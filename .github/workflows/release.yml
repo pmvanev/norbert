@@ -1,0 +1,130 @@
+# Norbert Observatory -- Release Pipeline
+# Runs when a GitHub Release is published (tag v*).
+# Cross-platform validation, npm publish with provenance, post-publish verification.
+#
+# Designed by Apex (Platform Architect) -- see docs/feature/norbert/devops/ci-cd-pipeline.md
+
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  id-token: write  # Required for npm provenance
+
+jobs:
+  # ============================================================
+  # Validate on all platforms before publishing
+  # ============================================================
+  validate:
+    name: Validate (${{ matrix.os }})
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: pnpm -r run build
+
+      - name: Full test suite
+        run: pnpm run test
+
+      - name: E2E smoke test
+        shell: bash
+        run: |
+          TARBALL=$(pnpm --filter @norbert/cli pack --pack-destination /tmp 2>/dev/null | tail -1)
+          npm install -g "/tmp/${TARBALL}" || npm install -g "${TARBALL}"
+          norbert --version
+          norbert init --dry-run
+          npm uninstall -g norbert || true
+
+  # ============================================================
+  # Publish to npm with provenance
+  # ============================================================
+  publish:
+    name: Publish to npm
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: pnpm -r run build
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          artifact-name: norbert-sbom.spdx.json
+          output-file: norbert-sbom.spdx.json
+
+      - name: Publish to npm
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Attach SBOM to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: norbert-sbom.spdx.json
+
+  # ============================================================
+  # Post-publish verification
+  # ============================================================
+  post-publish:
+    name: Post-Publish Verification
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for npm propagation
+        run: sleep 30
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install published package from npm
+        run: npm install -g norbert@${{ github.event.release.tag_name }}
+
+      - name: Verify version
+        shell: bash
+        run: |
+          INSTALLED=$(norbert --version)
+          EXPECTED="${{ github.event.release.tag_name }}"
+          EXPECTED="${EXPECTED#v}"
+          if [ "$INSTALLED" != "$EXPECTED" ]; then
+            echo "::error::Installed version $INSTALLED does not match expected $EXPECTED"
+            exit 1
+          fi
+          echo "Published version verified: $INSTALLED"
+
+      - name: Smoke test published package
+        run: norbert init --dry-run

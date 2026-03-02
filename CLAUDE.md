@@ -44,6 +44,17 @@ Modular monolith with dependency inversion (ports-and-adapters). Seven packages 
 - Testing: Vitest
 - Build: tsup (server/cli), Vite (dashboard)
 
+## Mutation Testing Strategy
+
+This project uses **per-feature** mutation testing. Runs after refactoring during each delivery, scoped to modified files. Kill rate gate: >= 80%.
+
+- Tool: Stryker Mutator (`@stryker-mutator/typescript-checker`)
+- Trigger: Post-merge to main (GitHub Actions `mutation.yml`)
+- Scope: Only files modified in the merge commit (excludes test files)
+- Runtime target: 5-15 minutes per delivery
+- Threshold: >= 80% kill rate (advisory on CI, blocking on release)
+- Focus: `@norbert/core` pure functions are the primary mutation target
+
 ## Key Constraints
 
 - Local-first: everything runs on localhost, no cloud dependency
@@ -59,3 +70,11 @@ Modular monolith with dependency inversion (ports-and-adapters). Seven packages 
 - `docs/feature/norbert/design/data-models.md` -- SQLite schema, domain types, API contracts
 - `docs/adrs/ADR-001-*.md` through `ADR-007-*.md` -- Architecture Decision Records
 - `docs/feature/norbert/design/roadmap.json` -- Implementation roadmap
+- `docs/feature/norbert/devops/platform-architecture.md` -- Build/release infrastructure design
+- `docs/feature/norbert/devops/ci-cd-pipeline.md` -- GitHub Actions pipeline with cross-platform matrix
+- `docs/feature/norbert/devops/observability-design.md` -- Local logging and self-diagnostics
+- `docs/feature/norbert/devops/branching-strategy.md` -- GitHub Flow with PR gates and release process
+- `docs/adrs/ADR-008-*.md` -- GitHub Actions with npm publish (proposed)
+- `.github/workflows/ci.yml` -- CI workflow skeleton
+- `.github/workflows/release.yml` -- Release workflow skeleton
+- `.github/workflows/mutation.yml` -- Mutation testing workflow skeleton

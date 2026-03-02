@@ -1,0 +1,157 @@
+# Norbert Observatory -- CI Pipeline
+# Runs on every PR to main and push to main.
+# Quality gates: lint, typecheck, test, security, cross-platform build.
+#
+# Designed by Apex (Platform Architect) -- see docs/feature/norbert/devops/ci-cd-pipeline.md
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ============================================================
+  # Commit Stage (target: < 8 minutes)
+  # Lint, typecheck, unit tests, coverage, security, build
+  # ============================================================
+  commit-stage:
+    name: Commit Stage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Format check
+        run: pnpm run format:check
+
+      - name: TypeScript strict typecheck
+        run: pnpm run typecheck
+
+      - name: Architecture boundary check
+        run: pnpm run check:architecture
+
+      - name: Unit tests with coverage
+        run: pnpm run test:unit -- --coverage
+
+      - name: Coverage gate
+        run: |
+          # Verify core coverage >= 80% and overall >= 70%
+          CORE_COV=$(jq '.total.lines.pct' packages/core/coverage/coverage-summary.json 2>/dev/null || echo "0")
+          OVERALL_COV=$(jq '.total.lines.pct' coverage/coverage-summary.json 2>/dev/null || echo "0")
+          echo "Core coverage: ${CORE_COV}%"
+          echo "Overall coverage: ${OVERALL_COV}%"
+          if (( $(echo "$CORE_COV < 80" | bc -l) )); then
+            echo "::error::Core coverage ${CORE_COV}% is below 80% threshold"
+            exit 1
+          fi
+          if (( $(echo "$OVERALL_COV < 70" | bc -l) )); then
+            echo "::error::Overall coverage ${OVERALL_COV}% is below 70% threshold"
+            exit 1
+          fi
+
+      - name: Security -- secrets scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+      - name: Security -- dependency audit
+        run: pnpm audit --audit-level=critical
+
+      - name: Build all packages
+        run: pnpm -r run build
+
+  # ============================================================
+  # Cross-Platform Stage (target: < 12 minutes)
+  # Build + test on ubuntu, macos, windows
+  # ============================================================
+  cross-platform:
+    name: Cross-Platform (${{ matrix.os }})
+    needs: commit-stage
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: pnpm -r run build
+
+      - name: Unit tests
+        run: pnpm run test:unit
+
+      - name: Integration tests
+        run: pnpm run test:integration
+
+      - name: E2E smoke test
+        shell: bash
+        run: |
+          # Pack the CLI package
+          TARBALL=$(pnpm --filter @norbert/cli pack --pack-destination /tmp 2>/dev/null | tail -1)
+          npm install -g "/tmp/${TARBALL}" || npm install -g "${TARBALL}"
+
+          # Verify CLI entry point
+          norbert --version
+
+          # Verify init dry-run
+          norbert init --dry-run
+
+          # Cleanup
+          npm uninstall -g norbert || true
+
+  # ============================================================
+  # Security SAST (parallel with commit stage)
+  # CodeQL static analysis for TypeScript
+  # ============================================================
+  security-sast:
+    name: Security SAST (CodeQL)
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3

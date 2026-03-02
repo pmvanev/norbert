@@ -1,0 +1,81 @@
+# Norbert Observatory -- Mutation Testing Pipeline
+# Runs after merge to main. Scoped to files modified in the merge commit.
+# Per-feature strategy: kill rate gate >= 80%.
+#
+# Designed by Apex (Platform Architect) -- see docs/feature/norbert/devops/ci-cd-pipeline.md
+
+name: Mutation Testing
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  mutation-test:
+    name: Per-Feature Mutation Testing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # Need parent commit for diff
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Determine modified source files
+        id: changed
+        run: |
+          FILES=$(git diff --name-only HEAD~1 HEAD -- 'packages/*/src/**/*.ts' | grep -v '\.test\.' | grep -v '\.spec\.' | tr '\n' ',')
+          FILES="${FILES%,}"  # Remove trailing comma
+          echo "files=${FILES}" >> "$GITHUB_OUTPUT"
+          if [ -z "$FILES" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "No source files modified -- skipping mutation testing"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "Modified files: ${FILES}"
+          fi
+
+      - name: Run Stryker mutation tests
+        if: steps.changed.outputs.skip != 'true'
+        run: |
+          npx stryker run \
+            --mutate "${{ steps.changed.outputs.files }}" \
+            --reporters html,json,clear-text
+
+      - name: Check mutation kill rate
+        if: steps.changed.outputs.skip != 'true'
+        run: |
+          KILLED=$(jq '[.files | to_entries[].value.mutants[] | select(.status == "Killed")] | length' reports/mutation/mutation.json)
+          TOTAL=$(jq '[.files | to_entries[].value.mutants[]] | length' reports/mutation/mutation.json)
+          if [ "$TOTAL" -gt 0 ]; then
+            RATE=$(echo "scale=1; $KILLED * 100 / $TOTAL" | bc)
+            echo "Mutation kill rate: ${RATE}% (${KILLED}/${TOTAL})"
+            if (( $(echo "$RATE < 80" | bc -l) )); then
+              echo "::warning::Mutation kill rate ${RATE}% is below 80% threshold"
+            else
+              echo "Mutation kill rate meets threshold"
+            fi
+          else
+            echo "No mutants generated for modified files"
+          fi
+
+      - name: Upload mutation report
+        if: steps.changed.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-report
+          path: reports/mutation/
+          retention-days: 14
