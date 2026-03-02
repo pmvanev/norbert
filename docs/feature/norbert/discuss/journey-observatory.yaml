@@ -1,0 +1,344 @@
+journey:
+  name: "Norbert Observatory -- First Use Through Mastery"
+  goal: "Observe, understand, and optimize agentic Claude Code workflows"
+  persona: "Rafael Oliveira (Power User), Priya Chakraborty (Framework Dev), Marcus Chen (Team Lead)"
+
+  emotional_arc:
+    start: "Cautious/Skeptical -- will this work? will it break my setup?"
+    middle: "Curious/Focused -- investigating cost spikes, tracing agent chains, diagnosing MCP failures"
+    end: "Confident/In-Control -- baselines established, patterns visible, optimization proven"
+
+steps:
+  - id: 1
+    name: "Install and Configure"
+    command: "npm install -g norbert && norbert init"
+    description: "First-time setup: install package, configure hooks, initialize database, start server"
+
+    tui_mockup: |
+      +-- norbert init ---------------------------------------------------+
+      | Norbert v0.1.0 -- The Observatory for Claude Code                 |
+      | [1/3] Creating hook configuration...                              |
+      | [2/3] Initializing local database... ${db_path}                   |
+      | [3/3] Starting background server... http://localhost:${norbert_port}|
+      | Ready. Run any Claude Code command -- Norbert is now observing.   |
+      +-------------------------------------------------------------------+
+
+    shared_artifacts:
+      - name: "norbert_port"
+        source: "~/.norbert/config.json (port field, default 7890)"
+        displayed_as: "${norbert_port}"
+        consumers: ["init output", "status output", "serve command", "dashboard URL"]
+
+      - name: "db_path"
+        source: "~/.norbert/config.json (dbPath field, default ~/.norbert/norbert.db)"
+        displayed_as: "${db_path}"
+        consumers: ["init output", "status output", "CLI direct queries"]
+
+    emotional_state:
+      entry: "Cautious/Skeptical"
+      exit: "Reassured"
+
+    integration_checkpoint: |
+      Hook configuration written to .claude/settings.json.
+      Verify: hooks array contains Norbert's 7 hook entries.
+      Verify: server responds to health check at http://localhost:${norbert_port}/health.
+      Verify: database file exists at ${db_path}.
+
+    gherkin: |
+      Scenario: Rafael installs Norbert for the first time
+        Given Rafael has Node.js 18+ installed
+        And Claude Code is configured in his project
+        When Rafael runs "npm install -g norbert && norbert init"
+        Then Norbert creates hook configuration in .claude/settings.json
+        And Norbert initializes a SQLite database at ~/.norbert/norbert.db
+        And Norbert starts a background server on localhost:7890
+        And Rafael sees "Ready. Run any Claude Code command"
+
+  - id: 2
+    name: "Verify First Event Capture"
+    command: "norbert status"
+    description: "Confirm end-to-end pipeline works by checking captured events"
+
+    tui_mockup: |
+      +-- norbert status -------------------------------------------------+
+      | Server:   RUNNING on http://localhost:${norbert_port}             |
+      | Database: ${db_path} (42 KB)                                     |
+      | Events captured: ${events_captured}                               |
+      | Sessions observed: ${sessions_observed}                           |
+      | Last event: PostToolUse (Read) 12 seconds ago                    |
+      | MCP servers seen: 4 (github, sentry, postgres, omni-search)      |
+      | All hooks operational.                                            |
+      +-------------------------------------------------------------------+
+
+    shared_artifacts:
+      - name: "events_captured"
+        source: "SQLite COUNT(*) from events table"
+        displayed_as: "${events_captured}"
+        consumers: ["status output", "dashboard overview"]
+
+      - name: "sessions_observed"
+        source: "SQLite COUNT(DISTINCT session_id) from events table"
+        displayed_as: "${sessions_observed}"
+        consumers: ["status output", "dashboard overview"]
+
+    emotional_state:
+      entry: "Hopeful/Testing"
+      exit: "Reassured/Delighted"
+
+    integration_checkpoint: |
+      Events captured > 0 confirms end-to-end pipeline.
+      If 0: guide to troubleshooting (hooks not registered, server not running, Claude Code not yet invoked).
+      MCP servers seen should match user's configured MCP servers from .mcp.json.
+
+    gherkin: |
+      Scenario: Rafael verifies Norbert is capturing events
+        Given Rafael has initialized Norbert
+        And Rafael has run at least one Claude Code command
+        When Rafael runs "norbert status"
+        Then Norbert shows events captured > 0
+        And Norbert shows the background server is running
+        And Norbert lists MCP servers it has observed
+
+      Scenario: Rafael sees zero events after running Claude Code
+        Given Rafael has initialized Norbert
+        And Rafael has run a Claude Code command
+        And Norbert shows "Events captured: 0"
+        When Rafael checks the status output
+        Then Norbert suggests checking hook configuration in .claude/settings.json
+        And Norbert suggests verifying the background server is running
+
+  - id: 3
+    name: "Observe -- Dashboard Overview"
+    command: "norbert serve (opens browser)"
+    description: "View the observatory dashboard with session summary, context pressure, MCP health"
+
+    tui_mockup: |
+      (Web dashboard -- see journey-observatory-visual.md for full mockup)
+      Overview page shows:
+      - Today's summary: sessions, total tokens, MCP server count
+      - Context window pressure gauge (system | CLAUDE.md | MCP tools | history | free)
+      - Recent sessions table (clickable rows)
+      - MCP server health table
+
+    shared_artifacts:
+      - name: "session_list"
+        source: "SQLite sessions table with aggregated metrics"
+        displayed_as: "Recent Sessions table"
+        consumers: ["dashboard overview", "session list page", "CLI session list"]
+
+      - name: "mcp_servers"
+        source: "SQLite mcp_events table, DISTINCT server_name"
+        displayed_as: "MCP Server Health table"
+        consumers: ["dashboard overview", "MCP panel", "CLI mcp status"]
+
+      - name: "context_pressure_pct"
+        source: "Computed from latest session hook data (system + claude_md + mcp_tools + history tokens / context_window_size)"
+        displayed_as: "Context Window Pressure gauge"
+        consumers: ["dashboard overview", "session detail"]
+
+    emotional_state:
+      entry: "Curious"
+      exit: "Curious/Impressed"
+
+    integration_checkpoint: |
+      Dashboard data matches CLI output from Step 2.
+      Session count matches sessions_observed from status.
+      MCP server list matches configured MCP servers.
+      Context pressure calculation uses correct context window size for active model.
+
+    gherkin: |
+      Scenario: Rafael opens the observatory dashboard
+        Given Rafael has Norbert running with captured session data
+        When Rafael opens http://localhost:7890 in his browser
+        Then he sees today's session count, total tokens, and estimated cost
+        And he sees a context window pressure gauge showing composition breakdown
+        And he sees a table of recent sessions sorted by start time
+        And he sees MCP server health with connection status and token overhead
+
+  - id: 4
+    name: "Diagnose -- Drill Into Problem"
+    command: "Click session row in dashboard, or norbert session show ${session_id}"
+    description: "Investigate a specific session: execution trace, cost waterfall, MCP errors"
+
+    tui_mockup: |
+      (Web dashboard -- see journey-observatory-visual.md for full mockup)
+      Session detail shows:
+      - Execution graph (DAG of agent/subagent topology)
+      - Token cost waterfall (per-agent attribution)
+      - MCP error timeline (if errors occurred)
+      - Insight callouts (e.g., "14 reads of same file = 53% of cost")
+
+    shared_artifacts:
+      - name: "session_id"
+        source: "SQLite sessions table primary key"
+        displayed_as: "${session_id}"
+        consumers: ["session detail page", "CLI session show", "cost compare"]
+
+      - name: "agent_tree"
+        source: "SQLite agent_events table, parent-child relationships via trace_id"
+        displayed_as: "Execution Graph (DAG)"
+        consumers: ["session detail page", "CLI trace --last"]
+
+      - name: "cost_waterfall"
+        source: "SQLite token_usage table aggregated per agent"
+        displayed_as: "Token Cost Waterfall table"
+        consumers: ["session detail page", "CLI cost --last"]
+
+      - name: "mcp_errors"
+        source: "SQLite mcp_events table WHERE status = 'error'"
+        displayed_as: "MCP Error Timeline"
+        consumers: ["session detail page", "MCP panel", "CLI mcp errors"]
+
+    emotional_state:
+      entry: "Focused/Investigative"
+      exit: "Empowered"
+
+    integration_checkpoint: |
+      Token counts in waterfall sum to approximately the session total (within 5% tolerance for estimation).
+      Agent tree matches SubagentStart/SubagentStop event pairs.
+      MCP error timestamps correlate with PostToolUseFailure events for MCP tools.
+
+    gherkin: |
+      Scenario: Rafael diagnoses a high-cost session
+        Given session #4 exists with 8 agents, 67,234 tokens, $2.02 cost, and 1 MCP error
+        When Rafael clicks on session #4 in the dashboard
+        Then he sees an execution graph showing the agent topology
+        And he sees a token cost waterfall with file-migrator at $1.08 (53% of total)
+        And he sees that file-migrator read src/models/user.ts 14 times
+        And he sees the sentry MCP error timeline showing connection timeout at 12:04
+
+      Scenario: Rafael inspects an MCP server failure
+        Given session #4 had a sentry MCP server timeout at 12:04:02
+        When Rafael clicks on the MCP error in the timeline
+        Then he sees the latency trend: 1.2s, 3.8s, TIMEOUT
+        And he sees that 3 subsequent sentry tool calls were skipped
+        And he sees a recommendation to check server process health
+
+  - id: 5
+    name: "Act -- Optimize Based on Insights"
+    command: "norbert cost --last --compare"
+    description: "After making changes, compare new session to previous to validate improvement"
+
+    tui_mockup: |
+      +-- norbert cost --last --compare -----------------------------------+
+      | Session Comparison                                                  |
+      | +----------------------+----------+----------+----------+           |
+      | | Metric               | Previous | Current  | Change   |           |
+      | | Total tokens         | 67,234   | 31,200   | -54%     |           |
+      | | Total cost           | $2.02    | $0.94    | -53%     |           |
+      | | file-migrator tokens | 42,100   | 12,400   | -71%     |           |
+      | | MCP errors           | 1        | 0        |          |           |
+      | +----------------------+----------+----------+----------+           |
+      | Optimization impact: Saved $1.08. Projected monthly savings: ~$97  |
+      +---------------------------------------------------------------------+
+
+    shared_artifacts:
+      - name: "previous_session_id"
+        source: "SQLite sessions table, second-most-recent matching session"
+        displayed_as: "Previous column in comparison"
+        consumers: ["cost compare CLI", "dashboard comparison view"]
+
+      - name: "comparison_metrics"
+        source: "Computed delta between two sessions on matching metrics"
+        displayed_as: "Change column in comparison"
+        consumers: ["cost compare CLI", "dashboard comparison view"]
+
+    emotional_state:
+      entry: "Empowered/Expectant"
+      exit: "Satisfied/Confident"
+
+    integration_checkpoint: |
+      Comparison data sources from same SQLite store as Step 4.
+      Previous session metrics match what was displayed in Step 4 detail view.
+      Change percentages computed correctly from raw values.
+
+    gherkin: |
+      Scenario: Rafael validates his optimization
+        Given Rafael restructured his file-migrator prompt after diagnosing session #4
+        And Rafael has run a new session (#7) with the same workflow
+        When Rafael runs "norbert cost --last --compare"
+        Then he sees total cost decreased from $2.02 to $0.94 (-53%)
+        And he sees file-migrator tokens decreased from 42,100 to 12,400 (-71%)
+        And he sees MCP errors decreased from 1 to 0
+        And he sees projected monthly savings of approximately $97
+
+  - id: 6
+    name: "Review -- Historical Analysis"
+    command: "Dashboard weekly review page, or norbert session list --range 7d"
+    description: "Review usage trends, establish baselines, identify recurring patterns"
+
+    tui_mockup: |
+      (Web dashboard -- see journey-observatory-visual.md for full mockup)
+      Weekly review shows:
+      - Cost trend chart (daily)
+      - Top cost agents table with optimization notes
+      - MCP health summary (uptime, errors, avg latency per server)
+      - Baselines established (avg cost, P95 cost, avg duration, context pressure)
+
+    shared_artifacts:
+      - name: "weekly_cost"
+        source: "SQLite SUM(cost) from sessions WHERE date >= 7 days ago"
+        displayed_as: "Weekly total in review page"
+        consumers: ["dashboard weekly review", "CLI session list --range 7d"]
+
+      - name: "baselines"
+        source: "SQLite computed aggregates (AVG, PERCENTILE) from sessions table"
+        displayed_as: "Baselines section in review page"
+        consumers: ["dashboard weekly review", "anomaly detection (future)"]
+
+      - name: "mcp_health_summary"
+        source: "SQLite aggregated mcp_events (uptime %, error count, avg latency per server)"
+        displayed_as: "MCP Health Summary table"
+        consumers: ["dashboard weekly review", "MCP panel"]
+
+    emotional_state:
+      entry: "Reflective/Strategic"
+      exit: "Confident/In-Control"
+
+    integration_checkpoint: |
+      Weekly aggregates match sum of daily data.
+      Baselines computed from all sessions in range (not just sampled).
+      MCP health percentages consistent with individual session error counts.
+
+    gherkin: |
+      Scenario: Rafael reviews his weekly usage
+        Given Rafael has used Norbert for 7 days with 42 sessions captured
+        When Rafael opens the weekly review page
+        Then he sees a daily cost trend chart
+        And he sees weekly total cost of $28.40 and daily average of $4.06
+        And he sees file-migrator average cost improved from $2.02 to $0.94
+        And he sees sentry MCP server uptime at 94.2% with 3 errors
+        And he sees established baselines for session cost, duration, and context pressure
+
+      Scenario: Marcus reviews team usage for budget planning
+        Given Marcus has access to Norbert dashboard with 4 weeks of data
+        When Marcus opens the monthly review page
+        Then he sees total team spend and per-developer attribution
+        And he sees the top 3 cost-driving workflow patterns
+        And he can export the data as CSV for the finance team
+
+integration_validation:
+  shared_artifact_consistency:
+    - artifact: "norbert_port"
+      must_match_across: [1, 2, 3]
+      failure_message: "Port shown in init must match port in status and dashboard URL"
+
+    - artifact: "session_id"
+      must_match_across: [3, 4, 5]
+      failure_message: "Session ID from list must load correct detail and comparison data"
+
+    - artifact: "events_captured"
+      must_match_across: [2, 3]
+      failure_message: "Event count in CLI status must match dashboard overview"
+
+    - artifact: "mcp_servers"
+      must_match_across: [2, 3, 4]
+      failure_message: "MCP server list must be consistent across status, overview, and session detail"
+
+    - artifact: "cost_waterfall"
+      must_match_across: [4, 5]
+      failure_message: "Cost breakdown in session detail must match comparison baseline"
+
+    - artifact: "baselines"
+      must_match_across: [6, 3]
+      failure_message: "Baselines from review must inform anomaly indicators on overview page"
