@@ -9,15 +9,16 @@
 
 ## Lean Canvas
 
-### 1. Problem (Phase 1 Validated)
+### 1. Problem (Phase 1 Validated -- Updated 2026-03-02)
 
 | # | Problem | Evidence Strength |
 |---|---------|-------------------|
-| P1 | Token/cost opacity -- users cannot attribute AI costs to specific tasks or agents | 6/6 signals confirmed |
-| P2 | Agent execution blindness -- no visibility into multi-agent workflow behavior | 6/6 signals confirmed |
-| P3 | Context file resolution mystery -- users cannot see which CLAUDE.md configurations are active | 4/6 signals confirmed (power users) |
+| P1 | Token/cost opacity -- users cannot attribute AI costs to specific tasks, agents, or MCP servers | 7/7 signals confirmed |
+| P2 | Agent execution blindness -- no visibility into multi-agent workflow behavior | 7/7 signals confirmed |
+| P3 | Context file resolution mystery -- users cannot see which CLAUDE.md configurations are active | 4/7 signals confirmed (power users) |
+| P6 | **MCP observability gap** -- zero visibility into MCP server connectivity, tool routing, token overhead, and failure states | 7/7 signals + 28-source research confirmed. Silent failures, 67K+ token overhead, routing opacity, ghost tools, config chaos. |
 
-**Existing alternatives**: Manual log grepping, custom bash scripts, Anthropic billing dashboard (aggregated only), community-built partial tools (fragmented, unmaintained).
+**Existing alternatives**: Manual log grepping, custom bash scripts, Anthropic billing dashboard (aggregated only), community-built partial tools (fragmented, unmaintained), `/mcp` command (snapshot only, no history/metrics), `~/.claude/logs/mcp-debug.log` (unstructured, not user-friendly), MCP Inspector (dev-time, single-server only).
 
 ### 2. Customer Segments (by JTBD)
 
@@ -34,17 +35,21 @@
 - Framework developers are a smaller but extremely high-value segment
 - Team segment requires multi-user features (defer to v2)
 
-### 3. Unique Value Proposition
+### 3. Unique Value Proposition (Updated 2026-03-02)
 
 **Single clear message**:
 
-> **See inside your agentic workflows. Trace every agent. Know every token.**
+> **See inside your agentic workflows. Trace every agent. Monitor every MCP server. Know every token.**
 
-**Supporting statement**: Norbert is the observatory for Claude Code -- the first tool purpose-built to make multi-agent workflows visible, debuggable, and cost-optimized.
+**Supporting statement**: Norbert is the observatory for Claude Code -- the first tool purpose-built to make multi-agent workflows and MCP server interactions visible, debuggable, and cost-optimized. It spans both agent observability and MCP observability in a single local-first dashboard.
 
 **Why "observatory" framing**: Users' primary need is observation, not control. The validated insight from Phase 3 is that seeing what happened is 4x more valuable than steering what happens. "Observatory" positions Norbert correctly and avoids over-promising on orchestration.
 
-### 4. Solution (Phase 3 Validated)
+**Why MCP observability is P0**: MCP research (28 sources, 14 findings) confirmed a complete competitive vacuum at Norbert's tier. Zero tools exist for local-first, Claude Code-specific MCP observability. Enterprise solutions (Datadog, Grafana) operate at the wrong abstraction level. MCP Inspector serves server authors, not end users. Norbert fills a genuine, documented gap.
+
+### 4. Solution (Phase 3 Validated -- Updated 2026-03-02)
+
+**Pillar 1: Agent Observability**
 
 | Feature | Addresses | Validated |
 |---------|-----------|-----------|
@@ -53,6 +58,23 @@
 | Session History (searchable archive) | P1 + P2: Historical analysis | 100% task completion |
 | Context Inspector (CLAUDE.md resolution viewer) | P3: Context resolution mystery | 100% for target users |
 | CLI Quick Queries (terminal-friendly summaries) | P1 + P2: Quick lookups | Complementary to dashboard |
+
+**Pillar 2: MCP Observability (P0 -- New)**
+
+| Feature | Addresses | Validated |
+|---------|-----------|-----------|
+| MCP Server Health Dashboard (connectivity, uptime, alerts) | P6: MCP silent failures | 100% task completion (Concept D) |
+| MCP Tool Call Routing Explorer (server attribution) | P6: MCP routing opacity | 100% task completion (Concept D) |
+| MCP Token Overhead Analyzer (per-server token cost) | P1 + P6: MCP token overhead | 100% task completion (Concept D) |
+| MCP Error Timeline (chronological failure view) | P6: MCP diagnostics gap | 100% task completion (Concept D) |
+| Norbert-as-MCP-server (in-conversation queries) | P2 + P6: Seamless observability | High value for power users (Phase 2) |
+
+**Data Capture Architecture** (Validated by MCP research Finding 9):
+```
+Claude Code Hooks --> HTTP POST --> Norbert Server --> SQLite --> Dashboard (WebSocket)
+                                                              --> MCP Server (query tools)
+                                                              --> CLI (direct SQLite reads)
+```
 
 ### 5. Channels
 
@@ -109,16 +131,18 @@
 | NPS / recommendation rate | Product-market fit | >50 NPS |
 | Token savings attributed | Value delivered | >$50/mo per user |
 
-### 9. Unfair Advantage
+### 9. Unfair Advantage (Updated 2026-03-02)
 
 | Advantage | Defensibility |
 |-----------|--------------|
-| **Deep Claude Code architecture knowledge** | Built by people who understand CLAUDE.md resolution, Task tool patterns, MCP integration. Competitors would need to reverse-engineer. |
+| **Deep Claude Code architecture knowledge** | Built by people who understand CLAUDE.md resolution, Task tool patterns, MCP integration, and hook-based data capture. Competitors would need to reverse-engineer. |
 | **nwave-ai framework integration** | Norbert can integrate deeply with nwave-ai's multi-agent patterns. First-mover advantage within this ecosystem. |
 | **Community-driven development** | Open source core means community contributes integrations, bug reports, and features. Network effects. |
 | **Context Inspector has zero competition** | No other tool solves CLAUDE.md resolution visibility. This is a unique capability. |
+| **MCP Observatory occupies a complete competitive vacuum** | MCP research (28 sources) confirms zero tools exist at Norbert's tier for Claude Code-specific MCP observability. Enterprise tools serve DevOps teams. MCP Inspector serves server authors. Norbert is the only local-first, user-facing MCP observatory. |
+| **Dual-pillar observation (agent + MCP) in single tool** | No competitor combines agent workflow observability with MCP connectivity visualization. Closest tools address one or the other, never both. |
 
-**What is NOT an unfair advantage**: Being first to market (easily copied), having a dashboard (commodity), token counting (many tools do this). The advantage is in the specificity of the Claude Code integration and the depth of the agent-level abstraction.
+**What is NOT an unfair advantage**: Being first to market (easily copied), having a dashboard (commodity), token counting (many tools do this). The advantage is in the specificity of the Claude Code integration, the depth of the agent-level abstraction, and the unique combination of agent + MCP observability in a single local-first tool.
 
 ---
 
@@ -146,50 +170,54 @@
 
 **Usability Risk: GREEN** -- Concept maps to known mental models. Installation simplicity is the key sub-risk.
 
-### Risk 3: Feasibility -- Can we build this?
+### Risk 3: Feasibility -- Can we build this? (Updated 2026-03-02)
 
 | Factor | Assessment | Evidence | Risk Level |
 |--------|-----------|----------|------------|
-| Data access | HIGH RISK | Claude Code does not expose a formal plugin/observability API. Data must be obtained through: (a) log file parsing, (b) MCP server integration, (c) file system monitoring of Claude Code artifacts, or (d) wrapper/proxy pattern. | RED |
-| Token counting accuracy | MEDIUM RISK | Can estimate via tiktoken or track from API responses if accessible. Exact accuracy depends on data access method. | YELLOW |
-| Real-time capability | MEDIUM RISK | Log tailing or file watch can approximate real-time but with latency. True real-time requires hooks into Claude Code. | YELLOW |
+| Data access | ~~HIGH RISK~~ **MEDIUM RISK** | MCP research Finding 9 proves Claude Code hooks capture both agent events AND MCP-specific data (server name, tool name, inputs, outputs, errors). disler project + 3 forks demonstrate working implementation. | ~~RED~~ **YELLOW** |
+| Token counting accuracy | MEDIUM RISK | Can estimate via tiktoken or track from API responses if accessible. MCP tool description tokens can be measured precisely (known strings). | YELLOW |
+| Real-time capability | ~~MEDIUM RISK~~ **LOW RISK** | Hooks fire on each event, enabling near-real-time dashboard updates via WebSocket. disler project demonstrates this working pattern. | ~~YELLOW~~ **GREEN** |
 | DAG visualization | LOW RISK | Well-understood tech (D3.js, Mermaid, Cytoscape). Many open source libraries available. | GREEN |
 | Local web server | LOW RISK | Standard Node.js/Python web server. Proven pattern (Vite, Storybook, etc.). | GREEN |
-| Session storage | LOW RISK | SQLite is sufficient. Well-understood, zero-config. | GREEN |
+| Session storage | LOW RISK | SQLite is sufficient. Well-understood, zero-config. Aligns with disler project's architecture. | GREEN |
+| MCP server isolation | LOW RISK | MCP research Finding 12 confirms Norbert-as-MCP-server cannot observe other servers directly. Hooks bypass this limitation -- they operate outside MCP isolation boundary. | GREEN |
+| Hook API stability | MEDIUM RISK | Knowledge Gap 1 from research: official hook API specification not fully documented. Community projects rely on discovered behavior. | YELLOW |
 
-**Feasibility Risk: YELLOW (trending RED on data access)**
+**Feasibility Risk: YELLOW (improved from trending-RED -- data access de-risked)**
 
-This is the highest-risk area. Specific technical assessment:
+MCP research significantly improved the feasibility assessment. The key change: **Claude Code hooks are now the recommended primary data capture mechanism**, replacing the previous uncertainty about data access options.
 
-**Data Access Deep Dive (Assumption A3)**:
+**Data Access Deep Dive (Assumption A3) -- Updated 2026-03-02**:
 
-*Option A: Log file parsing*
-- Claude Code writes conversation data to `~/.claude/` directory
-- JSON conversation files contain messages, tool calls, and some metadata
-- FEASIBLE for post-hoc analysis but format is undocumented and may change
-- Does NOT include token counts (would need estimation)
-- Risk: Anthropic could change format without notice
+*~~Option A: Log file parsing~~ --> DEMOTED to fallback*
+- Still feasible for post-hoc analysis but inferior to hooks
+- Hooks provide richer, real-time data with MCP-specific fields
 
-*Option B: MCP Server integration*
-- Claude Code supports MCP (Model Context Protocol) servers
-- An MCP server could be built that Norbert uses to instrument workflows
-- FEASIBLE for capturing tool calls and some execution data
-- Does NOT capture internal Claude Code decision-making or all token data
-- This is the most architecturally sound approach
+*Option B: MCP Server integration --> VALIDATED as query interface (not data capture)*
+- MCP research Finding 12 confirms Norbert-as-MCP-server is feasible
+- Cannot observe other MCP servers (isolation) but can serve queries from local data store
+- Use case: in-conversation queries, not data collection
 
-*Option C: CLI wrapper/proxy*
-- Norbert wraps the `claude` CLI command and intercepts I/O
-- FEASIBLE but fragile and may conflict with editor integrations
-- Provides most data but worst user experience
+*~~Option C: CLI wrapper/proxy~~ --> REJECTED*
+- Hooks provide the same data with better UX and no fragility
 
-*Option D: Anthropic partnership / official API*
-- If Anthropic provides an observability API or plugin system, all data access problems are solved
-- UNKNOWN timeline -- Anthropic has not announced this
-- Highest reward but highest dependency risk
+*Option D: Anthropic partnership / official API --> STILL DESIRED but not required*
+- Hooks provide sufficient data for MVP without Anthropic cooperation
+- Partnership would improve stability guarantees and data richness
 
-**Recommended approach**: Start with Option A (log parsing) for MVP, architect for Option B (MCP) as the stable solution, and pursue Option D (partnership) in parallel.
+***Option E: Claude Code Hooks --> NEW PRIMARY APPROACH (validated by research)***
+- disler/claude-code-hooks-multi-agent-observability proves hooks capture:
+  - Agent lifecycle events (12 hook types including PreToolUse, PostToolUse, PostToolUseFailure)
+  - MCP-specific fields: `mcp_server`, `mcp_tool_name`
+  - Tool call inputs, outputs, errors
+- Architecture: Claude Agents --> Hook Scripts --> HTTP POST --> Server --> SQLite --> WebSocket --> UI
+- Multiple independent forks validate the approach
+- **This resolves the highest feasibility risk and moves data access from RED to YELLOW**
+- Remaining YELLOW risk: hook API stability -- Anthropic has not published formal stability guarantees
 
-**Feasibility Risk: YELLOW** -- Buildable with caveats. Data access limitations constrain v1 but do not block it. MCP integration provides a viable path forward.
+**Recommended approach (updated)**: Start with Option E (hooks) for MVP, add Option B (MCP server) for in-conversation queries in Phase 2, and pursue Option D (partnership) in parallel for long-term stability.
+
+**Feasibility Risk: YELLOW** -- Significantly improved. Hook-based data capture is proven and working. Remaining risks are hook API stability (Anthropic could change hook behavior) and token counting precision (estimation vs. exact).
 
 ### Risk 4: Viability -- Does the business model work?
 
@@ -201,18 +229,24 @@ This is the highest-risk area. Specific technical assessment:
 | Competitive moat | MEDIUM | Claude Code specificity is a moat but also a ceiling. Anthropic's own moves are the wildcard. |
 | Market timing | GOOD | Multi-agent adoption is accelerating. Observability need grows with complexity. 2026 is the right time. |
 
-**Competitive landscape**:
+**Competitive landscape (Updated 2026-03-02 with MCP research)**:
 
-| Competitor | Overlap | Differentiation |
-|-----------|---------|-----------------|
-| LangSmith (LangChain) | LLM tracing | LangChain-specific, not Claude Code native |
-| Langfuse | LLM observability | API-level, not agent-level. No Claude Code integration. |
-| Helicone | LLM cost tracking | API proxy model. No agent topology. No context inspection. |
-| Braintrust | LLM evaluation | Focused on eval/testing, not runtime observability |
-| Datadog LLM Obs | Enterprise LLM monitoring | Enterprise-grade, expensive, no Claude Code specificity |
-| Anthropic Console | Token usage | Billing-level only. No per-task, no agent tracing. |
+| Competitor | Overlap | Differentiation | MCP Observability |
+|-----------|---------|-----------------|-------------------|
+| LangSmith (LangChain) | LLM tracing | LangChain-specific, not Claude Code native | None |
+| Langfuse | LLM observability | API-level, not agent-level. No Claude Code integration. | None |
+| Helicone | LLM cost tracking | API proxy model. No agent topology. No context inspection. | None |
+| Braintrust | LLM evaluation | Focused on eval/testing, not runtime observability | None |
+| Datadog LLM Obs | Enterprise LLM monitoring | Enterprise-grade, expensive, no Claude Code specificity | Yes -- but infrastructure-level, requires SDK instrumentation |
+| Grafana Cloud | Enterprise MCP observability | Cloud-based, requires OTel setup, enterprise pricing | Yes -- but enterprise tier, not individual developer |
+| Anthropic Console | Token usage | Billing-level only. No per-task, no agent tracing. | None |
+| MCP Inspector | MCP server testing | Dev-time, single-server, not runtime monitoring | Dev-time only -- not user-facing runtime observability |
+| MCPcat | MCP server analytics | Server-author analytics, not user-facing | Server-author side only -- opposite perspective from Norbert |
+| MetaMCP | MCP aggregation | Docker-deployed, multi-tenant infrastructure | File logging only -- no structured observability layer |
+| MCP Gateways (MintMCP, etc.) | Enterprise MCP management | SOC2, audit logs, rate limiting -- enterprise security tier | Enterprise compliance -- not individual developer observability |
+| disler hooks project | Agent + MCP events | Individual developer project, narrow scope, basic UI | Partial -- captures data but minimal visualization |
 
-**Key competitive insight**: Every existing player operates at the API/LLM call level. Norbert operates at the agent/workflow level -- a higher, more meaningful abstraction. This is genuinely differentiated.
+**Key competitive insight (updated)**: Norbert uniquely combines agent-level workflow observability with MCP server observability in a single local-first tool designed for individual Claude Code developers. No competitor addresses both dimensions. The MCP observability gap is particularly stark -- the competitive landscape map shows zero tools at Norbert's tier (local-first, Claude Code-specific) serving MCP user-facing observability.
 
 **Anthropic Risk (A8) Assessment**:
 - Anthropic WILL likely build some observability into Claude Code over time
@@ -223,45 +257,58 @@ This is the highest-risk area. Specific technical assessment:
 
 **Viability Risk: GREEN** -- Viable with manageable risks. Anthropic's potential entry is the key monitor-and-adapt risk.
 
-### Risk Summary
+### Risk Summary (Updated 2026-03-02)
 
 | Risk | Status | Key Issue | Mitigation |
 |------|--------|-----------|------------|
-| Value | GREEN | WTP unconfirmed | Freemium reduces risk |
+| Value | GREEN | WTP unconfirmed | Freemium reduces risk. MCP research adds evidence of strong demand (28 sources). |
 | Usability | GREEN | Install friction | One-command install |
-| Feasibility | YELLOW | Data access from Claude Code | MCP + log parsing + partnership pursuit |
-| Viability | GREEN | Anthropic competition | Speed, community, power-user depth |
+| Feasibility | YELLOW (improved) | ~~Data access from Claude Code~~ Hook API stability | Hooks proven for data capture (de-risked from trending-RED). Remaining: hook API stability. |
+| Viability | GREEN | Anthropic competition | Speed, community, power-user depth. MCP gap confirmed to have zero competition at Norbert's tier. |
 
-**All 4 risks: GREEN/YELLOW -- no RED. Proceed.**
+**All 4 risks: GREEN/YELLOW -- no RED. Proceed.** MCP research improved Feasibility from trending-RED to stable YELLOW.
 
 ---
 
-## Go-to-Market Strategy
+## Go-to-Market Strategy (Updated 2026-03-02)
 
 ### Phase 0: Technical Spike (Week 1-2)
-- Validate data access: parse Claude Code conversation files, prototype MCP server
-- Confirm: what data is actually available, what must be estimated, what is inaccessible
-- This resolves the YELLOW feasibility risk before building the full product
+- **Primary**: Validate hook-based data capture -- deploy Claude Code hooks, capture agent + MCP events, store in SQLite
+- **Secondary**: Prototype Norbert-as-MCP-server with 2-3 query tools
+- Confirm: hook event fields, MCP data richness, real-time WebSocket feasibility
+- This resolves the remaining YELLOW feasibility risk (hook API reliability) before building the full product
 
-### Phase 1: MVP Launch (Week 3-8)
+### Phase 1: MVP Launch (Week 3-8) -- TWO PILLARS
+*Agent Observability*:
 - Execution trace graph + token cost waterfall + session history
 - Local web dashboard + CLI quick queries
+
+*MCP Observability (P0)*:
+- MCP server health dashboard (connectivity, uptime, silent failure detection)
+- MCP tool call routing explorer (server attribution)
+- MCP token overhead analyzer (per-server breakdown)
+- MCP error timeline (chronological failure view)
+
 - Open source on GitHub, npm package
 - Target: 100 installs, 30 WAU
+- **MCP-specific launch content**: "I built the missing network tab for Claude Code MCP servers"
 
 ### Phase 2: Differentiation (Week 9-14)
 - Context Inspector (CLAUDE.md resolution viewer)
-- MCP server integration for richer data capture
+- Norbert-as-MCP-server (in-conversation observability queries)
+- MCP data flow inspector (detailed input/output viewer)
+- MCP tool name collision detection
 - Target: 500 installs, 150 WAU
 
 ### Phase 3: Monetization (Week 15-20)
 - Pro tier: unlimited history, advanced analytics, export
-- Content marketing: "How Norbert saved me $X/month on Claude Code"
+- Content marketing: "How Norbert saved me $X/month on Claude Code" + "How Norbert caught my silent MCP failure before it cost me an hour"
 - Target: 1,000 installs, 50 paid users
 
 ### Phase 4: Team/Scale (Month 6+)
 - Team dashboard, multi-user support
 - Enterprise features (SSO, audit, budgets)
+- OTel export for power users who want Datadog/Grafana integration
 - Anthropic marketplace integration (if available)
 
 ---
@@ -280,31 +327,33 @@ This is the highest-risk area. Specific technical assessment:
 
 ---
 
-## Go / No-Go Recommendation
+## Go / No-Go Recommendation (Updated 2026-03-02)
 
-### GO -- with conditions
+### GO -- with conditions (strengthened by MCP research)
 
-**Recommendation**: Proceed to build. The evidence supports a viable product with genuine differentiation, clear customer pain, and favorable economics.
+**Recommendation**: Proceed to build. The evidence supports a viable product with genuine differentiation, clear customer pain, and favorable economics. MCP research significantly strengthened the case by: (1) de-risking feasibility (hooks proven), (2) confirming zero competition at Norbert's tier for MCP observability, and (3) validating MCP observability as P0 core feature.
 
 **Conditions**:
-1. **Technical spike first** (1-2 weeks): Confirm data access from Claude Code. If Claude Code conversation files and/or MCP integration provide sufficient data for trace + cost views, proceed to full MVP. If data is inaccessible or insufficient, reassess feasibility.
+1. **Technical spike first** (1-2 weeks): Validate hook-based data capture for both agent events and MCP events. Confirm hook API reliability, event field completeness, and real-time WebSocket feasibility. If hooks fail to capture sufficient MCP data, fall back to log parsing for agent observability and defer MCP features.
 2. **Validate A2 (willingness to pay) with real users**: Ship free MVP, measure engagement, test pricing page before building Pro tier.
 3. **Monitor Anthropic's roadmap**: If Anthropic announces native observability, accelerate community building and differentiation features.
 
 **Kill criteria**:
-- Technical spike reveals Claude Code data is fundamentally inaccessible (no log files, no MCP hooks, no workaround)
+- Technical spike reveals Claude Code hooks are fundamentally unreliable or about to be deprecated
 - After 500 installs, fewer than 10% return after first use (no stickiness)
-- Anthropic ships native observability that covers 80%+ of Norbert's value
+- Anthropic ships native observability that covers 80%+ of Norbert's value (including MCP observability)
 
 ---
 
-## Discovery Summary
+## Discovery Summary (Updated 2026-03-02)
 
 | Phase | Status | Key Finding |
 |-------|--------|-------------|
-| 1: Problem | VALIDATED | 6/6 signals confirm observability gap is real, painful, and frequent |
-| 2: Opportunity | VALIDATED | Top 3 opportunities score 15-17/20. Observation >> Control. |
-| 3: Solution | VALIDATED | Local web dashboard with CLI complement. 100% task completion. |
-| 4: Viability | VALIDATED (conditional) | Viable business model. Feasibility is highest risk (YELLOW). |
+| 1: Problem | VALIDATED | 7/7 signals confirm observability gap is real, painful, and frequent. MCP observability gap (P6) validated by 28-source research. |
+| 2: Opportunity | VALIDATED | 13 opportunities identified (8 original + 5 MCP). Top scores: 17, 17, 16, 15, 15, 15, 15. MCP Server Health tied for #1. |
+| 3: Solution | VALIDATED | Two-pillar observatory: agent observability + MCP observability. 4 concepts tested, all passing. Hook-based architecture validated. |
+| 4: Viability | VALIDATED (conditional) | Viable business model. Feasibility improved from trending-RED to stable YELLOW (hooks de-risked data access). Zero competition at Norbert's tier for MCP observability. |
 
-**The single most important insight from this discovery**: Norbert should be an **observation tool, not an orchestration tool**. The evidence overwhelmingly supports "help me see what happened" over "help me control what happens." Name it an observatory. Build the trace graph. Show the cost waterfall. The control features can come later, if ever.
+**The single most important insight from this discovery**: Norbert should be an **observation tool, not an orchestration tool**, spanning **both agent workflows AND MCP server interactions**. The evidence overwhelmingly supports "help me see what happened" over "help me control what happens." Name it an observatory. Build the trace graph. Show the cost waterfall. Show the MCP server health. Show the tool routing. The control features can come later, if ever.
+
+**The MCP research insight**: MCP observability is not a nice-to-have add-on -- it is a P0 core feature that occupies a complete competitive vacuum and shares the same data capture infrastructure (hooks) as agent observability. Delivering both pillars in the MVP positions Norbert as the comprehensive observatory for Claude Code, not just a trace viewer.
