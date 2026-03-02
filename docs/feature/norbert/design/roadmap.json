@@ -1,0 +1,281 @@
+{
+  "roadmap": {
+    "feature_id": "norbert",
+    "feature_name": "Norbert -- The Agentic Workflow Observatory",
+    "paradigm": "functional-leaning TypeScript",
+    "architecture": "modular monolith with dependency inversion (ports-and-adapters)",
+    "estimated_production_files": 35,
+    "total_steps": 10,
+    "step_ratio": 0.29,
+    "created_date": "2026-03-02"
+  },
+  "phases": [
+    {
+      "id": "01",
+      "name": "Foundation",
+      "description": "Walking skeleton: hook -> server -> SQLite -> minimal dashboard. Proves architecture end-to-end.",
+      "steps": [
+        {
+          "id": "01-01",
+          "title": "Project scaffold and core types",
+          "description": "Initialize pnpm workspace with 7 packages. Define domain types as discriminated unions: HookEvent (7 variants), Session, AgentNode, McpServerHealth. Configure TypeScript project references enforcing dependency rules.",
+          "story_trace": "US-001",
+          "acceptance_criteria": [
+            "Monorepo builds successfully with all 7 packages",
+            "Core package has zero runtime dependencies",
+            "Domain event types cover all 7 hook event variants",
+            "TypeScript project references enforce inward dependency rule"
+          ],
+          "architectural_constraints": [
+            "Core module imports nothing from other packages",
+            "All types defined as readonly (immutable domain)"
+          ]
+        },
+        {
+          "id": "01-02",
+          "title": "Storage port and SQLite adapter with schema",
+          "description": "Define storage port as function-signature types. Implement SQLite adapter with better-sqlite3. Create initial schema (events, sessions, mcp_events, agent_spans tables). Schema versioning via migration runner.",
+          "story_trace": "US-001",
+          "acceptance_criteria": [
+            "Storage port defined as record of function types using core domain types",
+            "SQLite adapter implements all port functions",
+            "Schema creates 4 tables with appropriate indexes",
+            "Migration runner applies pending migrations on startup"
+          ],
+          "architectural_constraints": [
+            "Port definition uses only core types",
+            "SQLite adapter is the only module importing better-sqlite3",
+            "WAL mode enabled for concurrent read access"
+          ]
+        },
+        {
+          "id": "01-03",
+          "title": "Event ingress server and hook scripts",
+          "description": "Fastify server with POST /api/events endpoint. JSON Schema validation of incoming hook events. Event processor transforms raw events to domain events, persists via storage port. Hook script templates for .claude/settings.json. norbert init command writes hooks and starts server.",
+          "story_trace": "US-001",
+          "acceptance_criteria": [
+            "Server accepts POST /api/events and persists valid events",
+            "Malformed events rejected with 400 status",
+            "norbert init writes 7 hook entries to .claude/settings.json additively",
+            "Initialization is atomic (no partial state on failure)",
+            "Health endpoint responds at /health"
+          ],
+          "architectural_constraints": [
+            "Hook scripts are async fire-and-forget (non-blocking to Claude Code)",
+            "Server receives storage port via dependency injection (not direct import)"
+          ]
+        },
+        {
+          "id": "01-04",
+          "title": "Minimal dashboard and walking skeleton integration",
+          "description": "SvelteKit app serving on localhost via Norbert server. Minimal event list page showing captured events. WebSocket connection for real-time updates. norbert serve and norbert status commands.",
+          "story_trace": "US-001",
+          "acceptance_criteria": [
+            "Dashboard displays captured events with timestamp, tool name, status",
+            "WebSocket pushes new events to dashboard without page refresh",
+            "norbert status shows server state, event count, MCP servers seen",
+            "First event visible on dashboard within 5 minutes of install",
+            "Server crash does not affect Claude Code operation"
+          ],
+          "architectural_constraints": [
+            "Dashboard communicates with server via REST API and WebSocket only",
+            "Dashboard has zero runtime imports from other Norbert packages"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "02",
+      "name": "Data Pipeline",
+      "description": "Comprehensive event capture for all hook types with MCP attribution and agent tree construction.",
+      "steps": [
+        {
+          "id": "02-01",
+          "title": "Full event capture pipeline with MCP attribution",
+          "description": "Expand event processing for all 7 hook types. Extract MCP attribution (server, tool name) from tool events. Build session aggregates (token counts, agent count, cost estimates). Construct agent parent-child relationships from SubagentStart/SubagentStop pairs.",
+          "story_trace": "US-002",
+          "acceptance_criteria": [
+            "All 7 hook event types captured and stored with correct fields",
+            "MCP tool calls include server name and tool name",
+            "Built-in tool calls stored with null MCP fields",
+            "Parent-child agent relationships queryable from agent_spans",
+            "Events during server downtime do not corrupt existing data",
+            "Session aggregates update incrementally on each event"
+          ],
+          "architectural_constraints": [
+            "Event processing functions are pure (in core module)",
+            "MCP attribution uses OTel-aligned field names",
+            "Raw event payload preserved in raw_payload column"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "03",
+      "name": "Dashboard Core Views",
+      "description": "Overview page, execution trace graph, and token cost waterfall -- the three primary dashboard experiences.",
+      "steps": [
+        {
+          "id": "03-01",
+          "title": "Dashboard overview with summary cards and MCP health",
+          "description": "Replace minimal event list with overview page: today's summary cards (sessions, tokens, cost, MCP servers), recent sessions table (sortable, clickable), MCP server health table (status, calls, errors, token overhead). Empty state guidance for new installs.",
+          "story_trace": "US-003",
+          "acceptance_criteria": [
+            "Summary cards show session count, total tokens, estimated cost, MCP server count",
+            "Sessions table sorted by start time, shows agents/tokens/cost/MCP errors/duration",
+            "MCP health table shows per-server status, call count, errors, token overhead",
+            "Dashboard loads in under 2 seconds with 100 sessions",
+            "Empty state shows helpful guidance"
+          ],
+          "architectural_constraints": [
+            "API endpoints serve pre-computed aggregates (not raw event queries)",
+            "MCP servers with errors are visually highlighted"
+          ]
+        },
+        {
+          "id": "03-02",
+          "title": "Execution trace graph with interactive DAG",
+          "description": "Session detail page with D3.js DAG visualization of agent topology. Nodes show agent name, cost, tool count. Edges show parent-child delegation. Nodes expandable to show individual tool calls. Failed agents show error indicators. Single-agent sessions display cleanly.",
+          "story_trace": "US-004",
+          "acceptance_criteria": [
+            "DAG renders correct parent-child agent relationships",
+            "Each node shows agent name, token cost, tool call count, duration",
+            "Clicking a node reveals individual tool calls within that agent",
+            "Failed agents display error indicator with error details",
+            "Single-agent sessions render without broken layout",
+            "Graph renders in under 3 seconds for 20 agents"
+          ],
+          "architectural_constraints": [
+            "Trace building is a pure function in core module",
+            "DAG visualization uses D3.js (no framework-specific graph library)"
+          ]
+        },
+        {
+          "id": "03-03",
+          "title": "Token cost waterfall with MCP attribution",
+          "description": "Cost waterfall view in session detail page. Per-agent breakdown (input tokens, output tokens, cost). MCP tool calls attributed to server (server:tool format). Agents sorted by cost descending. Expandable for per-tool-call detail. Cost estimation footnote.",
+          "story_trace": "US-006",
+          "acceptance_criteria": [
+            "Per-agent cost breakdown with input/output tokens and estimated cost",
+            "Agents sorted by cost descending",
+            "Expanding agent shows per-tool-call breakdown",
+            "MCP tool calls show server:tool_name format",
+            "Agent costs sum to within 5% of session total",
+            "Cost estimation methodology footnote visible"
+          ],
+          "architectural_constraints": [
+            "Cost calculation is a pure function in core module",
+            "Cost rates configurable via config (not hardcoded)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "04",
+      "name": "MCP Observatory",
+      "description": "Dedicated MCP health panel with error timeline, latency tracking, and diagnostic recommendations.",
+      "steps": [
+        {
+          "id": "04-01",
+          "title": "MCP health dashboard with error timeline and diagnostics",
+          "description": "Dedicated MCP panel: real-time connection status per server, historical event timeline (connect/disconnect/reconnect), error categorization (connection/timeout/registration/silent drop), tool call explorer with per-server attribution and latency, progressive latency degradation detection, diagnostic recommendations per error type. Empty state for users with no MCP servers.",
+          "story_trace": "US-005",
+          "acceptance_criteria": [
+            "Per-server connection status (connected/disconnected/error) displayed",
+            "Historical timeline shows connect/disconnect/reconnect events",
+            "Errors categorized by type with diagnostic recommendations",
+            "Tool call explorer shows server name, tool, latency, and success/fail",
+            "Latency degradation pattern detection and warning",
+            "Empty state for no MCP servers shows helpful explanation"
+          ],
+          "architectural_constraints": [
+            "MCP analysis functions are pure (in core module)",
+            "Connection status inferred from event patterns (no direct health check)",
+            "Latency computed from PreToolUse to PostToolUse timestamp delta"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "05",
+      "name": "Optimization Loop",
+      "description": "Session comparison and history -- closing the observe-diagnose-optimize feedback loop.",
+      "steps": [
+        {
+          "id": "05-01",
+          "title": "Session comparison (CLI and dashboard)",
+          "description": "Compare two sessions side-by-side: tokens, cost, per-agent breakdown, MCP errors, duration. Change percentages computed. Projected monthly savings estimated. CLI: norbert cost --last --compare. Dashboard: comparison view. Handle differing agent configurations (new/removed agents).",
+          "story_trace": "US-007",
+          "acceptance_criteria": [
+            "Side-by-side metrics for tokens, cost, agents, MCP errors, duration",
+            "Change percentages computed and displayed",
+            "New/removed agents labeled appropriately",
+            "Projected monthly savings computed from cost delta and frequency",
+            "Helpful message when fewer than 2 sessions exist"
+          ],
+          "architectural_constraints": [
+            "Comparison logic is a pure function in core module",
+            "Available in both CLI and dashboard"
+          ]
+        },
+        {
+          "id": "05-02",
+          "title": "Session history with search, trends, and CSV export",
+          "description": "Session history page: searchable/filterable by date, cost, agent count. Weekly/monthly cost trend charts. Computed baselines (avg cost, P95, avg duration). CSV export for stakeholder reporting. Preliminary baselines with confidence note for insufficient data.",
+          "story_trace": "US-008",
+          "acceptance_criteria": [
+            "Session list filterable by date range, cost range, agent count",
+            "Weekly cost trend chart with daily granularity",
+            "Baselines computed: average cost, P95 cost, average duration",
+            "CSV export containing date, sessions, tokens, cost",
+            "Insufficient data shows preliminary baselines with confidence note",
+            "Session list sortable by cost, date, duration, agent count"
+          ],
+          "architectural_constraints": [
+            "Trend data computed from SQLite aggregates",
+            "CSV export generated server-side from query results"
+          ]
+        }
+      ]
+    }
+  ],
+  "implementation_scope": {
+    "in_scope": [
+      "Hook-based data capture for 7 Claude Code lifecycle events",
+      "Local SQLite storage with OTel-aligned schema",
+      "Web dashboard on localhost (Svelte 5 SPA)",
+      "CLI companion for quick queries and server management",
+      "Agent execution trace graph (interactive DAG)",
+      "Token cost waterfall with MCP attribution",
+      "MCP server health dashboard with error timeline",
+      "Session comparison and history with CSV export"
+    ],
+    "out_of_scope_mvp": [
+      "Norbert-as-MCP-server (Phase 2)",
+      "Context window pressure gauge (Phase 2)",
+      "MCP token overhead analyzer detail view (Phase 2)",
+      "Extensibility inspector (Phase 2)",
+      "Team analytics and multi-user (Phase 3)",
+      "Output quality evaluation/scoring",
+      "Real-time orchestration control",
+      "Cloud deployment or SaaS features"
+    ]
+  },
+  "validation": {
+    "quality_gates": [
+      "All 8 user stories traceable to roadmap steps",
+      "Architecture tests enforce module dependency rules in CI",
+      "Core module has zero runtime dependencies",
+      "Dashboard module has zero runtime Norbert imports",
+      "Walking skeleton (Phase 01) validates full pipeline before feature work",
+      "Cost estimates within 5% of session totals"
+    ],
+    "step_ratio_check": {
+      "steps": 10,
+      "estimated_production_files": 35,
+      "ratio": 0.29,
+      "threshold": 2.5,
+      "status": "PASS"
+    }
+  }
+}
