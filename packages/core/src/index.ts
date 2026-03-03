@@ -90,3 +90,6 @@ export { computeSessionUpdate } from './session-aggregator.js';
 // Agent Tree (pure function: event -> agent span update)
 export type { AgentSpanUpdate, AgentSpan } from './agent-tree.js';
 export { computeAgentSpanUpdate } from './agent-tree.js';
+
+// Trace Builder (pure function: flat agent list -> trace graph)
+export { buildTraceGraph } from './trace-builder.js';

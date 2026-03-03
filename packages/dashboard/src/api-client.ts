@@ -110,6 +110,44 @@ export const fetchOverview = async (
 };
 
 // ---------------------------------------------------------------------------
+// Trace graph response types
+// ---------------------------------------------------------------------------
+
+export interface TraceAgentNode {
+  readonly agentId: string;
+  readonly parentAgentId: string | undefined;
+  readonly toolCallCount: number;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly estimatedCost: number;
+  readonly status: string;
+  readonly children: readonly TraceAgentNode[];
+}
+
+export interface TraceEdge {
+  readonly fromAgentId: string;
+  readonly toAgentId: string;
+}
+
+export interface TraceGraphResponse {
+  readonly sessionId: string;
+  readonly rootAgent: TraceAgentNode;
+  readonly allAgents: readonly TraceAgentNode[];
+  readonly edges: readonly TraceEdge[];
+}
+
+export const fetchSessionTrace = async (
+  baseUrl: string,
+  sessionId: string
+): Promise<TraceGraphResponse> => {
+  const response = await fetch(`${baseUrl}/api/sessions/${sessionId}/trace`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch session trace: ${response.status}`);
+  }
+  return response.json() as Promise<TraceGraphResponse>;
+};
+
+// ---------------------------------------------------------------------------
 // URL builder (pure)
 // ---------------------------------------------------------------------------
 
