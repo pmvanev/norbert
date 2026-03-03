@@ -11,12 +11,18 @@
       "types": "./dist/index.d.ts"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc --project tsconfig.build.json",
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@norbert/core": "workspace:*"
+    "@norbert/core": "workspace:*",
+    "better-sqlite3": "^12.6.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13"
   }
 }
