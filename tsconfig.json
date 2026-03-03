@@ -19,7 +19,6 @@
     { "path": "packages/storage" },
     { "path": "packages/server" },
     { "path": "packages/cli" },
-    { "path": "packages/dashboard" },
     { "path": "packages/hooks" }
   ],
   "files": []

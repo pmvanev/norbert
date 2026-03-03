@@ -57,9 +57,15 @@ describe('Project scaffold', () => {
         expect(fs.existsSync(path.join(pkgDir, 'tsconfig.json'))).toBe(true);
       });
 
-      it(`packages/${pkg} has src/index.ts`, () => {
-        const indexPath = path.join(PACKAGES_DIR, pkg, 'src', 'index.ts');
-        expect(fs.existsSync(indexPath)).toBe(true);
+      it(`packages/${pkg} has expected entry point`, () => {
+        if (pkg === 'dashboard') {
+          // SvelteKit dashboard uses route-based entry, not src/index.ts
+          const appHtml = path.join(PACKAGES_DIR, pkg, 'src', 'app.html');
+          expect(fs.existsSync(appHtml)).toBe(true);
+        } else {
+          const indexPath = path.join(PACKAGES_DIR, pkg, 'src', 'index.ts');
+          expect(fs.existsSync(indexPath)).toBe(true);
+        }
       });
     }
   });

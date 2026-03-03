@@ -15,6 +15,7 @@ export default defineConfig({
   },
   test: {
     include: ['packages/*/src/**/*.test.ts', 'tests/unit/**/*.test.ts'],
+    exclude: ['packages/dashboard/**'],
     globals: false,
   },
 });

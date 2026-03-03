@@ -5,7 +5,11 @@
  * The server is the side-effect shell; domain logic lives in @norbert/core.
  */
 
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
 import Fastify, { type FastifyInstance } from 'fastify';
+import fastifyStatic from '@fastify/static';
 import type { StoragePort } from '@norbert/storage';
 import { registerHealthRoute } from './api/health.js';
 import { registerEventsRoute } from './api/events.js';
@@ -76,6 +80,26 @@ export const createApp = (
   registerHistoryRoute(app, storage);
   registerExportRoute(app, storage);
   registerEventIngress(app, storage, broadcastEvent);
+
+  // Serve dashboard SPA static files (if build exists)
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const dashboardBuildPath = path.resolve(__dirname, '..', '..', 'dashboard', 'build');
+  if (fs.existsSync(dashboardBuildPath)) {
+    app.register(fastifyStatic, {
+      root: dashboardBuildPath,
+      prefix: '/',
+      decorateReply: false,
+    });
+
+    // SPA fallback: serve index.html for non-API routes that don't match a static file
+    app.setNotFoundHandler((request, reply) => {
+      if (request.url.startsWith('/api/') || request.url === '/health' || request.url === '/ws') {
+        reply.code(404).send({ error: 'Not found' });
+      } else {
+        reply.sendFile('index.html');
+      }
+    });
+  }
 
   // Attach collector to app for test access
   // Using Object.defineProperty to add the readonly property
