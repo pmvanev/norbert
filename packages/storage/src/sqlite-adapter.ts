@@ -309,6 +309,22 @@ export const createSqliteAdapter = (dbPath: string): StoragePort => {
     SELECT * FROM agent_spans WHERE session_id = ? ORDER BY start_time ASC
   `);
 
+  const getRecentEventsStmt = db.prepare(`
+    SELECT * FROM events ORDER BY timestamp DESC, id DESC LIMIT ?
+  `);
+
+  const getEventCountStmt = db.prepare(`
+    SELECT COUNT(*) as count FROM events
+  `);
+
+  const getSessionCountStmt = db.prepare(`
+    SELECT COUNT(*) as count FROM sessions
+  `);
+
+  const getMcpServerNamesStmt = db.prepare(`
+    SELECT DISTINCT mcp_server FROM events WHERE mcp_server IS NOT NULL ORDER BY mcp_server ASC
+  `);
+
   // ---------------------------------------------------------------------------
   // Port function implementations
   // ---------------------------------------------------------------------------
@@ -435,6 +451,27 @@ export const createSqliteAdapter = (dbPath: string): StoragePort => {
     return rows.map(mapRowToAgentNode);
   };
 
+  const getRecentEvents = (limit: number): readonly HookEvent[] => {
+    const rows = getRecentEventsStmt.all(limit) as EventRow[];
+    // Reverse to return in chronological order (oldest first)
+    return rows.reverse().map(mapRowToHookEvent);
+  };
+
+  const getEventCount = (): number => {
+    const row = getEventCountStmt.get() as { count: number };
+    return row.count;
+  };
+
+  const getSessionCount = (): number => {
+    const row = getSessionCountStmt.get() as { count: number };
+    return row.count;
+  };
+
+  const getMcpServerNames = (): readonly string[] => {
+    const rows = getMcpServerNamesStmt.all() as Array<{ mcp_server: string }>;
+    return rows.map((row) => row.mcp_server);
+  };
+
   const close = (): void => {
     db.close();
   };
@@ -444,6 +481,10 @@ export const createSqliteAdapter = (dbPath: string): StoragePort => {
     getSession,
     getSessions,
     getEventsForSession,
+    getRecentEvents,
+    getEventCount,
+    getSessionCount,
+    getMcpServerNames,
     getMcpHealth,
     getAgentSpans,
     close,

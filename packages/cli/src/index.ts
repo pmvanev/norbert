@@ -7,6 +7,27 @@
 
 import { Command } from 'commander';
 import { runInit, type InitOptions } from './commands/init.js';
+import { formatStatusOutput, gatherStatusData, type StatusDeps } from './commands/status.js';
+import type { StoragePort } from '@norbert/storage';
+import { createSqliteAdapter } from '@norbert/storage';
+import { DEFAULT_CONFIG } from '@norbert/config';
+import http from 'http';
+
+// ---------------------------------------------------------------------------
+// Health check utility (side-effect at boundary)
+// ---------------------------------------------------------------------------
+
+const checkServerHealth = (port: number): Promise<boolean> =>
+  new Promise((resolve) => {
+    const req = http.get(`http://localhost:${port}/health`, (res) => {
+      resolve(res.statusCode === 200);
+    });
+    req.on('error', () => resolve(false));
+    req.setTimeout(2000, () => {
+      req.destroy();
+      resolve(false);
+    });
+  });
 
 // ---------------------------------------------------------------------------
 // CLI program factory
@@ -41,9 +62,79 @@ export const createProgram = (): Command => {
       }
     });
 
+  program
+    .command('status')
+    .description('Show server state, event count, MCP servers seen')
+    .option('-p, --port <number>', 'Server port', '7777')
+    .option('--db <path>', 'Path to database file')
+    .action(async (options) => {
+      const port = parseInt(options.port, 10);
+      const dbPath = options.db ?? DEFAULT_CONFIG.dbPath;
+
+      let storage: StoragePort | null = null;
+      try {
+        storage = createSqliteAdapter(dbPath);
+
+        const deps: StatusDeps = {
+          getEventCount: storage.getEventCount,
+          getSessionCount: storage.getSessionCount,
+          getMcpServerNames: storage.getMcpServerNames,
+          checkServerHealth,
+        };
+
+        const statusData = await gatherStatusData(deps, port);
+        console.log(formatStatusOutput(statusData));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`Failed to get status: ${message}`);
+        process.exit(1);
+      } finally {
+        storage?.close();
+      }
+    });
+
+  program
+    .command('serve')
+    .description('Start the Norbert server')
+    .option('-p, --port <number>', 'Server port', '7777')
+    .option('--db <path>', 'Path to database file')
+    .action(async (options) => {
+      const port = parseInt(options.port, 10);
+      const dbPath = options.db ?? DEFAULT_CONFIG.dbPath;
+
+      // Dynamic import to avoid adding @norbert/server to package.json dependencies.
+      // The serve command requires @norbert/server to be installed in the monorepo.
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      try {
+        const modulePath = '@norbert/server';
+        // Use Function constructor to avoid TypeScript module resolution
+        const loadModule = new Function('modulePath', 'return import(modulePath)') as
+          (path: string) => Promise<Record<string, unknown>>;
+        const serverModule = await loadModule(modulePath);
+        const createApp = serverModule.createApp as (
+          config: { port: number },
+          storage: StoragePort
+        ) => { listen: (opts: { port: number; host: string }) => Promise<string> };
+
+        const storage = createSqliteAdapter(dbPath);
+        const app = createApp({ port }, storage);
+
+        await app.listen({ port, host: '0.0.0.0' });
+        console.log(`Norbert server listening on http://localhost:${port}`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`Failed to start server: ${message}`);
+        process.exit(1);
+      }
+    });
+
   return program;
 };
 
 // Re-export init for programmatic use
 export { runInit } from './commands/init.js';
 export type { InitOptions } from './commands/init.js';
+
+// Re-export status for programmatic use
+export { formatStatusOutput, gatherStatusData } from './commands/status.js';
+export type { StatusData, StatusDeps } from './commands/status.js';

@@ -276,6 +276,9 @@
       "ratio": 0.29,
       "threshold": 2.5,
       "status": "PASS"
-    }
+    },
+    "status": "approved",
+    "approved_at": "2026-03-03T00:00:00Z",
+    "approved_by": "automated-quality-gate"
   }
 }

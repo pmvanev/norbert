@@ -5,5 +5,7 @@
  * Exports: Server factory and start/stop functions
  */
 
-export type { ServerConfig } from './app.js';
+export type { ServerConfig, NorbertApp } from './app.js';
 export { createApp } from './app.js';
+export type { ConnectionManager, BroadcastSocket } from './ws/connection-manager.js';
+export { createConnectionManager } from './ws/connection-manager.js';
