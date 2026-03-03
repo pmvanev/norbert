@@ -288,6 +288,93 @@ export const fetchSessionComparison = async (
 };
 
 // ---------------------------------------------------------------------------
+// Session history response types
+// ---------------------------------------------------------------------------
+
+export interface DailyTrendResponse {
+  readonly date: string;
+  readonly sessionCount: number;
+  readonly totalTokens: number;
+  readonly totalCost: number;
+}
+
+export interface SessionBaselinesResponse {
+  readonly averageCost: number;
+  readonly p95Cost: number;
+  readonly averageDuration: number;
+  readonly sampleSize: number;
+  readonly isConfident: boolean;
+  readonly confidenceNote: string | undefined;
+}
+
+export interface SessionHistoryResponse {
+  readonly sessions: readonly OverviewSession[];
+  readonly trends: readonly DailyTrendResponse[];
+  readonly baselines: SessionBaselinesResponse;
+}
+
+export interface SessionHistoryParams {
+  readonly dateStart?: string;
+  readonly dateEnd?: string;
+  readonly costMin?: number;
+  readonly costMax?: number;
+  readonly agentMin?: number;
+  readonly agentMax?: number;
+  readonly sortBy?: string;
+  readonly sortOrder?: string;
+  readonly limit?: number;
+  readonly offset?: number;
+}
+
+export const fetchSessionHistory = async (
+  baseUrl: string,
+  params: SessionHistoryParams = {}
+): Promise<SessionHistoryResponse> => {
+  const searchParams = new URLSearchParams();
+  if (params.dateStart !== undefined) searchParams.set('dateStart', params.dateStart);
+  if (params.dateEnd !== undefined) searchParams.set('dateEnd', params.dateEnd);
+  if (params.costMin !== undefined) searchParams.set('costMin', String(params.costMin));
+  if (params.costMax !== undefined) searchParams.set('costMax', String(params.costMax));
+  if (params.agentMin !== undefined) searchParams.set('agentMin', String(params.agentMin));
+  if (params.agentMax !== undefined) searchParams.set('agentMax', String(params.agentMax));
+  if (params.sortBy !== undefined) searchParams.set('sortBy', params.sortBy);
+  if (params.sortOrder !== undefined) searchParams.set('sortOrder', params.sortOrder);
+  if (params.limit !== undefined) searchParams.set('limit', String(params.limit));
+  if (params.offset !== undefined) searchParams.set('offset', String(params.offset));
+
+  const queryString = searchParams.toString();
+  const url = `${baseUrl}/api/sessions/history${queryString ? `?${queryString}` : ''}`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch session history: ${response.status}`);
+  }
+  return response.json() as Promise<SessionHistoryResponse>;
+};
+
+/**
+ * Build the URL for CSV export with the given filter parameters.
+ * Returns a URL string suitable for window.location or anchor href.
+ */
+export const getSessionExportUrl = (
+  baseUrl: string,
+  params: SessionHistoryParams = {}
+): string => {
+  const searchParams = new URLSearchParams();
+  searchParams.set('format', 'csv');
+  if (params.dateStart !== undefined) searchParams.set('dateStart', params.dateStart);
+  if (params.dateEnd !== undefined) searchParams.set('dateEnd', params.dateEnd);
+  if (params.costMin !== undefined) searchParams.set('costMin', String(params.costMin));
+  if (params.costMax !== undefined) searchParams.set('costMax', String(params.costMax));
+  if (params.agentMin !== undefined) searchParams.set('agentMin', String(params.agentMin));
+  if (params.agentMax !== undefined) searchParams.set('agentMax', String(params.agentMax));
+  if (params.sortBy !== undefined) searchParams.set('sortBy', params.sortBy);
+  if (params.sortOrder !== undefined) searchParams.set('sortOrder', params.sortOrder);
+  if (params.limit !== undefined) searchParams.set('limit', String(params.limit));
+  if (params.offset !== undefined) searchParams.set('offset', String(params.offset));
+  return `${baseUrl}/api/sessions/export?${searchParams.toString()}`;
+};
+
+// ---------------------------------------------------------------------------
 // URL builder (pure)
 // ---------------------------------------------------------------------------
 

@@ -15,6 +15,8 @@ import { registerTraceRoute } from './api/trace.js';
 import { registerCostsRoute } from './api/costs.js';
 import { registerMcpHealthRoute } from './api/mcp-health.js';
 import { registerComparisonRoute } from './api/comparison.js';
+import { registerHistoryRoute } from './api/history.js';
+import { registerExportRoute } from './api/export.js';
 import { registerEventIngress } from './ingress/event-handler.js';
 import { createConnectionManager } from './ws/connection-manager.js';
 
@@ -71,6 +73,8 @@ export const createApp = (
   registerCostsRoute(app, storage);
   registerMcpHealthRoute(app, storage);
   registerComparisonRoute(app, storage);
+  registerHistoryRoute(app, storage);
+  registerExportRoute(app, storage);
   registerEventIngress(app, storage, broadcastEvent);
 
   // Attach collector to app for test access

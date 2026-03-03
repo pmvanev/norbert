@@ -107,6 +107,19 @@ export type {
 } from './session-comparator.js';
 export { compareSessions } from './session-comparator.js';
 
+// Session Trends (pure functions: sessions -> daily trends, baselines, CSV)
+export type {
+  DailyTrend,
+  SessionBaselines,
+  TrendAnalysis,
+} from './session-trends.js';
+export {
+  computeDailyTrends,
+  computeBaselines,
+  computeTrendAnalysis,
+  sessionsToCsv,
+} from './session-trends.js';
+
 // MCP Analyzer (pure functions: events + health -> MCP diagnostics)
 export type {
   McpErrorCategory,
