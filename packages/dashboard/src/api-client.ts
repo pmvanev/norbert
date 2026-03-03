@@ -241,6 +241,53 @@ export const fetchMcpHealthDetail = async (
 };
 
 // ---------------------------------------------------------------------------
+// Session comparison response types
+// ---------------------------------------------------------------------------
+
+export interface AgentComparisonEntry {
+  readonly agentId: string;
+  readonly status: 'unchanged' | 'new' | 'removed';
+  readonly previousCost: number;
+  readonly currentCost: number;
+  readonly costDelta: number;
+  readonly costChangePercent: number;
+}
+
+export interface SessionComparisonResponse {
+  readonly previousSession: OverviewSession;
+  readonly currentSession: OverviewSession;
+  readonly deltas: {
+    readonly tokensDelta: number;
+    readonly costDelta: number;
+    readonly agentCountDelta: number;
+    readonly errorCountDelta: number;
+  };
+  readonly changePercents: {
+    readonly tokens: number;
+    readonly cost: number;
+    readonly agents: number;
+    readonly errors: number;
+    readonly duration: number;
+  };
+  readonly agentComparisons: readonly AgentComparisonEntry[];
+  readonly projectedMonthlySavings: number;
+}
+
+export const fetchSessionComparison = async (
+  baseUrl: string,
+  currentId: string,
+  previousId: string
+): Promise<SessionComparisonResponse> => {
+  const response = await fetch(
+    `${baseUrl}/api/sessions/compare?current=${encodeURIComponent(currentId)}&previous=${encodeURIComponent(previousId)}`
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to fetch session comparison: ${response.status}`);
+  }
+  return response.json() as Promise<SessionComparisonResponse>;
+};
+
+// ---------------------------------------------------------------------------
 // URL builder (pure)
 // ---------------------------------------------------------------------------
 

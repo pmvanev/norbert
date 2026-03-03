@@ -98,6 +98,15 @@ export { buildTraceGraph } from './trace-builder.js';
 // Cost Breakdown Builder (pure function: agents + events -> cost waterfall)
 export { buildCostBreakdown } from './cost-breakdown-builder.js';
 
+// Session Comparator (pure function: two sessions -> detailed comparison)
+export type {
+  AgentComparison,
+  AgentComparisonStatus,
+  ChangePercents,
+  DetailedComparisonResult,
+} from './session-comparator.js';
+export { compareSessions } from './session-comparator.js';
+
 // MCP Analyzer (pure functions: events + health -> MCP diagnostics)
 export type {
   McpErrorCategory,
