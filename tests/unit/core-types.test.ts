@@ -445,8 +445,10 @@ describe('Domain types compile correctly', () => {
       agents: [],
       totalCost: 0.05,
       costByMcpServer: [],
+      costMethodologyNote: 'Estimated based on published rates.',
     };
     expect(breakdown.totalCost).toBe(0.05);
+    expect(breakdown.costMethodologyNote).toBeDefined();
   });
 
   it('ComparisonResult compares two sessions', () => {

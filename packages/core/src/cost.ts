@@ -38,11 +38,19 @@ export const getCostRate = (model: string): CostRate =>
 // Cost Breakdown
 // ---------------------------------------------------------------------------
 
+export interface ToolCallDetail {
+  readonly toolName: string;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly estimatedCost: number;
+}
+
 export interface AgentCostEntry {
   readonly agentId: string;
   readonly inputTokens: number;
   readonly outputTokens: number;
   readonly estimatedCost: number;
+  readonly toolCalls: readonly ToolCallDetail[];
 }
 
 export interface McpCostEntry {
@@ -57,6 +65,7 @@ export interface CostBreakdown {
   readonly agents: readonly AgentCostEntry[];
   readonly totalCost: number;
   readonly costByMcpServer: readonly McpCostEntry[];
+  readonly costMethodologyNote: string;
 }
 
 // ---------------------------------------------------------------------------

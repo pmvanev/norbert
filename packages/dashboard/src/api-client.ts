@@ -148,6 +148,51 @@ export const fetchSessionTrace = async (
 };
 
 // ---------------------------------------------------------------------------
+// Cost breakdown response types
+// ---------------------------------------------------------------------------
+
+export interface CostToolCallDetail {
+  readonly toolName: string;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly estimatedCost: number;
+}
+
+export interface CostAgentEntry {
+  readonly agentId: string;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly estimatedCost: number;
+  readonly toolCalls: readonly CostToolCallDetail[];
+}
+
+export interface CostMcpEntry {
+  readonly serverName: string;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly estimatedCost: number;
+}
+
+export interface CostBreakdownResponse {
+  readonly sessionId: string;
+  readonly agents: readonly CostAgentEntry[];
+  readonly totalCost: number;
+  readonly costByMcpServer: readonly CostMcpEntry[];
+  readonly costMethodologyNote: string;
+}
+
+export const fetchSessionCosts = async (
+  baseUrl: string,
+  sessionId: string
+): Promise<CostBreakdownResponse> => {
+  const response = await fetch(`${baseUrl}/api/sessions/${sessionId}/costs`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch session costs: ${response.status}`);
+  }
+  return response.json() as Promise<CostBreakdownResponse>;
+};
+
+// ---------------------------------------------------------------------------
 // URL builder (pure)
 // ---------------------------------------------------------------------------
 

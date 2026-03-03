@@ -12,6 +12,7 @@ import { registerEventsRoute } from './api/events.js';
 import { registerSessionsRoute } from './api/sessions.js';
 import { registerOverviewRoute } from './api/overview.js';
 import { registerTraceRoute } from './api/trace.js';
+import { registerCostsRoute } from './api/costs.js';
 import { registerEventIngress } from './ingress/event-handler.js';
 import { createConnectionManager } from './ws/connection-manager.js';
 
@@ -65,6 +66,7 @@ export const createApp = (
   registerSessionsRoute(app, storage);
   registerOverviewRoute(app, storage);
   registerTraceRoute(app, storage);
+  registerCostsRoute(app, storage);
   registerEventIngress(app, storage, broadcastEvent);
 
   // Attach collector to app for test access

@@ -66,6 +66,7 @@ export type {
   CostBreakdown,
   AgentCostEntry,
   McpCostEntry,
+  ToolCallDetail,
   ComparisonResult,
   SessionDelta,
 } from './cost.js';
@@ -93,3 +94,6 @@ export { computeAgentSpanUpdate } from './agent-tree.js';
 
 // Trace Builder (pure function: flat agent list -> trace graph)
 export { buildTraceGraph } from './trace-builder.js';
+
+// Cost Breakdown Builder (pure function: agents + events -> cost waterfall)
+export { buildCostBreakdown } from './cost-breakdown-builder.js';
