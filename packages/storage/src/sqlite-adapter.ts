@@ -17,6 +17,7 @@ import type {
   McpServerHealth,
   McpServerStatus,
   EventType,
+  OverviewSummary,
 } from '@norbert/core';
 import {
   estimateCost,
@@ -416,6 +417,15 @@ export const createSqliteAdapter = (dbPath: string): StoragePort => {
     SELECT DISTINCT mcp_server FROM events WHERE mcp_server IS NOT NULL ORDER BY mcp_server ASC
   `);
 
+  const getOverviewSummaryStmt = db.prepare(`
+    SELECT
+      COUNT(*) as session_count,
+      COALESCE(SUM(total_input_tokens + total_output_tokens), 0) as total_tokens,
+      COALESCE(SUM(estimated_cost), 0) as estimated_cost,
+      (SELECT COUNT(DISTINCT mcp_server) FROM events WHERE mcp_server IS NOT NULL) as mcp_server_count
+    FROM sessions
+  `);
+
   // ---------------------------------------------------------------------------
   // Port function implementations
   // ---------------------------------------------------------------------------
@@ -565,6 +575,22 @@ export const createSqliteAdapter = (dbPath: string): StoragePort => {
     return rows.map((row) => row.mcp_server);
   };
 
+  const getOverviewSummary = (): OverviewSummary => {
+    const row = getOverviewSummaryStmt.get() as {
+      session_count: number;
+      total_tokens: number;
+      estimated_cost: number;
+      mcp_server_count: number;
+    };
+
+    return {
+      sessionCount: row.session_count,
+      totalTokens: row.total_tokens,
+      estimatedCost: row.estimated_cost,
+      mcpServerCount: row.mcp_server_count,
+    };
+  };
+
   const close = (): void => {
     db.close();
   };
@@ -579,6 +605,7 @@ export const createSqliteAdapter = (dbPath: string): StoragePort => {
     getSessionCount,
     getMcpServerNames,
     getMcpHealth,
+    getOverviewSummary,
     getAgentSpans,
     close,
   };

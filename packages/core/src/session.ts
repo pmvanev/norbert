@@ -57,3 +57,14 @@ export interface SessionFilter {
   readonly limit: number;
   readonly offset: number;
 }
+
+// ---------------------------------------------------------------------------
+// Overview Summary (pre-computed aggregate for dashboard)
+// ---------------------------------------------------------------------------
+
+export interface OverviewSummary {
+  readonly sessionCount: number;
+  readonly totalTokens: number;
+  readonly estimatedCost: number;
+  readonly mcpServerCount: number;
+}

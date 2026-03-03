@@ -35,6 +35,46 @@ export interface SessionsResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Overview response types
+// ---------------------------------------------------------------------------
+
+export interface OverviewSummaryResponse {
+  readonly sessionCount: number;
+  readonly totalTokens: number;
+  readonly estimatedCost: number;
+  readonly mcpServerCount: number;
+}
+
+export interface McpHealthEntry {
+  readonly serverName: string;
+  readonly status: 'healthy' | 'degraded' | 'unhealthy';
+  readonly callCount: number;
+  readonly errorCount: number;
+  readonly avgLatencyMs: number;
+  readonly tokenOverhead: number;
+}
+
+export interface OverviewSession {
+  readonly id: string;
+  readonly startTime: string;
+  readonly endTime?: string;
+  readonly model: string;
+  readonly agentCount: number;
+  readonly eventCount: number;
+  readonly totalInputTokens: number;
+  readonly totalOutputTokens: number;
+  readonly estimatedCost: number;
+  readonly mcpErrorCount: number;
+  readonly status: string;
+}
+
+export interface OverviewResponse {
+  readonly summary: OverviewSummaryResponse;
+  readonly recentSessions: readonly OverviewSession[];
+  readonly mcpHealth: readonly McpHealthEntry[];
+}
+
+// ---------------------------------------------------------------------------
 // Fetch functions
 // ---------------------------------------------------------------------------
 
@@ -57,6 +97,16 @@ export const fetchSessions = async (
     throw new Error(`Failed to fetch sessions: ${response.status}`);
   }
   return response.json() as Promise<SessionsResponse>;
+};
+
+export const fetchOverview = async (
+  baseUrl: string
+): Promise<OverviewResponse> => {
+  const response = await fetch(`${baseUrl}/api/overview`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch overview: ${response.status}`);
+  }
+  return response.json() as Promise<OverviewResponse>;
 };
 
 // ---------------------------------------------------------------------------

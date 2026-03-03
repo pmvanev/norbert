@@ -10,6 +10,7 @@ import type { StoragePort } from '@norbert/storage';
 import { registerHealthRoute } from './api/health.js';
 import { registerEventsRoute } from './api/events.js';
 import { registerSessionsRoute } from './api/sessions.js';
+import { registerOverviewRoute } from './api/overview.js';
 import { registerEventIngress } from './ingress/event-handler.js';
 import { createConnectionManager } from './ws/connection-manager.js';
 
@@ -61,6 +62,7 @@ export const createApp = (
   registerHealthRoute(app);
   registerEventsRoute(app, storage);
   registerSessionsRoute(app, storage);
+  registerOverviewRoute(app, storage);
   registerEventIngress(app, storage, broadcastEvent);
 
   // Attach collector to app for test access

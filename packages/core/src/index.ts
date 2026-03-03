@@ -42,6 +42,7 @@ export type {
   SortOrder,
   DateRange,
   NumberRange,
+  OverviewSummary,
 } from './session.js';
 
 // Trace Graph
