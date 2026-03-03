@@ -22,13 +22,6 @@
 
 	onMount(() => {
 		load();
-
-		const wsUrl = `ws://${window.location.host}/ws`;
-		appStore.connectWs(wsUrl);
-
-		return () => {
-			appStore.disconnectWs();
-		};
 	});
 
 	$effect(() => {

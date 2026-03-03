@@ -1,6 +1,7 @@
 <script lang="ts">
 	import '../app.css';
 	import WsIndicator from '../components/shared/WsIndicator.svelte';
+	import { appStore } from '$lib/stores/app-store.svelte';
 
 	interface Props {
 		children: import('svelte').Snippet;
@@ -12,6 +13,13 @@
 
 	$effect(() => {
 		currentPath = window.location.pathname;
+	});
+
+	$effect(() => {
+		const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+		const wsUrl = `${protocol}//${window.location.host}/ws`;
+		appStore.connectWs(wsUrl);
+		return () => appStore.disconnectWs();
 	});
 
 	const navItems = [

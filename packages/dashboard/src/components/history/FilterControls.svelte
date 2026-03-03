@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import type { SessionHistoryParams } from '$lib/api-client';
 
 	interface Props {
@@ -8,12 +9,14 @@
 
 	let { filters, onApply }: Props = $props();
 
-	let dateStart = $state(filters.dateStart ?? '');
-	let dateEnd = $state(filters.dateEnd ?? '');
-	let costMin = $state(filters.costMin !== undefined ? String(filters.costMin) : '');
-	let costMax = $state(filters.costMax !== undefined ? String(filters.costMax) : '');
-	let sortBy = $state(filters.sortBy ?? 'startTime');
-	let sortOrder = $state(filters.sortOrder ?? 'desc');
+	// Snapshot initial prop values for local form state (intentional one-time capture)
+	const init = untrack(() => ({ ...filters }));
+	let dateStart = $state(init.dateStart ?? '');
+	let dateEnd = $state(init.dateEnd ?? '');
+	let costMin = $state(init.costMin !== undefined ? String(init.costMin) : '');
+	let costMax = $state(init.costMax !== undefined ? String(init.costMax) : '');
+	let sortBy = $state(init.sortBy ?? 'startTime');
+	let sortOrder = $state(init.sortOrder ?? 'desc');
 
 	const apply = () => {
 		let params: SessionHistoryParams = {
