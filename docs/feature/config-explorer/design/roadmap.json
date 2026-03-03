@@ -1,0 +1,304 @@
+{
+  "roadmap": {
+    "feature_id": "config-explorer",
+    "title": "Config Explorer -- Claude Configuration Observatory",
+    "architect": "Morgan",
+    "date": "2026-03-03",
+    "paradigm": "functional-leaning-typescript",
+    "estimated_production_files": 18,
+    "target_dev_days": 12
+  },
+  "rejected_simple_alternatives": [
+    {
+      "name": "CLI command printing text config tree",
+      "expected_impact": "40%",
+      "why_insufficient": "Cannot show force-directed graphs, precedence waterfalls, or interactive path testing."
+    },
+    {
+      "name": "Static HTML export of config analysis",
+      "expected_impact": "60%",
+      "why_insufficient": "No interactive graph, no subsystem filtering, no real-time path testing. Loses 'living map' value."
+    }
+  ],
+  "phases": [
+    {
+      "id": "01",
+      "title": "Foundation -- Package, Types, and Walking Skeleton",
+      "steps": [
+        {
+          "id": "01-01",
+          "title": "Config Explorer package with domain types",
+          "description": "Create @norbert/config-explorer package with discriminated unions for ConfigNode, ConfigEdge, ConfigScope, ConfigSubsystem, PrecedenceChain, and all supporting types.",
+          "acceptance_criteria": [
+            "Package builds independently with zero @norbert/* dependencies",
+            "Discriminated unions cover all 5 scopes and 8 subsystems",
+            "All types are readonly (immutable domain)",
+            "Types exported from package index"
+          ],
+          "architectural_constraints": [
+            "Zero dependencies on @norbert/core or any other @norbert/* package",
+            "picomatch and gray-matter are sole runtime dependencies"
+          ],
+          "type": "production"
+        },
+        {
+          "id": "01-02",
+          "title": "File classifier and JSON content parser",
+          "description": "Pure functions: classify file path to subsystem+scope, parse JSON settings files. Filesystem adapter in server reads files and passes to pure functions.",
+          "acceptance_criteria": [
+            "File classifier maps known paths to correct subsystem and scope",
+            "JSON parser produces structured ParsedContent for settings.json",
+            "Malformed JSON produces error node, not exception",
+            "Filesystem adapter reads ~/.claude/ and .claude/ cross-platform"
+          ],
+          "architectural_constraints": [
+            "Classifier and parser are pure functions in config-explorer package",
+            "Filesystem I/O in server only (adapter boundary)"
+          ],
+          "type": "production"
+        },
+        {
+          "id": "01-03",
+          "title": "Walking skeleton -- settings API and basic tree view",
+          "description": "End-to-end pipeline: read settings.json from user+project scopes, serve via GET /api/config/tree, render in minimal Svelte tree with scope coloring.",
+          "acceptance_criteria": [
+            "API returns parsed settings from both scopes with scope annotations",
+            "Tree renders user settings in blue, project settings in green",
+            "Missing settings file produces placeholder, not error",
+            "Config tab appears in dashboard navigation"
+          ],
+          "architectural_constraints": [
+            "New Fastify route registered via registerConfigRoutes() in app.ts",
+            "Dashboard /config route with ConfigExplorer parent layout"
+          ],
+          "type": "production"
+        }
+      ]
+    },
+    {
+      "id": "02",
+      "title": "Config Parser -- All Formats and Subsystems",
+      "steps": [
+        {
+          "id": "02-01",
+          "title": "Markdown and YAML frontmatter parser",
+          "description": "Parse Markdown files (CLAUDE.md, rules, skills, agents) using gray-matter. Extract frontmatter fields: paths, skills, tools, model, hooks, allowed-tools.",
+          "acceptance_criteria": [
+            "YAML frontmatter extracted from rules, skills, and agents",
+            "Frontmatter fields annotated for display (e.g., 'Applies to: src/api/**/*.ts')",
+            "Files without frontmatter parsed as plain Markdown body",
+            "Malformed YAML produces error node, other files unaffected"
+          ],
+          "architectural_constraints": [
+            "gray-matter used for frontmatter extraction",
+            "Parser functions remain pure -- no filesystem access"
+          ],
+          "type": "production"
+        },
+        {
+          "id": "02-02",
+          "title": "Full config discovery across all scopes and subsystems",
+          "description": "Extend filesystem adapter to scan all 5 scopes (user, project, local, plugin, managed) and classify all 8 subsystems. Assemble complete ConfigModel.",
+          "acceptance_criteria": [
+            "All 5 scopes scanned with correct path resolution per platform",
+            "All 8 subsystems classified from discovered files",
+            "Plugin directories parsed including plugin.json manifest",
+            "Managed settings degrade gracefully when access denied",
+            "ConfigModel assembled with node counts matching filesystem"
+          ],
+          "architectural_constraints": [
+            "Cross-platform path resolution via os.homedir() and platform detection",
+            "Config file reader port injected into API routes"
+          ],
+          "type": "production"
+        }
+      ]
+    },
+    {
+      "id": "03",
+      "title": "Precedence Resolution and Cascade View",
+      "steps": [
+        {
+          "id": "03-01",
+          "title": "Precedence resolver for all subsystems",
+          "description": "Pure function resolving precedence per subsystem following documented order. Handles override, additive (CLAUDE.md), and merge (array settings) resolution types.",
+          "acceptance_criteria": [
+            "Settings precedence: managed > CLI > local > project > user",
+            "CLAUDE.md shown as additive (all ACTIVE, not overridden)",
+            "Array settings (permissions) show merge with source tagging",
+            "On-demand items labeled distinctly from always-loaded items",
+            "Override reason explains which scope caused the override"
+          ],
+          "architectural_constraints": [
+            "Precedence resolver is a pure function in config-explorer package",
+            "Resolution follows Research Finding 12 documented order"
+          ],
+          "type": "production"
+        },
+        {
+          "id": "03-02",
+          "title": "Config Cascade view (precedence waterfall)",
+          "description": "Svelte component showing per-subsystem resolution waterfall with ACTIVE/OVERRIDDEN markers, strikethrough, override reasons, and subsystem selector.",
+          "acceptance_criteria": [
+            "Cascade displays all 5 scope levels for selected subsystem",
+            "ACTIVE marker on winning value, OVERRIDDEN with strikethrough on suppressed",
+            "Subsystem selector covers all 7 subsystems",
+            "Click-through from cascade entry to Atlas file view"
+          ],
+          "architectural_constraints": [
+            "Data fetched via GET /api/config/precedence/:subsystem",
+            "Scope colors from shared CSS custom properties"
+          ],
+          "type": "production"
+        }
+      ]
+    },
+    {
+      "id": "04",
+      "title": "Atlas Tree and Path Rule Tester",
+      "steps": [
+        {
+          "id": "04-01",
+          "title": "Config Atlas full anatomy view",
+          "description": "Dual-pane tree of ~/.claude/ and .claude/ with scope coloring, subsystem icons, content preview with syntax highlighting, and missing file indicators.",
+          "acceptance_criteria": [
+            "Dual-pane tree shows user and project scopes side by side",
+            "Scope coloring consistent with Cascade and all other views",
+            "Content preview shows file contents with frontmatter annotations",
+            "Missing directories shown dimmed with descriptive tooltip",
+            "Malformed files display error badge, other files unaffected"
+          ],
+          "architectural_constraints": [
+            "Data fetched via GET /api/config/tree",
+            "Reuses existing dashboard shared components (EmptyState, StatusBadge)"
+          ],
+          "type": "production"
+        },
+        {
+          "id": "04-02",
+          "title": "Path Rule Tester with glob matching",
+          "description": "Diagnostic tool: enter file path, see which rules match (with pattern) and which do not (with mismatch reason). Uses picomatch for glob matching.",
+          "acceptance_criteria": [
+            "Text input accepts file path relative to project root",
+            "MATCH shown for rules whose glob pattern matches the path",
+            "NO MATCH shown with specific mismatch reason",
+            "Unconditional rules always shown as MATCH",
+            "Click-through to Atlas for rule file details",
+            "Glob matching uses picomatch-compatible semantics"
+          ],
+          "architectural_constraints": [
+            "Glob matching via picomatch in config-explorer package",
+            "API endpoint: GET /api/config/test-path?path="
+          ],
+          "type": "production"
+        }
+      ]
+    },
+    {
+      "id": "05",
+      "title": "Mind Map and Search",
+      "steps": [
+        {
+          "id": "05-01",
+          "title": "Config Mind Map overview visualization",
+          "description": "D3.js tree layout with 8 subsystem branches, element counts, scope coloring, expand/collapse interaction. Default overview for newcomers.",
+          "acceptance_criteria": [
+            "8 primary branches: Memory, Settings, Rules, Skills, Agents, Hooks, Plugins, MCP",
+            "Element counts per branch match Atlas file counts",
+            "Branches expand to show individual elements, collapse to counts",
+            "Empty subsystems shown dimmed with zero count",
+            "Scope coloring consistent with all other views"
+          ],
+          "architectural_constraints": [
+            "D3.js tree layout (existing library in dashboard)",
+            "Data from GET /api/config model"
+          ],
+          "type": "production"
+        },
+        {
+          "id": "05-02",
+          "title": "Full-text configuration search",
+          "description": "Search across all config files with results showing file path, scope badge, subsystem icon, matching line. Cmd+K shortcut.",
+          "acceptance_criteria": [
+            "Search covers all files across all scopes",
+            "Results show path, scope badge, subsystem icon, matching line",
+            "Click result navigates to file in Atlas",
+            "No-results state shows guidance message",
+            "Cmd+K (Ctrl+K) opens search from any view",
+            "Results return within 500ms for typical configs"
+          ],
+          "architectural_constraints": [
+            "API endpoint: GET /api/config/search?q=",
+            "Search index built from same scan as config model"
+          ],
+          "type": "production"
+        }
+      ]
+    },
+    {
+      "id": "06",
+      "title": "Galaxy Graph -- Relationship Visualization",
+      "steps": [
+        {
+          "id": "06-01",
+          "title": "Cross-reference extraction and conflict detection",
+          "description": "Pure functions extracting relationship edges from parsed frontmatter (agent->skill, plugin->component, rule->path) and detecting naming conflicts.",
+          "acceptance_criteria": [
+            "Agent skills: field produces agent-references-skill edges",
+            "Plugin manifest produces plugin-contains-component edges",
+            "Naming conflicts detected between non-namespaced elements at different scopes",
+            "Plugin skills show namespace prefix in node name"
+          ],
+          "architectural_constraints": [
+            "Cross-reference extractor is a pure function in config-explorer",
+            "Conflict detector operates on assembled node list"
+          ],
+          "type": "production"
+        },
+        {
+          "id": "06-02",
+          "title": "Config Galaxy force-directed graph",
+          "description": "D3.js force simulation with typed nodes (shaped by type, colored by scope), relationship edges, subsystem filtering, plugin explosion, naming conflict indicators.",
+          "acceptance_criteria": [
+            "Nodes shaped by type (hexagon=agent, circle=skill, etc.)",
+            "Nodes colored by scope consistently with other views",
+            "Edges represent actual cross-references from frontmatter",
+            "Subsystem filter hides non-matching node types",
+            "Plugin star expands to reveal contained components",
+            "Naming conflicts shown with red edge and tooltip",
+            "Graph renders within 2s for 100 nodes"
+          ],
+          "architectural_constraints": [
+            "D3.js force simulation (existing library)",
+            "Data from GET /api/config full model"
+          ],
+          "type": "production"
+        }
+      ]
+    }
+  ],
+  "implementation_scope": {
+    "new_packages": ["@norbert/config-explorer"],
+    "modified_packages": ["@norbert/server", "@norbert/dashboard"],
+    "unchanged_packages": ["@norbert/core", "@norbert/config", "@norbert/storage", "@norbert/cli", "@norbert/hooks"],
+    "new_dependencies": ["picomatch (MIT)", "gray-matter (MIT)"],
+    "estimated_production_files": 18,
+    "estimated_test_files": 12
+  },
+  "validation": {
+    "step_ratio_check": "12 steps / 18 production files = 0.67 (well under 2.5 limit)",
+    "identical_pattern_check": "No 3+ identical-pattern steps detected",
+    "quality_gates": [
+      "Requirements traced to components (see architecture-design.md Section 12)",
+      "Component boundaries with clear responsibilities (see component-boundaries.md)",
+      "Technology choices in ADRs (ADR-009, ADR-010, ADR-011)",
+      "Quality attributes addressed (usability, maintainability, testability, performance)",
+      "Dependency-inversion compliance (config file reader port, pure parser functions)",
+      "C4 diagrams L1+L2+L3 in architecture-design.md",
+      "Integration patterns specified (REST API, pure function calls, filesystem adapter)",
+      "OSS preference validated (picomatch MIT, gray-matter MIT)",
+      "AC behavioral, not implementation-coupled",
+      "Peer review pending"
+    ]
+  }
+}

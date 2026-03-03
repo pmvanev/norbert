@@ -1,0 +1,365 @@
+journey:
+  name: "Config Exploration"
+  goal: "Understand, navigate, and debug Claude Code .claude configuration ecosystem"
+  feature_id: "config-explorer"
+  personas:
+    - id: kenji
+      name: "Kenji Tanaka"
+      role: "Mid-level developer, new to project"
+      context: "Joined 2 weeks ago, project has CLAUDE.md, settings, 4 rules, 2 agents, 1 plugin"
+    - id: ravi
+      name: "Ravi Patel"
+      role: "Senior developer debugging config override"
+      context: "Added hook to settings.json, hook does not fire, suspects override"
+    - id: sofia
+      name: "Sofia Hernandez"
+      role: "Framework developer building multi-agent system"
+      context: "10 skills, 5 agents, 1 plugin, custom hooks, 3 MCP servers"
+    - id: mei-lin
+      name: "Mei-Lin Chen"
+      role: "Developer debugging path-scoped rules"
+      context: "Rule for TypeScript API files does not apply to expected paths"
+    - id: carlos
+      name: "Carlos Rivera"
+      role: "Plugin author testing plugin delivery"
+      context: "Built plugin with 3 skills, 2 agents, 1 hook, 1 MCP server"
+
+  emotional_arc:
+    orientation:
+      start: "Overwhelmed"
+      middle: "Curious"
+      end: "Confident"
+      pattern: "Discovery Joy"
+    debugging:
+      start: "Frustrated"
+      middle: "Hopeful"
+      end: "Relieved"
+      pattern: "Problem Relief"
+    exploration:
+      start: "Curious"
+      middle: "Exploring / Delighted"
+      end: "Informed"
+      pattern: "Discovery Joy"
+
+steps:
+  - id: 1
+    name: "Open Config Explorer Tab"
+    view: "Config Explorer Landing"
+    action: "Click 'Config' tab in Norbert dashboard navigation"
+
+    shared_artifacts:
+      - name: config_summary
+        source: "Config parser scan of ~/.claude/ and .claude/"
+        displayed_as: "${subsystem_count} subsystems, ${file_count} files, ${plugin_count} plugins"
+        consumers:
+          - "Landing page summary"
+          - "Mind Map total count"
+          - "Atlas tree node count"
+
+    emotional_state:
+      entry: "Overwhelmed (newcomer) or Frustrated (debugger) or Curious (explorer)"
+      exit: "Oriented -- aggregate counts give concrete scope"
+
+    integration_checkpoint: |
+      Config parser must complete filesystem scan before rendering any view.
+      Scan covers: ~/.claude/, .claude/, installed plugins, managed settings paths.
+      Graceful degradation if managed settings path is not readable (permissions).
+
+    gherkin: |
+      Scenario: Kenji opens Config Explorer for the first time
+        Given Kenji navigates to the Norbert dashboard
+        And the project "norbert-nwave" has 14 configuration files across 3 scopes
+        When Kenji clicks the "Config" tab
+        Then Config Explorer scans ~/.claude/ and .claude/ directories
+        And displays a summary showing "7 subsystems active, 14 config files, 1 plugin installed"
+        And offers navigation to Atlas, Mind Map, and Galaxy views
+
+  - id: 2
+    name: "View Mind Map Overview"
+    view: "Config Mind (Mind Map)"
+    action: "Click 'Mind Map' view or land on default visualization"
+
+    shared_artifacts:
+      - name: subsystem_branches
+        source: "Config parser subsystem classification"
+        displayed_as: "8 primary branches with element counts per scope"
+        consumers:
+          - "Mind Map branch nodes"
+          - "Galaxy subsystem filter"
+          - "Atlas subsystem grouping"
+      - name: scope_colors
+        source: "Design system constant: user=blue, project=green, local=yellow, plugin=purple, managed=red"
+        displayed_as: "Color coding on every node in every view"
+        consumers:
+          - "Mind Map nodes"
+          - "Galaxy nodes"
+          - "Atlas tree items"
+          - "Cascade scope headers"
+          - "Scope legend"
+
+    emotional_state:
+      entry: "Curious (what does my config look like?)"
+      exit: "Oriented (I can see all 8 subsystems and their distribution)"
+
+    integration_checkpoint: |
+      Subsystem classification must be consistent across Mind Map, Galaxy, and Atlas.
+      Element counts must match across all views.
+      Scope coloring must use identical colors in every view.
+
+    gherkin: |
+      Scenario: Kenji views mind map to understand project config structure
+        Given Kenji is on the Config Explorer tab
+        When Kenji clicks "Mind Map" view
+        Then the mind map displays 8 primary branches (Memory, Settings, Rules, Skills, Agents, Hooks, Plugins, MCP)
+        And each branch shows element count by scope (e.g., "Rules (6): 2 user, 4 project")
+        And scope colors are consistent: user=blue, project=green, local=yellow, plugin=purple
+
+  - id: 3
+    name: "Browse Files in Atlas"
+    view: "Config Atlas (Anatomy View)"
+    action: "Click 'Atlas' tab or click a node in Mind Map to navigate"
+
+    shared_artifacts:
+      - name: file_tree
+        source: "Config parser directory discovery"
+        displayed_as: "Dual-pane tree: ~/.claude/ (left) and .claude/ (right) with scope coloring"
+        consumers:
+          - "Atlas tree pane"
+          - "Mind Map drill-down"
+          - "Search result file paths"
+      - name: file_content
+        source: "Filesystem file content (parsed Markdown, JSON, YAML frontmatter)"
+        displayed_as: "Content preview pane with syntax highlighting and frontmatter annotations"
+        consumers:
+          - "Atlas content preview"
+          - "Cascade file content"
+          - "Galaxy node detail panel"
+      - name: missing_files
+        source: "Config parser: expected directories/files not found on disk"
+        displayed_as: "Dimmed entries with tooltip 'Not configured -- click to learn more'"
+        consumers:
+          - "Atlas tree (dimmed items)"
+          - "Mind Map (empty branches)"
+
+    emotional_state:
+      entry: "Oriented (from Mind Map) or Investigating (from search result)"
+      exit: "Confident (I can see every file and its content)"
+
+    integration_checkpoint: |
+      Content preview must show parsed frontmatter annotations for rules, skills, agents.
+      Missing file indicators must reflect actual filesystem state.
+      File content must be read-only (Config Explorer is an observer, not an editor).
+
+    gherkin: |
+      Scenario: Kenji discovers a path-scoped rule he did not know about
+        Given Kenji is viewing the Atlas for the norbert-nwave project
+        When Kenji expands .claude/rules/ in the project tree
+        Then 4 rule files are listed with scope coloring (green for project)
+        And Kenji clicks "api.md"
+        Then the content preview shows YAML frontmatter: paths: ["src/api/**/*.ts"]
+        And an annotation reads "This rule applies only to files matching src/api/**/*.ts"
+
+      Scenario: Kenji sees available but unconfigured directories
+        Given Kenji is viewing the Atlas
+        When Kenji expands ~/.claude/ in the user tree
+        Then "agents/" appears dimmed with tooltip "No personal agents configured"
+        And "skills/" appears dimmed with tooltip "No personal skills configured"
+        And clicking a dimmed item shows a description of what it would contain
+
+  - id: 4
+    name: "Inspect Precedence with Cascade"
+    view: "Config Cascade (Precedence Waterfall)"
+    action: "Click 'Cascade' tab or click any node and select 'View precedence'"
+
+    shared_artifacts:
+      - name: precedence_chain
+        source: "Config parser precedence resolution per subsystem"
+        displayed_as: "Waterfall from managed (top) to user (bottom) with ACTIVE/OVERRIDDEN markers"
+        consumers:
+          - "Cascade waterfall view"
+          - "Galaxy node detail (abbreviated)"
+      - name: effective_value
+        source: "Config parser: resolved winner at each precedence level"
+        displayed_as: "Highlighted entry with '*** THIS IS THE EFFECTIVE VALUE ***'"
+        consumers:
+          - "Cascade active marker"
+          - "Atlas file content (if file is the winner)"
+
+    emotional_state:
+      entry: "Frustrated (debugging) or Curious (exploring precedence)"
+      exit: "Relieved (found the override) or Informed (understand precedence)"
+
+    integration_checkpoint: |
+      Precedence resolution must follow documented order:
+        Settings: managed > CLI args > local > project > user
+        CLAUDE.md: managed > local override > project > subdirectory (on-demand) > user
+        Rules: project rules override user rules
+        Skills: enterprise > personal > project > plugin
+        Agents: CLI flag > project > user > plugin
+      On-demand items (subdirectory CLAUDE.md, path-scoped rules) labeled as "loaded at runtime."
+      Array settings (permissions) show merge behavior, not override.
+
+    gherkin: |
+      Scenario: Ravi finds why his project hook is overridden
+        Given Ravi has a PreToolUse/Bash hook defined in .claude/settings.json
+        And a PreToolUse/Bash hook also exists in .claude/settings.local.json
+        When Ravi opens the Cascade view and selects "Hooks" subsystem
+        Then the waterfall shows the local hook as ACTIVE
+        And the project hook as OVERRIDDEN with reason "Overridden by LOCAL scope"
+        And Ravi can click the active hook to view its file in Atlas
+
+  - id: 5
+    name: "Explore Relationships in Galaxy"
+    view: "Config Galaxy (Relationship Graph)"
+    action: "Click 'Galaxy' tab or switch from Mind Map"
+
+    shared_artifacts:
+      - name: relationship_edges
+        source: "Config parser: cross-references extracted from YAML frontmatter (skills:, tools:, paths:)"
+        displayed_as: "Edges connecting nodes: agent->skill, plugin->components, rule->path-pattern"
+        consumers:
+          - "Galaxy graph edges"
+          - "Mind Map cross-links (dotted lines)"
+          - "Plugin contribution viewer"
+      - name: naming_conflicts
+        source: "Config parser: name collision detection (same name at different scopes)"
+        displayed_as: "Red edges between conflicting nodes with conflict resolution explanation"
+        consumers:
+          - "Galaxy conflict indicators"
+          - "Plugin contribution viewer (conflict section)"
+
+    emotional_state:
+      entry: "Curious (want to see the big picture)"
+      exit: "Delighted (relationships visible) or Alarmed (naming conflict found)"
+
+    integration_checkpoint: |
+      Cross-reference edges must be derived from actual file content:
+        - Agent frontmatter `skills:` field -> skill nodes
+        - Plugin manifest -> all plugin component nodes
+        - Agent frontmatter `hooks:` field -> hook definitions
+        - Rule frontmatter `paths:` field -> file pattern nodes (optional)
+      Naming conflicts detected by comparing element names across scopes.
+      Graph layout must handle 50+ nodes without performance degradation.
+
+    gherkin: |
+      Scenario: Sofia sees all skills used by her solution-architect agent
+        Given Sofia has an agent "solution-architect" that references skills "api-patterns", "code-review", and "nw-plugin:formatting"
+        When Sofia opens the Galaxy view
+        And clicks the "solution-architect" agent node
+        Then 3 edges highlight connecting to skill nodes
+        And each skill shows its scope: api-patterns (project, green), code-review (user, blue), nw-plugin:formatting (plugin, purple)
+
+      Scenario: Carlos discovers a naming conflict in his plugin
+        Given Carlos's plugin "nw-plugin" provides an agent named "code-reviewer"
+        And the project already has a .claude/agents/code-reviewer.md
+        When Carlos opens the Galaxy view
+        Then a red edge connects the two "code-reviewer" nodes
+        And the conflict tooltip reads "Project scope wins: .claude/agents/code-reviewer.md overrides nw-plugin agent"
+
+  - id: 6
+    name: "Test Path Rule Matching"
+    view: "Path Rule Tester"
+    action: "Click 'Path Test' utility or navigate from Atlas rule"
+
+    shared_artifacts:
+      - name: rule_glob_patterns
+        source: "Config parser: paths: frontmatter from all rule files"
+        displayed_as: "Pattern list per rule with match/no-match status"
+        consumers:
+          - "Path Rule Tester match results"
+          - "Atlas rule annotation"
+          - "Cascade rule scope indicators"
+
+    emotional_state:
+      entry: "Confused (rule not applying as expected)"
+      exit: "Enlightened (exact pattern mismatch reason shown)"
+
+    integration_checkpoint: |
+      Glob matching must use same semantics as Claude Code (picomatch or micromatch library).
+      Must support: **, *, ?, {a,b} brace expansion, negation patterns.
+      Must show the specific reason for no-match (which part of pattern failed).
+
+    gherkin: |
+      Scenario: Mei-Lin tests why her API rule does not apply to a test file
+        Given Mei-Lin has a rule with paths: ["src/api/**/*.ts"]
+        When Mei-Lin enters "src/api/routes/users.test.ts" in the Path Rule Tester
+        Then the rule "api.md" shows as MATCH (pattern "src/api/**/*.ts" matches)
+        And the rule "testing.md" with pattern "**/*.test.ts" also shows as MATCH
+        And rules without matching patterns show NO MATCH with specific reason
+
+  - id: 7
+    name: "Search Across Configuration"
+    view: "Search"
+    action: "Click 'Search' utility or use keyboard shortcut Cmd+K"
+
+    shared_artifacts:
+      - name: search_index
+        source: "Config parser: full-text index of all configuration file contents"
+        displayed_as: "Search results with file path, scope badge, subsystem icon, matching line"
+        consumers:
+          - "Search results list"
+          - "Navigation to Atlas/Galaxy/Cascade from search result"
+
+    emotional_state:
+      entry: "Searching (know what to find, not where)"
+      exit: "Found (located the definition, can navigate to it)"
+
+    integration_checkpoint: |
+      Search index must include all configuration files across all scopes.
+      Results must show scope (colored badge) and subsystem (icon) for each match.
+      Clicking a search result navigates to the file in Atlas with the matching line highlighted.
+
+    gherkin: |
+      Scenario: Sofia searches for all hooks firing on PreToolUse
+        Given Sofia's configuration has hooks defined in 3 locations
+        When Sofia opens Search and types "PreToolUse"
+        Then results show 3 matches:
+          | File | Scope | Subsystem |
+          | .claude/settings.json | Project | Hooks |
+          | .claude/settings.local.json | Local | Hooks |
+          | nw-plugin/hooks/hooks.json | Plugin | Hooks |
+        And clicking a result navigates to that file in Atlas
+
+integration_validation:
+  shared_artifact_consistency:
+    - artifact: "scope_colors"
+      must_match_across: [2, 3, 4, 5, 6, 7]
+      failure_message: "Scope coloring inconsistent between views -- user sees conflicting visual language"
+
+    - artifact: "subsystem_branches"
+      must_match_across: [2, 3, 5]
+      failure_message: "Subsystem classification differs between Mind Map, Atlas, and Galaxy"
+
+    - artifact: "file_content"
+      must_match_across: [3, 4, 5]
+      failure_message: "File content shown differently in Atlas vs Cascade vs Galaxy detail"
+
+    - artifact: "relationship_edges"
+      must_match_across: [2, 5]
+      failure_message: "Cross-references in Mind Map cross-links do not match Galaxy edges"
+
+    - artifact: "precedence_chain"
+      must_match_across: [4, 5]
+      failure_message: "Precedence shown in Cascade does not match Galaxy node detail"
+
+    - artifact: "rule_glob_patterns"
+      must_match_across: [3, 4, 6]
+      failure_message: "Rule pattern information inconsistent between Atlas, Cascade, and Path Tester"
+
+  walking_skeleton_candidate:
+    description: "Parse settings.json from both scopes, serve via Fastify API, render in a basic tree view (Atlas)"
+    rationale: |
+      Settings.json is the simplest parsing target (pure JSON, no frontmatter).
+      Two scopes (user + project) demonstrate the precedence model.
+      A basic tree view validates the Svelte 5 component rendering pipeline.
+      The API endpoint validates the Fastify data serving pipeline.
+    scope:
+      parse: "~/.claude/settings.json + .claude/settings.json"
+      serve: "GET /api/config/settings returning parsed settings with scope annotations"
+      render: "Svelte tree component showing two-scope settings with scope coloring"
+    validates:
+      - "File system access from Norbert server process"
+      - "JSON parsing and scope annotation"
+      - "Fastify API endpoint serving config data"
+      - "Svelte component rendering config tree"
+      - "Scope coloring in the UI"
