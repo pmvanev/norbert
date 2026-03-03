@@ -183,16 +183,12 @@ export const buildTraceGraph = (
   // are also in the list -- a cycle or fully connected graph with no root).
   // Synthesize virtual root and attach all agents as children.
   const virtualRoot = createPlaceholderAgent('virtual-root', []);
-  const allFlatWithVirtual = [virtualRoot, ...allFlatAgents.map(a => ({
-    ...a,
-    parentAgentId: a.parentAgentId === undefined ? undefined : a.parentAgentId,
-  }))];
 
   // Re-group with virtual root parenting all top-level agents
-  const topLevelAgents = allFlatAgents.filter(a => {
-    const agentIds = new Set(allFlatAgents.map(x => x.agentId));
-    return a.parentAgentId === undefined || !agentIds.has(a.parentAgentId);
-  });
+  const agentIdSet = new Set(allFlatAgents.map(a => a.agentId));
+  const topLevelAgents = allFlatAgents.filter(a =>
+    a.parentAgentId === undefined || !agentIdSet.has(a.parentAgentId)
+  );
 
   const reparentedAgents = allFlatAgents.map(a =>
     topLevelAgents.includes(a)

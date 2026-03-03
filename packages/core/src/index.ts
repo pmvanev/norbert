@@ -85,7 +85,7 @@ export type { McpEventRecord } from './mcp-extractor.js';
 export { extractMcpEvent } from './mcp-extractor.js';
 
 // Session Aggregator (pure function: event + session -> session update)
-export type { SessionUpdate, SessionDelta } from './session-aggregator.js';
+export type { SessionUpdate, SessionIncrementDelta } from './session-aggregator.js';
 export { computeSessionUpdate } from './session-aggregator.js';
 
 // Agent Tree (pure function: event -> agent span update)

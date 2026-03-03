@@ -18,37 +18,14 @@
 
 import type { FastifyInstance } from 'fastify';
 import type { StoragePort } from '@norbert/storage';
-import type { SessionFilter, SortField, SortOrder } from '@norbert/core';
+import type { SessionFilter } from '@norbert/core';
 import { computeDailyTrends, computeBaselines } from '@norbert/core';
-
-// ---------------------------------------------------------------------------
-// Valid sort fields and orders
-// ---------------------------------------------------------------------------
-
-const VALID_SORT_FIELDS: readonly SortField[] = ['startTime', 'estimatedCost', 'eventCount', 'agentCount'];
-const VALID_SORT_ORDERS: readonly SortOrder[] = ['asc', 'desc'];
-
-// ---------------------------------------------------------------------------
-// Query parameter parsing helpers
-// ---------------------------------------------------------------------------
-
-const parseOptionalFloat = (value: string | undefined): number | undefined => {
-  if (value === undefined) return undefined;
-  const parsed = parseFloat(value);
-  return Number.isNaN(parsed) ? undefined : parsed;
-};
-
-const parseOptionalInt = (value: string | undefined): number | undefined => {
-  if (value === undefined) return undefined;
-  const parsed = parseInt(value, 10);
-  return Number.isNaN(parsed) ? undefined : parsed;
-};
-
-const parseSortField = (value: string | undefined): SortField =>
-  VALID_SORT_FIELDS.includes(value as SortField) ? (value as SortField) : 'startTime';
-
-const parseSortOrder = (value: string | undefined): SortOrder =>
-  VALID_SORT_ORDERS.includes(value as SortOrder) ? (value as SortOrder) : 'desc';
+import {
+  parseOptionalFloat,
+  parseOptionalInt,
+  parseSortField,
+  parseSortOrder,
+} from './query-parsing.js';
 
 // ---------------------------------------------------------------------------
 // Route registration

@@ -20,10 +20,10 @@ import { estimateCost } from './cost-calculator.js';
 
 export type SessionUpdate =
   | { readonly type: 'create'; readonly session: Session }
-  | { readonly type: 'increment'; readonly delta: SessionDelta }
+  | { readonly type: 'increment'; readonly delta: SessionIncrementDelta }
   | { readonly type: 'close'; readonly endTime: string };
 
-export interface SessionDelta {
+export interface SessionIncrementDelta {
   readonly inputTokensDelta: number;
   readonly outputTokensDelta: number;
   readonly eventCountDelta: number;
@@ -36,7 +36,7 @@ export interface SessionDelta {
 // Delta constructors
 // ---------------------------------------------------------------------------
 
-const zeroDelta = (): SessionDelta => ({
+const zeroDelta = (): SessionIncrementDelta => ({
   inputTokensDelta: 0,
   outputTokensDelta: 0,
   eventCountDelta: 1,
@@ -67,7 +67,7 @@ const createNewSession = (
 // Per-event-kind update computation
 // ---------------------------------------------------------------------------
 
-const computePostToolUseDelta = (event: HookEvent, session: Session): SessionDelta => {
+const computePostToolUseDelta = (event: HookEvent, session: Session): SessionIncrementDelta => {
   if (event.eventType !== 'PostToolUse') return zeroDelta();
 
   const inputTokens = event.inputTokens ?? 0;
@@ -84,7 +84,7 @@ const computePostToolUseDelta = (event: HookEvent, session: Session): SessionDel
   };
 };
 
-const computePostToolUseFailureDelta = (event: HookEvent): SessionDelta => {
+const computePostToolUseFailureDelta = (event: HookEvent): SessionIncrementDelta => {
   if (event.eventType !== 'PostToolUseFailure') return zeroDelta();
 
   const hasMcpServer = event.mcpServer != null;
@@ -95,7 +95,7 @@ const computePostToolUseFailureDelta = (event: HookEvent): SessionDelta => {
   };
 };
 
-const computeSubagentStartDelta = (): SessionDelta => ({
+const computeSubagentStartDelta = (): SessionIncrementDelta => ({
   ...zeroDelta(),
   agentCountDelta: 1,
 });
