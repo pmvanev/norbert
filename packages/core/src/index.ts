@@ -74,3 +74,18 @@ export { COST_RATES, getCostRate } from './cost.js';
 // Event Processor (pure transformation: raw JSON -> HookEvent)
 export type { ProcessResult } from './event-processor.js';
 export { processRawEvent } from './event-processor.js';
+
+// Cost Calculator (pure function: tokens + model -> cost estimate)
+export { estimateCost } from './cost-calculator.js';
+
+// MCP Extractor (pure function: tool event -> MCP event record)
+export type { McpEventRecord } from './mcp-extractor.js';
+export { extractMcpEvent } from './mcp-extractor.js';
+
+// Session Aggregator (pure function: event + session -> session update)
+export type { SessionUpdate, SessionDelta } from './session-aggregator.js';
+export { computeSessionUpdate } from './session-aggregator.js';
+
+// Agent Tree (pure function: event -> agent span update)
+export type { AgentSpanUpdate, AgentSpan } from './agent-tree.js';
+export { computeAgentSpanUpdate } from './agent-tree.js';

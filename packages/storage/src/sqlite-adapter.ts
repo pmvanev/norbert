@@ -18,6 +18,11 @@ import type {
   McpServerStatus,
   EventType,
 } from '@norbert/core';
+import {
+  estimateCost,
+  extractMcpEvent,
+  computeAgentSpanUpdate,
+} from '@norbert/core';
 import type { StoragePort, WriteResult } from './port.js';
 import { runMigrations } from './migration-runner.js';
 
@@ -239,17 +244,103 @@ const upsertSessionOnEvent = (
     return;
   }
 
-  // For all other events, increment counts
+  // For all other events, increment counts and compute cost delta
   const inputTokens = extractInputTokens(event) ?? 0;
   const outputTokens = extractOutputTokens(event) ?? 0;
+  const agentCountDelta = event.eventType === 'SubagentStart' ? 1 : 0;
+  const mcpErrorCountDelta =
+    event.eventType === 'PostToolUseFailure' && event.mcpServer != null ? 1 : 0;
+
+  // Compute estimated cost delta using the session's model
+  const sessionRow = db.prepare(`SELECT model FROM sessions WHERE id = ?`).get(event.sessionId) as { model: string | null } | undefined;
+  const model = sessionRow?.model ?? 'claude-sonnet-4';
+  const costDelta = estimateCost(inputTokens, outputTokens, model);
 
   db.prepare(`
     UPDATE sessions
     SET event_count = event_count + 1,
         total_input_tokens = total_input_tokens + ?,
-        total_output_tokens = total_output_tokens + ?
+        total_output_tokens = total_output_tokens + ?,
+        estimated_cost = estimated_cost + ?,
+        agent_count = agent_count + ?,
+        mcp_error_count = mcp_error_count + ?
     WHERE id = ?
-  `).run(inputTokens, outputTokens, event.sessionId);
+  `).run(inputTokens, outputTokens, costDelta, agentCountDelta, mcpErrorCountDelta, event.sessionId);
+};
+
+// ---------------------------------------------------------------------------
+// MCP event recording
+// ---------------------------------------------------------------------------
+
+const insertMcpEventIfApplicable = (
+  db: BetterSqlite3.Database,
+  event: HookEvent
+): void => {
+  if (event.eventType !== 'PostToolUse' && event.eventType !== 'PostToolUseFailure') {
+    return;
+  }
+
+  const mcpRecord = extractMcpEvent(event);
+  if (mcpRecord == null) {
+    return;
+  }
+
+  db.prepare(`
+    INSERT INTO mcp_events (
+      session_id, server_name, event_type, tool_name, timestamp,
+      status, error_detail, input_tokens, output_tokens
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    mcpRecord.sessionId,
+    mcpRecord.serverName,
+    mcpRecord.eventType,
+    mcpRecord.toolName,
+    mcpRecord.timestamp,
+    mcpRecord.status,
+    mcpRecord.errorDetail ?? null,
+    mcpRecord.inputTokens,
+    mcpRecord.outputTokens,
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Agent span recording
+// ---------------------------------------------------------------------------
+
+const upsertAgentSpanIfApplicable = (
+  db: BetterSqlite3.Database,
+  event: HookEvent
+): void => {
+  const spanUpdate = computeAgentSpanUpdate(event);
+  if (spanUpdate == null) {
+    return;
+  }
+
+  if (spanUpdate.type === 'create') {
+    db.prepare(`
+      INSERT INTO agent_spans (
+        session_id, agent_id, parent_agent_id, start_time, status
+      ) VALUES (?, ?, ?, ?, 'active')
+    `).run(
+      spanUpdate.span.sessionId,
+      spanUpdate.span.agentId,
+      spanUpdate.span.parentAgentId,
+      spanUpdate.span.startTime,
+    );
+    return;
+  }
+
+  if (spanUpdate.type === 'close') {
+    db.prepare(`
+      UPDATE agent_spans
+      SET end_time = ?, status = 'completed'
+      WHERE session_id = ? AND agent_id = ?
+    `).run(
+      spanUpdate.endTime,
+      spanUpdate.sessionId,
+      spanUpdate.agentId,
+    );
+  }
 };
 
 // ---------------------------------------------------------------------------
@@ -349,6 +440,8 @@ export const createSqliteAdapter = (dbPath: string): StoragePort => {
           rawPayload,
         );
         upsertSessionOnEvent(db, event);
+        insertMcpEventIfApplicable(db, event);
+        upsertAgentSpanIfApplicable(db, event);
       });
 
       writeTransaction();
