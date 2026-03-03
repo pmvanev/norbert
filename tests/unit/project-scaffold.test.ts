@@ -32,7 +32,7 @@ const DEPENDENCY_MATRIX: Record<string, readonly string[]> = {
   config: [],
   storage: ['@norbert/core'],
   server: ['@norbert/core', '@norbert/config', '@norbert/storage'],
-  cli: ['@norbert/core', '@norbert/config', '@norbert/storage'],
+  cli: ['@norbert/core', '@norbert/config', '@norbert/storage', '@norbert/hooks'],
   dashboard: [],
   hooks: ['@norbert/config'],
 };

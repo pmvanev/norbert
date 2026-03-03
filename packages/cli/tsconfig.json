@@ -18,7 +18,8 @@
   "references": [
     { "path": "../core" },
     { "path": "../config" },
-    { "path": "../storage" }
+    { "path": "../storage" },
+    { "path": "../hooks" }
   ],
   "include": ["src/**/*.ts"],
   "exclude": ["src/**/*.test.ts", "dist"]

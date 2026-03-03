@@ -5,4 +5,5 @@
  * Exports: Server factory and start/stop functions
  */
 
-export {};
+export type { ServerConfig } from './app.js';
+export { createApp } from './app.js';

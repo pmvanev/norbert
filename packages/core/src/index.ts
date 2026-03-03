@@ -70,3 +70,7 @@ export type {
 } from './cost.js';
 
 export { COST_RATES, getCostRate } from './cost.js';
+
+// Event Processor (pure transformation: raw JSON -> HookEvent)
+export type { ProcessResult } from './event-processor.js';
+export { processRawEvent } from './event-processor.js';

@@ -11,14 +11,20 @@
       "types": "./dist/index.d.ts"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc --project tsconfig.build.json",
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@norbert/core": "workspace:*",
     "@norbert/config": "workspace:*",
-    "@norbert/storage": "workspace:*"
+    "@norbert/core": "workspace:*",
+    "@norbert/storage": "workspace:*",
+    "fastify": "^5.7.4"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.3"
   }
 }

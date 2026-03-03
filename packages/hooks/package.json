@@ -11,12 +11,17 @@
       "types": "./dist/index.d.ts"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc --project tsconfig.build.json",
     "clean": "rm -rf dist"
   },
   "dependencies": {
     "@norbert/config": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.3"
   }
 }
