@@ -10,6 +10,7 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyStatic from '@fastify/static';
+import fastifyWebsocket from '@fastify/websocket';
 import type { StoragePort } from '@norbert/storage';
 import { registerHealthRoute } from './api/health.js';
 import { registerEventsRoute } from './api/events.js';
@@ -67,6 +68,15 @@ export const createApp = (
     broadcastCollector.push(message);
     connectionManager.broadcast(message);
   };
+
+  // Register WebSocket plugin and /ws route
+  app.register(fastifyWebsocket);
+  app.register(async (fastify) => {
+    fastify.get('/ws', { websocket: true }, (socket) => {
+      connectionManager.addClient(socket);
+      socket.on('close', () => connectionManager.removeClient(socket));
+    });
+  });
 
   // Register routes
   registerHealthRoute(app);
