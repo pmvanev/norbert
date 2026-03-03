@@ -1,0 +1,12 @@
+{
+  "feature_id": "norbert",
+  "paradigm": "functional-leaning TypeScript",
+  "crafter": "nw-functional-software-crafter",
+  "mutation_strategy": "per-feature",
+  "rigor": "standard",
+  "roadmap_status": "approved",
+  "current_phase": "execute",
+  "current_step": "01-01",
+  "completed_steps": [],
+  "failed_steps": []
+}

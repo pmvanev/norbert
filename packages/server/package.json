@@ -1,0 +1,24 @@
+{
+  "name": "@norbert/server",
+  "version": "0.1.0",
+  "description": "Fastify HTTP server, API, and WebSocket for Norbert Observatory",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@norbert/core": "workspace:*",
+    "@norbert/config": "workspace:*",
+    "@norbert/storage": "workspace:*"
+  }
+}
