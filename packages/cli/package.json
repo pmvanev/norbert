@@ -11,6 +11,9 @@
       "types": "./dist/index.d.ts"
     }
   },
+  "bin": {
+    "norbert": "./dist/bin.js"
+  },
   "files": [
     "dist"
   ],
@@ -22,6 +25,7 @@
     "@norbert/config": "workspace:*",
     "@norbert/core": "workspace:*",
     "@norbert/hooks": "workspace:*",
+    "@norbert/server": "workspace:*",
     "@norbert/storage": "workspace:*",
     "commander": "^14.0.3"
   },

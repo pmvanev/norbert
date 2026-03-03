@@ -11,6 +11,7 @@
     "clean": "pnpm -r run clean"
   },
   "devDependencies": {
+    "@norbert/cli": "workspace:*",
     "typescript": "^5.7.3",
     "vitest": "^3.0.0",
     "fast-check": "^4.0.0"

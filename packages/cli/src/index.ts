@@ -102,20 +102,8 @@ export const createProgram = (): Command => {
       const port = parseInt(options.port, 10);
       const dbPath = options.db ?? DEFAULT_CONFIG.dbPath;
 
-      // Dynamic import to avoid adding @norbert/server to package.json dependencies.
-      // The serve command requires @norbert/server to be installed in the monorepo.
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       try {
-        const modulePath = '@norbert/server';
-        // Use Function constructor to avoid TypeScript module resolution
-        const loadModule = new Function('modulePath', 'return import(modulePath)') as
-          (path: string) => Promise<Record<string, unknown>>;
-        const serverModule = await loadModule(modulePath);
-        const createApp = serverModule.createApp as (
-          config: { port: number },
-          storage: StoragePort
-        ) => { listen: (opts: { port: number; host: string }) => Promise<string> };
-
+        const { createApp } = await import('@norbert/server');
         const storage = createSqliteAdapter(dbPath);
         const app = createApp({ port }, storage);
 

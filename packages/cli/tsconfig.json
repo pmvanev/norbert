@@ -18,6 +18,7 @@
   "references": [
     { "path": "../core" },
     { "path": "../config" },
+    { "path": "../server" },
     { "path": "../storage" },
     { "path": "../hooks" }
   ],
