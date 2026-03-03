@@ -193,6 +193,54 @@ export const fetchSessionCosts = async (
 };
 
 // ---------------------------------------------------------------------------
+// MCP health detail response types
+// ---------------------------------------------------------------------------
+
+export interface McpDiagnosticEntry {
+  readonly category: string;
+  readonly recommendation: string;
+}
+
+export interface McpErrorCategoryEntry {
+  readonly category: string;
+  readonly count: number;
+}
+
+export interface McpToolCallDetail {
+  readonly serverName: string;
+  readonly toolName: string;
+  readonly timestamp: string;
+  readonly latencyMs: number | null;
+  readonly status: 'success' | 'error';
+  readonly errorDetail?: string;
+}
+
+export interface McpServerDetailResponse {
+  readonly serverName: string;
+  readonly connectionStatus: 'connected' | 'disconnected' | 'error';
+  readonly health: McpHealthEntry;
+  readonly errorsByCategory: readonly McpErrorCategoryEntry[];
+  readonly diagnostics: readonly McpDiagnosticEntry[];
+  readonly latencyTrend: 'stable' | 'degrading' | 'improving';
+  readonly recentCalls: readonly McpToolCallDetail[];
+}
+
+export interface McpHealthDetailResponse {
+  readonly servers: readonly McpServerDetailResponse[];
+  readonly hasServers: boolean;
+}
+
+export const fetchMcpHealthDetail = async (
+  baseUrl: string
+): Promise<McpHealthDetailResponse> => {
+  const response = await fetch(`${baseUrl}/api/mcp/health`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch MCP health detail: ${response.status}`);
+  }
+  return response.json() as Promise<McpHealthDetailResponse>;
+};
+
+// ---------------------------------------------------------------------------
 // URL builder (pure)
 // ---------------------------------------------------------------------------
 

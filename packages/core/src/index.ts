@@ -97,3 +97,20 @@ export { buildTraceGraph } from './trace-builder.js';
 
 // Cost Breakdown Builder (pure function: agents + events -> cost waterfall)
 export { buildCostBreakdown } from './cost-breakdown-builder.js';
+
+// MCP Analyzer (pure functions: events + health -> MCP diagnostics)
+export type {
+  McpErrorCategory,
+  McpDiagnostic,
+  McpToolCallEntry,
+  McpErrorCategoryCount,
+  McpServerDetail,
+  McpAnalysis,
+} from './mcp-analyzer.js';
+export {
+  categorizeMcpError,
+  getDiagnosticRecommendation,
+  detectLatencyDegradation,
+  inferConnectionStatus,
+  analyzeMcpServers,
+} from './mcp-analyzer.js';

@@ -13,6 +13,7 @@ import { registerSessionsRoute } from './api/sessions.js';
 import { registerOverviewRoute } from './api/overview.js';
 import { registerTraceRoute } from './api/trace.js';
 import { registerCostsRoute } from './api/costs.js';
+import { registerMcpHealthRoute } from './api/mcp-health.js';
 import { registerEventIngress } from './ingress/event-handler.js';
 import { createConnectionManager } from './ws/connection-manager.js';
 
@@ -67,6 +68,7 @@ export const createApp = (
   registerOverviewRoute(app, storage);
   registerTraceRoute(app, storage);
   registerCostsRoute(app, storage);
+  registerMcpHealthRoute(app, storage);
   registerEventIngress(app, storage, broadcastEvent);
 
   // Attach collector to app for test access

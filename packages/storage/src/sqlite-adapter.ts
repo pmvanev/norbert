@@ -16,6 +16,8 @@ import type {
   AgentStatus,
   McpServerHealth,
   McpServerStatus,
+  McpToolCallEntry,
+  McpErrorEntry,
   EventType,
   OverviewSummary,
 } from '@norbert/core';
@@ -591,6 +593,57 @@ export const createSqliteAdapter = (dbPath: string): StoragePort => {
     };
   };
 
+  const getMcpToolCalls = (limit: number = 100): readonly McpToolCallEntry[] => {
+    const rows = db.prepare(`
+      SELECT
+        server_name,
+        tool_name,
+        timestamp,
+        latency_ms,
+        status,
+        error_detail
+      FROM mcp_events
+      ORDER BY timestamp DESC
+      LIMIT ?
+    `).all(limit) as Array<{
+      server_name: string;
+      tool_name: string | null;
+      timestamp: string;
+      latency_ms: number | null;
+      status: string;
+      error_detail: string | null;
+    }>;
+
+    // Return in chronological order (oldest first)
+    return rows.reverse().map((row) => ({
+      serverName: row.server_name,
+      toolName: row.tool_name ?? '',
+      timestamp: row.timestamp,
+      latencyMs: row.latency_ms,
+      status: row.status as 'success' | 'error',
+      ...(row.error_detail != null ? { errorDetail: row.error_detail } : {}),
+    }));
+  };
+
+  const getMcpErrorTimeline = (serverName: string): readonly McpErrorEntry[] => {
+    const rows = db.prepare(`
+      SELECT timestamp, tool_name, error_detail
+      FROM mcp_events
+      WHERE server_name = ? AND status = 'error'
+      ORDER BY timestamp ASC
+    `).all(serverName) as Array<{
+      timestamp: string;
+      tool_name: string | null;
+      error_detail: string | null;
+    }>;
+
+    return rows.map((row) => ({
+      timestamp: row.timestamp,
+      toolName: row.tool_name ?? '',
+      errorMessage: row.error_detail ?? '',
+    }));
+  };
+
   const close = (): void => {
     db.close();
   };
@@ -605,6 +658,8 @@ export const createSqliteAdapter = (dbPath: string): StoragePort => {
     getSessionCount,
     getMcpServerNames,
     getMcpHealth,
+    getMcpToolCalls,
+    getMcpErrorTimeline,
     getOverviewSummary,
     getAgentSpans,
     close,

@@ -12,6 +12,8 @@ import type {
   SessionFilter,
   AgentNode,
   McpServerHealth,
+  McpToolCallEntry,
+  McpErrorEntry,
   OverviewSummary,
 } from '@norbert/core';
 
@@ -42,6 +44,8 @@ export type StoragePort = {
   readonly getSessionCount: () => number;
   readonly getMcpServerNames: () => readonly string[];
   readonly getMcpHealth: () => readonly McpServerHealth[];
+  readonly getMcpToolCalls: (limit?: number) => readonly McpToolCallEntry[];
+  readonly getMcpErrorTimeline: (serverName: string) => readonly McpErrorEntry[];
   readonly getOverviewSummary: () => OverviewSummary;
   readonly getAgentSpans: (sessionId: string) => readonly AgentNode[];
   readonly close: () => void;
