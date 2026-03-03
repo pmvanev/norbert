@@ -15,7 +15,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc --project tsconfig.build.json",
+    "build": "tsc --project tsconfig.build.json && cp -r src/migrations dist/migrations",
     "clean": "rm -rf dist"
   },
   "dependencies": {

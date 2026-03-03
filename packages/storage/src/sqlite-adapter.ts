@@ -6,6 +6,8 @@
  * WAL mode enabled for concurrent read access.
  */
 
+import { mkdirSync, existsSync } from 'fs';
+import { dirname } from 'path';
 import BetterSqlite3 from 'better-sqlite3';
 import type {
   HookEvent,
@@ -371,6 +373,12 @@ const sortFieldToColumn = (sortField: string): string => {
  * @returns StoragePort with all functions implemented.
  */
 export const createSqliteAdapter = (dbPath: string): StoragePort => {
+  // Ensure parent directory exists
+  const dir = dirname(dbPath);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+
   const db = new BetterSqlite3(dbPath);
 
   // Enable WAL mode for concurrent read access
