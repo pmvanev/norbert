@@ -27,7 +27,8 @@ describe('Hook template generation', () => {
     for (const hookType of expectedTypes) {
       expect(entries[hookType]).toBeDefined();
       expect(entries[hookType]).toHaveLength(1);
-      expect(entries[hookType][0].type).toBe('command');
+      expect(entries[hookType][0].matcher).toBe('');
+      expect(entries[hookType][0].hooks[0].type).toBe('command');
     }
   });
 
@@ -38,7 +39,7 @@ describe('Hook template generation', () => {
         (port) => {
           const entries = generateHookEntries(port);
           for (const hookType of Object.keys(entries)) {
-            const command = entries[hookType][0].command;
+            const command = entries[hookType][0].hooks[0].command;
             expect(command).toContain(`localhost:${port}`);
           }
         }
@@ -50,7 +51,7 @@ describe('Hook template generation', () => {
   it('generates fire-and-forget curl commands (background execution)', () => {
     const entries = generateHookEntries(7777);
     for (const hookType of Object.keys(entries)) {
-      const command = entries[hookType][0].command;
+      const command = entries[hookType][0].hooks[0].command;
       // Should use curl with -s (silent) and run in background (&)
       expect(command).toContain('curl');
       expect(command).toContain('-s');
@@ -60,7 +61,7 @@ describe('Hook template generation', () => {
   it('targets POST /api/events endpoint', () => {
     const entries = generateHookEntries(7777);
     for (const hookType of Object.keys(entries)) {
-      const command = entries[hookType][0].command;
+      const command = entries[hookType][0].hooks[0].command;
       expect(command).toContain('/api/events');
       expect(command).toContain('POST');
     }
@@ -68,5 +69,26 @@ describe('Hook template generation', () => {
 
   it('exports all 7 hook event type names', () => {
     expect(HOOK_EVENT_TYPES).toHaveLength(7);
+  });
+
+  it('produces entries matching Claude Code matcher-based schema', () => {
+    const entries = generateHookEntries(7777);
+
+    for (const hookType of Object.keys(entries)) {
+      const entryList = entries[hookType];
+      expect(entryList).toHaveLength(1);
+
+      const entry = entryList[0];
+      // Each entry has exactly {matcher, hooks}
+      expect(Object.keys(entry).sort()).toEqual(['hooks', 'matcher']);
+      expect(typeof entry.matcher).toBe('string');
+      expect(Array.isArray(entry.hooks)).toBe(true);
+
+      // Each hook has exactly {type, command}
+      const hook = entry.hooks[0];
+      expect(Object.keys(hook).sort()).toEqual(['command', 'type']);
+      expect(hook.type).toBe('command');
+      expect(typeof hook.command).toBe('string');
+    }
   });
 });

@@ -5,6 +5,8 @@
  *   1. Writes 7 hook entries to a settings.json additively
  *   2. Preserves existing hooks (no data loss)
  *   3. Atomic: no partial state on failure
+ *   4. Replaces existing Norbert hooks on re-install (no duplicates)
+ *   5. Preserves unrecognized hook entries (forward compatibility)
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -26,7 +28,7 @@ describe('Hook installer acceptance', () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('writes 7 hook entries to settings.json additively', () => {
+  it('writes 7 hook entries to settings.json in matcher-based format', () => {
     // Start with empty settings
     writeFileSync(settingsPath, JSON.stringify({}));
 
@@ -50,7 +52,13 @@ describe('Hook installer acceptance', () => {
 
     for (const hookType of expectedTypes) {
       expect(settings.hooks[hookType]).toBeDefined();
-      expect(settings.hooks[hookType].length).toBeGreaterThanOrEqual(1);
+      expect(settings.hooks[hookType]).toHaveLength(1);
+
+      const entry = settings.hooks[hookType][0];
+      expect(entry.matcher).toBe('');
+      expect(entry.hooks).toHaveLength(1);
+      expect(entry.hooks[0].type).toBe('command');
+      expect(entry.hooks[0].command).toContain('/api/events');
     }
   });
 
@@ -59,8 +67,8 @@ describe('Hook installer acceptance', () => {
       hooks: {
         PreToolUse: [
           {
-            type: 'command',
-            command: 'echo "existing hook"',
+            matcher: 'Bash',
+            hooks: [{ type: 'command', command: 'echo "existing hook"' }],
           },
         ],
       },
@@ -72,9 +80,13 @@ describe('Hook installer acceptance', () => {
 
     const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'));
 
-    // Existing hook preserved
-    expect(settings.hooks.PreToolUse.length).toBeGreaterThanOrEqual(2);
-    expect(settings.hooks.PreToolUse[0].command).toBe('echo "existing hook"');
+    // Existing hook preserved + Norbert hook added
+    expect(settings.hooks.PreToolUse.length).toBe(2);
+    expect(settings.hooks.PreToolUse[0].matcher).toBe('Bash');
+    expect(settings.hooks.PreToolUse[0].hooks[0].command).toBe('echo "existing hook"');
+
+    // Norbert hook appended
+    expect(settings.hooks.PreToolUse[1].hooks[0].command).toContain('/api/events');
 
     // Other settings preserved
     expect(settings.someOtherSetting).toBe(true);
@@ -106,5 +118,57 @@ describe('Hook installer acceptance', () => {
     // The blocker file is unchanged (no partial writes)
     const content = readFileSync(blocker, 'utf-8');
     expect(content).toBe('I am a file, not a directory');
+  });
+
+  it('replaces existing Norbert hook on re-install (no duplicates)', () => {
+    writeFileSync(settingsPath, JSON.stringify({}));
+
+    // Install twice
+    installHooks(settingsPath, 7777);
+    installHooks(settingsPath, 8888);
+
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'));
+
+    // Should have exactly 1 entry per hook type, not 2
+    for (const hookType of Object.keys(settings.hooks)) {
+      expect(settings.hooks[hookType]).toHaveLength(1);
+      // Should be the second install's port
+      expect(settings.hooks[hookType][0].hooks[0].command).toContain('localhost:8888');
+    }
+  });
+
+  it('preserves unrecognized hook entries (forward compatibility)', () => {
+    const existingSettings = {
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: '',
+            hooks: [{ type: 'command', command: 'some-other-tool --check' }],
+          },
+        ],
+        SomeNewHookType: [
+          {
+            matcher: '',
+            hooks: [{ type: 'command', command: 'future-hook-handler' }],
+          },
+        ],
+      },
+    };
+    writeFileSync(settingsPath, JSON.stringify(existingSettings));
+
+    installHooks(settingsPath, 7777);
+
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'));
+
+    // Unrecognized hook type preserved
+    expect(settings.hooks.SomeNewHookType).toBeDefined();
+    expect(settings.hooks.SomeNewHookType[0].hooks[0].command).toBe('future-hook-handler');
+
+    // Non-Norbert entry in PreToolUse preserved
+    const preToolEntries = settings.hooks.PreToolUse;
+    const otherToolEntry = preToolEntries.find(
+      (e: { hooks: { command: string }[] }) => e.hooks[0].command === 'some-other-tool --check'
+    );
+    expect(otherToolEntry).toBeDefined();
   });
 });

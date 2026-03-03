@@ -7,7 +7,7 @@
 
 import { readFileSync, writeFileSync, renameSync, unlinkSync, mkdirSync, existsSync } from 'fs';
 import { dirname, join } from 'path';
-import { generateHookEntries, type HookEntry } from './templates.js';
+import { generateHookEntries, type MatcherEntry } from './templates.js';
 
 // ---------------------------------------------------------------------------
 // Result type
@@ -22,7 +22,7 @@ export type InstallResult =
 // ---------------------------------------------------------------------------
 
 interface SettingsFile {
-  hooks?: Record<string, HookEntry[]>;
+  hooks?: Record<string, MatcherEntry[]>;
   [key: string]: unknown;
 }
 
@@ -43,19 +43,26 @@ const readExistingSettings = (settingsPath: string): SettingsFile => {
 };
 
 // ---------------------------------------------------------------------------
-// Merge hooks additively
+// Norbert entry detection
+// ---------------------------------------------------------------------------
+
+const isNorbertEntry = (entry: MatcherEntry): boolean =>
+  entry.hooks.some((h) => h.command.includes('/api/events'));
+
+// ---------------------------------------------------------------------------
+// Merge hooks with dedup
 // ---------------------------------------------------------------------------
 
 const mergeHooks = (
-  existing: Record<string, HookEntry[]> | undefined,
-  newEntries: Record<string, readonly HookEntry[]>
-): Record<string, HookEntry[]> => {
-  const merged: Record<string, HookEntry[]> = {};
+  existing: Record<string, MatcherEntry[]> | undefined,
+  newEntries: Record<string, readonly MatcherEntry[]>
+): Record<string, MatcherEntry[]> => {
+  const merged: Record<string, MatcherEntry[]> = {};
 
-  // Copy existing hooks
+  // Copy existing hooks, filtering out old Norbert entries
   if (existing) {
     for (const [key, entries] of Object.entries(existing)) {
-      merged[key] = [...entries];
+      merged[key] = entries.filter((e) => !isNorbertEntry(e));
     }
   }
 
