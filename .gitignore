@@ -4,3 +4,4 @@ build/
 .svelte-kit/
 *.tsbuildinfo
 .nwave/
+.stryker-tmp/
