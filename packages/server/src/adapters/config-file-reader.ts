@@ -10,6 +10,7 @@
  */
 
 import * as fs from 'fs/promises';
+import type { Dirent } from 'fs';
 import * as pathModule from 'path';
 import * as os from 'os';
 import type { ConfigFileReaderPort, ScannedFileEntry, ScopeName } from '@norbert/config-explorer';
@@ -49,16 +50,16 @@ const readDirectoryRecursively = async (
 ): Promise<readonly ScannedFileEntry[]> => {
   const results: ScannedFileEntry[] = [];
 
-  let entries: Awaited<ReturnType<typeof fs.readdir>>;
+  let dirents: Dirent[];
   try {
-    entries = await fs.readdir(dirPath, { withFileTypes: true });
+    dirents = await fs.readdir(dirPath, { withFileTypes: true }) as unknown as Dirent[];
   } catch {
     // Directory doesn't exist or is inaccessible -- return empty
     return [];
   }
 
-  for (const entry of entries) {
-    const entryPath = pathModule.join(dirPath, entry.name);
+  for (const entry of dirents) {
+    const entryPath = pathModule.join(dirPath, String(entry.name));
     const relativePath = pathModule.relative(basePath, entryPath).replace(/\\/g, '/');
 
     if (entry.isDirectory()) {
