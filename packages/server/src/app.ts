@@ -12,6 +12,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
 import type { StoragePort } from '@norbert/storage';
+import type { ConfigFileReaderPort } from '@norbert/config-explorer';
 import { registerHealthRoute } from './api/health.js';
 import { registerEventsRoute } from './api/events.js';
 import { registerSessionsRoute } from './api/sessions.js';
@@ -22,6 +23,7 @@ import { registerMcpHealthRoute } from './api/mcp-health.js';
 import { registerComparisonRoute } from './api/comparison.js';
 import { registerHistoryRoute } from './api/history.js';
 import { registerExportRoute } from './api/export.js';
+import { registerConfigRoutes } from './api/config.js';
 import { registerEventIngress } from './ingress/event-handler.js';
 import { createConnectionManager } from './ws/connection-manager.js';
 
@@ -31,6 +33,10 @@ import { createConnectionManager } from './ws/connection-manager.js';
 
 export interface ServerConfig {
   readonly port: number;
+}
+
+export interface ServerExtensions {
+  readonly configFileReader?: ConfigFileReaderPort;
 }
 
 // ---------------------------------------------------------------------------
@@ -53,7 +59,8 @@ export interface NorbertApp extends FastifyInstance {
  */
 export const createApp = (
   config: ServerConfig,
-  storage: StoragePort
+  storage: StoragePort,
+  extensions: ServerExtensions = {},
 ): NorbertApp => {
   const app = Fastify({ logger: false });
 
@@ -90,6 +97,11 @@ export const createApp = (
   registerHistoryRoute(app, storage);
   registerExportRoute(app, storage);
   registerEventIngress(app, storage, broadcastEvent);
+
+  // Register config explorer routes when file reader is provided
+  if (extensions.configFileReader) {
+    registerConfigRoutes(app, extensions.configFileReader);
+  }
 
   // Serve dashboard SPA static files (if build exists)
   const __dirname = path.dirname(fileURLToPath(import.meta.url));

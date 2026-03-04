@@ -19,6 +19,7 @@
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/svelte": "^5.2.6",
+    "@types/d3-force": "^3.0.10",
     "jsdom": "^25.0.1",
     "svelte": "^5.16.0",
     "svelte-check": "^4.1.0",
@@ -28,6 +29,7 @@
   },
   "dependencies": {
     "chart.js": "^4.4.7",
+    "d3-force": "^3.0.0",
     "d3-hierarchy": "^3.1.2",
     "d3-shape": "^3.2.0"
   }

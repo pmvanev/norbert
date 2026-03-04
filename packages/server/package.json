@@ -23,6 +23,7 @@
     "@fastify/websocket": "^11.2.0",
     "@norbert/config": "workspace:*",
     "@norbert/core": "workspace:*",
+    "@norbert/config-explorer": "workspace:*",
     "@norbert/storage": "workspace:*",
     "fastify": "^5.7.4"
   },

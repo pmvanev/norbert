@@ -1,0 +1,23 @@
+{
+  "name": "@norbert/config-explorer",
+  "version": "0.1.0",
+  "description": "Pure domain types and functions for the Claude Code configuration ecosystem",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "picomatch": "^4.0.0",
+    "gray-matter": "^4.0.0"
+  }
+}

@@ -15,12 +15,6 @@
     "composite": true,
     "incremental": true
   },
-  "references": [
-    { "path": "../core" },
-    { "path": "../config" },
-    { "path": "../config-explorer" },
-    { "path": "../storage" }
-  ],
   "include": ["src/**/*.ts"],
   "exclude": ["src/**/*.test.ts", "dist"]
 }

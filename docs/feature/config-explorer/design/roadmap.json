@@ -298,7 +298,8 @@
       "Integration patterns specified (REST API, pure function calls, filesystem adapter)",
       "OSS preference validated (picomatch MIT, gray-matter MIT)",
       "AC behavioral, not implementation-coupled",
-      "Peer review pending"
-    ]
+      "Peer review APPROVED (2026-03-03)"
+    ],
+    "status": "approved"
   }
 }

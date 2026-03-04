@@ -25,7 +25,8 @@
 	const navItems = [
 		{ href: '/', label: 'Overview', icon: 'grid' },
 		{ href: '/history', label: 'History', icon: 'clock' },
-		{ href: '/mcp', label: 'MCP', icon: 'server' }
+		{ href: '/mcp', label: 'MCP', icon: 'server' },
+		{ href: '/config', label: 'Config', icon: 'settings' }
 	] as const;
 </script>
 

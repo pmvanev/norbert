@@ -11,6 +11,7 @@ export default defineConfig({
       '@norbert/cli': path.resolve(__dirname, 'packages/cli/src/index.ts'),
       '@norbert/dashboard': path.resolve(__dirname, 'packages/dashboard/src/index.ts'),
       '@norbert/hooks': path.resolve(__dirname, 'packages/hooks/src/index.ts'),
+      '@norbert/config-explorer': path.resolve(__dirname, 'packages/config-explorer/src/index.ts'),
     },
   },
   test: {

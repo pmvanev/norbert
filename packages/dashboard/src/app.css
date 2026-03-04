@@ -20,6 +20,13 @@
 	--border: #334155;
 	--radius: 8px;
 	--radius-sm: 4px;
+
+	/* Scope colors (shared across ConfigTreeView, ConfigCascade, and future views) */
+	--scope-user: #3B82F6;
+	--scope-project: #22C55E;
+	--scope-local: #EAB308;
+	--scope-plugin: #A855F7;
+	--scope-managed: #EF4444;
 }
 
 * {
