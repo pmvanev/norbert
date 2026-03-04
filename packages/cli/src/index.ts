@@ -103,9 +103,10 @@ export const createProgram = (): Command => {
       const dbPath = options.db ?? DEFAULT_CONFIG.dbPath;
 
       try {
-        const { createApp } = await import('@norbert/server');
+        const { createApp, createConfigFileReader } = await import('@norbert/server');
         const storage = createSqliteAdapter(dbPath);
-        const app = createApp({ port }, storage);
+        const configFileReader = createConfigFileReader();
+        const app = createApp({ port }, storage, { configFileReader });
 
         await app.listen({ port, host: '0.0.0.0' });
         console.log(`Norbert server listening on http://localhost:${port}`);
