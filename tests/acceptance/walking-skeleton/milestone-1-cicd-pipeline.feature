@@ -9,7 +9,6 @@ Feature: CI/CD Pipeline -- Build, package, and distribute Norbert
     Then a release for "v0.1.0" is published
     And the release contains the Windows binary package
 
-  @skip
   Scenario: User installs Norbert with a single command
     Given the release for "v0.1.0" is published with the Windows binary
     When a user runs the install command on Windows 11
@@ -23,7 +22,6 @@ Feature: CI/CD Pipeline -- Build, package, and distribute Norbert
     Then the pipeline fails with a visible error
     And no release is published for that tag
 
-  @skip
   Scenario: Install fails gracefully on network error
     Given a user is installing Norbert
     And the network connection drops during binary download

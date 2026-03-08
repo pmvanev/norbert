@@ -1,0 +1,29 @@
+#!/usr/bin/env node
+
+import { execFileSync } from "node:child_process";
+import path from "node:path";
+import os from "node:os";
+import { existsSync } from "node:fs";
+
+const installDir = path.join(os.homedir(), ".norbert", "bin");
+const isWindows = process.platform === "win32";
+const binaryName = isWindows ? "norbert-cc.exe" : "norbert-cc";
+const binaryPath = path.join(installDir, binaryName);
+
+if (!existsSync(binaryPath)) {
+  console.error(`Error: norbert-cc binary not found at ${binaryPath}`);
+  console.error("Run 'npm run postinstall' to download and install the binary.");
+  process.exit(1);
+}
+
+try {
+  execFileSync(binaryPath, process.argv.slice(2), {
+    stdio: "inherit",
+  });
+} catch (error) {
+  if (error.status !== undefined) {
+    process.exit(error.status);
+  }
+  console.error(`Error running norbert-cc: ${error.message}`);
+  process.exit(1);
+}
