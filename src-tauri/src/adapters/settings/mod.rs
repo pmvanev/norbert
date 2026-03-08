@@ -51,7 +51,7 @@ impl SettingsMergeAdapter {
             return Ok(None);
         }
         let contents = fs::read_to_string(&self.settings_path)
-            .map_err(|e| format!("Failed to read settings file: {}", e))?;
+            .map_err(|e| format!("Failed to read settings file {}: {}", self.settings_path.display(), e))?;
         Ok(Some(contents))
     }
 
@@ -79,7 +79,7 @@ impl SettingsMergeAdapter {
         let json_string = serde_json::to_string_pretty(config)
             .map_err(|e| format!("Failed to serialize config: {}", e))?;
         fs::write(&self.settings_path, &json_string)
-            .map_err(|e| format!("Failed to write settings file: {}", e))?;
+            .map_err(|e| format!("Failed to write settings file {}: {}", self.settings_path.display(), e))?;
         Ok(())
     }
 }
@@ -106,7 +106,7 @@ impl SettingsManager for SettingsMergeAdapter {
             Some(contents) => {
                 // Parse JSON -- malformed JSON skips merge with warning
                 let config: serde_json::Value = serde_json::from_str(&contents)
-                    .map_err(|e| format!("Malformed JSON in settings file, hooks not registered: {}", e))?;
+                    .map_err(|e| format!("Malformed JSON in settings file {}, hooks not registered: {}", self.settings_path.display(), e))?;
 
                 // Merge hooks using pure domain function
                 match domain::merge_hooks_into_config(&config, self.port) {
@@ -130,7 +130,7 @@ impl SettingsManager for SettingsMergeAdapter {
             None => Ok(false),
             Some(contents) => {
                 let config: serde_json::Value = serde_json::from_str(&contents)
-                    .map_err(|e| format!("Failed to parse settings: {}", e))?;
+                    .map_err(|e| format!("Failed to parse settings file {}: {}", self.settings_path.display(), e))?;
                 Ok(domain::hooks_are_merged(&config, self.port))
             }
         }

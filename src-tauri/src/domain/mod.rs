@@ -298,7 +298,8 @@ pub fn hooks_are_merged(config: &serde_json::Value, port: u16) -> bool {
 
 /// Merge Norbert hook entries into a Claude Code configuration.
 ///
-/// Pure function: takes existing config JSON, returns new config with hooks added.
+/// Pure function: takes existing config JSON, returns a NEW config with hooks added.
+/// Builds the result immutably -- the input is never modified.
 /// Preserves all existing settings. Adds Norbert hooks without duplicating them.
 /// If hooks are already present, returns AlreadyMerged.
 pub fn merge_hooks_into_config(
@@ -309,51 +310,91 @@ pub fn merge_hooks_into_config(
         return MergeOutcome::AlreadyMerged;
     }
 
-    let mut new_config = config.clone();
+    // Build the merged config immutably from the input
+    let merged = build_merged_config(config, port);
 
-    // Ensure the config is an object
-    let config_obj = match new_config.as_object_mut() {
+    // Validate the merged result contains all required hooks
+    if !hooks_are_merged(&merged, port) {
+        // This should not happen with correct logic, but guards against
+        // producing an invalid config
+        return MergeOutcome::Merged(serde_json::json!({"hooks": build_hooks_object(port)}));
+    }
+
+    MergeOutcome::Merged(merged)
+}
+
+/// Build a new config value with Norbert hooks merged in.
+///
+/// Pure function: reads the input, produces a new value.
+/// Preserves existing hooks from third parties.
+fn build_merged_config(config: &serde_json::Value, port: u16) -> serde_json::Value {
+    // If config is not an object, return a fresh config with hooks only
+    let config_obj = match config.as_object() {
         Some(obj) => obj,
-        None => return MergeOutcome::Merged(serde_json::json!({"hooks": build_hooks_object(port)})),
+        None => return serde_json::json!({"hooks": build_hooks_object(port)}),
     };
 
-    // Get or create the hooks object
-    let hooks = config_obj
-        .entry("hooks")
-        .or_insert_with(|| serde_json::json!({}));
-
-    let hooks_obj = match hooks.as_object_mut() {
-        Some(obj) => obj,
-        None => {
-            // hooks key exists but is not an object -- replace it
-            *hooks = build_hooks_object(port);
-            return MergeOutcome::Merged(new_config);
-        }
-    };
-
-    // For each event type, add the Norbert entry if not already present
-    for event_name in &HOOK_EVENT_NAMES {
-        let expected_url = build_hook_url(port, event_name);
-        let entry = build_hook_entry(port, event_name);
-
-        let entries = hooks_obj
-            .entry(event_name.to_string())
-            .or_insert_with(|| serde_json::json!([]));
-
-        if let Some(arr) = entries.as_array_mut() {
-            let already_present = arr.iter().any(|e| {
-                e.get("url").and_then(|u| u.as_str()) == Some(expected_url.as_str())
-            });
-            if !already_present {
-                arr.push(entry);
-            }
-        } else {
-            // Entry exists but is not an array -- replace with array containing our entry
-            *entries = serde_json::json!([entry]);
+    // Start building a new object with all existing keys
+    let mut new_obj = serde_json::Map::new();
+    for (key, value) in config_obj {
+        if key != "hooks" {
+            new_obj.insert(key.clone(), value.clone());
         }
     }
 
-    MergeOutcome::Merged(new_config)
+    // Build the merged hooks object
+    let existing_hooks = config_obj.get("hooks");
+    let merged_hooks = build_merged_hooks(existing_hooks, port);
+    new_obj.insert("hooks".to_string(), merged_hooks);
+
+    serde_json::Value::Object(new_obj)
+}
+
+/// Build a new hooks object that merges existing hook entries with Norbert entries.
+///
+/// Pure function: preserves third-party entries, adds missing Norbert entries.
+fn build_merged_hooks(existing_hooks: Option<&serde_json::Value>, port: u16) -> serde_json::Value {
+    let existing_obj = existing_hooks.and_then(|h| h.as_object());
+
+    let mut hooks = serde_json::Map::new();
+
+    // Copy any existing hook keys that are not in HOOK_EVENT_NAMES
+    if let Some(obj) = existing_obj {
+        for (key, value) in obj {
+            if !HOOK_EVENT_NAMES.contains(&key.as_str()) {
+                hooks.insert(key.clone(), value.clone());
+            }
+        }
+    }
+
+    // For each event type, build a new array with existing entries + Norbert entry
+    for event_name in &HOOK_EVENT_NAMES {
+        let expected_url = build_hook_url(port, event_name);
+        let norbert_entry = build_hook_entry(port, event_name);
+
+        let mut entries: Vec<serde_json::Value> = Vec::new();
+
+        // Preserve existing entries for this event type
+        if let Some(obj) = existing_obj {
+            if let Some(serde_json::Value::Array(existing_entries)) = obj.get(*event_name) {
+                for entry in existing_entries {
+                    entries.push(entry.clone());
+                }
+            }
+        }
+
+        // Add Norbert entry if not already present
+        let already_present = entries.iter().any(|e| {
+            e.get("url").and_then(|u| u.as_str()) == Some(expected_url.as_str())
+        });
+        if !already_present {
+            entries.push(norbert_entry);
+        }
+
+        hooks.insert(event_name.to_string(), serde_json::Value::Array(entries));
+    }
+
+    serde_json::Value::Object(hooks)
 }
 
 /// Build a fresh configuration containing only hooks.
