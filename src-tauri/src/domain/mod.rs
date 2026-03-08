@@ -41,6 +41,27 @@ pub fn initial_status() -> AppStatus {
     }
 }
 
+/// Action the application should take on a window when the tray icon is clicked.
+#[derive(Debug, Clone, PartialEq)]
+pub enum WindowAction {
+    /// Window is hidden: show it and bring it to focus.
+    ShowAndFocus,
+    /// Window is visible: hide it.
+    Hide,
+}
+
+/// Determine the window action based on current visibility.
+///
+/// Pure function: maps visibility state to the appropriate toggle action.
+/// When visible, the window should hide. When hidden, it should show and focus.
+pub fn toggle_window_action(is_visible: bool) -> WindowAction {
+    if is_visible {
+        WindowAction::Hide
+    } else {
+        WindowAction::ShowAndFocus
+    }
+}
+
 /// Build the tray icon tooltip string from app name and version.
 ///
 /// Pure function: no side effects, no IO.
@@ -114,5 +135,15 @@ mod tests {
     fn initial_status_starts_with_zero_events() {
         let status = initial_status();
         assert_eq!(status.event_count, 0);
+    }
+
+    #[test]
+    fn toggle_window_action_hides_when_visible() {
+        assert_eq!(toggle_window_action(true), WindowAction::Hide);
+    }
+
+    #[test]
+    fn toggle_window_action_shows_and_focuses_when_hidden() {
+        assert_eq!(toggle_window_action(false), WindowAction::ShowAndFocus);
     }
 }

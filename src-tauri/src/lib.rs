@@ -1,6 +1,7 @@
 pub mod domain;
 
-use domain::{APP_NAME, AppStatus, VERSION, format_tooltip, initial_status};
+use domain::{APP_NAME, AppStatus, VERSION, WindowAction, format_tooltip, initial_status, toggle_window_action};
+use tauri::Manager;
 
 /// Greet command exposed to the frontend via Tauri IPC.
 #[tauri::command]
@@ -20,7 +21,8 @@ fn get_status() -> AppStatus {
 /// Build and configure the Tauri application.
 ///
 /// This is the library entry point called by the binary.
-/// Registers the tray icon with tooltip and all Tauri commands.
+/// Registers the tray icon with tooltip, tray click handler,
+/// window close interceptor, and all Tauri commands.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let tooltip = format_tooltip(APP_NAME, VERSION);
@@ -37,8 +39,31 @@ pub fn run() {
             let _tray = tauri::tray::TrayIconBuilder::new()
                 .icon(icon)
                 .tooltip(&tooltip)
+                .on_tray_icon_event(|tray_icon, event| {
+                    if let tauri::tray::TrayIconEvent::Click { .. } = event {
+                        let app_handle = tray_icon.app_handle();
+                        if let Some(window) = app_handle.get_webview_window("main") {
+                            let is_visible = window.is_visible().unwrap_or(false);
+                            match toggle_window_action(is_visible) {
+                                WindowAction::ShowAndFocus => {
+                                    let _ = window.show();
+                                    let _ = window.set_focus();
+                                }
+                                WindowAction::Hide => {
+                                    let _ = window.hide();
+                                }
+                            }
+                        }
+                    }
+                })
                 .build(app)?;
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
         })
         .invoke_handler(tauri::generate_handler![greet, get_status])
         .run(tauri::generate_context!())
