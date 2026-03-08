@@ -43,11 +43,16 @@ async fn handle_hook_event(
         }
     };
 
-    let session_id = payload
-        .get("session_id")
-        .and_then(|v| v.as_str())
-        .unwrap_or("unknown")
-        .to_string();
+    let session_id = match payload.get("session_id").and_then(|v| v.as_str()) {
+        Some(id) => id.to_string(),
+        None => {
+            eprintln!("Warning: missing session_id in payload for event type {}", event_type_name);
+            return (
+                StatusCode::BAD_REQUEST,
+                "missing session_id in payload".to_string(),
+            );
+        }
+    };
 
     let received_at = chrono::Utc::now().to_rfc3339();
 
@@ -226,6 +231,27 @@ mod tests {
 
         let count = state.event_store.get_event_count().unwrap();
         assert_eq!(count, 0, "No events should be stored for invalid types");
+    }
+
+    #[tokio::test]
+    async fn missing_session_id_returns_400() {
+        let state = test_state();
+        let app = build_router(state.clone());
+
+        let body = serde_json::json!({"tool": "bash"});
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/hooks/PreToolUse")
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::to_string(&body).unwrap()))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let count = state.event_store.get_event_count().unwrap();
+        assert_eq!(count, 0, "No events should be stored when session_id is missing");
     }
 
     #[tokio::test]
