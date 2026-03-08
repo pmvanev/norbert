@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   type AppStatus,
@@ -22,7 +22,6 @@ function App() {
   const [latestSession, setLatestSession] = useState<SessionInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [bannerWasShown, setBannerWasShown] = useState(true);
-  const previousEventCount = useRef<number>(0);
 
   useEffect(() => {
     function pollStatus() {
@@ -44,9 +43,6 @@ function App() {
   useEffect(() => {
     if (status && status.event_count > 0 && bannerWasShown) {
       setBannerWasShown(false);
-    }
-    if (status) {
-      previousEventCount.current = status.event_count;
     }
   }, [status, bannerWasShown]);
 
