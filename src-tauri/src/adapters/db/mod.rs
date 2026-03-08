@@ -43,6 +43,18 @@ const CREATE_INDEX_EVENTS_SESSION_ID: &str =
 const CREATE_INDEX_EVENTS_RECEIVED_AT: &str =
     "CREATE INDEX IF NOT EXISTS idx_events_received_at ON events (received_at)";
 
+/// Resolve the database path for the application.
+///
+/// Uses the platform data directory (e.g., ~/.local/share/norbert on Linux,
+/// %APPDATA%/norbert on Windows).
+pub fn resolve_database_path() -> Result<std::path::PathBuf, String> {
+    let data_dir = dirs::data_dir().ok_or("Could not determine data directory")?;
+    let app_dir = data_dir.join("norbert");
+    std::fs::create_dir_all(&app_dir)
+        .map_err(|e| format!("Failed to create data directory: {}", e))?;
+    Ok(app_dir.join("norbert.db"))
+}
+
 /// SQLite-backed implementation of the EventStore port.
 pub struct SqliteEventStore {
     connection: Connection,
@@ -80,6 +92,18 @@ impl SqliteEventStore {
             .map_err(|e| format!("Failed to create received_at index: {}", e))?;
         Ok(())
     }
+}
+
+/// Map a SQLite row to a Session domain type.
+///
+/// Expects columns in order: id, started_at, ended_at, event_count.
+fn map_row_to_session(row: &rusqlite::Row) -> rusqlite::Result<Session> {
+    Ok(Session {
+        id: row.get(0)?,
+        started_at: row.get(1)?,
+        ended_at: row.get(2)?,
+        event_count: row.get(3)?,
+    })
 }
 
 impl EventStore for SqliteEventStore {
@@ -129,14 +153,7 @@ impl EventStore for SqliteEventStore {
             .map_err(|e| format!("Failed to prepare sessions query: {}", e))?;
 
         let sessions = stmt
-            .query_map([], |row| {
-                Ok(Session {
-                    id: row.get(0)?,
-                    started_at: row.get(1)?,
-                    ended_at: row.get(2)?,
-                    event_count: row.get(3)?,
-                })
-            })
+            .query_map([], map_row_to_session)
             .map_err(|e| format!("Failed to query sessions: {}", e))?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| format!("Failed to read session row: {}", e))?;
@@ -161,14 +178,7 @@ impl EventStore for SqliteEventStore {
             .map_err(|e| format!("Failed to prepare latest session query: {}", e))?;
 
         let mut rows = stmt
-            .query_map([], |row| {
-                Ok(Session {
-                    id: row.get(0)?,
-                    started_at: row.get(1)?,
-                    ended_at: row.get(2)?,
-                    event_count: row.get(3)?,
-                })
-            })
+            .query_map([], map_row_to_session)
             .map_err(|e| format!("Failed to query latest session: {}", e))?;
 
         match rows.next() {

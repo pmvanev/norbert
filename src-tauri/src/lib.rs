@@ -7,8 +7,8 @@ use std::sync::Mutex;
 use adapters::db::SqliteEventStore;
 use adapters::settings::SettingsMergeAdapter;
 use domain::{
-    APP_NAME, AppStatus, Session, VERSION, WindowAction, build_status, build_status_with_session,
-    format_tooltip, toggle_window_action, HOOK_PORT,
+    build_status, build_status_with_session, format_tooltip, toggle_window_action, AppStatus,
+    Session, WindowAction, APP_NAME, HOOK_PORT, VERSION,
 };
 use ports::{EventStore, SettingsManager};
 use rusqlite::Connection;
@@ -53,21 +53,9 @@ fn get_latest_session(state: tauri::State<AppState>) -> Option<Session> {
     store.get_latest_session().unwrap_or(None)
 }
 
-/// Resolve the database path for the Tauri application.
-///
-/// Uses the platform data directory (e.g., %APPDATA%/norbert on Windows,
-/// ~/.local/share/norbert on Linux).
-fn resolve_database_path() -> Result<std::path::PathBuf, String> {
-    let data_dir = dirs::data_dir().ok_or("Could not determine data directory")?;
-    let app_dir = data_dir.join("norbert");
-    std::fs::create_dir_all(&app_dir)
-        .map_err(|e| format!("Failed to create data directory: {}", e))?;
-    Ok(app_dir.join("norbert.db"))
-}
-
 /// Initialize the SQLite event store from the platform data directory.
 fn initialize_event_store() -> Result<SqliteEventStore, String> {
-    let db_path = resolve_database_path()?;
+    let db_path = adapters::db::resolve_database_path()?;
     let connection = Connection::open(&db_path)
         .map_err(|e| format!("Failed to open database: {}", e))?;
     SqliteEventStore::new(connection)

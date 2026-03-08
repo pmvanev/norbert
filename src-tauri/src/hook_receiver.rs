@@ -77,21 +77,9 @@ fn build_router(state: Arc<AppState>) -> Router {
         .with_state(state)
 }
 
-/// Resolve the database path for the hook receiver.
-///
-/// Uses the platform data directory (e.g., ~/.local/share/norbert on Linux,
-/// %APPDATA%/norbert on Windows).
-fn resolve_database_path() -> Result<std::path::PathBuf, String> {
-    let data_dir = dirs::data_dir().ok_or("Could not determine data directory")?;
-    let app_dir = data_dir.join("norbert");
-    std::fs::create_dir_all(&app_dir)
-        .map_err(|e| format!("Failed to create data directory: {}", e))?;
-    Ok(app_dir.join("norbert.db"))
-}
-
 #[tokio::main]
 async fn main() {
-    let db_path = match resolve_database_path() {
+    let db_path = match norbert_lib::adapters::db::resolve_database_path() {
         Ok(path) => path,
         Err(e) => {
             eprintln!("norbert-hook-receiver: {}", e);
@@ -242,16 +230,7 @@ mod tests {
 
     #[tokio::test]
     async fn all_valid_event_types_accepted() {
-        let event_types = vec![
-            "PreToolUse",
-            "PostToolUse",
-            "SubagentStop",
-            "Stop",
-            "SessionStart",
-            "UserPromptSubmit",
-        ];
-
-        for event_type in event_types {
+        for event_type in &norbert_lib::domain::HOOK_EVENT_NAMES {
             let state = test_state();
             let app = build_router(state);
 
