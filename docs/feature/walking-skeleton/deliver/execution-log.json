@@ -107,6 +107,41 @@
       "s": "EXECUTED",
       "d": "PASS",
       "t": "2026-03-08T21:10:37Z"
+    },
+    {
+      "sid": "01-03",
+      "p": "COMMIT",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-08T21:12:28Z"
+    },
+    {
+      "sid": "02-01",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-08T21:14:43Z"
+    },
+    {
+      "sid": "02-01",
+      "p": "RED_ACCEPTANCE",
+      "s": "SKIPPED",
+      "d": "CHECKPOINT_PENDING: Scenarios 9 and 14 are UI-driven tray icon tests requiring manual or E2E verification, not automatable as Rust unit tests",
+      "t": "2026-03-08T21:15:03Z"
+    },
+    {
+      "sid": "02-01",
+      "p": "RED_UNIT",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-08T21:23:08Z"
+    },
+    {
+      "sid": "02-01",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-08T21:23:22Z"
     }
   ]
 }

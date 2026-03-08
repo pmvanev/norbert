@@ -3,7 +3,6 @@ Feature: App Shell -- Tauri window, system tray icon, and status display
   I want an always-on desktop presence that shows me Norbert's status at a glance,
   so I can confirm the app is alive without interrupting my workflow.
 
-  @skip
   Scenario: Tray icon appears on launch
     Given Priya launches Norbert on Windows 11
     When the application starts
@@ -45,7 +44,6 @@ Feature: App Shell -- Tauri window, system tray icon, and status display
     Then she sees "Waiting for first Claude Code session..." as the empty state message
     And the interface does not appear broken or error-like
 
-  @skip
   Scenario: Tray icon persists after window close and reopen
     Given Priya has opened and closed the Norbert window multiple times
     When she checks the system tray
