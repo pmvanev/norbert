@@ -1,0 +1,20 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default capabilities for the Norbert desktop application",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "shell:allow-spawn",
+    "shell:allow-execute",
+    {
+      "identifier": "shell:default",
+      "allow": [
+        {
+          "name": "norbert-hook-receiver",
+          "sidecar": true
+        }
+      ]
+    }
+  ]
+}

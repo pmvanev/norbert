@@ -2,8 +2,27 @@ pub mod adapters;
 pub mod domain;
 pub mod ports;
 
-use domain::{APP_NAME, AppStatus, VERSION, WindowAction, format_tooltip, initial_status, toggle_window_action};
+use std::sync::Mutex;
+
+use adapters::db::SqliteEventStore;
+use adapters::settings::SettingsMergeAdapter;
+use domain::{
+    APP_NAME, AppStatus, Session, VERSION, WindowAction, build_status, format_tooltip,
+    toggle_window_action, HOOK_PORT,
+};
+use ports::{EventStore, SettingsManager};
+use rusqlite::Connection;
 use tauri::Manager;
+use tauri_plugin_shell::ShellExt;
+
+/// Shared application state accessible from IPC command handlers.
+///
+/// Wraps the SqliteEventStore in a Mutex because rusqlite::Connection
+/// is Send but not Sync. The Mutex ensures safe concurrent access
+/// from multiple IPC calls.
+pub struct AppState {
+    pub event_store: Mutex<SqliteEventStore>,
+}
 
 /// Greet command exposed to the frontend via Tauri IPC.
 #[tauri::command]
@@ -13,24 +32,115 @@ fn greet(name: &str) -> String {
 
 /// Return current application status to the frontend via Tauri IPC.
 ///
-/// Returns a snapshot of version, listening status, port, and counters.
-/// For the walking skeleton, returns initial hardcoded values.
+/// Reads real session and event counts from the EventStore.
+/// Falls back to zero counts if the store cannot be read.
 #[tauri::command]
-fn get_status() -> AppStatus {
-    initial_status()
+fn get_status(state: tauri::State<AppState>) -> AppStatus {
+    let store = state.event_store.lock().unwrap();
+    let session_count = store.get_sessions().map(|s| s.len() as u32).unwrap_or(0);
+    let event_count = store.get_event_count().unwrap_or(0);
+    build_status(session_count, event_count)
+}
+
+/// Return the most recently started session, if any.
+///
+/// Returns None (serialized as null) when no sessions have been recorded.
+#[tauri::command]
+fn get_latest_session(state: tauri::State<AppState>) -> Option<Session> {
+    let store = state.event_store.lock().unwrap();
+    store.get_latest_session().unwrap_or(None)
+}
+
+/// Resolve the database path for the Tauri application.
+///
+/// Uses the platform data directory (e.g., %APPDATA%/norbert on Windows,
+/// ~/.local/share/norbert on Linux).
+fn resolve_database_path() -> Result<std::path::PathBuf, String> {
+    let data_dir = dirs::data_dir().ok_or("Could not determine data directory")?;
+    let app_dir = data_dir.join("norbert");
+    std::fs::create_dir_all(&app_dir)
+        .map_err(|e| format!("Failed to create data directory: {}", e))?;
+    Ok(app_dir.join("norbert.db"))
+}
+
+/// Initialize the SQLite event store from the platform data directory.
+fn initialize_event_store() -> Result<SqliteEventStore, String> {
+    let db_path = resolve_database_path()?;
+    let connection = Connection::open(&db_path)
+        .map_err(|e| format!("Failed to open database: {}", e))?;
+    SqliteEventStore::new(connection)
+}
+
+/// Run the first-launch settings merge.
+///
+/// Logs warnings on failure but does not prevent app startup.
+fn run_settings_merge() {
+    match SettingsMergeAdapter::with_default_paths() {
+        Ok(adapter) => {
+            if let Err(e) = adapter.merge_settings() {
+                eprintln!("norbert: Settings merge failed: {}", e);
+            }
+        }
+        Err(e) => {
+            eprintln!("norbert: Could not resolve settings paths: {}", e);
+        }
+    }
+}
+
+/// Spawn the hook-receiver sidecar process.
+///
+/// The sidecar runs independently and survives window close events
+/// because window close only hides the window (does not exit the app).
+fn spawn_hook_receiver_sidecar(app: &tauri::App) {
+    match app.shell().sidecar("norbert-hook-receiver") {
+        Ok(command) => {
+            match command.spawn() {
+                Ok((_rx, _child)) => {
+                    eprintln!("norbert: Hook receiver sidecar started on port {}", HOOK_PORT);
+                }
+                Err(e) => {
+                    eprintln!("norbert: Failed to spawn hook receiver sidecar: {}", e);
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("norbert: Failed to create sidecar command: {}", e);
+        }
+    }
 }
 
 /// Build and configure the Tauri application.
 ///
-/// This is the library entry point called by the binary.
-/// Registers the tray icon with tooltip, tray click handler,
-/// window close interceptor, and all Tauri commands.
+/// This is the composition root: initializes the database, runs settings merge,
+/// spawns the hook-receiver sidecar, and registers IPC commands.
+/// The library entry point called by the binary.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let tooltip = format_tooltip(APP_NAME, VERSION);
 
+    // Initialize the event store before building the app.
+    let event_store = match initialize_event_store() {
+        Ok(store) => store,
+        Err(e) => {
+            eprintln!("norbert: Fatal -- failed to initialize database: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let app_state = AppState {
+        event_store: Mutex::new(event_store),
+    };
+
     tauri::Builder::default()
+        .plugin(tauri_plugin_shell::init())
+        .manage(app_state)
         .setup(move |app| {
+            // Run settings merge on first launch (non-blocking on failure).
+            run_settings_merge();
+
+            // Spawn hook-receiver sidecar.
+            spawn_hook_receiver_sidecar(app);
+
             let icon = app
                 .default_window_icon()
                 .cloned()
@@ -67,7 +177,7 @@ pub fn run() {
                 let _ = window.hide();
             }
         })
-        .invoke_handler(tauri::generate_handler![greet, get_status])
+        .invoke_handler(tauri::generate_handler![greet, get_status, get_latest_session])
         .run(tauri::generate_context!())
         .expect("error while running Norbert");
 }
@@ -75,6 +185,7 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use domain::initial_status;
 
     #[test]
     fn version_is_semver() {
@@ -94,20 +205,27 @@ mod tests {
     }
 
     #[test]
-    fn get_status_returns_initial_status() {
-        let status = get_status();
+    fn build_status_with_zero_counts_matches_initial_status() {
+        let status = build_status(0, 0);
         let expected = initial_status();
         assert_eq!(status, expected);
     }
 
     #[test]
-    fn get_status_serializes_to_expected_json_keys() {
-        let status = get_status();
+    fn app_status_serializes_to_expected_json_keys() {
+        let status = build_status(1, 5);
         let json = serde_json::to_value(&status).expect("should serialize");
         assert!(json.get("version").is_some());
         assert!(json.get("status").is_some());
         assert!(json.get("port").is_some());
         assert!(json.get("session_count").is_some());
         assert!(json.get("event_count").is_some());
+    }
+
+    #[test]
+    fn app_status_reflects_real_counts() {
+        let status = build_status(7, 123);
+        assert_eq!(status.session_count, 7);
+        assert_eq!(status.event_count, 123);
     }
 }

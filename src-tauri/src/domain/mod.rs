@@ -33,12 +33,19 @@ pub struct AppStatus {
 ///
 /// Pure function: derives all values from domain constants.
 pub fn initial_status() -> AppStatus {
+    build_status(0, 0)
+}
+
+/// Build application status from real session and event counts.
+///
+/// Pure function: combines domain constants with live data from the EventStore.
+pub fn build_status(session_count: u32, event_count: u32) -> AppStatus {
     AppStatus {
         version: VERSION.to_string(),
         status: "Listening".to_string(),
         port: HOOK_PORT,
-        session_count: 0,
-        event_count: 0,
+        session_count,
+        event_count,
     }
 }
 
@@ -720,5 +727,54 @@ mod tests {
     #[test]
     fn parse_event_type_returns_none_for_empty_string() {
         assert_eq!(parse_event_type(""), None);
+    }
+
+    // --- build_status tests ---
+
+    #[test]
+    fn build_status_uses_version_and_hook_port() {
+        let status = build_status(0, 0);
+        assert_eq!(status.version, VERSION);
+        assert_eq!(status.port, HOOK_PORT);
+        assert_eq!(status.status, "Listening");
+    }
+
+    #[test]
+    fn build_status_includes_provided_counts() {
+        let status = build_status(3, 42);
+        assert_eq!(status.session_count, 3);
+        assert_eq!(status.event_count, 42);
+    }
+
+    #[test]
+    fn build_status_with_zero_counts_matches_initial_status() {
+        assert_eq!(build_status(0, 0), initial_status());
+    }
+
+    // --- Event type consistency (Scenario #36) ---
+
+    #[test]
+    fn every_hook_event_name_is_parseable_by_parse_event_type() {
+        for name in &HOOK_EVENT_NAMES {
+            assert!(
+                parse_event_type(name).is_some(),
+                "HOOK_EVENT_NAMES contains '{}' which parse_event_type does not recognize",
+                name
+            );
+        }
+    }
+
+    #[test]
+    fn hook_url_port_matches_hook_port_constant() {
+        for name in &HOOK_EVENT_NAMES {
+            let url = build_hook_url(HOOK_PORT, name);
+            assert!(
+                url.contains(&HOOK_PORT.to_string()),
+                "Hook URL for {} should contain port {}: {}",
+                name,
+                HOOK_PORT,
+                url
+            );
+        }
     }
 }
