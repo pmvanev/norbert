@@ -1,4 +1,5 @@
 pub mod domain;
+pub mod ports;
 
 use domain::{APP_NAME, AppStatus, VERSION, WindowAction, format_tooltip, initial_status, toggle_window_action};
 use tauri::Manager;
