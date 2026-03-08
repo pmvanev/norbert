@@ -32,6 +32,38 @@ jobs:
         run: npm ci
 
       - name: Build Tauri app
+        id: tauri-build
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate binary size
+        shell: bash
+        env:
+          MAX_SIZE_BYTES: "15728640"
+          ARTIFACT_PATHS: ${{ steps.tauri-build.outputs.artifactPaths }}
+        run: |
+          echo "Binary size limit: 15 MB ($MAX_SIZE_BYTES bytes)"
+          echo "Artifact paths: $ARTIFACT_PATHS"
+          oversized=false
+          for artifact in $(echo "$ARTIFACT_PATHS" | tr -d '[]"' | tr ',' ' '); do
+            if [ -f "$artifact" ]; then
+              size=$(stat -c%s "$artifact" 2>/dev/null || stat -f%z "$artifact" 2>/dev/null || wc -c < "$artifact" | tr -d ' ')
+              size_mb=$(awk "BEGIN {printf \"%.2f\", $size / 1048576}")
+              echo "  $artifact: ${size_mb} MB ($size bytes)"
+              if [ "$size" -gt "$MAX_SIZE_BYTES" ]; then
+                echo "::error::Binary exceeds size limit: $artifact is ${size_mb} MB (limit: 15 MB)"
+                oversized=true
+              fi
+            fi
+          done
+          if [ "$oversized" = true ]; then
+            echo "::error::One or more binaries exceed the 15 MB size limit. Build failed."
+            exit 1
+          fi
+          echo "All binaries are within the 15 MB size limit."
+
+      - name: Create release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

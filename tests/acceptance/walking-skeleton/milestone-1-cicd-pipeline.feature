@@ -30,7 +30,6 @@ Feature: CI/CD Pipeline -- Build, package, and distribute Norbert
     And no partial files remain in the installation directory
     And the user can retry the installation
 
-  @skip
   Scenario: Pipeline produces binary under size target
     Given a developer pushes version tag "v0.1.0"
     When the build pipeline produces the Windows binary
