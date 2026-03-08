@@ -472,4 +472,129 @@ mod tests {
         let result = SqliteEventStore::initialize_schema(&store.connection);
         assert!(result.is_ok(), "Re-initialization should succeed: {:?}", result.err());
     }
+
+    // --- Data durability: events persist across connections (Scenario #31) ---
+
+    #[test]
+    fn events_persist_across_connections() {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let db_path = temp_dir.path().join("durability_test.db");
+
+        // First connection: write events
+        {
+            let conn = Connection::open(&db_path).expect("Failed to open database");
+            let store = SqliteEventStore::new(conn).expect("Failed to initialize schema");
+
+            for i in 0..20 {
+                let event = HookEvent {
+                    session_id: "sess-durable".to_string(),
+                    event_type: EventType::PreToolUse,
+                    payload: serde_json::json!({"index": i}),
+                    received_at: format!("2026-03-08T12:{:02}:00Z", i),
+                };
+                store.write_event(&event).unwrap();
+            }
+
+            let count = store.get_event_count().unwrap();
+            assert_eq!(count, 20, "All events should be stored before closing connection");
+        }
+        // First connection dropped here -- simulating app shutdown
+
+        // Second connection: verify events survive
+        {
+            let conn = Connection::open(&db_path).expect("Failed to reopen database");
+            let store = SqliteEventStore::new(conn).expect("Failed to reinitialize schema");
+
+            let count = store.get_event_count().unwrap();
+            assert_eq!(count, 20, "Pre-restart events should be visible after relaunch");
+
+            let sessions = store.get_sessions().unwrap();
+            assert_eq!(sessions.len(), 1, "Session should survive restart");
+            assert_eq!(sessions[0].id, "sess-durable");
+            assert_eq!(sessions[0].event_count, 20, "Session event count should reflect all captured events");
+        }
+    }
+
+    #[test]
+    fn new_events_accumulate_after_reconnection() {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let db_path = temp_dir.path().join("accumulate_test.db");
+
+        // First connection: write initial events
+        {
+            let conn = Connection::open(&db_path).expect("Failed to open database");
+            let store = SqliteEventStore::new(conn).expect("Failed to initialize schema");
+
+            let event = test_event("sess-1", EventType::SessionStart);
+            store.write_event(&event).unwrap();
+        }
+
+        // Second connection: write more events, verify accumulation
+        {
+            let conn = Connection::open(&db_path).expect("Failed to reopen database");
+            let store = SqliteEventStore::new(conn).expect("Failed to reinitialize schema");
+
+            let event = HookEvent {
+                session_id: "sess-1".to_string(),
+                event_type: EventType::PreToolUse,
+                payload: serde_json::json!({"tool": "Read"}),
+                received_at: "2026-03-08T12:01:00Z".to_string(),
+            };
+            store.write_event(&event).unwrap();
+
+            let count = store.get_event_count().unwrap();
+            assert_eq!(count, 2, "Events from both connections should accumulate");
+
+            let sessions = store.get_sessions().unwrap();
+            assert_eq!(sessions[0].event_count, 2, "Session event count should include events from both connections");
+        }
+    }
+
+    // --- Concurrent access: WAL mode allows separate reader and writer connections (Scenario #34) ---
+
+    #[test]
+    fn separate_connections_share_data_via_wal() {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let db_path = temp_dir.path().join("concurrent_test.db");
+
+        // Writer connection (simulates sidecar/hook receiver)
+        let writer_conn = Connection::open(&db_path).expect("Failed to open writer connection");
+        let writer_store = SqliteEventStore::new(writer_conn).expect("Failed to initialize writer");
+
+        // Reader connection (simulates main window)
+        let reader_conn = Connection::open(&db_path).expect("Failed to open reader connection");
+        let reader_store = SqliteEventStore::new(reader_conn).expect("Failed to initialize reader");
+
+        // Writer stores an event
+        let event = HookEvent {
+            session_id: "sess-concurrent".to_string(),
+            event_type: EventType::PreToolUse,
+            payload: serde_json::json!({"tool": "bash"}),
+            received_at: "2026-03-08T12:00:00Z".to_string(),
+        };
+        writer_store.write_event(&event).unwrap();
+
+        // Reader sees the event immediately (WAL mode provides this)
+        let count = reader_store.get_event_count().unwrap();
+        assert_eq!(count, 1, "Reader should see data written by writer via WAL mode");
+
+        let sessions = reader_store.get_sessions().unwrap();
+        assert_eq!(sessions.len(), 1, "Reader should see session created by writer");
+        assert_eq!(sessions[0].id, "sess-concurrent");
+    }
+
+    #[test]
+    fn file_based_database_uses_wal_journal_mode() {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let db_path = temp_dir.path().join("wal_mode_test.db");
+
+        let conn = Connection::open(&db_path).expect("Failed to open database");
+        let store = SqliteEventStore::new(conn).expect("Failed to initialize schema");
+
+        let mode: String = store
+            .connection
+            .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(mode, "wal", "File-based database should use WAL journal mode");
+    }
 }

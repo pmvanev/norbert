@@ -10,7 +10,6 @@ Feature: Integration Checkpoints -- Cross-component verification points
     Then every hook URL in the configuration points to the same port the receiver listens on
     And the receiver has a route for every event type registered in the configuration
 
-  @skip
   Scenario: Database is shared between hook receiver and main window
     Given Norbert is running with both the hook receiver and the main window
     When a hook event arrives and is stored by the receiver
@@ -32,7 +31,7 @@ Feature: Integration Checkpoints -- Cross-component verification points
     Then hook events continue to be received and stored
     And when Priya reopens the window the new events are visible
 
-  @skip @property
+  @property
   Scenario: Event types are consistent across settings and receiver
     Given the list of event types registered in the configuration
     And the list of event types the hook receiver accepts

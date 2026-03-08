@@ -52,7 +52,6 @@ Feature: End-to-End Proof -- Real session data visible in the Norbert window
     Then the tray icon transitions to an active visual state
     And the tray tooltip shows the current event count
 
-  @skip
   Scenario: Pre-restart events survive Norbert restart
     Given Norbert was receiving events from a Claude Code session
     And 20 events have been captured

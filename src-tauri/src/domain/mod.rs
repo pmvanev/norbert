@@ -930,4 +930,145 @@ mod tests {
             );
         }
     }
+
+    // --- Event type consistency property tests (Scenario #37) ---
+
+    /// All EventType variants as a complete list.
+    /// If a new variant is added to EventType, this test must be updated.
+    fn all_event_type_variants() -> Vec<EventType> {
+        vec![
+            EventType::PreToolUse,
+            EventType::PostToolUse,
+            EventType::SubagentStop,
+            EventType::Stop,
+            EventType::SessionStart,
+            EventType::UserPromptSubmit,
+        ]
+    }
+
+    #[test]
+    fn hook_event_names_and_event_type_variants_have_same_count() {
+        assert_eq!(
+            HOOK_EVENT_NAMES.len(),
+            all_event_type_variants().len(),
+            "HOOK_EVENT_NAMES and EventType variants must have the same count"
+        );
+    }
+
+    #[test]
+    fn every_event_type_variant_has_a_corresponding_hook_event_name() {
+        let parseable_variants: Vec<EventType> = HOOK_EVENT_NAMES
+            .iter()
+            .filter_map(|name| parse_event_type(name))
+            .collect();
+
+        for variant in all_event_type_variants() {
+            assert!(
+                parseable_variants.contains(&variant),
+                "EventType::{:?} has no corresponding entry in HOOK_EVENT_NAMES",
+                variant
+            );
+        }
+    }
+
+    #[test]
+    fn hook_event_names_are_unique() {
+        let mut seen = std::collections::HashSet::new();
+        for name in &HOOK_EVENT_NAMES {
+            assert!(
+                seen.insert(name),
+                "Duplicate entry in HOOK_EVENT_NAMES: {}",
+                name
+            );
+        }
+    }
+
+    #[test]
+    fn hook_url_event_name_roundtrips_through_parse_event_type() {
+        for name in &HOOK_EVENT_NAMES {
+            let url = build_hook_url(HOOK_PORT, name);
+            let path_segment = url.rsplit('/').next().unwrap();
+            let parsed = parse_event_type(path_segment);
+            assert!(
+                parsed.is_some(),
+                "URL path segment '{}' from hook URL should parse to a valid EventType",
+                path_segment
+            );
+        }
+    }
+
+    #[test]
+    fn no_receiver_route_exists_without_settings_registration() {
+        // Every name parseable by parse_event_type must exist in HOOK_EVENT_NAMES
+        let all_variants = all_event_type_variants();
+        for variant in &all_variants {
+            // Find which HOOK_EVENT_NAME parses to this variant
+            let matching_name = HOOK_EVENT_NAMES
+                .iter()
+                .find(|name| parse_event_type(name) == Some(variant.clone()));
+            assert!(
+                matching_name.is_some(),
+                "EventType::{:?} is accepted by the receiver but has no registration in HOOK_EVENT_NAMES",
+                variant
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod property_tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    /// Strategy that generates valid PascalCase event type names from HOOK_EVENT_NAMES.
+    fn valid_event_name() -> impl Strategy<Value = String> {
+        prop::sample::select(HOOK_EVENT_NAMES.to_vec()).prop_map(|s| s.to_string())
+    }
+
+    proptest! {
+        /// Property: every valid event name from HOOK_EVENT_NAMES parses successfully
+        /// and the parsed type's Display output is a valid snake_case string.
+        #[test]
+        fn parse_event_type_succeeds_for_all_hook_event_names(name in valid_event_name()) {
+            let parsed = parse_event_type(&name);
+            prop_assert!(parsed.is_some(), "parse_event_type should succeed for '{}'", name);
+            let display = parsed.unwrap().to_string();
+            prop_assert!(!display.is_empty(), "Display output should not be empty");
+            prop_assert!(
+                display.chars().all(|c| c.is_ascii_lowercase() || c == '_'),
+                "Display output '{}' should be snake_case",
+                display
+            );
+        }
+
+        /// Property: build_hook_url for any valid event name always contains the event name
+        /// and the port, forming a valid route that parse_event_type can handle.
+        #[test]
+        fn hook_url_contains_parseable_event_name(name in valid_event_name(), port in 1024..65535u16) {
+            let url = build_hook_url(port, &name);
+            let path_segment = url.rsplit('/').next().unwrap();
+            prop_assert_eq!(path_segment, name.as_str());
+            prop_assert!(parse_event_type(path_segment).is_some());
+        }
+
+        /// Property: for any port, the hooks object built for settings contains exactly
+        /// the same event types that parse_event_type accepts.
+        #[test]
+        fn hooks_object_keys_match_parseable_event_types(port in 1024..65535u16) {
+            let hooks = build_hooks_object(port);
+            let hooks_obj = hooks.as_object().unwrap();
+
+            // Every key in the hooks object should be parseable
+            for key in hooks_obj.keys() {
+                prop_assert!(
+                    parse_event_type(key).is_some(),
+                    "Hooks object key '{}' should be parseable by the receiver",
+                    key
+                );
+            }
+
+            // The hooks object should have exactly HOOK_EVENT_NAMES.len() keys
+            prop_assert_eq!(hooks_obj.len(), HOOK_EVENT_NAMES.len());
+        }
+    }
 }

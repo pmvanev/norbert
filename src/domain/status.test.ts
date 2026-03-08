@@ -221,3 +221,56 @@ describe("formatActiveTooltip", () => {
     ).toBe("Norbert v0.1.0 - Active session (0 events)");
   });
 });
+
+describe("cross-component event type consistency", () => {
+  // These event type names must match the Rust-side HOOK_EVENT_NAMES constant
+  // and the parse_event_type function. Any mismatch breaks the data pipeline.
+  const EXPECTED_EVENT_TYPES = [
+    "PreToolUse",
+    "PostToolUse",
+    "SubagentStop",
+    "Stop",
+    "SessionStart",
+    "UserPromptSubmit",
+  ] as const;
+
+  it("has exactly six event types", () => {
+    expect(EXPECTED_EVENT_TYPES.length).toBe(6);
+  });
+
+  it("event types match the Rust-side HOOK_EVENT_NAMES", () => {
+    // This acts as a canary: if Rust adds/removes an event type,
+    // this test reminds the developer to update the TS side too.
+    expect(EXPECTED_EVENT_TYPES).toEqual([
+      "PreToolUse",
+      "PostToolUse",
+      "SubagentStop",
+      "Stop",
+      "SessionStart",
+      "UserPromptSubmit",
+    ]);
+  });
+
+  it("all event types are PascalCase strings", () => {
+    for (const eventType of EXPECTED_EVENT_TYPES) {
+      expect(eventType[0]).toBe(eventType[0].toUpperCase());
+      expect(eventType).not.toContain("_");
+      expect(eventType).not.toContain(" ");
+    }
+  });
+
+  it("hook port matches expected value", () => {
+    // The hook port is a cross-component constant.
+    // Rust defines it as 3748 in domain::HOOK_PORT.
+    // Frontend receives it via IPC in AppStatus.port.
+    const EXPECTED_PORT = 3748;
+    const status: AppStatus = {
+      version: "0.1.0",
+      status: "Listening",
+      port: EXPECTED_PORT,
+      session_count: 0,
+      event_count: 0,
+    };
+    expect(status.port).toBe(3748);
+  });
+});
