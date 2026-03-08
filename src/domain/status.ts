@@ -16,6 +16,17 @@ export function formatHeader(appName: string, version: string): string {
   return `${appName.toUpperCase()} v${version}`;
 }
 
+/// Message displayed when no sessions have been observed yet.
+export const EMPTY_STATE_MESSAGE =
+  "Waiting for first Claude Code session...";
+
+/// Determine whether the application is in the empty state (no sessions yet).
+///
+/// Pure function: returns true when session count is zero.
+export function isEmptyState(sessionCount: number): boolean {
+  return sessionCount === 0;
+}
+
 /// Format a labeled status field for display.
 ///
 /// Pure function: produces "Label: value" strings.

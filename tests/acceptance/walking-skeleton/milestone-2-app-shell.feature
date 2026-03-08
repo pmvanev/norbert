@@ -36,7 +36,6 @@ Feature: App Shell -- Tauri window, system tray icon, and status display
     When Priya clicks the tray icon again
     Then the window reopens
 
-  @skip
   Scenario: Empty state is clear and inviting
     Given Priya has just launched Norbert for the first time
     And no Claude Code sessions have occurred yet

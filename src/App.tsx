@@ -1,6 +1,12 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { type AppStatus, formatHeader, formatField } from "./domain/status";
+import {
+  type AppStatus,
+  formatHeader,
+  formatField,
+  isEmptyState,
+  EMPTY_STATE_MESSAGE,
+} from "./domain/status";
 
 function App() {
   const [status, setStatus] = useState<AppStatus | null>(null);
@@ -35,8 +41,8 @@ function App() {
       <p>{formatField("Port", status.port)}</p>
       <p>{formatField("Sessions", status.session_count)}</p>
       <p>{formatField("Events", status.event_count)}</p>
-      {status.session_count === 0 && (
-        <p>Waiting for first Claude Code session...</p>
+      {isEmptyState(status.session_count) && (
+        <p>{EMPTY_STATE_MESSAGE}</p>
       )}
     </main>
   );

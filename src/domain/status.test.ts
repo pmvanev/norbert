@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { formatHeader, formatField, type AppStatus } from "./status";
+import {
+  formatHeader,
+  formatField,
+  isEmptyState,
+  EMPTY_STATE_MESSAGE,
+  type AppStatus,
+} from "./status";
 
 describe("formatHeader", () => {
   it("uppercases app name and prepends v to version", () => {
@@ -28,6 +34,25 @@ describe("formatField", () => {
 
   it("formats events field with zero", () => {
     expect(formatField("Events", 0)).toBe("Events: 0");
+  });
+});
+
+describe("isEmptyState", () => {
+  it("returns true when session count is zero", () => {
+    expect(isEmptyState(0)).toBe(true);
+  });
+
+  it("returns false when session count is greater than zero", () => {
+    expect(isEmptyState(1)).toBe(false);
+    expect(isEmptyState(42)).toBe(false);
+  });
+});
+
+describe("EMPTY_STATE_MESSAGE", () => {
+  it("contains the expected waiting message", () => {
+    expect(EMPTY_STATE_MESSAGE).toBe(
+      "Waiting for first Claude Code session..."
+    );
   });
 });
 
