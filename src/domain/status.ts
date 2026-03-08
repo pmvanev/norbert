@@ -9,6 +9,16 @@ export interface AppStatus {
   readonly event_count: number;
 }
 
+/// Session information returned from the Rust backend via Tauri IPC.
+///
+/// Fields match the Rust Session struct's serialized JSON.
+export interface SessionInfo {
+  readonly id: string;
+  readonly started_at: string;
+  readonly ended_at: string | null;
+  readonly event_count: number;
+}
+
 /// Format the application header from name and version.
 ///
 /// Pure function: no side effects.
@@ -32,4 +42,45 @@ export function isEmptyState(sessionCount: number): boolean {
 /// Pure function: produces "Label: value" strings.
 export function formatField(label: string, value: string | number): string {
   return `${label}: ${value}`;
+}
+
+/// Format a duration in seconds to a human-readable string.
+///
+/// Pure function: converts total seconds into "Xh Ym Zs" format.
+/// Omits hours when zero, but always includes minutes when hours are present.
+export function formatDuration(totalSeconds: number): string {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m ${seconds}s`;
+  }
+  if (minutes > 0) {
+    return `${minutes}m ${seconds}s`;
+  }
+  return `${seconds}s`;
+}
+
+/// Calculate the duration in seconds between two ISO 8601 timestamps.
+///
+/// Pure function: returns null when ended_at is null (session still active).
+export function calculateDurationSeconds(
+  startedAt: string,
+  endedAt: string | null
+): number | null {
+  if (endedAt === null) {
+    return null;
+  }
+  const start = new Date(startedAt).getTime();
+  const end = new Date(endedAt).getTime();
+  return Math.floor((end - start) / 1000);
+}
+
+/// Format an ISO 8601 timestamp for display.
+///
+/// Pure function: converts to locale-appropriate date/time string.
+export function formatSessionTimestamp(isoTimestamp: string): string {
+  const date = new Date(isoTimestamp);
+  return date.toLocaleString();
 }

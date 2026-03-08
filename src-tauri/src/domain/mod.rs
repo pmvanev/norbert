@@ -3,6 +3,7 @@
 /// This module contains no IO or framework imports.
 /// All functions are pure and testable in isolation.
 
+use chrono::DateTime;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -156,6 +157,15 @@ pub struct Session {
     pub ended_at: Option<String>,
     /// Number of events received in this session.
     pub event_count: u32,
+}
+
+/// Calculate the duration in seconds between two ISO 8601 timestamps.
+///
+/// Pure function: returns None if either timestamp cannot be parsed.
+pub fn calculate_duration_seconds(started_at: &str, ended_at: &str) -> Option<i64> {
+    let start = DateTime::parse_from_rfc3339(started_at).ok()?;
+    let end = DateTime::parse_from_rfc3339(ended_at).ok()?;
+    Some((end - start).num_seconds())
 }
 
 // --- Settings Merge (Pure Core) ---
@@ -727,6 +737,38 @@ mod tests {
     #[test]
     fn parse_event_type_returns_none_for_empty_string() {
         assert_eq!(parse_event_type(""), None);
+    }
+
+    // --- calculate_duration_seconds tests ---
+
+    #[test]
+    fn calculate_duration_seconds_returns_difference_in_seconds() {
+        let started = "2026-03-08T10:00:00Z";
+        let ended = "2026-03-08T10:08:12Z";
+        assert_eq!(calculate_duration_seconds(started, ended), Some(492));
+    }
+
+    #[test]
+    fn calculate_duration_seconds_returns_zero_for_same_timestamps() {
+        let timestamp = "2026-03-08T10:00:00Z";
+        assert_eq!(calculate_duration_seconds(timestamp, timestamp), Some(0));
+    }
+
+    #[test]
+    fn calculate_duration_seconds_returns_none_for_invalid_start() {
+        assert_eq!(calculate_duration_seconds("not-a-date", "2026-03-08T10:00:00Z"), None);
+    }
+
+    #[test]
+    fn calculate_duration_seconds_returns_none_for_invalid_end() {
+        assert_eq!(calculate_duration_seconds("2026-03-08T10:00:00Z", "not-a-date"), None);
+    }
+
+    #[test]
+    fn calculate_duration_seconds_handles_hour_boundary() {
+        let started = "2026-03-08T09:30:00Z";
+        let ended = "2026-03-08T10:30:00Z";
+        assert_eq!(calculate_duration_seconds(started, ended), Some(3600));
     }
 
     // --- build_status tests ---

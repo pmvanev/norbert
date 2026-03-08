@@ -94,6 +94,16 @@ impl EventStore for SqliteEventStore {
             )
             .map_err(|e| format!("Failed to upsert session: {}", e))?;
 
+        // Set ended_at when a Stop event finalizes the session
+        if event.event_type == EventType::Stop {
+            self.connection
+                .execute(
+                    "UPDATE sessions SET ended_at = ?1 WHERE id = ?2",
+                    rusqlite::params![event.received_at, event.session_id],
+                )
+                .map_err(|e| format!("Failed to set session ended_at: {}", e))?;
+        }
+
         // Insert the event
         let payload_str = event.payload.to_string();
         self.connection
@@ -365,6 +375,57 @@ mod tests {
 
         let latest = store.get_latest_session().unwrap().unwrap();
         assert_eq!(latest.id, "sess-late");
+    }
+
+    #[test]
+    fn write_event_sets_ended_at_on_stop_event() {
+        let store = create_test_store();
+
+        // First, create the session with a SessionStart event
+        let start_event = HookEvent {
+            session_id: "sess-1".to_string(),
+            event_type: EventType::SessionStart,
+            payload: serde_json::json!({}),
+            received_at: "2026-03-08T10:00:00Z".to_string(),
+        };
+        store.write_event(&start_event).unwrap();
+
+        // Session should not have ended_at yet
+        let session = store.get_latest_session().unwrap().unwrap();
+        assert!(session.ended_at.is_none(), "Session should not have ended_at before Stop event");
+
+        // Now send a Stop event
+        let stop_event = HookEvent {
+            session_id: "sess-1".to_string(),
+            event_type: EventType::Stop,
+            payload: serde_json::json!({}),
+            received_at: "2026-03-08T10:08:12Z".to_string(),
+        };
+        store.write_event(&stop_event).unwrap();
+
+        // Session should now have ended_at set
+        let session = store.get_latest_session().unwrap().unwrap();
+        assert_eq!(
+            session.ended_at,
+            Some("2026-03-08T10:08:12Z".to_string()),
+            "Stop event should set ended_at on the session"
+        );
+    }
+
+    #[test]
+    fn write_event_sets_started_at_from_session_start_event() {
+        let store = create_test_store();
+
+        let start_event = HookEvent {
+            session_id: "sess-1".to_string(),
+            event_type: EventType::SessionStart,
+            payload: serde_json::json!({}),
+            received_at: "2026-03-08T10:00:00Z".to_string(),
+        };
+        store.write_event(&start_event).unwrap();
+
+        let session = store.get_latest_session().unwrap().unwrap();
+        assert_eq!(session.started_at, "2026-03-08T10:00:00Z");
     }
 
     #[test]

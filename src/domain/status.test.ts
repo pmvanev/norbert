@@ -4,7 +4,11 @@ import {
   formatField,
   isEmptyState,
   EMPTY_STATE_MESSAGE,
+  formatDuration,
+  calculateDurationSeconds,
+  formatSessionTimestamp,
   type AppStatus,
+  type SessionInfo,
 } from "./status";
 
 describe("formatHeader", () => {
@@ -53,6 +57,83 @@ describe("EMPTY_STATE_MESSAGE", () => {
     expect(EMPTY_STATE_MESSAGE).toBe(
       "Waiting for first Claude Code session..."
     );
+  });
+});
+
+describe("formatDuration", () => {
+  it("formats zero seconds", () => {
+    expect(formatDuration(0)).toBe("0s");
+  });
+
+  it("formats seconds only", () => {
+    expect(formatDuration(45)).toBe("45s");
+  });
+
+  it("formats minutes and seconds", () => {
+    expect(formatDuration(492)).toBe("8m 12s");
+  });
+
+  it("formats hours minutes and seconds", () => {
+    expect(formatDuration(3661)).toBe("1h 1m 1s");
+  });
+
+  it("formats exact minutes with no trailing seconds", () => {
+    expect(formatDuration(120)).toBe("2m 0s");
+  });
+
+  it("formats exact hours", () => {
+    expect(formatDuration(3600)).toBe("1h 0m 0s");
+  });
+});
+
+describe("calculateDurationSeconds", () => {
+  it("returns seconds between two ISO timestamps", () => {
+    const started = "2026-03-08T10:00:00Z";
+    const ended = "2026-03-08T10:08:12Z";
+    expect(calculateDurationSeconds(started, ended)).toBe(492);
+  });
+
+  it("returns zero when start equals end", () => {
+    const timestamp = "2026-03-08T10:00:00Z";
+    expect(calculateDurationSeconds(timestamp, timestamp)).toBe(0);
+  });
+
+  it("returns null when ended_at is null", () => {
+    expect(calculateDurationSeconds("2026-03-08T10:00:00Z", null)).toBeNull();
+  });
+});
+
+describe("formatSessionTimestamp", () => {
+  it("formats ISO timestamp to readable local format", () => {
+    const result = formatSessionTimestamp("2026-03-08T10:00:00Z");
+    expect(result).toContain("2026");
+    expect(typeof result).toBe("string");
+    expect(result.length).toBeGreaterThan(0);
+  });
+});
+
+describe("SessionInfo type", () => {
+  it("represents a session with correct shape", () => {
+    const session: SessionInfo = {
+      id: "sess-1",
+      started_at: "2026-03-08T10:00:00Z",
+      ended_at: "2026-03-08T10:08:12Z",
+      event_count: 30,
+    };
+    expect(session.id).toBe("sess-1");
+    expect(session.started_at).toBe("2026-03-08T10:00:00Z");
+    expect(session.ended_at).toBe("2026-03-08T10:08:12Z");
+    expect(session.event_count).toBe(30);
+  });
+
+  it("allows null ended_at for active sessions", () => {
+    const session: SessionInfo = {
+      id: "sess-2",
+      started_at: "2026-03-08T10:00:00Z",
+      ended_at: null,
+      event_count: 5,
+    };
+    expect(session.ended_at).toBeNull();
   });
 });
 
