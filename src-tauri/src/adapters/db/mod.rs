@@ -122,7 +122,7 @@ impl EventStore for SqliteEventStore {
         if event.event_type == EventType::Stop {
             self.connection
                 .execute(
-                    "UPDATE sessions SET ended_at = ?1 WHERE id = ?2",
+                    "UPDATE sessions SET ended_at = ?1 WHERE id = ?2 AND ended_at IS NULL",
                     rusqlite::params![event.received_at, event.session_id],
                 )
                 .map_err(|e| format!("Failed to set session ended_at: {}", e))?;
