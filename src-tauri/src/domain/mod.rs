@@ -135,6 +135,157 @@ pub struct Session {
     pub event_count: u32,
 }
 
+// --- Settings Merge (Pure Core) ---
+
+/// The 6 hook event type names as they appear in Claude Code settings.json.
+///
+/// These are PascalCase strings matching the Claude Code hook configuration format.
+pub const HOOK_EVENT_NAMES: [&str; 6] = [
+    "PreToolUse",
+    "PostToolUse",
+    "SubagentStop",
+    "Stop",
+    "SessionStart",
+    "UserPromptSubmit",
+];
+
+/// Build the hook URL for a given event type name.
+///
+/// Pure function: combines localhost, port, and event name into a URL string.
+pub fn build_hook_url(port: u16, event_name: &str) -> String {
+    format!("http://localhost:{}/hooks/{}", port, event_name)
+}
+
+/// Build a single hook entry as a JSON value.
+///
+/// Each hook entry has type "http", a URL pointing to the local hook receiver,
+/// and async set to true for non-blocking delivery.
+pub fn build_hook_entry(port: u16, event_name: &str) -> serde_json::Value {
+    serde_json::json!({
+        "type": "http",
+        "url": build_hook_url(port, event_name),
+        "async": true
+    })
+}
+
+/// Build the complete hooks object containing all 6 event types.
+///
+/// Pure function: returns a JSON object mapping each event type name
+/// to an array containing one hook entry.
+pub fn build_hooks_object(port: u16) -> serde_json::Value {
+    let mut hooks = serde_json::Map::new();
+    for event_name in &HOOK_EVENT_NAMES {
+        hooks.insert(
+            event_name.to_string(),
+            serde_json::json!([build_hook_entry(port, event_name)]),
+        );
+    }
+    serde_json::Value::Object(hooks)
+}
+
+/// Result of merging hook settings into a configuration.
+#[derive(Debug, Clone, PartialEq)]
+pub enum MergeOutcome {
+    /// Hooks were added or updated in the configuration.
+    Merged(serde_json::Value),
+    /// Configuration already contains all required hooks -- no changes needed.
+    AlreadyMerged,
+}
+
+/// Check whether a JSON configuration already contains all Norbert hook entries.
+///
+/// Pure function: inspects the hooks object for all 6 event types with correct URLs.
+pub fn hooks_are_merged(config: &serde_json::Value, port: u16) -> bool {
+    let hooks = match config.get("hooks") {
+        Some(h) => h,
+        None => return false,
+    };
+
+    for event_name in &HOOK_EVENT_NAMES {
+        let expected_url = build_hook_url(port, event_name);
+        let entries = match hooks.get(*event_name) {
+            Some(serde_json::Value::Array(arr)) => arr,
+            _ => return false,
+        };
+        let has_norbert_entry = entries.iter().any(|entry| {
+            entry.get("url").and_then(|u| u.as_str()) == Some(expected_url.as_str())
+        });
+        if !has_norbert_entry {
+            return false;
+        }
+    }
+    true
+}
+
+/// Merge Norbert hook entries into a Claude Code configuration.
+///
+/// Pure function: takes existing config JSON, returns new config with hooks added.
+/// Preserves all existing settings. Adds Norbert hooks without duplicating them.
+/// If hooks are already present, returns AlreadyMerged.
+pub fn merge_hooks_into_config(
+    config: &serde_json::Value,
+    port: u16,
+) -> MergeOutcome {
+    if hooks_are_merged(config, port) {
+        return MergeOutcome::AlreadyMerged;
+    }
+
+    let mut new_config = config.clone();
+
+    // Ensure the config is an object
+    let config_obj = match new_config.as_object_mut() {
+        Some(obj) => obj,
+        None => return MergeOutcome::Merged(serde_json::json!({"hooks": build_hooks_object(port)})),
+    };
+
+    // Get or create the hooks object
+    let hooks = config_obj
+        .entry("hooks")
+        .or_insert_with(|| serde_json::json!({}));
+
+    let hooks_obj = match hooks.as_object_mut() {
+        Some(obj) => obj,
+        None => {
+            // hooks key exists but is not an object -- replace it
+            *hooks = build_hooks_object(port);
+            return MergeOutcome::Merged(new_config);
+        }
+    };
+
+    // For each event type, add the Norbert entry if not already present
+    for event_name in &HOOK_EVENT_NAMES {
+        let expected_url = build_hook_url(port, event_name);
+        let entry = build_hook_entry(port, event_name);
+
+        let entries = hooks_obj
+            .entry(event_name.to_string())
+            .or_insert_with(|| serde_json::json!([]));
+
+        if let Some(arr) = entries.as_array_mut() {
+            let already_present = arr.iter().any(|e| {
+                e.get("url").and_then(|u| u.as_str()) == Some(expected_url.as_str())
+            });
+            if !already_present {
+                arr.push(entry);
+            }
+        } else {
+            // Entry exists but is not an array -- replace with array containing our entry
+            *entries = serde_json::json!([entry]);
+        }
+    }
+
+    MergeOutcome::Merged(new_config)
+}
+
+/// Build a fresh configuration containing only hooks.
+///
+/// Used when no existing configuration file is found.
+pub fn build_hooks_only_config(port: u16) -> serde_json::Value {
+    serde_json::json!({
+        "hooks": build_hooks_object(port)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -309,5 +460,222 @@ mod tests {
         assert!(json.get("started_at").is_some());
         assert!(json.get("ended_at").is_some());
         assert!(json.get("event_count").is_some());
+    }
+
+    // --- Settings Merge Pure Functions ---
+
+    #[test]
+    fn hook_event_names_contains_six_entries() {
+        assert_eq!(HOOK_EVENT_NAMES.len(), 6);
+    }
+
+    #[test]
+    fn build_hook_url_combines_port_and_event_name() {
+        let url = build_hook_url(3748, "PreToolUse");
+        assert_eq!(url, "http://localhost:3748/hooks/PreToolUse");
+    }
+
+    #[test]
+    fn build_hook_entry_has_type_url_and_async() {
+        let entry = build_hook_entry(3748, "PostToolUse");
+        assert_eq!(entry["type"], "http");
+        assert_eq!(entry["url"], "http://localhost:3748/hooks/PostToolUse");
+        assert_eq!(entry["async"], true);
+    }
+
+    #[test]
+    fn build_hooks_object_contains_all_six_event_types() {
+        let hooks = build_hooks_object(3748);
+        for name in &HOOK_EVENT_NAMES {
+            assert!(
+                hooks.get(name).is_some(),
+                "Missing hook event type: {}",
+                name
+            );
+            let entries = hooks[name].as_array().unwrap();
+            assert_eq!(entries.len(), 1, "Expected 1 entry for {}", name);
+        }
+    }
+
+    #[test]
+    fn hooks_are_merged_returns_false_for_empty_config() {
+        let config = serde_json::json!({});
+        assert!(!hooks_are_merged(&config, 3748));
+    }
+
+    #[test]
+    fn hooks_are_merged_returns_false_when_hooks_key_missing() {
+        let config = serde_json::json!({"permissions": {}});
+        assert!(!hooks_are_merged(&config, 3748));
+    }
+
+    #[test]
+    fn hooks_are_merged_returns_false_when_partial_hooks() {
+        let config = serde_json::json!({
+            "hooks": {
+                "PreToolUse": [{"type": "http", "url": "http://localhost:3748/hooks/PreToolUse", "async": true}]
+            }
+        });
+        assert!(!hooks_are_merged(&config, 3748));
+    }
+
+    #[test]
+    fn hooks_are_merged_returns_true_when_all_hooks_present() {
+        let config = serde_json::json!({
+            "hooks": build_hooks_object(3748)
+        });
+        assert!(hooks_are_merged(&config, 3748));
+    }
+
+    #[test]
+    fn merge_hooks_preserves_existing_settings() {
+        let config = serde_json::json!({
+            "permissions": {"allow": ["Read", "Write"]},
+            "mcpServers": {"github": {"command": "mcp-github", "type": "stdio"}}
+        });
+        let result = merge_hooks_into_config(&config, 3748);
+        match result {
+            MergeOutcome::Merged(merged) => {
+                assert_eq!(
+                    merged["permissions"],
+                    serde_json::json!({"allow": ["Read", "Write"]})
+                );
+                assert_eq!(
+                    merged["mcpServers"]["github"]["command"],
+                    "mcp-github"
+                );
+                assert!(merged.get("hooks").is_some());
+            }
+            MergeOutcome::AlreadyMerged => panic!("Expected Merged, got AlreadyMerged"),
+        }
+    }
+
+    #[test]
+    fn merge_hooks_adds_all_six_event_types() {
+        let config = serde_json::json!({});
+        let result = merge_hooks_into_config(&config, 3748);
+        match result {
+            MergeOutcome::Merged(merged) => {
+                let hooks = merged.get("hooks").expect("hooks key should exist");
+                for name in &HOOK_EVENT_NAMES {
+                    assert!(
+                        hooks.get(name).is_some(),
+                        "Missing hook for: {}",
+                        name
+                    );
+                }
+            }
+            MergeOutcome::AlreadyMerged => panic!("Expected Merged"),
+        }
+    }
+
+    #[test]
+    fn merge_hooks_each_entry_points_to_localhost_on_hook_port() {
+        let config = serde_json::json!({});
+        let result = merge_hooks_into_config(&config, 3748);
+        match result {
+            MergeOutcome::Merged(merged) => {
+                let hooks = &merged["hooks"];
+                for name in &HOOK_EVENT_NAMES {
+                    let url = hooks[name][0]["url"].as_str().unwrap();
+                    assert!(
+                        url.contains("localhost"),
+                        "URL should contain localhost: {}",
+                        url
+                    );
+                    assert!(
+                        url.contains("3748"),
+                        "URL should contain port 3748: {}",
+                        url
+                    );
+                }
+            }
+            MergeOutcome::AlreadyMerged => panic!("Expected Merged"),
+        }
+    }
+
+    #[test]
+    fn merge_hooks_each_entry_is_async_for_nonblocking_delivery() {
+        let config = serde_json::json!({});
+        let result = merge_hooks_into_config(&config, 3748);
+        match result {
+            MergeOutcome::Merged(merged) => {
+                let hooks = &merged["hooks"];
+                for name in &HOOK_EVENT_NAMES {
+                    let is_async = hooks[name][0]["async"].as_bool().unwrap();
+                    assert!(is_async, "Hook entry for {} should be async", name);
+                }
+            }
+            MergeOutcome::AlreadyMerged => panic!("Expected Merged"),
+        }
+    }
+
+    #[test]
+    fn merge_hooks_is_idempotent_returns_already_merged() {
+        let config = serde_json::json!({});
+        let first = merge_hooks_into_config(&config, 3748);
+        let merged_config = match first {
+            MergeOutcome::Merged(c) => c,
+            MergeOutcome::AlreadyMerged => panic!("Expected Merged on first call"),
+        };
+
+        let second = merge_hooks_into_config(&merged_config, 3748);
+        assert_eq!(second, MergeOutcome::AlreadyMerged);
+    }
+
+    #[test]
+    fn merge_hooks_does_not_duplicate_existing_norbert_entries() {
+        // Config already has one Norbert hook
+        let config = serde_json::json!({
+            "hooks": {
+                "PreToolUse": [{"type": "http", "url": "http://localhost:3748/hooks/PreToolUse", "async": true}]
+            }
+        });
+        let result = merge_hooks_into_config(&config, 3748);
+        match result {
+            MergeOutcome::Merged(merged) => {
+                let pre_tool_entries = merged["hooks"]["PreToolUse"].as_array().unwrap();
+                assert_eq!(
+                    pre_tool_entries.len(),
+                    1,
+                    "Should not duplicate existing PreToolUse entry"
+                );
+            }
+            MergeOutcome::AlreadyMerged => panic!("Expected Merged (other events missing)"),
+        }
+    }
+
+    #[test]
+    fn merge_hooks_preserves_existing_third_party_hook_entries() {
+        let config = serde_json::json!({
+            "hooks": {
+                "PreToolUse": [{"type": "http", "url": "http://other-service:9999/hook", "async": false}]
+            }
+        });
+        let result = merge_hooks_into_config(&config, 3748);
+        match result {
+            MergeOutcome::Merged(merged) => {
+                let pre_tool_entries = merged["hooks"]["PreToolUse"].as_array().unwrap();
+                assert_eq!(
+                    pre_tool_entries.len(),
+                    2,
+                    "Should have both third-party and Norbert entries"
+                );
+                // Verify third-party entry is preserved
+                let third_party = &pre_tool_entries[0];
+                assert_eq!(third_party["url"], "http://other-service:9999/hook");
+            }
+            MergeOutcome::AlreadyMerged => panic!("Expected Merged"),
+        }
+    }
+
+    #[test]
+    fn build_hooks_only_config_has_hooks_key() {
+        let config = build_hooks_only_config(3748);
+        assert!(config.get("hooks").is_some());
+        let hooks = &config["hooks"];
+        for name in &HOOK_EVENT_NAMES {
+            assert!(hooks.get(name).is_some(), "Missing: {}", name);
+        }
     }
 }
