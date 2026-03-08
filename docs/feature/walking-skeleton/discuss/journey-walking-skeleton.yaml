@@ -1,0 +1,309 @@
+journey:
+  name: "Walking Skeleton: Install to First Confirmed Data"
+  goal: "Prove the full data pipeline from Claude Code hook event through HTTP server to SQLite to desktop UI"
+  persona: "Priya Chandrasekaran, a Claude Code power user running multi-agent sessions daily, spending $15-30/week on API costs with no visibility into where the money goes"
+  feature_id: "walking-skeleton"
+
+  emotional_arc:
+    start: "Curious and hopeful -- trying a new tool that promises visibility"
+    middle: "Cautious during settings merge, then reassured when tray icon appears"
+    end: "Satisfied and trusting -- full pipeline confirmed with visible evidence"
+    pattern: "Confidence Building"
+
+  prerequisite:
+    - "Node.js installed (required for npm/npx)"
+    - "Claude Code installed and functional"
+    - "Windows 11 operating system"
+
+steps:
+  - id: 1
+    name: "Install Norbert"
+    action: "Run npm install -g norbert-cc from terminal"
+    trigger: "User decides to try Norbert after reading about it"
+
+    ui_mockup: |
+      +-- Terminal -----------------------------------------------+
+      |                                                            |
+      |  $ npm install -g norbert-cc                               |
+      |                                                            |
+      |  added 1 package in 4s                                     |
+      |                                                            |
+      +------------------------------------------------------------+
+
+    shared_artifacts:
+      - name: "norbert_binary"
+        source: "GitHub Releases (platform-specific binary)"
+        displayed_as: "norbert-cc executable in PATH"
+        consumers:
+          - "Terminal command invocation"
+          - "System tray process"
+
+    emotional_state:
+      entry: "Curious -- will this tool deliver on its promise?"
+      exit: "Hopeful -- install succeeded, ready to try it"
+
+    error_paths:
+      - trigger: "npm permission error"
+        user_sees: "EACCES permission denied"
+        recovery: "Suggest running with appropriate permissions or using npx"
+      - trigger: "Binary download failure"
+        user_sees: "Network error during postinstall"
+        recovery: "Clear error with retry instructions"
+
+    gherkin: |
+      Scenario: Successful installation via npm
+        Given Priya has Node.js 18+ installed on her Windows 11 machine
+        When Priya runs "npm install -g norbert-cc"
+        Then the norbert-cc package installs successfully
+        And the Windows x64 binary is downloaded to ~/.norbert/bin/
+        And "norbert-cc" is available as a command in her terminal
+
+  - id: 2
+    name: "First Launch and Settings Merge"
+    action: "Run norbert-cc for the first time"
+    trigger: "User runs norbert-cc after installation"
+
+    ui_mockup: |
+      +-- System Tray ---+    +-- Notification -----------------+
+      |  [Norbert icon]  |    |  Norbert                        |
+      +------------------+    |  Hooks registered. Restart any  |
+                              |  running Claude Code sessions.  |
+                              +---------------------------------+
+
+      +-- Main Window -----------------------------------+
+      |                                                   |
+      |  NORBERT v${version}                              |
+      |                                                   |
+      |  Status: Listening                                |
+      |  Port: ${hook_port}                               |
+      |  Sessions: 0                                      |
+      |  Events: 0                                        |
+      |                                                   |
+      |  Waiting for first Claude Code session...         |
+      |                                                   |
+      +---------------------------------------------------+
+
+    shared_artifacts:
+      - name: "version"
+        source: "package.json version field"
+        displayed_as: "${version}"
+        consumers:
+          - "Main window title"
+          - "Tray icon tooltip"
+          - "About dialog (future)"
+      - name: "hook_port"
+        source: "Norbert configuration (default: 3748)"
+        displayed_as: "${hook_port}"
+        consumers:
+          - "HTTP server bind address"
+          - "settings.json hook URL"
+          - "Main window status display"
+      - name: "settings_backup"
+        source: "~/.norbert/settings.json.bak"
+        displayed_as: "Backup of original settings.json"
+        consumers:
+          - "Rollback on uninstall"
+          - "User manual recovery"
+      - name: "database_path"
+        source: "~/.norbert/norbert.db"
+        displayed_as: "SQLite database file"
+        consumers:
+          - "Hook event storage"
+          - "Session records"
+          - "UI data queries"
+
+    emotional_state:
+      entry: "Cautious -- settings modification is anxiety-inducing"
+      exit: "Reassured -- tray icon visible, backup made, status clear"
+
+    integration_checkpoint: |
+      1. ~/.norbert/ directory created
+      2. norbert.db initialized with schema (WAL mode enabled)
+      3. settings.json.bak backup written
+      4. settings.json merged with hook configuration
+      5. HTTP server listening on port 3748
+      6. Tray icon visible in system tray
+      7. Main window shows "Listening" status
+
+    error_paths:
+      - trigger: "Port 3748 already in use"
+        user_sees: "Error: Port 3748 is in use. Norbert cannot start the hook receiver."
+        recovery: "Identify the process using the port, or configure an alternative port"
+      - trigger: "settings.json is malformed"
+        user_sees: "Warning: ~/.claude/settings.json contains invalid JSON. Norbert will not modify it. Please fix the file manually."
+        recovery: "User fixes their settings.json, then relaunches Norbert"
+      - trigger: "~/.claude/ directory does not exist"
+        user_sees: "Info: Creating ~/.claude/ directory and settings.json with hook configuration."
+        recovery: "Automatic -- Norbert creates what is needed"
+
+    gherkin: |
+      Scenario: First launch creates infrastructure and registers hooks
+        Given Priya has installed norbert-cc
+        And she has an existing ~/.claude/settings.json with custom MCP servers configured
+        When Priya runs "norbert-cc" for the first time
+        Then Norbert backs up settings.json to ~/.norbert/settings.json.bak
+        And Norbert merges hook configuration into settings.json preserving her existing MCP config
+        And Norbert creates ~/.norbert/norbert.db with SQLite WAL mode enabled
+        And the system tray shows the Norbert icon
+        And the main window displays "Status: Listening" with port 3748
+
+      Scenario: First launch notification prompts Claude Code restart
+        Given Priya has launched Norbert for the first time
+        And hooks have been registered in settings.json
+        When the settings merge completes
+        Then a Windows notification appears saying "Restart any running Claude Code sessions for hooks to take effect"
+        And the Norbert dashboard shows a persistent banner with the same message
+        And the banner remains until Norbert receives its first hook event
+
+  - id: 3
+    name: "Run Claude Code Session"
+    action: "User runs Claude Code normally -- no workflow change"
+    trigger: "User starts or restarts a Claude Code session after Norbert installation"
+
+    ui_mockup: |
+      +-- Claude Code Terminal (unchanged) ----------------+
+      |                                                     |
+      |  $ claude                                           |
+      |  > Help me refactor the payment module              |
+      |                                                     |
+      |  [Session proceeds normally]                        |
+      |  [Hook events POST to localhost:3748 in background] |
+      |                                                     |
+      +-----------------------------------------------------+
+
+    shared_artifacts:
+      - name: "hook_events"
+        source: "Claude Code HTTP hook system"
+        displayed_as: "JSON POST payloads to localhost:${hook_port}/hooks/{event_type}"
+        consumers:
+          - "Norbert HTTP server"
+          - "SQLite event table"
+          - "Session record aggregation"
+
+    emotional_state:
+      entry: "Neutral -- working as usual"
+      exit: "Neutral -- no disruption to workflow"
+
+    integration_checkpoint: |
+      1. Claude Code sends hook events to localhost:3748
+      2. Norbert HTTP server accepts and responds 200 to each POST
+      3. Events written to SQLite events table
+      4. Session record created or updated in sessions table
+
+    gherkin: |
+      Scenario: Hook events flow from Claude Code to Norbert during a session
+        Given Priya has Norbert running with hooks registered
+        And she starts a new Claude Code session
+        When Claude Code processes her prompt "Help me refactor the payment module"
+        And Claude Code makes tool calls (Read, Write, Bash)
+        Then Norbert receives PreToolUse and PostToolUse hook events via HTTP POST
+        And each event is stored in the SQLite database with timestamp and session attribution
+        And Priya's Claude Code session is not slowed down by the hook processing
+
+  - id: 4
+    name: "Status Shows Live Event Count"
+    action: "User glances at tray icon or window during session"
+    trigger: "First hook event arrives at Norbert"
+
+    ui_mockup: |
+      +-- System Tray --------------------------------+
+      |  [Norbert icon -- active state]               |
+      |  Tooltip: "Norbert - Session active - 47 evts"|
+      +-----------------------------------------------+
+
+      +-- Main Window (if open) ---------------------+
+      |                                               |
+      |  NORBERT v${version}                          |
+      |                                               |
+      |  Status: Active session                       |
+      |  Port: ${hook_port}                           |
+      |  Sessions: 1                                  |
+      |  Events: 47                                   |
+      |                                               |
+      +-----------------------------------------------+
+
+    emotional_state:
+      entry: "Neutral or mildly curious"
+      exit: "Confident -- it is clearly working"
+
+    integration_checkpoint: |
+      1. Tray icon state transitions from "Listening" to "Active session"
+      2. Event count increments in real time
+      3. First-launch banner dismisses automatically after first event received
+
+    gherkin: |
+      Scenario: Tray icon reflects active session state
+        Given Norbert is running and listening for hook events
+        When the first hook event arrives from a Claude Code session
+        Then the tray icon transitions to the "active session" visual state
+        And the tray tooltip shows the current event count
+        And the first-launch restart banner dismisses automatically
+
+  - id: 5
+    name: "Open Norbert Window After Session"
+    action: "User clicks tray icon to open Norbert after Claude Code session ends"
+    trigger: "Claude Code session completes (Stop hook event received)"
+
+    ui_mockup: |
+      +-- Norbert Main Window (post-session) ---------+
+      |                                                |
+      |  NORBERT v${version}                           |
+      |                                                |
+      |  Status: Listening                             |
+      |  Port: ${hook_port}                            |
+      |  Sessions: 1                                   |
+      |  Events: 47                                    |
+      |                                                |
+      |  Last session:                                 |
+      |    Started: 2026-03-08 14:23:01                |
+      |    Duration: 12m 34s                           |
+      |    Events: 47                                  |
+      |                                                |
+      +------------------------------------------------+
+
+    emotional_state:
+      entry: "Curious -- did it capture everything?"
+      exit: "Satisfied -- full pipeline proven"
+
+    integration_checkpoint: |
+      1. Session record shows correct start time
+      2. Session duration calculated from first to last event
+      3. Event count matches actual hook events received
+      4. Status returns to "Listening" after session ends
+
+    gherkin: |
+      Scenario: Session record visible after Claude Code session completes
+        Given Priya ran a Claude Code session that lasted 12 minutes with 47 hook events
+        And the session has ended (Stop event received)
+        When Priya opens the Norbert window
+        Then she sees "Sessions: 1" in the status area
+        And she sees the last session with start time "2026-03-08 14:23:01"
+        And the session shows "Duration: 12m 34s"
+        And the session shows "Events: 47"
+        And the status shows "Listening" (ready for next session)
+
+integration_validation:
+  shared_artifact_consistency:
+    - artifact: "version"
+      must_match_across: [2, 5]
+      failure_message: "Version displayed in main window must match package.json"
+    - artifact: "hook_port"
+      must_match_across: [2, 3, 4]
+      failure_message: "Port displayed in UI must match HTTP server bind port and settings.json hook URL"
+    - artifact: "database_path"
+      must_match_across: [2, 3, 5]
+      failure_message: "Database path must be consistent across initialization, event writing, and UI queries"
+
+  pipeline_validation:
+    - stage: "Hook Registration"
+      input: "norbert-cc first launch"
+      output: "settings.json contains hook entries pointing to localhost:${hook_port}"
+      failure_mode: "Hooks not registered -- Claude Code sends no events"
+    - stage: "Event Reception"
+      input: "Claude Code POST to localhost:${hook_port}/hooks/{event_type}"
+      output: "HTTP 200 response, event written to SQLite"
+      failure_mode: "Server not running, port mismatch, or database write failure"
+    - stage: "Data Display"
+      input: "SQLite query for sessions and events"
+      output: "UI shows session count, event count, timestamps"
+      failure_mode: "Database empty, query error, or UI not reading from correct database"
