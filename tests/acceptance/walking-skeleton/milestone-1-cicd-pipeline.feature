@@ -3,7 +3,6 @@ Feature: CI/CD Pipeline -- Build, package, and distribute Norbert
   I want automated builds that produce installable binaries on version tags,
   so that every release is reproducible and users can install with a single command.
 
-  @skip
   Scenario: Tagged commit produces a downloadable release
     Given a developer pushes version tag "v0.1.0" to the repository
     When the build pipeline completes
@@ -18,7 +17,6 @@ Feature: CI/CD Pipeline -- Build, package, and distribute Norbert
     And the binary is placed in the Norbert installation directory
     And the "norbert-cc" command is available in their terminal
 
-  @skip
   Scenario: Build failure prevents release publication
     Given a developer pushes a version tag with code that fails to compile
     When the build pipeline runs
