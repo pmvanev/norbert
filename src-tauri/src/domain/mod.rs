@@ -37,6 +37,17 @@ pub fn initial_status() -> AppStatus {
     build_status(0, 0)
 }
 
+/// Derive the application status string from the latest session.
+///
+/// Pure function: returns "Active session" when the latest session has no
+/// ended_at timestamp, otherwise returns "Listening".
+pub fn derive_status(latest_session: Option<&Session>) -> String {
+    match latest_session {
+        Some(session) if session.ended_at.is_none() => "Active session".to_string(),
+        _ => "Listening".to_string(),
+    }
+}
+
 /// Build application status from real session and event counts.
 ///
 /// Pure function: combines domain constants with live data from the EventStore.
@@ -47,6 +58,41 @@ pub fn build_status(session_count: u32, event_count: u32) -> AppStatus {
         port: HOOK_PORT,
         session_count,
         event_count,
+    }
+}
+
+/// Build application status with derived status from latest session.
+///
+/// Pure function: like build_status but derives the status field from session state.
+pub fn build_status_with_session(
+    session_count: u32,
+    event_count: u32,
+    latest_session: Option<&Session>,
+) -> AppStatus {
+    AppStatus {
+        version: VERSION.to_string(),
+        status: derive_status(latest_session),
+        port: HOOK_PORT,
+        session_count,
+        event_count,
+    }
+}
+
+/// Format the tray tooltip based on active state.
+///
+/// Pure function: when listening, shows "AppName vVersion".
+/// When active, appends status and event count.
+pub fn format_active_tooltip(
+    app_name: &str,
+    version: &str,
+    status: &str,
+    event_count: u32,
+) -> String {
+    let base = format!("{} v{}", app_name, version);
+    if status == "Listening" {
+        base
+    } else {
+        format!("{} - {} ({} events)", base, status, event_count)
     }
 }
 
@@ -791,6 +837,71 @@ mod tests {
     #[test]
     fn build_status_with_zero_counts_matches_initial_status() {
         assert_eq!(build_status(0, 0), initial_status());
+    }
+
+    // --- derive_status tests ---
+
+    #[test]
+    fn derive_status_returns_listening_when_no_session() {
+        assert_eq!(derive_status(None), "Listening");
+    }
+
+    #[test]
+    fn derive_status_returns_listening_when_session_ended() {
+        let session = Session {
+            id: "sess-1".to_string(),
+            started_at: "2026-03-08T10:00:00Z".to_string(),
+            ended_at: Some("2026-03-08T10:08:12Z".to_string()),
+            event_count: 30,
+        };
+        assert_eq!(derive_status(Some(&session)), "Listening");
+    }
+
+    #[test]
+    fn derive_status_returns_active_session_when_session_has_no_ended_at() {
+        let session = Session {
+            id: "sess-2".to_string(),
+            started_at: "2026-03-08T10:00:00Z".to_string(),
+            ended_at: None,
+            event_count: 5,
+        };
+        assert_eq!(derive_status(Some(&session)), "Active session");
+    }
+
+    // --- build_status_with_session tests ---
+
+    #[test]
+    fn build_status_with_session_derives_active_status() {
+        let session = Session {
+            id: "sess-1".to_string(),
+            started_at: "2026-03-08T10:00:00Z".to_string(),
+            ended_at: None,
+            event_count: 5,
+        };
+        let status = build_status_with_session(1, 5, Some(&session));
+        assert_eq!(status.status, "Active session");
+        assert_eq!(status.session_count, 1);
+        assert_eq!(status.event_count, 5);
+    }
+
+    #[test]
+    fn build_status_with_session_derives_listening_when_no_session() {
+        let status = build_status_with_session(0, 0, None);
+        assert_eq!(status.status, "Listening");
+    }
+
+    // --- format_active_tooltip tests ---
+
+    #[test]
+    fn format_active_tooltip_shows_base_when_listening() {
+        let result = format_active_tooltip("Norbert", "0.1.0", "Listening", 0);
+        assert_eq!(result, "Norbert v0.1.0");
+    }
+
+    #[test]
+    fn format_active_tooltip_includes_status_and_events_when_active() {
+        let result = format_active_tooltip("Norbert", "0.1.0", "Active session", 15);
+        assert_eq!(result, "Norbert v0.1.0 - Active session (15 events)");
     }
 
     // --- Event type consistency (Scenario #36) ---

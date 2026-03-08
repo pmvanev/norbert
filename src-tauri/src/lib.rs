@@ -7,8 +7,8 @@ use std::sync::Mutex;
 use adapters::db::SqliteEventStore;
 use adapters::settings::SettingsMergeAdapter;
 use domain::{
-    APP_NAME, AppStatus, Session, VERSION, WindowAction, build_status, format_tooltip,
-    toggle_window_action, HOOK_PORT,
+    APP_NAME, AppStatus, Session, VERSION, WindowAction, build_status, build_status_with_session,
+    format_tooltip, toggle_window_action, HOOK_PORT,
 };
 use ports::{EventStore, SettingsManager};
 use rusqlite::Connection;
@@ -33,13 +33,15 @@ fn greet(name: &str) -> String {
 /// Return current application status to the frontend via Tauri IPC.
 ///
 /// Reads real session and event counts from the EventStore.
+/// Derives status from the latest session state.
 /// Falls back to zero counts if the store cannot be read.
 #[tauri::command]
 fn get_status(state: tauri::State<AppState>) -> AppStatus {
     let store = state.event_store.lock().unwrap();
     let session_count = store.get_sessions().map(|s| s.len() as u32).unwrap_or(0);
     let event_count = store.get_event_count().unwrap_or(0);
-    build_status(session_count, event_count)
+    let latest_session = store.get_latest_session().unwrap_or(None);
+    build_status_with_session(session_count, event_count, latest_session.as_ref())
 }
 
 /// Return the most recently started session, if any.

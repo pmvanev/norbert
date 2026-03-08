@@ -7,6 +7,9 @@ import {
   formatDuration,
   calculateDurationSeconds,
   formatSessionTimestamp,
+  deriveStatus,
+  shouldShowRestartBanner,
+  formatActiveTooltip,
   type AppStatus,
   type SessionInfo,
 } from "./status";
@@ -152,5 +155,69 @@ describe("AppStatus type", () => {
     expect(status.port).toBe(3748);
     expect(status.session_count).toBe(0);
     expect(status.event_count).toBe(0);
+  });
+});
+
+describe("deriveStatus", () => {
+  it("returns Listening when latest session is null", () => {
+    expect(deriveStatus(null)).toBe("Listening");
+  });
+
+  it("returns Listening when latest session has ended", () => {
+    const session: SessionInfo = {
+      id: "sess-1",
+      started_at: "2026-03-08T10:00:00Z",
+      ended_at: "2026-03-08T10:08:12Z",
+      event_count: 30,
+    };
+    expect(deriveStatus(session)).toBe("Listening");
+  });
+
+  it("returns Active session when latest session has no ended_at", () => {
+    const session: SessionInfo = {
+      id: "sess-2",
+      started_at: "2026-03-08T10:00:00Z",
+      ended_at: null,
+      event_count: 5,
+    };
+    expect(deriveStatus(session)).toBe("Active session");
+  });
+});
+
+describe("shouldShowRestartBanner", () => {
+  it("returns true when banner was shown and no events received", () => {
+    expect(shouldShowRestartBanner(true, 0)).toBe(true);
+  });
+
+  it("returns false when first event arrives", () => {
+    expect(shouldShowRestartBanner(true, 1)).toBe(false);
+  });
+
+  it("returns false when banner was never shown", () => {
+    expect(shouldShowRestartBanner(false, 0)).toBe(false);
+  });
+
+  it("returns false when events already present and banner shown", () => {
+    expect(shouldShowRestartBanner(true, 42)).toBe(false);
+  });
+});
+
+describe("formatActiveTooltip", () => {
+  it("shows app name and version when listening", () => {
+    expect(formatActiveTooltip("Norbert", "0.1.0", "Listening", 0)).toBe(
+      "Norbert v0.1.0"
+    );
+  });
+
+  it("includes event count when active", () => {
+    expect(
+      formatActiveTooltip("Norbert", "0.1.0", "Active session", 15)
+    ).toBe("Norbert v0.1.0 - Active session (15 events)");
+  });
+
+  it("includes event count of zero when active", () => {
+    expect(
+      formatActiveTooltip("Norbert", "0.1.0", "Active session", 0)
+    ).toBe("Norbert v0.1.0 - Active session (0 events)");
   });
 });
