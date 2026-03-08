@@ -1,11 +1,20 @@
 pub mod domain;
 
-use domain::{APP_NAME, VERSION, format_tooltip};
+use domain::{APP_NAME, AppStatus, VERSION, format_tooltip, initial_status};
 
 /// Greet command exposed to the frontend via Tauri IPC.
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! Welcome to Norbert v{}.", name, VERSION)
+}
+
+/// Return current application status to the frontend via Tauri IPC.
+///
+/// Returns a snapshot of version, listening status, port, and counters.
+/// For the walking skeleton, returns initial hardcoded values.
+#[tauri::command]
+fn get_status() -> AppStatus {
+    initial_status()
 }
 
 /// Build and configure the Tauri application.
@@ -31,7 +40,7 @@ pub fn run() {
                 .build(app)?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet])
+        .invoke_handler(tauri::generate_handler![greet, get_status])
         .run(tauri::generate_context!())
         .expect("error while running Norbert");
 }
@@ -55,5 +64,23 @@ mod tests {
         let result = greet("Developer");
         assert!(result.contains("Developer"), "Greeting should include name");
         assert!(result.contains(VERSION), "Greeting should include version");
+    }
+
+    #[test]
+    fn get_status_returns_initial_status() {
+        let status = get_status();
+        let expected = initial_status();
+        assert_eq!(status, expected);
+    }
+
+    #[test]
+    fn get_status_serializes_to_expected_json_keys() {
+        let status = get_status();
+        let json = serde_json::to_value(&status).expect("should serialize");
+        assert!(json.get("version").is_some());
+        assert!(json.get("status").is_some());
+        assert!(json.get("port").is_some());
+        assert!(json.get("session_count").is_some());
+        assert!(json.get("event_count").is_some());
     }
 }
