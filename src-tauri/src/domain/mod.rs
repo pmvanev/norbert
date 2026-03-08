@@ -91,6 +91,22 @@ pub enum EventType {
     UserPromptSubmit,
 }
 
+/// Parse a PascalCase event type name from a URL path segment into an EventType.
+///
+/// Claude Code hook URLs use PascalCase names (e.g., "PreToolUse").
+/// Returns None for unrecognized event type names.
+pub fn parse_event_type(name: &str) -> Option<EventType> {
+    match name {
+        "PreToolUse" => Some(EventType::PreToolUse),
+        "PostToolUse" => Some(EventType::PostToolUse),
+        "SubagentStop" => Some(EventType::SubagentStop),
+        "Stop" => Some(EventType::Stop),
+        "SessionStart" => Some(EventType::SessionStart),
+        "UserPromptSubmit" => Some(EventType::UserPromptSubmit),
+        _ => None,
+    }
+}
+
 impl fmt::Display for EventType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let label = match self {
@@ -677,5 +693,32 @@ mod tests {
         for name in &HOOK_EVENT_NAMES {
             assert!(hooks.get(name).is_some(), "Missing: {}", name);
         }
+    }
+
+    // --- parse_event_type tests ---
+
+    #[test]
+    fn parse_event_type_recognizes_all_pascal_case_names() {
+        assert_eq!(parse_event_type("PreToolUse"), Some(EventType::PreToolUse));
+        assert_eq!(parse_event_type("PostToolUse"), Some(EventType::PostToolUse));
+        assert_eq!(parse_event_type("SubagentStop"), Some(EventType::SubagentStop));
+        assert_eq!(parse_event_type("Stop"), Some(EventType::Stop));
+        assert_eq!(parse_event_type("SessionStart"), Some(EventType::SessionStart));
+        assert_eq!(parse_event_type("UserPromptSubmit"), Some(EventType::UserPromptSubmit));
+    }
+
+    #[test]
+    fn parse_event_type_returns_none_for_unknown_name() {
+        assert_eq!(parse_event_type("UnknownEvent"), None);
+    }
+
+    #[test]
+    fn parse_event_type_returns_none_for_snake_case_name() {
+        assert_eq!(parse_event_type("pre_tool_use"), None);
+    }
+
+    #[test]
+    fn parse_event_type_returns_none_for_empty_string() {
+        assert_eq!(parse_event_type(""), None);
     }
 }
