@@ -7,11 +7,11 @@ import {
   formatField,
   isEmptyState,
   EMPTY_STATE_MESSAGE,
+  PLUGIN_INSTALL_COMMAND,
   formatDuration,
   calculateDurationSeconds,
   formatSessionTimestamp,
-  deriveStatus,
-  shouldShowRestartBanner,
+  deriveConnectionStatus,
 } from "./domain/status";
 
 /// Polling interval in milliseconds for live UI updates.
@@ -21,7 +21,6 @@ function App() {
   const [status, setStatus] = useState<AppStatus | null>(null);
   const [latestSession, setLatestSession] = useState<SessionInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [bannerWasShown, setBannerWasShown] = useState(true);
 
   useEffect(() => {
     function pollStatus() {
@@ -39,13 +38,6 @@ function App() {
     return () => clearInterval(intervalId);
   }, []);
 
-  // Track whether banner should auto-dismiss based on event arrival.
-  useEffect(() => {
-    if (status && status.event_count > 0 && bannerWasShown) {
-      setBannerWasShown(false);
-    }
-  }, [status, bannerWasShown]);
-
   if (error) {
     return (
       <main>
@@ -62,8 +54,11 @@ function App() {
     );
   }
 
-  const derivedStatus = deriveStatus(latestSession);
-  const showBanner = shouldShowRestartBanner(bannerWasShown, status.event_count);
+  const derivedStatus = deriveConnectionStatus(
+    status.session_count,
+    status.event_count,
+    latestSession
+  );
 
   const durationSeconds = latestSession
     ? calculateDurationSeconds(latestSession.started_at, latestSession.ended_at)
@@ -76,11 +71,11 @@ function App() {
       <p>{formatField("Port", status.port)}</p>
       <p>{formatField("Sessions", status.session_count)}</p>
       <p>{formatField("Events", status.event_count)}</p>
-      {showBanner && (
-        <p>Restart Claude Code to activate hooks.</p>
-      )}
-      {isEmptyState(status.session_count) && !showBanner && (
-        <p>{EMPTY_STATE_MESSAGE}</p>
+      {isEmptyState(status.session_count) && (
+        <section>
+          <p>{EMPTY_STATE_MESSAGE}</p>
+          <code>{PLUGIN_INSTALL_COMMAND}</code>
+        </section>
       )}
       {latestSession && (
         <section>

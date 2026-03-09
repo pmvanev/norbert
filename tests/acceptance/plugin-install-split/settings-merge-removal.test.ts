@@ -124,11 +124,11 @@ describe("ADR-006 is marked as superseded", () => {
 });
 
 describe("No restart banner logic remains in the frontend", () => {
-  it.skip("shouldShowRestartBanner does not exist", () => {
+  it("shouldShowRestartBanner does not exist", () => {
     expect(sourceContains("shouldShowRestartBanner")).toBe(false);
   });
 
-  it.skip("bannerWasShown does not exist", () => {
+  it("bannerWasShown does not exist", () => {
     expect(sourceContains("bannerWasShown")).toBe(false);
   });
 });

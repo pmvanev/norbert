@@ -4,11 +4,12 @@ import {
   formatField,
   isEmptyState,
   EMPTY_STATE_MESSAGE,
+  PLUGIN_INSTALL_COMMAND,
   formatDuration,
   calculateDurationSeconds,
   formatSessionTimestamp,
   deriveStatus,
-  shouldShowRestartBanner,
+  deriveConnectionStatus,
   formatActiveTooltip,
   type AppStatus,
   type SessionInfo,
@@ -56,9 +57,15 @@ describe("isEmptyState", () => {
 });
 
 describe("EMPTY_STATE_MESSAGE", () => {
-  it("contains the expected waiting message", () => {
-    expect(EMPTY_STATE_MESSAGE).toBe(
-      "Waiting for first Claude Code session..."
+  it("contains the plugin install guidance message", () => {
+    expect(EMPTY_STATE_MESSAGE).toContain("plugin");
+  });
+});
+
+describe("PLUGIN_INSTALL_COMMAND", () => {
+  it("contains the correct plugin install command", () => {
+    expect(PLUGIN_INSTALL_COMMAND).toBe(
+      "/plugin install norbert@pmvanev-marketplace"
     );
   });
 });
@@ -144,14 +151,14 @@ describe("AppStatus type", () => {
   it("represents initial status with correct shape", () => {
     const status: AppStatus = {
       version: "0.1.0",
-      status: "Listening",
+      status: "No plugin connected",
       port: 3748,
       session_count: 0,
       event_count: 0,
     };
 
     expect(status.version).toBe("0.1.0");
-    expect(status.status).toBe("Listening");
+    expect(status.status).toBe("No plugin connected");
     expect(status.port).toBe(3748);
     expect(status.session_count).toBe(0);
     expect(status.event_count).toBe(0);
@@ -184,21 +191,37 @@ describe("deriveStatus", () => {
   });
 });
 
-describe("shouldShowRestartBanner", () => {
-  it("returns true when banner was shown and no events received", () => {
-    expect(shouldShowRestartBanner(true, 0)).toBe(true);
+describe("deriveConnectionStatus", () => {
+  it("returns 'No plugin connected' when 0 sessions and 0 events", () => {
+    expect(deriveConnectionStatus(0, 0, null)).toBe("No plugin connected");
   });
 
-  it("returns false when first event arrives", () => {
-    expect(shouldShowRestartBanner(true, 1)).toBe(false);
+  it("returns 'Listening' when sessions exist but no active session", () => {
+    const endedSession: SessionInfo = {
+      id: "sess-1",
+      started_at: "2026-03-08T10:00:00Z",
+      ended_at: "2026-03-08T10:30:00Z",
+      event_count: 30,
+    };
+    expect(deriveConnectionStatus(1, 30, endedSession)).toBe("Listening");
   });
 
-  it("returns false when banner was never shown", () => {
-    expect(shouldShowRestartBanner(false, 0)).toBe(false);
+  it("returns 'Active session' when latest session has no ended_at", () => {
+    const activeSession: SessionInfo = {
+      id: "sess-2",
+      started_at: "2026-03-08T10:00:00Z",
+      ended_at: null,
+      event_count: 5,
+    };
+    expect(deriveConnectionStatus(1, 5, activeSession)).toBe("Active session");
   });
 
-  it("returns false when events already present and banner shown", () => {
-    expect(shouldShowRestartBanner(true, 42)).toBe(false);
+  it("returns 'Listening' when events exist but no latest session", () => {
+    expect(deriveConnectionStatus(1, 10, null)).toBe("Listening");
+  });
+
+  it("never returns 'No plugin connected' once events exist", () => {
+    expect(deriveConnectionStatus(0, 1, null)).not.toBe("No plugin connected");
   });
 });
 

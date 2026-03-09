@@ -33,8 +33,15 @@ pub struct AppStatus {
 /// Build the initial status for a freshly launched application.
 ///
 /// Pure function: derives all values from domain constants.
+/// Initial state has 0 sessions and 0 events, so status is "No plugin connected".
 pub fn initial_status() -> AppStatus {
-    build_status(0, 0)
+    AppStatus {
+        version: VERSION.to_string(),
+        status: "No plugin connected".to_string(),
+        port: HOOK_PORT,
+        session_count: 0,
+        event_count: 0,
+    }
 }
 
 /// Derive the application status string from the latest session.
@@ -48,13 +55,30 @@ pub fn derive_status(latest_session: Option<&Session>) -> String {
     }
 }
 
+/// Derive the connection-level status from session count, event count, and latest session.
+///
+/// Pure function: returns "No plugin connected" when no sessions and no events
+/// have ever been observed. Otherwise delegates to derive_status for session-level
+/// status ("Active session" or "Listening").
+pub fn derive_connection_status(
+    session_count: u32,
+    event_count: u32,
+    latest_session: Option<&Session>,
+) -> String {
+    if session_count == 0 && event_count == 0 {
+        "No plugin connected".to_string()
+    } else {
+        derive_status(latest_session)
+    }
+}
+
 /// Build application status from real session and event counts.
 ///
 /// Pure function: combines domain constants with live data from the EventStore.
 pub fn build_status(session_count: u32, event_count: u32) -> AppStatus {
     AppStatus {
         version: VERSION.to_string(),
-        status: "Listening".to_string(),
+        status: derive_connection_status(session_count, event_count, None),
         port: HOOK_PORT,
         session_count,
         event_count,
@@ -71,7 +95,7 @@ pub fn build_status_with_session(
 ) -> AppStatus {
     AppStatus {
         version: VERSION.to_string(),
-        status: derive_status(latest_session),
+        status: derive_connection_status(session_count, event_count, latest_session),
         port: HOOK_PORT,
         session_count,
         event_count,
@@ -278,9 +302,9 @@ mod tests {
     }
 
     #[test]
-    fn initial_status_is_listening() {
+    fn initial_status_is_no_plugin_connected() {
         let status = initial_status();
-        assert_eq!(status.status, "Listening");
+        assert_eq!(status.status, "No plugin connected");
     }
 
     #[test]
@@ -488,7 +512,7 @@ mod tests {
         let status = build_status(0, 0);
         assert_eq!(status.version, VERSION);
         assert_eq!(status.port, HOOK_PORT);
-        assert_eq!(status.status, "Listening");
+        assert_eq!(status.status, "No plugin connected");
     }
 
     #[test]
@@ -496,6 +520,7 @@ mod tests {
         let status = build_status(3, 42);
         assert_eq!(status.session_count, 3);
         assert_eq!(status.event_count, 42);
+        assert_eq!(status.status, "Listening");
     }
 
     #[test]
@@ -549,9 +574,52 @@ mod tests {
     }
 
     #[test]
-    fn build_status_with_session_derives_listening_when_no_session() {
+    fn build_status_with_session_derives_no_plugin_when_zero_counts() {
         let status = build_status_with_session(0, 0, None);
+        assert_eq!(status.status, "No plugin connected");
+    }
+
+    #[test]
+    fn build_status_with_session_derives_listening_when_sessions_exist_but_no_active() {
+        let session = Session {
+            id: "sess-1".to_string(),
+            started_at: "2026-03-08T10:00:00Z".to_string(),
+            ended_at: Some("2026-03-08T10:30:00Z".to_string()),
+            event_count: 30,
+        };
+        let status = build_status_with_session(1, 30, Some(&session));
         assert_eq!(status.status, "Listening");
+    }
+
+    // --- derive_connection_status tests ---
+
+    #[test]
+    fn derive_connection_status_returns_no_plugin_when_zero_counts() {
+        assert_eq!(derive_connection_status(0, 0, None), "No plugin connected");
+    }
+
+    #[test]
+    fn derive_connection_status_returns_listening_when_events_exist() {
+        assert_eq!(derive_connection_status(1, 10, None), "Listening");
+    }
+
+    #[test]
+    fn derive_connection_status_returns_active_when_session_ongoing() {
+        let session = Session {
+            id: "sess-1".to_string(),
+            started_at: "2026-03-08T10:00:00Z".to_string(),
+            ended_at: None,
+            event_count: 5,
+        };
+        assert_eq!(
+            derive_connection_status(1, 5, Some(&session)),
+            "Active session"
+        );
+    }
+
+    #[test]
+    fn derive_connection_status_never_returns_no_plugin_once_events_exist() {
+        assert_ne!(derive_connection_status(0, 1, None), "No plugin connected");
     }
 
     // --- format_active_tooltip tests ---

@@ -77,7 +77,7 @@ describe("User opens newly installed app and sees guidance to connect", () => {
 
 // @walking_skeleton
 describe("App transitions to active when plugin sends first event", () => {
-  it.skip("status transitions from empty to 'Active session' on first event", () => {
+  it("status transitions from empty to 'Active session' on first event", () => {
     // Before: no sessions, no events
     expect(isEmptyState(0)).toBe(true);
 
@@ -94,7 +94,7 @@ describe("App transitions to active when plugin sends first event", () => {
 });
 
 describe("Status derivation rules", () => {
-  it.skip("status is 'No plugin connected' when 0 sessions and 0 events", () => {
+  it("status is 'No plugin connected' when 0 sessions and 0 events", () => {
     // This tests the NEW derive_status behavior that will be added.
     // Current deriveStatus returns "Listening" for null session.
     // After implementation, it should return "No plugin connected"
@@ -108,7 +108,7 @@ describe("Status derivation rules", () => {
     expect(status.status).toBe("No plugin connected");
   });
 
-  it.skip("status is 'Listening' when sessions exist but none are active", () => {
+  it("status is 'Listening' when sessions exist but none are active", () => {
     const endedSession: SessionInfo = {
       id: "sess-3",
       started_at: "2026-03-09T10:00:00Z",
@@ -118,7 +118,7 @@ describe("Status derivation rules", () => {
     expect(deriveStatus(endedSession)).toBe("Listening");
   });
 
-  it.skip("status is 'Active session' when the latest session is ongoing", () => {
+  it("status is 'Active session' when the latest session is ongoing", () => {
     const activeSession: SessionInfo = {
       id: "sess-2",
       started_at: "2026-03-09T10:00:00Z",
@@ -128,7 +128,7 @@ describe("Status derivation rules", () => {
     expect(deriveStatus(activeSession)).toBe("Active session");
   });
 
-  it.skip("status never returns to 'No plugin connected' once events exist", () => {
+  it("status never returns to 'No plugin connected' once events exist", () => {
     // Even with no active session and plugin removed, if historical data exists,
     // status should be "Listening" not "No plugin connected"
     const status = buildListeningWithHistory(3, 45);
@@ -139,7 +139,7 @@ describe("Status derivation rules", () => {
 });
 
 describe("Empty state displays the plugin install command", () => {
-  it.skip("the plugin install command string is correct", () => {
+  it("the plugin install command string is correct", () => {
     expect(PLUGIN_INSTALL_COMMAND).toBe(
       "/plugin install norbert@pmvanev-marketplace"
     );
@@ -147,14 +147,14 @@ describe("Empty state displays the plugin install command", () => {
 });
 
 describe("Empty state does not show error indicators", () => {
-  it.skip("receiver port is reported as 3748", () => {
+  it("receiver port is reported as 3748", () => {
     const status = buildNoPluginStatus();
     expect(status.port).toBe(3748);
   });
 });
 
 describe("Historical data accessible without plugin", () => {
-  it.skip("sessions with data show 'Listening' not 'No plugin connected'", () => {
+  it("sessions with data show 'Listening' not 'No plugin connected'", () => {
     const status = buildListeningWithHistory(8, 200);
     expect(status.session_count).toBe(8);
     expect(status.status).toBe("Listening");
@@ -162,7 +162,7 @@ describe("Historical data accessible without plugin", () => {
 });
 
 describe("Receiver stays ready even when no plugin is connected", () => {
-  it.skip("receiver port is constant regardless of plugin state", () => {
+  it("receiver port is constant regardless of plugin state", () => {
     const noPlugin = buildNoPluginStatus();
     const listening = buildListeningWithHistory(5, 100);
     expect(noPlugin.port).toBe(EXPECTED_PORT);
@@ -171,7 +171,7 @@ describe("Receiver stays ready even when no plugin is connected", () => {
 });
 
 describe("App handles zero-to-one session transition correctly", () => {
-  it.skip("after first session starts, status becomes 'Active session'", () => {
+  it("after first session starts, status becomes 'Active session'", () => {
     // Start: 0 sessions, 0 events
     expect(isEmptyState(0)).toBe(true);
 

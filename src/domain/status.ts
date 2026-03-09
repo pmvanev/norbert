@@ -26,9 +26,13 @@ export function formatHeader(appName: string, version: string): string {
   return `${appName.toUpperCase()} v${version}`;
 }
 
-/// Message displayed when no sessions have been observed yet.
+/// Message displayed when no plugin is connected (no sessions, no events).
 export const EMPTY_STATE_MESSAGE =
-  "Waiting for first Claude Code session...";
+  "No plugin connected. Install the Norbert plugin to get started.";
+
+/// The command users run in Claude Code to install the Norbert plugin.
+export const PLUGIN_INSTALL_COMMAND =
+  "/plugin install norbert@pmvanev-marketplace";
 
 /// Determine whether the application is in the empty state (no sessions yet).
 ///
@@ -96,15 +100,20 @@ export function deriveStatus(latestSession: SessionInfo | null): string {
   return latestSession.ended_at === null ? "Active session" : "Listening";
 }
 
-/// Determine whether the restart banner should be visible.
+/// Derive the connection-level status from session and event counts.
 ///
-/// Pure function: the banner shows after settings merge (bannerWasShown=true)
-/// and dismisses automatically when the first event arrives (eventCount > 0).
-export function shouldShowRestartBanner(
-  bannerWasShown: boolean,
-  eventCount: number
-): boolean {
-  return bannerWasShown && eventCount === 0;
+/// Pure function: returns "No plugin connected" when no sessions and no events
+/// have ever been observed. Otherwise delegates to deriveStatus for session-level
+/// status ("Active session" or "Listening").
+export function deriveConnectionStatus(
+  sessionCount: number,
+  eventCount: number,
+  latestSession: SessionInfo | null
+): string {
+  if (sessionCount === 0 && eventCount === 0) {
+    return "No plugin connected";
+  }
+  return deriveStatus(latestSession);
 }
 
 /// Format the tray tooltip based on active state.
