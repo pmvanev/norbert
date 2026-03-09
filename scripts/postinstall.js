@@ -6,7 +6,7 @@ import { createGunzip } from "node:zlib";
 import { extract } from "tar";
 import path from "node:path";
 import os from "node:os";
-import { detectPlatform, buildDownloadUrl, getInstallDirectory } from "./postinstall-core.js";
+import { detectPlatform, buildDownloadUrl, getInstallDirectory, buildInstallSuccessMessage } from "./postinstall-core.js";
 
 async function downloadFile(url, destPath) {
   const tempPath = `${destPath}.tmp`;
@@ -85,8 +85,8 @@ async function postinstall() {
       }
     }
 
-    console.log("Installation complete!");
     console.log(`Binary installed to: ${installDir}`);
+    console.log(buildInstallSuccessMessage());
   } catch (error) {
     // Clean up any partial files on failure
     try {
