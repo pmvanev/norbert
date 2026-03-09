@@ -1,0 +1,260 @@
+{
+  "roadmap": {
+    "project_id": "walking-skeleton",
+    "created_at": "2026-03-08T20:36:13Z",
+    "total_steps": 15,
+    "phases": 4
+  },
+  "phases": [
+    {
+      "id": "01",
+      "name": "CI/CD Pipeline",
+      "steps": [
+        {
+          "id": "01-01",
+          "name": "Tauri project scaffold and GitHub Actions workflow",
+          "description": "Initialize Tauri 2.0 project with Rust backend + React/TypeScript frontend. Create GitHub Actions workflow that builds Windows x64 binary on version tag push using tauri-apps/tauri-action and attaches artifact to GitHub Release.",
+          "criteria": [
+            "Pushing a version tag triggers the build workflow",
+            "Successful build produces a GitHub Release with Windows x64 binary",
+            "Build failure prevents release publication"
+          ],
+          "estimated_hours": 6,
+          "dependencies": [],
+          "scenarios": ["#4", "#6"]
+        },
+        {
+          "id": "01-02",
+          "name": "npm package with postinstall binary download",
+          "description": "Create npm package.json with postinstall script that detects platform (win32-x64), downloads the correct binary from GitHub Release, and extracts to ~/.norbert/bin/. Register norbert-cc as bin entry.",
+          "criteria": [
+            "npx github:pmvanev/norbert-cc downloads and installs the binary",
+            "norbert-cc command is available in the user's terminal after install",
+            "Network failure during download shows clear error with no partial files"
+          ],
+          "estimated_hours": 4,
+          "dependencies": ["01-01"],
+          "scenarios": ["#5", "#7"]
+        },
+        {
+          "id": "01-03",
+          "name": "Binary size validation",
+          "description": "Add CI step verifying the packaged binary stays under 15MB. Fail the workflow if exceeded.",
+          "criteria": [
+            "Pipeline asserts binary package is under 15 megabytes",
+            "Oversized binary fails the workflow before release publication"
+          ],
+          "estimated_hours": 1,
+          "dependencies": ["01-01"],
+          "scenarios": ["#8"]
+        }
+      ]
+    },
+    {
+      "id": "02",
+      "name": "App Shell",
+      "steps": [
+        {
+          "id": "02-01",
+          "name": "System tray icon with tooltip",
+          "description": "Register Norbert icon in Windows 11 system tray on app launch. Tooltip displays app name and version sourced from shared constant.",
+          "criteria": [
+            "Tray icon appears when norbert-cc is launched",
+            "Tooltip shows 'Norbert v0.1.0'",
+            "Tray icon persists across window open/close cycles"
+          ],
+          "estimated_hours": 3,
+          "dependencies": ["01-01"],
+          "scenarios": ["#9", "#14"]
+        },
+        {
+          "id": "02-02",
+          "name": "Main window with status display",
+          "description": "Create React status window showing app name, version, status indicator, port, session count, and event count. Data fetched via Tauri IPC commands.",
+          "criteria": [
+            "Window displays 'NORBERT v0.1.0', 'Status: Listening', 'Port: 3748'",
+            "Session and event counts show '0' on fresh launch",
+            "Version and port values sourced from shared constants"
+          ],
+          "estimated_hours": 4,
+          "dependencies": ["02-01"],
+          "scenarios": ["#10", "#35"]
+        },
+        {
+          "id": "02-03",
+          "name": "Tray icon click toggles window",
+          "description": "Clicking tray icon opens main window if closed, closes if open. Closing window via close button hides window without terminating the application.",
+          "criteria": [
+            "Tray click toggles window visibility",
+            "Window close button hides window; app continues running",
+            "Tray icon remains visible after window close"
+          ],
+          "estimated_hours": 2,
+          "dependencies": ["02-02"],
+          "scenarios": ["#11", "#12"]
+        },
+        {
+          "id": "02-04",
+          "name": "Empty state display",
+          "description": "When no sessions exist, show 'Waiting for first Claude Code session...' message. Interface appears intentional, not broken.",
+          "criteria": [
+            "Empty state message visible when session count is zero",
+            "Message disappears once first session data arrives",
+            "Interface looks intentional, not error-like"
+          ],
+          "estimated_hours": 1,
+          "dependencies": ["02-02"],
+          "scenarios": ["#13"]
+        }
+      ]
+    },
+    {
+      "id": "03",
+      "name": "Data Pipeline",
+      "steps": [
+        {
+          "id": "03-01",
+          "name": "Core domain types and port traits",
+          "description": "Define domain types (HookEvent, Session, EventType, AppStatus) in core module. Define port traits (EventStore, SettingsManager) in ports module. No adapter implementations yet.",
+          "criteria": [
+            "Core types represent all walking skeleton domain concepts",
+            "Port traits define storage and settings abstractions",
+            "Core module has zero external dependencies"
+          ],
+          "estimated_hours": 3,
+          "dependencies": ["01-01"],
+          "scenarios": []
+        },
+        {
+          "id": "03-02",
+          "name": "SQLite adapter with schema initialization",
+          "description": "Implement EventStore port via SQLite. Create database at ~/.norbert/norbert.db with WAL mode, NORMAL synchronous. Initialize sessions and events tables with indexes.",
+          "criteria": [
+            "Database created in data directory on first launch",
+            "journal_mode is WAL and synchronous is NORMAL",
+            "Sessions and events tables exist with correct schema"
+          ],
+          "estimated_hours": 4,
+          "dependencies": ["03-01"],
+          "scenarios": ["#20"]
+        },
+        {
+          "id": "03-03",
+          "name": "Settings merge adapter",
+          "description": "Implement SettingsManager port. Read ~/.claude/settings.json, create byte-identical backup, surgically merge hook entries for 6 event types. Handle missing file and malformed JSON edge cases. Show restart notification on success.",
+          "criteria": [
+            "Backup is byte-identical to original before any modification",
+            "Merged config retains all existing user settings and adds 6 hook entries",
+            "Malformed JSON skips merge with warning; no backup created",
+            "Missing file creates new config with hooks only; no backup",
+            "Merge is idempotent -- no duplicates on re-run"
+          ],
+          "estimated_hours": 5,
+          "dependencies": ["03-01"],
+          "scenarios": ["#15", "#16", "#17", "#18", "#19"]
+        },
+        {
+          "id": "03-04",
+          "name": "HTTP hook receiver sidecar",
+          "description": "Build norbert-hook-server as Tauri sidecar binary. HTTP server on 127.0.0.1:3748 with POST /hooks/{event_type} route. Validate event type, persist to SQLite via EventStore, return 200 after write.",
+          "criteria": [
+            "POST /hooks/{valid_type} with valid payload returns HTTP 200",
+            "Event persisted to database before acknowledgment sent",
+            "Unknown event type rejected with appropriate error status",
+            "Port-in-use shows clear error in UI"
+          ],
+          "estimated_hours": 5,
+          "dependencies": ["03-02"],
+          "scenarios": ["#21", "#22", "#23", "#24"]
+        },
+        {
+          "id": "03-05",
+          "name": "Sidecar lifecycle and app composition",
+          "description": "Wire app startup: init DB, merge settings, spawn hook-receiver sidecar via Tauri sidecar API. Sidecar survives window close. Register IPC commands for frontend queries.",
+          "criteria": [
+            "Sidecar starts on app launch and continues after window close",
+            "IPC commands return status, session count, and event count",
+            "Hook receiver port matches settings merge URLs"
+          ],
+          "estimated_hours": 4,
+          "dependencies": ["03-02", "03-03", "03-04", "02-03"],
+          "scenarios": ["#33", "#36"]
+        }
+      ]
+    },
+    {
+      "id": "04",
+      "name": "End-to-End Proof",
+      "steps": [
+        {
+          "id": "04-01",
+          "name": "Session capture and display",
+          "description": "SessionStart event creates session record; Stop event finalizes with duration. UI displays session count, event count, last session timestamp, and duration via IPC queries.",
+          "criteria": [
+            "First captured session replaces empty state with session details",
+            "Session shows correct start timestamp and calculated duration",
+            "Multiple sessions accumulate with accurate total counts"
+          ],
+          "estimated_hours": 5,
+          "dependencies": ["03-05"],
+          "scenarios": ["#25", "#28", "#32"]
+        },
+        {
+          "id": "04-02",
+          "name": "Live UI updates and status transitions",
+          "description": "Backend emits Tauri events on new hook data. Frontend updates counts within 1 second. Status transitions between 'Listening' and 'Active session'. Tray icon and tooltip reflect active state. Restart banner dismisses on first event.",
+          "criteria": [
+            "Event count increments within 1 second of hook receipt",
+            "Status transitions between Listening and Active session",
+            "Tray icon and tooltip reflect active/idle state",
+            "Restart banner auto-dismisses on first event arrival"
+          ],
+          "estimated_hours": 4,
+          "dependencies": ["04-01"],
+          "scenarios": ["#26", "#27", "#29", "#30"]
+        },
+        {
+          "id": "04-03",
+          "name": "Data durability and cross-component integration",
+          "description": "Verify pre-restart events survive app restart. Confirm database shared between sidecar and main window. Validate event type consistency across settings and receiver routes.",
+          "criteria": [
+            "Events persisted before restart are visible after relaunch",
+            "Events stored by sidecar are readable by main window within 1 second",
+            "Event types in settings config match receiver route list exactly"
+          ],
+          "estimated_hours": 3,
+          "dependencies": ["04-01"],
+          "scenarios": ["#31", "#34", "#37"]
+        }
+      ]
+    }
+  ],
+  "implementation_scope": {
+    "source_directories": [
+      "src-tauri/src/",
+      "src-tauri/src/core/",
+      "src-tauri/src/ports/",
+      "src-tauri/src/adapters/db/",
+      "src-tauri/src/adapters/settings/",
+      "src-tauri/src/adapters/hook_receiver/",
+      "src/",
+      "src/components/",
+      ".github/workflows/"
+    ],
+    "test_directories": [
+      "src-tauri/tests/",
+      "tests/acceptance/walking-skeleton/",
+      "src/__tests__/"
+    ],
+    "excluded_patterns": [
+      "node_modules/**",
+      "target/**",
+      "dist/**"
+    ]
+  },
+  "validation": {
+    "status": "approved",
+    "reviewer": "software-crafter-reviewer",
+    "approved_at": "2026-03-08T20:45:00Z"
+  }
+}
