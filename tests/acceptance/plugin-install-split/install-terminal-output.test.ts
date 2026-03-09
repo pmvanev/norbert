@@ -11,7 +11,7 @@
 import { describe, it, expect } from "vitest";
 import { buildInstallSuccessMessage } from "../../../scripts/postinstall-core.js";
 
-const PLUGIN_INSTALL_COMMAND = "/plugin install norbert@pmvanev-marketplace";
+const PLUGIN_INSTALL_COMMAND = "/plugin install norbert@pmvanev-plugins";
 
 describe("Terminal output includes plugin install command after successful install", () => {
   it("output contains 'To connect to Claude Code:' guidance", () => {

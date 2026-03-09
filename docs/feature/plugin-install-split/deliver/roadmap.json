@@ -98,7 +98,7 @@
           "description": "Add plugin install command to terminal output after successful binary download. Show clear two-step guidance.",
           "acceptance_criteria": [
             "Terminal output includes 'To connect to Claude Code:' after install",
-            "Terminal output includes '/plugin install norbert@pmvanev-marketplace'",
+            "Terminal output includes '/plugin install norbert@pmvanev-plugins'",
             "No settings merge or restart message in terminal output"
           ],
           "files_to_modify": [

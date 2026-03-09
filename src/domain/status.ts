@@ -32,7 +32,7 @@ export const EMPTY_STATE_MESSAGE =
 
 /// The command users run in Claude Code to install the Norbert plugin.
 export const PLUGIN_INSTALL_COMMAND =
-  "/plugin install norbert@pmvanev-marketplace";
+  "/plugin install norbert@pmvanev-plugins";
 
 /// Determine whether the application is in the empty state (no sessions yet).
 ///

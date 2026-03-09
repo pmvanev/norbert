@@ -18,7 +18,7 @@ steps:
       ### 1. Install the app
       npx github:pmvanev/norbert-cc
       ### 2. Connect to Claude Code
-      /plugin install norbert@pmvanev-marketplace
+      /plugin install norbert@pmvanev-plugins
 
     shared_artifacts:
       - name: "app_install_command"
@@ -27,7 +27,7 @@ steps:
         consumers: ["README", "terminal output after install"]
       - name: "plugin_install_command"
         source: "README.md"
-        displayed_as: "/plugin install norbert@pmvanev-marketplace"
+        displayed_as: "/plugin install norbert@pmvanev-plugins"
         consumers: ["README", "Norbert app empty state", "terminal output after install"]
 
     emotional_state:
@@ -42,7 +42,7 @@ steps:
         Given a user visits the Norbert GitHub repository
         When they read the Quick Start section
         Then they see the app install command "npx github:pmvanev/norbert-cc"
-        And they see the plugin install command "/plugin install norbert@pmvanev-marketplace"
+        And they see the plugin install command "/plugin install norbert@pmvanev-plugins"
 
   - id: 2
     name: "App Install"
@@ -57,7 +57,7 @@ steps:
       Launching Norbert...
 
       Norbert is running in the system tray.
-      To connect to Claude Code: /plugin install norbert@pmvanev-marketplace
+      To connect to Claude Code: /plugin install norbert@pmvanev-plugins
 
     shared_artifacts:
       - name: "version"
@@ -105,7 +105,7 @@ steps:
       |                                                                 |
       |  +-----------------------------------------------------------+  |
       |  |  Connect Norbert to Claude Code:                          |  |
-      |  |  /plugin install norbert@pmvanev-marketplace              |  |
+      |  |  /plugin install norbert@pmvanev-plugins              |  |
       |  |  Run this command in any Claude Code session.             |  |
       |  +-----------------------------------------------------------+  |
       |                                                                 |
@@ -115,7 +115,7 @@ steps:
     shared_artifacts:
       - name: "plugin_install_command"
         source: "README.md"
-        displayed_as: "/plugin install norbert@pmvanev-marketplace"
+        displayed_as: "/plugin install norbert@pmvanev-plugins"
         consumers: ["Norbert app empty state", "README", "terminal output"]
 
     emotional_state:
@@ -139,12 +139,12 @@ steps:
 
   - id: 4
     name: "Plugin Install"
-    command: "/plugin install norbert@pmvanev-marketplace"
+    command: "/plugin install norbert@pmvanev-plugins"
 
     tui_mockup: |
-      > /plugin install norbert@pmvanev-marketplace
+      > /plugin install norbert@pmvanev-plugins
 
-      Installing plugin norbert from pmvanev-marketplace...
+      Installing plugin norbert from pmvanev-plugins...
       Registered 6 hooks (async HTTP to localhost:3748)
       Registered MCP server: norbert (stdio)
       Plugin installed successfully.
@@ -175,7 +175,7 @@ steps:
     gherkin: |
       Scenario: Plugin installs hooks and MCP server via Claude framework
         Given Priya has Norbert app running with the sidecar listening on port 3748
-        When she runs "/plugin install norbert@pmvanev-marketplace" in Claude Code
+        When she runs "/plugin install norbert@pmvanev-plugins" in Claude Code
         Then Claude registers 6 async HTTP hooks pointing to localhost:3748
         And Claude registers the norbert MCP server with stdio transport
         And the plugin install reports success

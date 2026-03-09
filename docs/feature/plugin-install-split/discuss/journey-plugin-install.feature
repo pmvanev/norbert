@@ -23,19 +23,19 @@ Feature: Plugin Install Split
     When Priya clicks the tray icon to open the window
     Then the status shows "No plugin connected"
     And the hook receiver sidecar is listening on port 3748
-    And the window displays "/plugin install norbert@pmvanev-marketplace"
+    And the window displays "/plugin install norbert@pmvanev-plugins"
     And session count shows 0 and event count shows 0
 
   Scenario: App terminal output shows plugin install hint
     When Priya runs "npx github:pmvanev/norbert-cc"
     Then the terminal output includes "To connect to Claude Code:"
-    And the terminal output includes "/plugin install norbert@pmvanev-marketplace"
+    And the terminal output includes "/plugin install norbert@pmvanev-plugins"
 
   # --- Plugin Install ---
 
   Scenario: Plugin installs hooks and MCP server via Claude framework
     Given Priya has the Norbert app running with sidecar on port 3748
-    When she runs "/plugin install norbert@pmvanev-marketplace" in Claude Code
+    When she runs "/plugin install norbert@pmvanev-plugins" in Claude Code
     Then Claude registers 6 async HTTP hooks:
       | Hook              | URL                                          |
       | PreToolUse        | http://localhost:3748/hooks/PreToolUse        |

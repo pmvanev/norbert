@@ -60,7 +60,7 @@ The walking skeleton already bundles app install and Claude Code integration int
 #### Forces Analysis
 
 - **Push**: Manual JSON editing or opaque automatic merging of settings.json creates anxiety about breaking existing configuration. Marcus Rivera had custom MCP servers configured and worried the merge would clobber them.
-- **Pull**: `/plugin install norbert@pmvanev-marketplace` uses Claude's own plugin framework. Claude manages the hooks. Claude manages the cleanup. The user trusts Claude to handle its own configuration.
+- **Pull**: `/plugin install norbert@pmvanev-plugins` uses Claude's own plugin framework. Claude manages the hooks. Claude manages the cleanup. The user trusts Claude to handle its own configuration.
 - **Anxiety**: Is the plugin marketplace trustworthy? Will the plugin have the right permissions? What if the plugin version does not match the app version?
 - **Habit**: The surgical merge was invisible -- it just worked. Now the user must run a second command. That is more steps.
 
@@ -94,7 +94,7 @@ The walking skeleton already bundles app install and Claude Code integration int
 | Step | Description | Scope |
 |------|-------------|-------|
 | 1. Define | User decides to try Norbert, reads README | Two-step install instructions: app first, plugin second |
-| 2. Locate | User finds install commands | `npx github:pmvanev/norbert-cc` for app, `/plugin install norbert@pmvanev-marketplace` for plugin |
+| 2. Locate | User finds install commands | `npx github:pmvanev/norbert-cc` for app, `/plugin install norbert@pmvanev-plugins` for plugin |
 | 3. Prepare | App installs binary to `~/.norbert/bin/` | No settings.json modification. App launches standalone. |
 | 4. Confirm | User sees tray icon, app shows "No plugin connected" | Clear empty state indicating plugin is the next step |
 | 5. Execute | User installs plugin via Claude's `/plugin` command | Claude registers hooks and MCP server through its framework |

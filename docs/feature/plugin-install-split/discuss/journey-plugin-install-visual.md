@@ -58,7 +58,7 @@ Confidence
 |  npx github:pmvanev/norbert-cc                                  |
 |                                                                 |
 |  ### 2. Connect to Claude Code                                  |
-|  /plugin install norbert@pmvanev-marketplace                    |
+|  /plugin install norbert@pmvanev-plugins                    |
 |                                                                 |
 |  That's it. Norbert listens. Claude talks.                      |
 |                                                                 |
@@ -86,7 +86,7 @@ Confidence
 |                                                                  |
 |  Norbert is running in the system tray.                          |
 |  To connect to Claude Code: /plugin install                      |
-|    norbert@pmvanev-marketplace                                   |
+|    norbert@pmvanev-plugins                                   |
 |                                                                  |
 +------------------------------------------------------------------+
 ```
@@ -109,7 +109,7 @@ Confidence
 |  +------------------------------------------------------------+ |
 |  |  Connect Norbert to Claude Code:                            | |
 |  |                                                             | |
-|  |  /plugin install norbert@pmvanev-marketplace                | |
+|  |  /plugin install norbert@pmvanev-plugins                | |
 |  |                                                             | |
 |  |  Run this command in any Claude Code session.               | |
 |  +------------------------------------------------------------+ |
@@ -126,14 +126,14 @@ Confidence
 
 ## Step 4: Plugin Install
 
-**Action**: User types `/plugin install norbert@pmvanev-marketplace` in Claude Code
+**Action**: User types `/plugin install norbert@pmvanev-plugins` in Claude Code
 
 ```
 +-- Claude Code ---------------------------------------------------+
 |                                                                  |
-|  > /plugin install norbert@pmvanev-marketplace                   |
+|  > /plugin install norbert@pmvanev-plugins                   |
 |                                                                  |
-|  Installing plugin norbert from pmvanev-marketplace...           |
+|  Installing plugin norbert from pmvanev-plugins...           |
 |  Registered 6 hooks (async HTTP to localhost:3748)               |
 |  Registered MCP server: norbert (stdio)                          |
 |  Plugin installed successfully.                                  |
@@ -196,7 +196,7 @@ Confidence
 |  Sessions: 14    Events: 847                                     |
 |                                                                  |
 |  Historical data preserved. Reconnect anytime:                   |
-|  /plugin install norbert@pmvanev-marketplace                     |
+|  /plugin install norbert@pmvanev-plugins                     |
 |                                                                  |
 +------------------------------------------------------------------+
 ```

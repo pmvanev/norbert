@@ -104,7 +104,7 @@ This installs the Norbert desktop app (Tauri binary, SQLite database, hook recei
 **Step 2 — Connect to Claude Code:**
 
 ```
-/plugin install norbert@pmvanev-marketplace
+/plugin install norbert@pmvanev-plugins
 ```
 
 This uses Claude Code's `/plugin` command to install Norbert as a plugin from the marketplace. Claude's plugin framework registers the 6 async HTTP hooks and the MCP server through its own configuration management — no surgical JSON merging, no backup files, no risk of clobbering existing settings. When the plugin is installed and Claude Code runs, Norbert receives events automatically and transitions from "No plugin connected" to "Listening."
@@ -1536,7 +1536,7 @@ Nothing else changes — same `package.json`, same postinstall script, same bina
 Once the app is running, the user connects it to Claude Code by installing the Norbert plugin:
 
 ```
-/plugin install norbert@pmvanev-marketplace
+/plugin install norbert@pmvanev-plugins
 ```
 
 This uses Claude Code's native `/plugin` command to install the Norbert plugin from the marketplace hosted at `github.com/pmvanev/claude-marketplace`. Claude's plugin framework reads the plugin definition and registers:

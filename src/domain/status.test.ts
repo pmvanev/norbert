@@ -65,7 +65,7 @@ describe("EMPTY_STATE_MESSAGE", () => {
 describe("PLUGIN_INSTALL_COMMAND", () => {
   it("contains the correct plugin install command", () => {
     expect(PLUGIN_INSTALL_COMMAND).toBe(
-      "/plugin install norbert@pmvanev-marketplace"
+      "/plugin install norbert@pmvanev-plugins"
     );
   });
 });

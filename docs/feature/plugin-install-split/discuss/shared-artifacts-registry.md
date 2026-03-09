@@ -16,7 +16,7 @@
 - **Consumers**: README Quick Start section, app empty state window, terminal output after install
 - **Owner**: Documentation / UX
 - **Integration risk**: HIGH -- wrong command means users cannot connect the plugin
-- **Validation**: String `/plugin install norbert@pmvanev-marketplace` must be identical in all three locations
+- **Validation**: String `/plugin install norbert@pmvanev-plugins` must be identical in all three locations
 
 ### version
 

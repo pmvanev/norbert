@@ -66,7 +66,7 @@ handoff:
       value: 3748
       locations: ["plugin/hooks/hooks.json", "src-tauri/src/domain/mod.rs", "hook_receiver.rs"]
     - name: plugin_install_command
-      value: "/plugin install norbert@pmvanev-marketplace"
+      value: "/plugin install norbert@pmvanev-plugins"
       locations: ["postinstall.js", "App.tsx/status.ts", "README.md"]
     - name: hook_event_names
       value: ["PreToolUse", "PostToolUse", "SubagentStop", "Stop", "SessionStart", "UserPromptSubmit"]

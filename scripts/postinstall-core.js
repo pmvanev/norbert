@@ -43,7 +43,7 @@ export function buildInstallSuccessMessage() {
     "Norbert installed successfully!",
     "",
     "To connect to Claude Code:",
-    "  /plugin install norbert@pmvanev-marketplace",
+    "  /plugin install norbert@pmvanev-plugins",
     "",
   ].join("\n");
 }

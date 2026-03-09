@@ -207,7 +207,7 @@ Port 3748 appears in:
 - `src-tauri/src/domain/mod.rs` (`HOOK_PORT` constant)
 - `src-tauri/src/hook_receiver.rs` (bind address)
 
-Plugin install command `/plugin install norbert@pmvanev-marketplace` appears in:
+Plugin install command `/plugin install norbert@pmvanev-plugins` appears in:
 - `postinstall.js` terminal output
 - `src/App.tsx` empty state UI
 - README.md

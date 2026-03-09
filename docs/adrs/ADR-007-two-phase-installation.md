@@ -24,7 +24,7 @@ Split installation into two independent phases:
 - Does NOT read, modify, or back up `~/.claude/settings.json`
 - Shows "No plugin connected" empty state with plugin install guidance
 
-**Phase 2 -- Plugin Install** (`/plugin install norbert@pmvanev-marketplace`):
+**Phase 2 -- Plugin Install** (`/plugin install norbert@pmvanev-plugins`):
 - User explicitly runs this in Claude Code
 - Claude's framework reads `plugin/.claude-plugin/plugin.json`, `plugin/hooks/hooks.json`, `plugin/.mcp.json`
 - Claude registers 6 async HTTP hooks and 1 MCP server

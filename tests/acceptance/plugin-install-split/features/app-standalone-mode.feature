@@ -53,7 +53,7 @@ Feature: App functions without plugin connected
   Scenario: Empty state displays the plugin install command prominently
     Given the app is in "No plugin connected" state
     When the user views the app window
-    Then the window displays "/plugin install norbert@pmvanev-marketplace"
+    Then the window displays "/plugin install norbert@pmvanev-plugins"
 
   Scenario: Empty state does not show error indicators or broken appearance
     Given the app is in "No plugin connected" state

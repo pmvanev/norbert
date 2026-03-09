@@ -22,7 +22,7 @@ import {
 } from "../../../src/domain/status";
 
 // Domain constant: the plugin install command (shared artifact)
-const PLUGIN_INSTALL_COMMAND = "/plugin install norbert@pmvanev-marketplace";
+const PLUGIN_INSTALL_COMMAND = "/plugin install norbert@pmvanev-plugins";
 const EXPECTED_PORT = 3748;
 
 /**
@@ -141,7 +141,7 @@ describe("Status derivation rules", () => {
 describe("Empty state displays the plugin install command", () => {
   it("the plugin install command string is correct", () => {
     expect(PLUGIN_INSTALL_COMMAND).toBe(
-      "/plugin install norbert@pmvanev-marketplace"
+      "/plugin install norbert@pmvanev-plugins"
     );
   });
 });

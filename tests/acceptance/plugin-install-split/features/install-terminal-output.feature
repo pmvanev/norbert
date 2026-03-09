@@ -7,7 +7,7 @@ Feature: Install terminal output with plugin guidance
     Given the user runs the Norbert install command
     When the install completes successfully
     Then the terminal output includes "To connect to Claude Code:"
-    And the terminal output includes "/plugin install norbert@pmvanev-marketplace"
+    And the terminal output includes "/plugin install norbert@pmvanev-plugins"
 
   Scenario: Terminal output does not mention settings merge or restart
     Given the user runs the Norbert install command

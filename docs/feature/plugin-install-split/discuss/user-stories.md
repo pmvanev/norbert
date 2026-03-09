@@ -28,7 +28,7 @@ Priya has `~/.claude/settings.json` with 3 custom MCP servers (github, filesyste
 
 #### 2: Terminal output guides next step -- Priya sees plugin hint
 
-After the install completes, Priya's terminal shows: "Norbert is running in the system tray. To connect to Claude Code: /plugin install norbert@pmvanev-marketplace". She knows exactly what to do next.
+After the install completes, Priya's terminal shows: "Norbert is running in the system tray. To connect to Claude Code: /plugin install norbert@pmvanev-plugins". She knows exactly what to do next.
 
 #### 3: App empty state -- Priya opens the window before connecting plugin
 
@@ -50,7 +50,7 @@ And no ~/.norbert/settings.json.bak file is created
 Given Priya runs "npx github:pmvanev/norbert-cc"
 When the install completes and Norbert launches
 Then the terminal output includes "To connect to Claude Code:"
-And the terminal output includes "/plugin install norbert@pmvanev-marketplace"
+And the terminal output includes "/plugin install norbert@pmvanev-plugins"
 
 #### Scenario: App shows helpful empty state without plugin
 
@@ -59,7 +59,7 @@ And no Norbert plugin is installed in Claude Code
 When Priya clicks the tray icon to open the window
 Then the status shows "No plugin connected"
 And the hook receiver sidecar is listening on port 3748
-And the window displays "/plugin install norbert@pmvanev-marketplace"
+And the window displays "/plugin install norbert@pmvanev-plugins"
 And session count shows 0 and event count shows 0
 
 #### Scenario: First launch does not trigger settings merge
@@ -268,28 +268,28 @@ Marcus Rivera has installed the Norbert desktop app and wants to connect it to C
 
 ### Solution
 
-Marcus runs `/plugin install norbert@pmvanev-marketplace` in any Claude Code session. Claude's plugin framework fetches the plugin definition from the marketplace, registers the 6 async HTTP hooks and the MCP server, and reports success. The Norbert app detects incoming events and transitions from "No plugin connected" to "Listening."
+Marcus runs `/plugin install norbert@pmvanev-plugins` in any Claude Code session. Claude's plugin framework fetches the plugin definition from the marketplace, registers the 6 async HTTP hooks and the MCP server, and reports success. The Norbert app detects incoming events and transitions from "No plugin connected" to "Listening."
 
 ### Domain Examples
 
 #### 1: Happy path -- Marcus installs the plugin
 
-Marcus has Norbert running in his system tray showing "No plugin connected." He opens a Claude Code session and types `/plugin install norbert@pmvanev-marketplace`. Claude reports: "Registered 6 hooks, Registered MCP server: norbert. Plugin installed successfully." He starts working and the Norbert window transitions to "Listening" with events flowing.
+Marcus has Norbert running in his system tray showing "No plugin connected." He opens a Claude Code session and types `/plugin install norbert@pmvanev-plugins`. Claude reports: "Registered 6 hooks, Registered MCP server: norbert. Plugin installed successfully." He starts working and the Norbert window transitions to "Listening" with events flowing.
 
 #### 2: App not running -- Marcus installs plugin before launching Norbert
 
-Marcus installs the Norbert plugin via `/plugin install norbert@pmvanev-marketplace` before launching the Norbert app. The plugin installs successfully -- Claude registers the hooks. When Marcus later launches Norbert and starts a Claude session, events begin flowing. The hooks are registered regardless of whether the app is running at install time.
+Marcus installs the Norbert plugin via `/plugin install norbert@pmvanev-plugins` before launching the Norbert app. The plugin installs successfully -- Claude registers the hooks. When Marcus later launches Norbert and starts a Claude session, events begin flowing. The hooks are registered regardless of whether the app is running at install time.
 
 #### 3: Plugin already installed -- Marcus reinstalls
 
-Marcus runs `/plugin install norbert@pmvanev-marketplace` when the plugin is already installed. Claude's framework handles this idempotently -- either skipping the install or updating to the latest version. No duplicate hook entries are created.
+Marcus runs `/plugin install norbert@pmvanev-plugins` when the plugin is already installed. Claude's framework handles this idempotently -- either skipping the install or updating to the latest version. No duplicate hook entries are created.
 
 ### UAT Scenarios (BDD)
 
 #### Scenario: Plugin installs successfully from marketplace
 
 Given Marcus Rivera has the Norbert app running in the system tray
-When he runs "/plugin install norbert@pmvanev-marketplace" in Claude Code
+When he runs "/plugin install norbert@pmvanev-plugins" in Claude Code
 Then Claude reports successful installation
 And 6 async HTTP hooks are registered pointing to localhost:3748
 And the norbert MCP server is registered with stdio transport
@@ -306,7 +306,7 @@ And events appear as Claude processes the request
 #### Scenario: Plugin installs even when app is not running
 
 Given Marcus has not yet launched the Norbert app
-When he runs "/plugin install norbert@pmvanev-marketplace" in Claude Code
+When he runs "/plugin install norbert@pmvanev-plugins" in Claude Code
 Then the plugin installs successfully
 And hooks are registered in Claude's configuration
 And when Marcus later launches Norbert and starts a Claude session, events flow normally
@@ -314,14 +314,14 @@ And when Marcus later launches Norbert and starts a Claude session, events flow 
 #### Scenario: Plugin install is idempotent
 
 Given Marcus already has the Norbert plugin installed in Claude Code
-When he runs "/plugin install norbert@pmvanev-marketplace" again
+When he runs "/plugin install norbert@pmvanev-plugins" again
 Then no duplicate hook entries are created
 And the MCP server registration is not duplicated
 And Claude handles the reinstall gracefully
 
 ### Acceptance Criteria
 
-- [ ] `/plugin install norbert@pmvanev-marketplace` successfully registers 6 hooks and 1 MCP server
+- [ ] `/plugin install norbert@pmvanev-plugins` successfully registers 6 hooks and 1 MCP server
 - [ ] App detects incoming events and transitions status to "Listening" without manual intervention
 - [ ] Plugin installs regardless of whether Norbert app is running
 - [ ] Reinstalling the plugin does not create duplicate registrations
@@ -361,7 +361,7 @@ Priya has 14 sessions and 847 events stored in Norbert. She runs `/plugin uninst
 
 #### 2: Reinstall after uninstall -- Priya reconnects
 
-After troubleshooting her Claude issue, Priya runs `/plugin install norbert@pmvanev-marketplace` again. The hooks and MCP server are re-registered. She starts a new Claude session and events flow again. Session count goes to 15. All previous data is preserved alongside new data.
+After troubleshooting her Claude issue, Priya runs `/plugin install norbert@pmvanev-plugins` again. The hooks and MCP server are re-registered. She starts a new Claude session and events flow again. Session count goes to 15. All previous data is preserved alongside new data.
 
 #### 3: App does not crash when plugin is removed mid-session
 
@@ -389,7 +389,7 @@ And the window displays the plugin install command for reconnection
 
 Given Priya previously uninstalled the Norbert plugin
 And her Norbert app has 14 stored sessions
-When she runs "/plugin install norbert@pmvanev-marketplace"
+When she runs "/plugin install norbert@pmvanev-plugins"
 And starts a new Claude Code session
 Then events flow to Norbert again
 And the session count becomes 15
