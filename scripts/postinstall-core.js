@@ -36,3 +36,14 @@ export function buildDownloadUrl(version, platform) {
 export function getInstallDirectory(homeDir) {
   return path.join(homeDir, ".norbert", "bin");
 }
+
+export function buildInstallSuccessMessage() {
+  return [
+    "",
+    "Norbert installed successfully!",
+    "",
+    "To connect to Claude Code:",
+    "  /plugin install norbert@pmvanev-marketplace",
+    "",
+  ].join("\n");
+}
