@@ -1,6 +1,6 @@
 {
   "update_check": {
-    "last_checked": "2026-03-08T18:43:06.376473+00:00",
+    "last_checked": "2026-03-09T20:10:32.443963+00:00",
     "skipped_versions": [],
     "frequency": "daily"
   },
@@ -10,7 +10,13 @@
     "reviewer_model": "sonnet",
     "review_enabled": true,
     "double_review": true,
-    "tdd_phases": ["PREPARE", "RED_ACCEPTANCE", "RED_UNIT", "GREEN", "COMMIT"],
+    "tdd_phases": [
+      "PREPARE",
+      "RED_ACCEPTANCE",
+      "RED_UNIT",
+      "GREEN",
+      "COMMIT"
+    ],
     "refactor_pass": true,
     "mutation_enabled": false
   }
