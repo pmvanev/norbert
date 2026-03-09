@@ -24,17 +24,6 @@ pub trait EventStore {
     fn get_latest_session(&self) -> Result<Option<Session>, String>;
 }
 
-/// Settings abstraction for Claude Code configuration management.
-///
-/// Driven port: the domain tells the adapter how to manage settings files.
-pub trait SettingsManager {
-    /// Merge managed settings into the Claude Code configuration.
-    fn merge_settings(&self) -> Result<(), String>;
-
-    /// Check whether managed settings are currently merged.
-    fn is_merged(&self) -> Result<bool, String>;
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -77,27 +66,6 @@ mod tests {
 
         fn get_latest_session(&self) -> Result<Option<Session>, String> {
             Ok(self.sessions.first().cloned())
-        }
-    }
-
-    /// Stub implementing SettingsManager for testing.
-    struct StubSettingsManager {
-        merged: bool,
-    }
-
-    impl StubSettingsManager {
-        fn new(merged: bool) -> Self {
-            StubSettingsManager { merged }
-        }
-    }
-
-    impl SettingsManager for StubSettingsManager {
-        fn merge_settings(&self) -> Result<(), String> {
-            Ok(())
-        }
-
-        fn is_merged(&self) -> Result<bool, String> {
-            Ok(self.merged)
         }
     }
 
@@ -154,21 +122,4 @@ mod tests {
         assert_eq!(latest.unwrap().id, "sess-latest");
     }
 
-    #[test]
-    fn settings_manager_stub_merge_succeeds() {
-        let manager = StubSettingsManager::new(false);
-        assert!(manager.merge_settings().is_ok());
-    }
-
-    #[test]
-    fn settings_manager_stub_reports_not_merged() {
-        let manager = StubSettingsManager::new(false);
-        assert!(!manager.is_merged().unwrap());
-    }
-
-    #[test]
-    fn settings_manager_stub_reports_merged() {
-        let manager = StubSettingsManager::new(true);
-        assert!(manager.is_merged().unwrap());
-    }
 }

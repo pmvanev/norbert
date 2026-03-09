@@ -24,9 +24,11 @@ const PROJECT_ROOT = resolve(__dirname, "../../..");
  */
 function sourceContains(searchTerm: string): boolean {
   try {
+    // Use forward slashes and explicit bash shell for Windows compatibility
+    const root = PROJECT_ROOT.replace(/\\/g, "/");
     execSync(
-      `grep -r "${searchTerm}" --include="*.ts" --include="*.tsx" --include="*.rs" --include="*.js" "${PROJECT_ROOT}/src" "${PROJECT_ROOT}/src-tauri/src" "${PROJECT_ROOT}/scripts" 2>/dev/null`,
-      { encoding: "utf-8" }
+      `grep -r "${searchTerm}" --include="*.ts" --include="*.tsx" --include="*.rs" --include="*.js" "${root}/src" "${root}/src-tauri/src" "${root}/scripts" 2>/dev/null`,
+      { encoding: "utf-8", shell: "bash" }
     );
     return true;
   } catch {
@@ -37,7 +39,7 @@ function sourceContains(searchTerm: string): boolean {
 
 // @walking_skeleton
 describe("App launches cleanly without any settings merge behavior", () => {
-  it.skip("no reference to run_settings_merge in startup code", () => {
+  it("no reference to run_settings_merge in startup code", () => {
     const libRs = readFileSync(
       resolve(PROJECT_ROOT, "src-tauri/src/lib.rs"),
       "utf-8"
@@ -47,19 +49,19 @@ describe("App launches cleanly without any settings merge behavior", () => {
 });
 
 describe("SettingsMergeAdapter no longer exists in the codebase", () => {
-  it.skip("no source file contains SettingsMergeAdapter", () => {
+  it("no source file contains SettingsMergeAdapter", () => {
     expect(sourceContains("SettingsMergeAdapter")).toBe(false);
   });
 });
 
 describe("run_settings_merge function no longer exists", () => {
-  it.skip("no source file contains run_settings_merge", () => {
+  it("no source file contains run_settings_merge", () => {
     expect(sourceContains("run_settings_merge")).toBe(false);
   });
 });
 
 describe("SettingsManager port trait no longer exists", () => {
-  it.skip("no source file contains SettingsManager trait", () => {
+  it("no source file contains SettingsManager trait", () => {
     expect(sourceContains("trait SettingsManager")).toBe(false);
   });
 });
@@ -91,19 +93,19 @@ describe("Settings merge domain functions are removed", () => {
 });
 
 describe("Domain constants used by the receiver are preserved", () => {
-  it.skip("HOOK_EVENT_NAMES is still defined", () => {
+  it("HOOK_EVENT_NAMES is still defined", () => {
     expect(sourceContains("HOOK_EVENT_NAMES")).toBe(true);
   });
 
-  it.skip("HOOK_PORT is still defined", () => {
+  it("HOOK_PORT is still defined", () => {
     expect(sourceContains("HOOK_PORT")).toBe(true);
   });
 
-  it.skip("build_hook_url is still available", () => {
+  it("build_hook_url is still available", () => {
     expect(sourceContains("build_hook_url")).toBe(true);
   });
 
-  it.skip("parse_event_type is still available", () => {
+  it("parse_event_type is still available", () => {
     expect(sourceContains("parse_event_type")).toBe(true);
   });
 });
@@ -132,7 +134,7 @@ describe("No restart banner logic remains in the frontend", () => {
 });
 
 describe("Settings adapter module declaration is removed", () => {
-  it.skip("no 'pub mod settings' in adapters module", () => {
+  it("no 'pub mod settings' in adapters module", () => {
     const adaptersRs = readFileSync(
       resolve(PROJECT_ROOT, "src-tauri/src/adapters/mod.rs"),
       "utf-8"

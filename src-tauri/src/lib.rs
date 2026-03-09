@@ -5,12 +5,11 @@ pub mod ports;
 use std::sync::Mutex;
 
 use adapters::db::SqliteEventStore;
-use adapters::settings::SettingsMergeAdapter;
 use domain::{
     build_status_with_session, format_tooltip, toggle_window_action, AppStatus,
     Session, WindowAction, APP_NAME, HOOK_PORT, VERSION,
 };
-use ports::{EventStore, SettingsManager};
+use ports::EventStore;
 use rusqlite::Connection;
 use tauri::Manager;
 use tauri_plugin_shell::ShellExt;
@@ -61,22 +60,6 @@ fn initialize_event_store() -> Result<SqliteEventStore, String> {
     SqliteEventStore::new(connection)
 }
 
-/// Run the first-launch settings merge.
-///
-/// Logs warnings on failure but does not prevent app startup.
-fn run_settings_merge() {
-    match SettingsMergeAdapter::with_default_paths() {
-        Ok(adapter) => {
-            if let Err(e) = adapter.merge_settings() {
-                eprintln!("norbert: Settings merge failed: {}", e);
-            }
-        }
-        Err(e) => {
-            eprintln!("norbert: Could not resolve settings paths: {}", e);
-        }
-    }
-}
-
 /// Spawn the hook-receiver sidecar process.
 ///
 /// The sidecar runs independently and survives window close events
@@ -101,7 +84,7 @@ fn spawn_hook_receiver_sidecar(app: &tauri::App) {
 
 /// Build and configure the Tauri application.
 ///
-/// This is the composition root: initializes the database, runs settings merge,
+/// This is the composition root: initializes the database,
 /// spawns the hook-receiver sidecar, and registers IPC commands.
 /// The library entry point called by the binary.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -125,9 +108,6 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .manage(app_state)
         .setup(move |app| {
-            // Run settings merge on first launch (non-blocking on failure).
-            run_settings_merge();
-
             // Spawn hook-receiver sidecar.
             spawn_hook_receiver_sidecar(app);
 
