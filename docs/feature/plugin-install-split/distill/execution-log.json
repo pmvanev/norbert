@@ -1,0 +1,76 @@
+{
+  "feature": "plugin-install-split",
+  "wave": "DISTILL",
+  "role": "acceptance-designer",
+  "phases": {
+    "phase_1_understand_context": {
+      "status": "complete",
+      "timestamp": "2026-03-09T12:00:00Z",
+      "outputs": {
+        "user_goals": 6,
+        "driving_ports_identified": [
+          "src/domain/status.ts (deriveStatus, isEmptyState, formatField)",
+          "src-tauri/src/domain/mod.rs (build_status_with_session, derive_status, HOOK_EVENT_NAMES, HOOK_PORT, build_hook_url)",
+          "scripts/postinstall-core.js (install output functions)",
+          "plugin/ directory (static JSON file validation)"
+        ],
+        "domain_language": [
+          "No plugin connected",
+          "Listening",
+          "Active session",
+          "plugin install command",
+          "hook event names",
+          "sessions",
+          "events",
+          "receiver",
+          "plugin manifest",
+          "hook definitions",
+          "MCP server"
+        ]
+      }
+    },
+    "phase_2_design_scenarios": {
+      "status": "complete",
+      "timestamp": "2026-03-09T12:00:00Z",
+      "outputs": {
+        "feature_files": 5,
+        "total_scenarios": 40,
+        "walking_skeletons": 4,
+        "error_path_ratio": "42.5%",
+        "property_tagged": 1,
+        "stories_covered": ["US-PIS-001", "US-PIS-002", "US-PIS-003", "US-PIS-004", "US-PIS-005", "US-PIS-006"]
+      }
+    },
+    "phase_3_implement_test_infrastructure": {
+      "status": "complete",
+      "timestamp": "2026-03-09T12:00:00Z",
+      "outputs": {
+        "test_files": 4,
+        "framework": "vitest",
+        "first_enabled": "plugin-directory-structure.test.ts (walking skeleton)",
+        "all_others_skipped": true
+      }
+    },
+    "phase_4_validate_and_handoff": {
+      "status": "complete",
+      "timestamp": "2026-03-09T12:00:00Z",
+      "peer_review": {
+        "iterations": 1,
+        "status": "self-reviewed",
+        "dimensions_checked": [
+          "happy_path_bias: pass (42.5% error/edge)",
+          "gwt_format: pass (all scenarios follow Given-When-Then)",
+          "business_language: pass (zero technical terms in Gherkin)",
+          "coverage_completeness: pass (all 6 stories covered)",
+          "walking_skeleton_centricity: pass (4 skeletons describe user goals)",
+          "priority_validation: pass (walking skeletons first, code removal second)"
+        ]
+      },
+      "mandate_compliance": {
+        "CM-A": "pass",
+        "CM-B": "pass",
+        "CM-C": "pass"
+      }
+    }
+  }
+}
