@@ -1,0 +1,46 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "type": "http",
+        "url": "http://localhost:3748/hooks/PreToolUse",
+        "async": true
+      }
+    ],
+    "PostToolUse": [
+      {
+        "type": "http",
+        "url": "http://localhost:3748/hooks/PostToolUse",
+        "async": true
+      }
+    ],
+    "SubagentStop": [
+      {
+        "type": "http",
+        "url": "http://localhost:3748/hooks/SubagentStop",
+        "async": true
+      }
+    ],
+    "Stop": [
+      {
+        "type": "http",
+        "url": "http://localhost:3748/hooks/Stop",
+        "async": true
+      }
+    ],
+    "SessionStart": [
+      {
+        "type": "http",
+        "url": "http://localhost:3748/hooks/SessionStart",
+        "async": true
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "type": "http",
+        "url": "http://localhost:3748/hooks/UserPromptSubmit",
+        "async": true
+      }
+    ]
+  }
+}
