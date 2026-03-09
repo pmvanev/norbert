@@ -91,18 +91,25 @@
 
 ## Installation & Setup Philosophy
 
-Norbert is designed to be invisible to install and immediate to use.
+Norbert is designed to be invisible to install and deliberate to connect. The app and the Claude Code integration are two independent concerns, installed separately so that each can be added, removed, or updated without affecting the other.
+
+**Step 1 — Install the app:**
 
 ```bash
-npm install -g norbert-cc
-norbert-cc
+npx github:pmvanev/norbert-cc
 ```
 
-On first launch, Norbert appears as a system tray icon, automatically patches `~/.claude/settings.json` to register its HTTP hooks (using a surgical merge that preserves all existing config), and begins receiving telemetry from Claude Code immediately. No Docker. No separate services to start. No configuration required. When Claude Code runs, Norbert listens.
+This installs the Norbert desktop app (Tauri binary, SQLite database, hook receiver sidecar, and UI) to `~/.norbert/`. On launch, Norbert appears as a system tray icon and the sidecar begins listening on `localhost:3748`. No Docker. No separate services to start. Critically, no other tool's configuration is touched — `~/.claude/settings.json` is never read or modified by the app install. Norbert runs independently of Claude Code.
 
-A backup of the original `settings.json` is written to `~/.norbert/settings.json.bak` before any changes are made.
+**Step 2 — Connect to Claude Code:**
 
-After the merge completes, Norbert displays a first-launch notification prompting the user to restart any running Claude Code sessions for the new hooks to take effect. The notification is shown both as a Windows notification center message and as a persistent banner inside the Norbert dashboard until Norbert receives its first hook event — at which point it automatically dismisses, confirming that Claude Code is hooked and data is flowing.
+```
+/plugin install norbert@pmvanev-marketplace
+```
+
+This uses Claude Code's `/plugin` command to install Norbert as a plugin from the marketplace. Claude's plugin framework registers the 6 async HTTP hooks and the MCP server through its own configuration management — no surgical JSON merging, no backup files, no risk of clobbering existing settings. When the plugin is installed and Claude Code runs, Norbert receives events automatically and transitions from "No plugin connected" to "Listening."
+
+The two steps are fully independent. The app runs standalone — useful for browsing historical sessions even when the plugin is disabled. The plugin can be installed or removed at any time via `/plugin install` and `/plugin uninstall` without affecting the app or its stored data. This separation means Norbert never modifies files it does not own.
 
 ---
 
@@ -1487,12 +1494,16 @@ For API users, Norbert queries the Anthropic Console usage and cost endpoints us
 
 ## Distribution
 
-### Install Method — `npx` from GitHub
+### Install Method — Two-Phase Install
 
-Norbert is distributed via `npx` directly from its GitHub repository. This is the canonical install command shown in the README:
+Norbert's install is split into two independent phases: app install (via `npx`) and Claude Code integration (via Claude's plugin framework). Each phase can be performed, updated, or reversed independently.
+
+#### Phase 1: App Install — `npx` from GitHub
+
+The Norbert desktop app is distributed via `npx` directly from its GitHub repository:
 
 ```bash
-npx github:your-org/norbert-cc
+npx github:pmvanev/norbert-cc
 ```
 
 This is the right approach for several reasons. Norbert's target audience — Claude Code developers — universally has Node installed, making `npx` a zero-friction prerequisite. The single command is copy-pasteable from the README and requires no explanation. It is entirely platform agnostic from the user's perspective: they run one command regardless of whether they are on macOS, Windows, or Linux.
@@ -1500,7 +1511,7 @@ This is the right approach for several reasons. Norbert's target audience — Cl
 Platform-specific binaries are unavoidable given the Tauri architecture, but they are handled invisibly. The `postinstall` script in `package.json` detects the user's OS and architecture at install time and downloads the appropriate pre-built binary from GitHub Releases:
 
 ```
-npx github:your-org/norbert-cc
+npx github:pmvanev/norbert-cc
   → postinstall runs
   → detects darwin-arm64 / darwin-x64 / win32-x64 / linux-x64
   → downloads norbert-v{version}-{platform}.tar.gz from GitHub Releases
@@ -1508,17 +1519,43 @@ npx github:your-org/norbert-cc
   → launches Norbert
 ```
 
-The user never sees or thinks about their platform. The complexity lives entirely in the postinstall script.
+The user never sees or thinks about their platform. The complexity lives entirely in the postinstall script. The app install does not read, modify, or back up `~/.claude/settings.json` — it touches only `~/.norbert/`.
 
 **Why not a curl-pipe-sh install script:** A curl one-liner (`curl -fsSL .../install.sh | sh`) was considered for its README appeal, but rejected because it requires platform detection logic in shell script — fragile, harder to maintain, and less familiar than npm conventions to the target audience. The `npx github:` approach achieves the same one-line README experience using tooling developers already trust.
 
-**Why not publish to the npm registry immediately:** Publishing to npm requires choosing and reserving a package name, setting up an npm organization, and maintaining a published package from day one. During early development, `npx github:your-org/norbert` sources the package directly from the GitHub repo — no registry involved. When Norbert is ready for wider distribution, `npm publish` promotes it to the registry and the install command becomes:
+**Why not publish to the npm registry immediately:** Publishing to npm requires choosing and reserving a package name, setting up an npm organization, and maintaining a published package from day one. During early development, `npx github:pmvanev/norbert` sources the package directly from the GitHub repo — no registry involved. When Norbert is ready for wider distribution, `npm publish` promotes it to the registry and the install command becomes:
 
 ```bash
 npx norbert-cc
 ```
 
 Nothing else changes — same `package.json`, same postinstall script, same binaries on GitHub Releases. The registry is just a different resolution mechanism for the same artifact. The transition is a single command and a README update.
+
+#### Phase 2: Plugin Install — Claude Plugin Marketplace
+
+Once the app is running, the user connects it to Claude Code by installing the Norbert plugin:
+
+```
+/plugin install norbert@pmvanev-marketplace
+```
+
+This uses Claude Code's native `/plugin` command to install the Norbert plugin from the marketplace hosted at `github.com/pmvanev/claude-marketplace`. Claude's plugin framework reads the plugin definition and registers:
+
+- **6 async HTTP hooks** (PreToolUse, PostToolUse, SubagentStop, Stop, SessionStart, UserPromptSubmit) pointing to `localhost:3748`
+- **1 MCP server** (`norbert` via stdio, command: `norbert-cc mcp`)
+
+The plugin source lives in the Norbert repository under `plugin/`, referenced from the marketplace catalog via `git-subdir`:
+
+```
+plugin/
+├── .claude-plugin/
+│   └── plugin.json          # Plugin metadata
+├── hooks/
+│   └── hooks.json           # 6 async HTTP hooks to localhost:3748
+└── .mcp.json                # norbert-cc MCP server
+```
+
+The plugin can be removed at any time with `/plugin uninstall norbert`, which cleanly removes all hook and MCP registrations from Claude's configuration without affecting the Norbert app or its stored data. This replaces the previous approach of surgically merging hook entries into `~/.claude/settings.json` — Claude's plugin framework handles its own configuration management, eliminating the need for backup files, merge logic, or first-launch notifications.
 
 ### Build Pipeline
 

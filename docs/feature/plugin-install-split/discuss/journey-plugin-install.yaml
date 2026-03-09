@@ -1,0 +1,271 @@
+journey:
+  name: "Plugin Install Split"
+  goal: "Install Norbert app and Claude Code integration as independent concerns"
+  persona: "Priya Chandrasekaran -- Claude Code power user, Windows 11, runs multi-agent sessions daily"
+
+  emotional_arc:
+    start: "Curious -- discovers Norbert, reads about two-step install"
+    middle: "Safe/Clear -- app installs cleanly, guides to plugin install"
+    end: "Satisfied -- events flowing through plugin framework"
+
+steps:
+  - id: 1
+    name: "Read README"
+    command: "Browse to GitHub repo"
+
+    tui_mockup: |
+      ## Quick Start
+      ### 1. Install the app
+      npx github:pmvanev/norbert-cc
+      ### 2. Connect to Claude Code
+      /plugin install norbert@pmvanev-marketplace
+
+    shared_artifacts:
+      - name: "app_install_command"
+        source: "README.md"
+        displayed_as: "npx github:pmvanev/norbert-cc"
+        consumers: ["README", "terminal output after install"]
+      - name: "plugin_install_command"
+        source: "README.md"
+        displayed_as: "/plugin install norbert@pmvanev-marketplace"
+        consumers: ["README", "Norbert app empty state", "terminal output after install"]
+
+    emotional_state:
+      entry: "Curious"
+      exit: "Clear -- understands two-step process"
+
+    integration_checkpoint: |
+      Install commands in README match actual commands in package.json and plugin.json
+
+    gherkin: |
+      Scenario: README shows two-step install
+        Given a user visits the Norbert GitHub repository
+        When they read the Quick Start section
+        Then they see the app install command "npx github:pmvanev/norbert-cc"
+        And they see the plugin install command "/plugin install norbert@pmvanev-marketplace"
+
+  - id: 2
+    name: "App Install"
+    command: "npx github:pmvanev/norbert-cc"
+
+    tui_mockup: |
+      $ npx github:pmvanev/norbert-cc
+
+      norbert v${version}
+      Downloading binary for ${platform}...
+      Installed to ~/.norbert/bin/norbert
+      Launching Norbert...
+
+      Norbert is running in the system tray.
+      To connect to Claude Code: /plugin install norbert@pmvanev-marketplace
+
+    shared_artifacts:
+      - name: "version"
+        source: "package.json"
+        displayed_as: "${version}"
+        consumers: ["install output", "tray tooltip", "app window title"]
+      - name: "install_path"
+        source: "postinstall script"
+        displayed_as: "~/.norbert/bin/"
+        consumers: ["install output", "app binary location"]
+      - name: "hook_port"
+        source: "plugin/hooks/hooks.json"
+        displayed_as: "3748"
+        consumers: ["app window status", "hook URLs in hooks.json", "sidecar startup"]
+
+    emotional_state:
+      entry: "Expectant"
+      exit: "Safe -- nothing outside ~/.norbert/ was touched"
+
+    integration_checkpoint: |
+      Postinstall does NOT call run_settings_merge().
+      No ~/.claude/settings.json modification.
+      No ~/.norbert/settings.json.bak created.
+      Terminal output shows plugin install hint.
+
+    gherkin: |
+      Scenario: App installs without modifying Claude settings
+        Given Priya Chandrasekaran has Claude Code configured with custom MCP servers
+        And her ~/.claude/settings.json contains her existing configuration
+        When she runs "npx github:pmvanev/norbert-cc"
+        Then the Norbert binary is installed to ~/.norbert/bin/
+        And the Norbert tray icon appears
+        And her ~/.claude/settings.json is unchanged
+        And no ~/.norbert/settings.json.bak file is created
+
+  - id: 3
+    name: "App Launch Standalone"
+    command: "Click tray icon"
+
+    tui_mockup: |
+      +-- Norbert v${version} -----------------------------------------+
+      |                                                                 |
+      |  Status: No plugin connected                                    |
+      |  Port:   ${hook_port} (listening)                               |
+      |                                                                 |
+      |  +-----------------------------------------------------------+  |
+      |  |  Connect Norbert to Claude Code:                          |  |
+      |  |  /plugin install norbert@pmvanev-marketplace              |  |
+      |  |  Run this command in any Claude Code session.             |  |
+      |  +-----------------------------------------------------------+  |
+      |                                                                 |
+      |  Sessions: 0    Events: 0                                       |
+      +------------------------------------------------------------------+
+
+    shared_artifacts:
+      - name: "plugin_install_command"
+        source: "README.md"
+        displayed_as: "/plugin install norbert@pmvanev-marketplace"
+        consumers: ["Norbert app empty state", "README", "terminal output"]
+
+    emotional_state:
+      entry: "Exploring"
+      exit: "Clear -- knows what to do next"
+
+    integration_checkpoint: |
+      App shows helpful empty state, not broken state.
+      Plugin install command displayed matches actual marketplace command.
+      Hook port shown matches sidecar port.
+
+    gherkin: |
+      Scenario: App shows helpful empty state without plugin
+        Given Norbert is installed and running
+        And no Norbert plugin is installed in Claude Code
+        When Priya opens the Norbert window
+        Then the status shows "No plugin connected"
+        And the window displays the plugin install command
+        And session count shows 0
+        And event count shows 0
+
+  - id: 4
+    name: "Plugin Install"
+    command: "/plugin install norbert@pmvanev-marketplace"
+
+    tui_mockup: |
+      > /plugin install norbert@pmvanev-marketplace
+
+      Installing plugin norbert from pmvanev-marketplace...
+      Registered 6 hooks (async HTTP to localhost:3748)
+      Registered MCP server: norbert (stdio)
+      Plugin installed successfully.
+
+    shared_artifacts:
+      - name: "hook_port"
+        source: "plugin/hooks/hooks.json"
+        displayed_as: "3748"
+        consumers: ["hook URLs", "sidecar port", "app status display"]
+      - name: "hook_count"
+        source: "plugin/hooks/hooks.json"
+        displayed_as: "6"
+        consumers: ["plugin install output", "hooks.json entries"]
+      - name: "mcp_server_name"
+        source: "plugin/.mcp.json"
+        displayed_as: "norbert"
+        consumers: ["plugin install output", "MCP tool call prefix"]
+
+    emotional_state:
+      entry: "Deliberate"
+      exit: "Confident -- Claude's framework manages the integration"
+
+    integration_checkpoint: |
+      Plugin hooks.json contains exactly 6 hook entries pointing to localhost:3748.
+      Plugin .mcp.json contains norbert MCP server with stdio transport.
+      Plugin .claude-plugin/plugin.json has correct metadata.
+
+    gherkin: |
+      Scenario: Plugin installs hooks and MCP server via Claude framework
+        Given Priya has Norbert app running with the sidecar listening on port 3748
+        When she runs "/plugin install norbert@pmvanev-marketplace" in Claude Code
+        Then Claude registers 6 async HTTP hooks pointing to localhost:3748
+        And Claude registers the norbert MCP server with stdio transport
+        And the plugin install reports success
+
+  - id: 5
+    name: "First Session with Plugin"
+    command: "Start Claude Code session normally"
+
+    tui_mockup: |
+      +-- Norbert v${version} -----------------------------------------+
+      |                                                                 |
+      |  Status: Listening                                              |
+      |  Port:   ${hook_port} (receiving)                               |
+      |                                                                 |
+      |  Sessions: 1    Events: ${event_count}                          |
+      |                                                                 |
+      |  Latest: ${session_id} (active)                                 |
+      |    Started: 2026-03-09 14:32:01                                 |
+      +------------------------------------------------------------------+
+
+    shared_artifacts:
+      - name: "session_id"
+        source: "SQLite sessions table"
+        displayed_as: "${session_id}"
+        consumers: ["app window", "session list"]
+      - name: "event_count"
+        source: "SQLite events table (COUNT)"
+        displayed_as: "${event_count}"
+        consumers: ["app window status"]
+
+    emotional_state:
+      entry: "Expectant"
+      exit: "Satisfied -- full pipeline proven"
+
+    integration_checkpoint: |
+      Hook events flow from Claude Code through plugin hooks to sidecar to SQLite.
+      App detects incoming events and transitions status automatically.
+      No manual restart or refresh needed.
+
+    gherkin: |
+      Scenario: App receives events after plugin is connected
+        Given Priya has the Norbert app running
+        And the Norbert plugin is installed in Claude Code
+        When she starts a Claude Code session and submits a prompt
+        Then the Norbert app status transitions to "Listening"
+        And the session count increments
+        And the event count increments as events arrive
+
+  - id: 6
+    name: "Plugin Uninstall"
+    command: "/plugin uninstall norbert"
+
+    tui_mockup: |
+      > /plugin uninstall norbert
+
+      Removing plugin norbert...
+      Removed 6 hooks
+      Removed MCP server: norbert
+      Plugin uninstalled.
+
+    shared_artifacts: []
+
+    emotional_state:
+      entry: "Deliberate"
+      exit: "Relieved -- clean removal, data preserved"
+
+    integration_checkpoint: |
+      All 6 hooks removed from Claude configuration.
+      MCP server registration removed.
+      Norbert app still running, historical data intact.
+      No orphaned entries in Claude settings.
+
+    gherkin: |
+      Scenario: Plugin uninstall removes hooks without affecting app data
+        Given Priya has the Norbert plugin installed in Claude Code
+        And her Norbert app has 14 sessions and 847 events stored
+        When she runs "/plugin uninstall norbert" in Claude Code
+        Then all 6 hooks are removed from Claude's configuration
+        And the norbert MCP server is deregistered
+        And the Norbert app still shows 14 sessions and 847 events
+        And the app status returns to "No plugin connected"
+
+integration_validation:
+  shared_artifact_consistency:
+    - artifact: "hook_port"
+      must_match_across: [2, 3, 4, 5]
+      failure_message: "Hook port in hooks.json must match sidecar startup port and app display"
+    - artifact: "plugin_install_command"
+      must_match_across: [1, 2, 3]
+      failure_message: "Plugin install command must be identical in README, terminal output, and app empty state"
+    - artifact: "version"
+      must_match_across: [2, 3, 5]
+      failure_message: "Version in install output, tray tooltip, and window title must match package.json"
