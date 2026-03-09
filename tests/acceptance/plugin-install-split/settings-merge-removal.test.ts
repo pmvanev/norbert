@@ -67,27 +67,27 @@ describe("SettingsManager port trait no longer exists", () => {
 });
 
 describe("Settings merge domain functions are removed", () => {
-  it.skip("merge_hooks_into_config does not exist", () => {
+  it("merge_hooks_into_config does not exist", () => {
     expect(sourceContains("merge_hooks_into_config")).toBe(false);
   });
 
-  it.skip("hooks_are_merged does not exist", () => {
+  it("hooks_are_merged does not exist", () => {
     expect(sourceContains("hooks_are_merged")).toBe(false);
   });
 
-  it.skip("build_hooks_only_config does not exist", () => {
+  it("build_hooks_only_config does not exist", () => {
     expect(sourceContains("build_hooks_only_config")).toBe(false);
   });
 
-  it.skip("build_hook_entry does not exist", () => {
+  it("build_hook_entry does not exist", () => {
     expect(sourceContains("build_hook_entry")).toBe(false);
   });
 
-  it.skip("build_hooks_object does not exist", () => {
+  it("build_hooks_object does not exist", () => {
     expect(sourceContains("build_hooks_object")).toBe(false);
   });
 
-  it.skip("MergeOutcome does not exist", () => {
+  it("MergeOutcome does not exist", () => {
     expect(sourceContains("MergeOutcome")).toBe(false);
   });
 });
@@ -111,7 +111,7 @@ describe("Domain constants used by the receiver are preserved", () => {
 });
 
 describe("ADR-006 is marked as superseded", () => {
-  it.skip("ADR-006 status shows Superseded", () => {
+  it("ADR-006 status shows Superseded", () => {
     const adrPath = resolve(
       PROJECT_ROOT,
       "docs/adrs/ADR-006-settings-merge-strategy.md"

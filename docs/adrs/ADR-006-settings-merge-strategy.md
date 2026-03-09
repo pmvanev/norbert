@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Superseded by Claude plugin framework (ADR-007). Hook registration now handled by Claude Code's /plugin install command.
 
 ## Context
 
