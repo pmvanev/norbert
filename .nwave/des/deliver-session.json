@@ -1,8 +1,0 @@
-{
-  "feature_id": "walking-skeleton",
-  "started_at": "2026-03-08T20:00:00Z",
-  "paradigm": "functional",
-  "crafter": "nw-functional-software-crafter",
-  "rigor_profile": "thorough",
-  "mutation_strategy": "per-feature"
-}

@@ -7,7 +7,7 @@ use std::sync::Mutex;
 use adapters::db::SqliteEventStore;
 use adapters::settings::SettingsMergeAdapter;
 use domain::{
-    build_status, build_status_with_session, format_tooltip, toggle_window_action, AppStatus,
+    build_status_with_session, format_tooltip, toggle_window_action, AppStatus,
     Session, WindowAction, APP_NAME, HOOK_PORT, VERSION,
 };
 use ports::{EventStore, SettingsManager};
@@ -134,10 +134,7 @@ pub fn run() {
             let icon = app
                 .default_window_icon()
                 .cloned()
-                .unwrap_or_else(|| {
-                    tauri::image::Image::from_bytes(include_bytes!("../icons/32x32.png"))
-                        .expect("failed to load tray icon from embedded bytes")
-                });
+                .expect("default window icon must be set in tauri.conf.json");
             let _tray = tauri::tray::TrayIconBuilder::new()
                 .icon(icon)
                 .tooltip(&tooltip)
@@ -175,7 +172,7 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use domain::initial_status;
+    use domain::{build_status, initial_status};
 
     #[test]
     fn version_is_semver() {

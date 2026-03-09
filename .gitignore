@@ -21,3 +21,7 @@ Thumbs.db
 
 # Tauri
 src-tauri/gen/
+
+# Sidecar placeholder binaries (real binary built by CI or postinstall)
+src-tauri/norbert-hook-receiver-*.exe
+src-tauri/binaries/

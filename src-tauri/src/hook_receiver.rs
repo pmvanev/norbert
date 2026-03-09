@@ -5,7 +5,7 @@
 /// This is a separate binary target sharing the same crate as the Tauri app.
 
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use axum::{
     extract::{Path, State},
@@ -20,8 +20,12 @@ use norbert_lib::ports::EventStore;
 use rusqlite::Connection;
 
 /// Shared application state holding the event store.
+///
+/// Wraps SqliteEventStore in a Mutex because rusqlite::Connection
+/// is Send but not Sync. The Mutex ensures safe concurrent access
+/// from multiple HTTP request handlers.
 struct AppState {
-    event_store: SqliteEventStore,
+    event_store: Mutex<SqliteEventStore>,
 }
 
 /// Handle POST /hooks/:event_type.
@@ -63,7 +67,8 @@ async fn handle_hook_event(
         received_at,
     };
 
-    match state.event_store.write_event(&hook_event) {
+    let store = state.event_store.lock().unwrap();
+    match store.write_event(&hook_event) {
         Ok(()) => (StatusCode::OK, "OK".to_string()),
         Err(e) => {
             eprintln!("Failed to persist event: {}", e);
@@ -108,7 +113,9 @@ async fn main() {
         }
     };
 
-    let state = Arc::new(AppState { event_store });
+    let state = Arc::new(AppState {
+        event_store: Mutex::new(event_store),
+    });
     let app = build_router(state);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], HOOK_PORT));
@@ -146,7 +153,9 @@ mod tests {
             Connection::open_in_memory().expect("Failed to open in-memory database");
         let event_store =
             SqliteEventStore::new(conn).expect("Failed to initialize schema");
-        Arc::new(AppState { event_store })
+        Arc::new(AppState {
+            event_store: Mutex::new(event_store),
+        })
     }
 
     #[tokio::test]
@@ -209,7 +218,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
 
         // Verify event was persisted
-        let count = state.event_store.get_event_count().unwrap();
+        let count = state.event_store.lock().unwrap().get_event_count().unwrap();
         assert_eq!(count, 1, "Event should be persisted before acknowledgment");
     }
 
@@ -229,7 +238,7 @@ mod tests {
 
         let _response = app.oneshot(request).await.unwrap();
 
-        let count = state.event_store.get_event_count().unwrap();
+        let count = state.event_store.lock().unwrap().get_event_count().unwrap();
         assert_eq!(count, 0, "No events should be stored for invalid types");
     }
 
@@ -250,7 +259,7 @@ mod tests {
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let count = state.event_store.get_event_count().unwrap();
+        let count = state.event_store.lock().unwrap().get_event_count().unwrap();
         assert_eq!(count, 0, "No events should be stored when session_id is missing");
     }
 
@@ -298,7 +307,7 @@ mod tests {
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let sessions = state.event_store.get_sessions().unwrap();
+        let sessions = state.event_store.lock().unwrap().get_sessions().unwrap();
         assert_eq!(sessions.len(), 1);
         assert_eq!(sessions[0].id, "sess-attribution-test");
     }

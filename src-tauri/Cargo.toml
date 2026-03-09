@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Local-first observability and configuration management for Claude Code"
 authors = ["pmvanev"]
 edition = "2021"
+default-run = "norbert"
 
 [lib]
 name = "norbert_lib"
