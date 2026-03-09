@@ -1,0 +1,73 @@
+handoff:
+  from: solution-architect (DESIGN wave)
+  to: acceptance-designer (DISTILL wave)
+  feature: plugin-install-split
+  date: 2026-03-09
+
+  architecture_artifacts:
+    - path: docs/feature/plugin-install-split/design/architecture.md
+      content: "C4 diagrams (L1+L2), component boundary changes, plugin directory structure, status state machine, integration patterns, quality attributes, rejected alternatives"
+    - path: docs/feature/plugin-install-split/design/roadmap.yaml
+      content: "5 steps across 3 phases: plugin structure, merge code removal, standalone mode"
+    - path: docs/adrs/ADR-007-two-phase-installation.md
+      content: "Decision to split install into app + plugin phases using Claude's plugin framework"
+
+  adr_changes:
+    - ADR-006: "Status changed to Superseded (change included in step 02-02)"
+    - ADR-007: "New -- Two-Phase Installation"
+
+  discuss_artifacts_consumed:
+    - docs/feature/plugin-install-split/discuss/user-stories.md
+    - docs/feature/plugin-install-split/discuss/jtbd-analysis.md
+    - docs/feature/plugin-install-split/discuss/journey-plugin-install.feature
+    - docs/feature/plugin-install-split/discuss/shared-artifacts-registry.md
+    - docs/feature/plugin-install-split/discuss/dor-validation.md
+
+  story_to_step_mapping:
+    US-PIS-001: ["03-01", "03-02"]  # App install without Claude integration
+    US-PIS-002: ["01-01"]           # Plugin directory structure
+    US-PIS-003: ["02-01", "02-02"]  # Remove settings merge code
+    US-PIS-004: []                  # Plugin install -- handled by Claude framework, no Norbert code
+    US-PIS-005: []                  # Plugin uninstall -- handled by Claude framework, no Norbert code
+    US-PIS-006: ["03-01"]           # App functions without plugin
+
+  key_decisions:
+    - "'No plugin connected' status derived from session_count==0 AND event_count==0 -- no explicit plugin detection handshake"
+    - "build_hook_url() and HOOK_EVENT_NAMES preserved despite merge removal -- used by sidecar and plugin validation"
+    - "Plugin install command is shared artifact appearing in 3 locations -- single source enforcement needed"
+    - "US-PIS-004 and US-PIS-005 require no Norbert code changes -- Claude framework handles install/uninstall lifecycle"
+
+  development_paradigm: functional
+  mutation_testing: per-feature
+
+  code_removal_scope:
+    rust_lines_removed: ~550  # adapter + domain merge functions + tests
+    ts_lines_removed: ~15     # restart banner logic
+    files_deleted:
+      - src-tauri/src/adapters/settings/mod.rs
+
+  code_addition_scope:
+    new_files:
+      - plugin/.claude-plugin/plugin.json
+      - plugin/hooks/hooks.json
+      - plugin/.mcp.json
+    modified_files:
+      - src-tauri/src/lib.rs
+      - src-tauri/src/domain/mod.rs
+      - src-tauri/src/ports/mod.rs
+      - src-tauri/src/adapters/mod.rs
+      - src/App.tsx
+      - src/domain/status.ts
+      - scripts/postinstall.js
+      - docs/adrs/ADR-006-settings-merge-strategy.md
+
+  shared_artifacts_requiring_consistency:
+    - name: hook_port
+      value: 3748
+      locations: ["plugin/hooks/hooks.json", "src-tauri/src/domain/mod.rs", "hook_receiver.rs"]
+    - name: plugin_install_command
+      value: "/plugin install norbert@pmvanev-marketplace"
+      locations: ["postinstall.js", "App.tsx/status.ts", "README.md"]
+    - name: hook_event_names
+      value: ["PreToolUse", "PostToolUse", "SubagentStop", "Stop", "SessionStart", "UserPromptSubmit"]
+      locations: ["plugin/hooks/hooks.json", "src-tauri/src/domain/mod.rs"]

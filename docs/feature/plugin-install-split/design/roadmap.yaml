@@ -1,0 +1,99 @@
+roadmap:
+  feature: plugin-install-split
+  paradigm: functional
+  architecture: modular-monolith-ports-and-adapters
+  estimated_production_files: 10
+  # Files: plugin.json, hooks.json, .mcp.json, domain/mod.rs, lib.rs,
+  #        adapters/mod.rs, adapters/settings/mod.rs (deleted), ports/mod.rs,
+  #        App.tsx, status.ts
+  # postinstall.js also touched but minor
+
+phases:
+  "01":
+    title: "Plugin directory structure"
+    steps:
+      "01-01":
+        title: "Create plugin package files"
+        description: >
+          Create plugin/.claude-plugin/plugin.json, plugin/hooks/hooks.json,
+          and plugin/.mcp.json with correct metadata, 6 async HTTP hooks,
+          and MCP server definition.
+        acceptance_criteria:
+          - "plugin.json contains name 'norbert' and version matching package.json"
+          - "hooks.json defines exactly 6 hooks, all async HTTP to localhost:3748"
+          - ".mcp.json defines norbert server with stdio transport, command norbert-cc"
+          - "All hook URLs use port matching HOOK_PORT domain constant (3748)"
+          - "Hook event names match HOOK_EVENT_NAMES domain constant"
+        architectural_constraints:
+          - "Port 3748 is shared artifact -- must match domain constant"
+          - "Event names derived from HOOK_EVENT_NAMES -- single source of truth"
+
+  "02":
+    title: "Remove settings merge code"
+    steps:
+      "02-01":
+        title: "Remove settings merge from startup and adapters"
+        description: >
+          Remove run_settings_merge() call from .setup(), delete
+          SettingsMergeAdapter, SettingsManager port, settings adapter module,
+          and all settings merge domain functions. Keep HOOK_EVENT_NAMES,
+          HOOK_PORT, build_hook_url, parse_event_type.
+        acceptance_criteria:
+          - "No reference to SettingsMergeAdapter exists in codebase"
+          - "No reference to run_settings_merge exists in codebase"
+          - "No reference to SettingsManager port trait exists in codebase"
+          - "App compiles and all remaining tests pass"
+          - "HOOK_EVENT_NAMES and HOOK_PORT constants still present"
+        architectural_constraints:
+          - "Domain functions used by sidecar must NOT be removed"
+          - "build_hook_url preserved -- used by plugin validation"
+
+      "02-02":
+        title: "Supersede ADR-006 and remove settings merge domain functions"
+        description: >
+          Remove merge_hooks_into_config, hooks_are_merged, build_hooks_only_config,
+          build_hook_entry, build_hooks_object, build_merged_config,
+          build_merged_hooks, MergeOutcome. Update ADR-006 status to Superseded.
+        acceptance_criteria:
+          - "None of the settings merge domain functions exist in codebase"
+          - "MergeOutcome type removed"
+          - "ADR-006 status reads 'Superseded' with reference to plugin framework"
+          - "All remaining tests pass"
+
+  "03":
+    title: "App standalone mode"
+    steps:
+      "03-01":
+        title: "'No plugin connected' status and empty state UI"
+        description: >
+          Add 'No plugin connected' status when session_count=0 AND
+          event_count=0. Replace restart banner with plugin install
+          hint card. Remove shouldShowRestartBanner and bannerWasShown state.
+        acceptance_criteria:
+          - "App displays 'No plugin connected' when no events ever received"
+          - "Plugin install command displayed prominently in empty state"
+          - "No restart banner or shouldShowRestartBanner function in codebase"
+          - "Status transitions to 'Listening' when events arrive (no restart needed)"
+          - "Historical sessions browsable without active plugin"
+        architectural_constraints:
+          - "Status derivation remains pure function in domain layer"
+          - "Plugin install command string is shared artifact -- single source"
+
+      "03-02":
+        title: "Postinstall terminal output with plugin hint"
+        description: >
+          Add plugin install command to terminal output after successful
+          binary download. Show clear two-step guidance.
+        acceptance_criteria:
+          - "Terminal output includes 'To connect to Claude Code:' after install"
+          - "Terminal output includes '/plugin install norbert@pmvanev-marketplace'"
+          - "No settings merge or restart message in terminal output"
+
+validation:
+  quality_gates:
+    - "No SettingsMergeAdapter, SettingsManager, or merge functions in codebase"
+    - "Plugin files pass schema validation for Claude framework"
+    - "App compiles and all tests pass after all removals"
+    - "Sidecar still binds to port 3748 and accepts all 6 event types"
+    - "Empty state UI shows plugin install guidance, not error state"
+  step_ratio: 1.0  # 5 steps / 10 production files = 0.5 (well within 2.5 limit)
