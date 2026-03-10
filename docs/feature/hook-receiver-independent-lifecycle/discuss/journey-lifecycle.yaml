@@ -1,0 +1,141 @@
+journey:
+  name: "Hook Receiver Independent Lifecycle"
+  goal: "Make hook receiver run independently of the GUI with its own lifecycle"
+  persona: "Phil -- solo developer using Norbert to observe Claude Code sessions on Windows 11"
+
+  emotional_arc:
+    start: "Confident -- install confirms startup registration"
+    middle: "Trusting/invisible -- hook receiver works silently in background"
+    end: "Confident -- GUI shows complete data including events captured while GUI was closed"
+
+  job_stories:
+    - id: "JS-1"
+      ref: "Always-On Data Collection"
+    - id: "JS-2"
+      ref: "Singleton Hook Receiver"
+    - id: "JS-3"
+      ref: "Seamless Install-to-Running"
+
+steps:
+  - id: 1
+    name: "Install Registers Startup"
+    action: "postinstall.js registers Windows Task Scheduler task"
+
+    shared_artifacts:
+      - name: "hook_receiver_binary_path"
+        source: "~/.norbert/bin/norbert-hook-receiver.exe"
+        displayed_as: "${HOOK_RECEIVER_PATH}"
+        consumers:
+          - "postinstall.js (copies binary)"
+          - "Task Scheduler task (launch target)"
+
+      - name: "task_scheduler_task_name"
+        source: "postinstall.js constant"
+        displayed_as: "${TASK_NAME}"
+        consumers:
+          - "postinstall.js (creates/updates task)"
+          - "uninstall script (removes task, future)"
+
+    emotional_state:
+      entry: "Expectant -- install is running"
+      exit: "Confident -- clear message confirms startup registration"
+
+    integration_checkpoint: |
+      Task Scheduler task exists with correct binary path.
+      Task is configured for user logon trigger.
+      Re-running postinstall does not create duplicate tasks.
+
+  - id: 2
+    name: "System Boot Starts Hook Receiver"
+    action: "Task Scheduler launches norbert-hook-receiver.exe at user logon"
+
+    shared_artifacts:
+      - name: "hook_port"
+        source: "src-tauri/src/domain/mod.rs (HOOK_PORT constant)"
+        displayed_as: "${HOOK_PORT}"
+        consumers:
+          - "hook_receiver.rs (bind address)"
+          - "Claude Code hooks config (target URL)"
+          - "GUI status display"
+
+      - name: "database_path"
+        source: "adapters::db::resolve_database_path()"
+        displayed_as: "${DB_PATH}"
+        consumers:
+          - "hook_receiver.rs (write events)"
+          - "lib.rs GUI (read events)"
+
+    emotional_state:
+      entry: "Unaware -- system is booting"
+      exit: "Unaware -- hook receiver started silently"
+
+    integration_checkpoint: |
+      Hook receiver process is running after login.
+      Port 3748 is bound and accepting connections.
+      If port already in use, process exits cleanly (no crash, no error dialog).
+
+  - id: 3
+    name: "Always-On Collection"
+    action: "Hook receiver accepts HTTP hooks and writes to SQLite"
+
+    shared_artifacts:
+      - name: "database_path"
+        source: "adapters::db::resolve_database_path()"
+        displayed_as: "${DB_PATH}"
+        consumers:
+          - "hook_receiver.rs (writer)"
+          - "lib.rs GUI (reader)"
+
+    emotional_state:
+      entry: "Invisible -- background operation"
+      exit: "Invisible -- data accumulates silently"
+
+    integration_checkpoint: |
+      Events written to SQLite are immediately readable by GUI.
+      WAL mode allows concurrent read (GUI) and write (receiver).
+
+  - id: 4
+    name: "GUI Opens as Viewer"
+    action: "User launches norbert.exe, reads from shared database"
+
+    shared_artifacts:
+      - name: "database_path"
+        source: "adapters::db::resolve_database_path()"
+        displayed_as: "${DB_PATH}"
+        consumers:
+          - "lib.rs GUI (read-only connection)"
+
+    emotional_state:
+      entry: "Curious -- what happened while I was away?"
+      exit: "Confident -- complete session history visible, including pre-GUI events"
+
+    integration_checkpoint: |
+      GUI does NOT spawn hook receiver sidecar.
+      GUI displays events that were captured before GUI was opened.
+      GUI shows hook receiver health status.
+
+  - id: 5
+    name: "GUI Closes, Collection Continues"
+    action: "User closes GUI, hook receiver remains running"
+
+    emotional_state:
+      entry: "Done reviewing -- closing GUI"
+      exit: "Trusting -- data collection continues without GUI"
+
+    integration_checkpoint: |
+      Closing GUI does not affect hook receiver process.
+      Hook receiver continues writing events after GUI exit.
+
+integration_validation:
+  shared_artifact_consistency:
+    - artifact: "database_path"
+      must_match_across: [1, 2, 3, 4]
+      failure_message: "Hook receiver and GUI must use identical database path resolution"
+
+    - artifact: "hook_port"
+      must_match_across: [2, 3, 4]
+      failure_message: "Port constant must be consistent between receiver, Claude Code config, and GUI display"
+
+    - artifact: "hook_receiver_binary_path"
+      must_match_across: [1, 2]
+      failure_message: "Postinstall must copy binary to same path that Task Scheduler references"

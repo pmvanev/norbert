@@ -1,0 +1,51 @@
+review_id: "req_rev_20260310_001"
+reviewer: "product-owner (review mode)"
+artifact: "docs/feature/hook-receiver-independent-lifecycle/discuss/user-stories.md"
+iteration: 1
+
+strengths:
+  - "All three stories have clear problem statements rooted in observable user pain (data loss, port conflicts, manual management)"
+  - "Domain examples use real persona (Phil), real file paths, real port numbers -- no generic data"
+  - "Acceptance criteria are outcome-focused, not implementation-prescriptive"
+  - "Stories are well-sized: 3-4 scenarios each, 0.5-1 day estimated effort"
+  - "Technical notes reference specific code locations for implementer context without prescribing solutions"
+  - "Dependency chain is clear and execution order is explicit"
+  - "Idempotency requirement for startup registration is captured as a first-class scenario"
+  - "Graceful degradation path for permission failures prevents install breakage"
+
+issues_identified:
+  confirmation_bias:
+    - issue: "Task Scheduler is assumed as the startup mechanism without documenting considered alternatives"
+      severity: "low"
+      location: "US-HRIL-01"
+      recommendation: "Add brief note that Task Scheduler was chosen over Startup folder shortcut and Windows Service. This is acceptable given the feature context already documents this as a decision point, but a one-line rationale in technical notes would strengthen traceability."
+
+  completeness_gaps:
+    - issue: "No uninstall/cleanup story for removing the Task Scheduler task"
+      severity: "medium"
+      location: "Feature level"
+      recommendation: "Acknowledged in JTBD analysis (Job Map step 8 -- Conclude) as future work. This is acceptable for the current scope but should be tracked as a follow-up story."
+
+    - issue: "US-HRIL-03 does not address what happens if the hook receiver is not running AND the GUI used to be the way to start it"
+      severity: "low"
+      location: "US-HRIL-03, example 2"
+      recommendation: "Example 2 covers this scenario (GUI opens, no receiver, no data). The transition period between old behavior (GUI spawns sidecar) and new behavior (independent lifecycle) is implicitly handled by the install order. Consider adding a note that users who update mid-session should reboot or manually start the receiver."
+
+  clarity_issues: []
+
+  testability_concerns:
+    - issue: "Property scenario for resource footprint specifies 'below 20 MB' and 'below 1% CPU' without measurement methodology"
+      severity: "low"
+      location: "journey-lifecycle.feature, @property scenario"
+      recommendation: "These thresholds are reasonable for a Rust/tokio idle process. Measurement methodology can be defined in DESIGN wave. No action needed at requirements level."
+
+  priority_validation:
+    q1_largest_bottleneck: "YES"
+    q2_simple_alternatives: "ADEQUATE"
+    q3_constraint_prioritization: "CORRECT"
+    q4_data_justified: "JUSTIFIED"
+    verdict: "PASS"
+
+approval_status: "approved"
+critical_issues_count: 0
+high_issues_count: 0
