@@ -1,5 +1,11 @@
 #!/usr/bin/env node
 
+// Skip postinstall in CI — the build creates the binary, not downloads it
+if (process.env.CI) {
+  console.log("CI detected, skipping postinstall binary download.");
+  process.exit(0);
+}
+
 import { createWriteStream, mkdirSync, existsSync, unlinkSync, renameSync, chmodSync } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import { createGunzip } from "node:zlib";
