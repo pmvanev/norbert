@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "norbert": {
-      "type": "stdio",
-      "command": "norbert-cc",
-      "args": ["mcp"]
-    }
-  }
-}
