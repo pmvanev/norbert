@@ -7,7 +7,7 @@ import { existsSync } from "node:fs";
 
 const installDir = path.join(os.homedir(), ".norbert", "bin");
 const isWindows = process.platform === "win32";
-const binaryName = isWindows ? "norbert-cc.exe" : "norbert-cc";
+const binaryName = isWindows ? "norbert.exe" : "norbert";
 const binaryPath = path.join(installDir, binaryName);
 
 if (!existsSync(binaryPath)) {

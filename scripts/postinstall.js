@@ -6,7 +6,8 @@ import { createGunzip } from "node:zlib";
 import { extract } from "tar";
 import path from "node:path";
 import os from "node:os";
-import { detectPlatform, buildDownloadUrl, getInstallDirectory, buildInstallSuccessMessage } from "./postinstall-core.js";
+import { execSync } from "node:child_process";
+import { detectPlatform, buildDownloadUrl, getInstallDirectory, getStartMenuShortcutPath, buildInstallSuccessMessage } from "./postinstall-core.js";
 
 async function downloadFile(url, destPath) {
   const tempPath = `${destPath}.tmp`;
@@ -77,15 +78,31 @@ async function postinstall() {
     // Clean up the archive
     unlinkSync(archivePath);
 
-    // Make binary executable on Unix
+    // Make binaries executable on Unix
     if (platform.os !== "win32") {
-      const binaryPath = path.join(installDir, "norbert-cc");
-      if (existsSync(binaryPath)) {
-        chmodSync(binaryPath, 0o755);
+      for (const name of ["norbert", "norbert-hook-receiver"]) {
+        const binPath = path.join(installDir, name);
+        if (existsSync(binPath)) {
+          chmodSync(binPath, 0o755);
+        }
       }
     }
 
     console.log(`Binary installed to: ${installDir}`);
+
+    // Create Start Menu shortcut on Windows
+    if (platform.os === "win32") {
+      try {
+        const shortcutPath = getStartMenuShortcutPath(process.env.APPDATA);
+        const targetPath = path.join(installDir, "norbert.exe");
+        const ps = `$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('${shortcutPath}'); $s.TargetPath = '${targetPath}'; $s.WorkingDirectory = '${installDir}'; $s.Description = 'Norbert - Local-first observability for Claude Code'; $s.Save()`;
+        execSync(`powershell -NoProfile -Command "${ps}"`, { stdio: "ignore" });
+        console.log(`Start Menu shortcut created: ${shortcutPath}`);
+      } catch (_shortcutError) {
+        console.warn("Could not create Start Menu shortcut (non-fatal).");
+      }
+    }
+
     console.log(buildInstallSuccessMessage());
   } catch (error) {
     // Clean up any partial files on failure

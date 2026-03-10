@@ -37,6 +37,10 @@ export function getInstallDirectory(homeDir) {
   return path.join(homeDir, ".norbert", "bin");
 }
 
+export function getStartMenuShortcutPath(appDataDir) {
+  return path.join(appDataDir, "Microsoft", "Windows", "Start Menu", "Programs", "Norbert.lnk");
+}
+
 export function buildInstallSuccessMessage() {
   return [
     "",

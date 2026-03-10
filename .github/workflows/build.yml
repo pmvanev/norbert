@@ -32,7 +32,6 @@ jobs:
         run: npm ci
 
       - name: Build Tauri app
-        id: tauri-build
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -41,35 +40,33 @@ jobs:
         shell: bash
         env:
           MAX_SIZE_BYTES: "15728640"
-          ARTIFACT_PATHS: ${{ steps.tauri-build.outputs.artifactPaths }}
         run: |
-          echo "Binary size limit: 15 MB ($MAX_SIZE_BYTES bytes)"
-          echo "Artifact paths: $ARTIFACT_PATHS"
-          oversized=false
-          for artifact in $(echo "$ARTIFACT_PATHS" | tr -d '[]"' | tr ',' ' '); do
-            if [ -f "$artifact" ]; then
-              size=$(stat -c%s "$artifact" 2>/dev/null || stat -f%z "$artifact" 2>/dev/null || wc -c < "$artifact" | tr -d ' ')
-              size_mb=$(awk "BEGIN {printf \"%.2f\", $size / 1048576}")
-              echo "  $artifact: ${size_mb} MB ($size bytes)"
-              if [ "$size" -gt "$MAX_SIZE_BYTES" ]; then
-                echo "::error::Binary exceeds size limit: $artifact is ${size_mb} MB (limit: 15 MB)"
-                oversized=true
-              fi
-            fi
-          done
-          if [ "$oversized" = true ]; then
-            echo "::error::One or more binaries exceed the 15 MB size limit. Build failed."
+          binary="src-tauri/target/release/norbert.exe"
+          size=$(stat -c%s "$binary" 2>/dev/null || stat -f%z "$binary" 2>/dev/null)
+          size_mb=$(awk "BEGIN {printf \"%.2f\", $size / 1048576}")
+          echo "Binary: ${size_mb} MB ($size bytes), limit: 15 MB"
+          if [ "$size" -gt "$MAX_SIZE_BYTES" ]; then
+            echo "::error::Binary exceeds 15 MB size limit: ${size_mb} MB"
             exit 1
           fi
-          echo "All binaries are within the 15 MB size limit."
+
+      - name: Package binary as tar.gz
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          STAGING_DIR="$(mktemp -d)"
+          cp src-tauri/target/release/norbert.exe "$STAGING_DIR/norbert.exe"
+          cp src-tauri/target/release/norbert-hook-receiver.exe "$STAGING_DIR/norbert-hook-receiver.exe"
+          ASSET_NAME="norbert-v${VERSION}-win32-x64.tar.gz"
+          tar -czf "$ASSET_NAME" -C "$STAGING_DIR" .
+          echo "Packaged: $ASSET_NAME"
+          ls -lh "$ASSET_NAME"
 
       - name: Create release
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v2
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "Norbert ${{ github.ref_name }}"
-          releaseBody: "See the [changelog](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details."
-          releaseDraft: false
+          name: "Norbert ${{ github.ref_name }}"
+          body: "See the [changelog](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details."
+          draft: false
           prerelease: false
+          files: norbert-v*-win32-x64.tar.gz
