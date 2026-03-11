@@ -7,12 +7,11 @@ use std::sync::Mutex;
 use adapters::db::SqliteEventStore;
 use domain::{
     build_status_with_session, format_tooltip, toggle_window_action, AppStatus,
-    Session, WindowAction, APP_NAME, HOOK_PORT, VERSION,
+    Session, WindowAction, APP_NAME, VERSION,
 };
 use ports::EventStore;
 use rusqlite::Connection;
 use tauri::Manager;
-use tauri_plugin_shell::ShellExt;
 
 /// Shared application state accessible from IPC command handlers.
 ///
@@ -60,33 +59,10 @@ fn initialize_event_store() -> Result<SqliteEventStore, String> {
     SqliteEventStore::new(connection)
 }
 
-/// Spawn the hook-receiver sidecar process.
-///
-/// The sidecar runs independently and survives window close events
-/// because window close only hides the window (does not exit the app).
-fn spawn_hook_receiver_sidecar(app: &tauri::App) {
-    match app.shell().sidecar("norbert-hook-receiver") {
-        Ok(command) => {
-            match command.spawn() {
-                Ok((_rx, _child)) => {
-                    eprintln!("norbert: Hook receiver sidecar started on port {}", HOOK_PORT);
-                }
-                Err(e) => {
-                    eprintln!("norbert: Failed to spawn hook receiver sidecar: {}", e);
-                }
-            }
-        }
-        Err(e) => {
-            eprintln!("norbert: Failed to create sidecar command: {}", e);
-        }
-    }
-}
-
 /// Build and configure the Tauri application.
 ///
-/// This is the composition root: initializes the database,
-/// spawns the hook-receiver sidecar, and registers IPC commands.
-/// The library entry point called by the binary.
+/// This is the composition root: initializes the database
+/// and registers IPC commands. The library entry point called by the binary.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let tooltip = format_tooltip(APP_NAME, VERSION);
@@ -105,12 +81,8 @@ pub fn run() {
     };
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
         .manage(app_state)
         .setup(move |app| {
-            // Spawn hook-receiver sidecar.
-            spawn_hook_receiver_sidecar(app);
-
             let icon = app
                 .default_window_icon()
                 .cloned()

@@ -64,7 +64,7 @@ describe("User opens GUI and sees data captured while GUI was closed", () => {
 // ---------------------------------------------------------------------------
 
 describe("GUI startup code does not spawn hook receiver", () => {
-  it.skip("lib.rs does not contain spawn_hook_receiver_sidecar call", () => {
+  it("lib.rs does not contain spawn_hook_receiver_sidecar call", () => {
     // GIVEN: the Norbert GUI application is configured
     // WHEN: the GUI starts up
     // THEN: no hook receiver sidecar process is launched
@@ -75,7 +75,7 @@ describe("GUI startup code does not spawn hook receiver", () => {
     expect(libContent).not.toContain("spawn_hook_receiver_sidecar");
   });
 
-  it.skip("shell plugin is not initialized in the GUI", () => {
+  it("shell plugin is not initialized in the GUI", () => {
     // AND: the shell plugin is not initialized
     //
     // Driving port: lib.rs source code
@@ -129,14 +129,14 @@ describe("GUI connects to the database as a read-only viewer", () => {
 // ---------------------------------------------------------------------------
 
 describe("Tauri shell plugin dependency is removed", () => {
-  it.skip("Cargo.toml does not depend on tauri-plugin-shell", () => {
+  it("Cargo.toml does not depend on tauri-plugin-shell", () => {
     const cargoContent = readProductionFile(CARGO_TOML_PATH);
     expect(cargoContent).not.toContain("tauri-plugin-shell");
   });
 });
 
 describe("External binary bundling configuration is removed", () => {
-  it.skip("tauri.conf.json does not reference externalBin", () => {
+  it("tauri.conf.json does not reference externalBin", () => {
     const confContent = readProductionFile(TAURI_CONF_PATH);
     const config = JSON.parse(confContent);
     const bundle = config?.bundle || config?.tauri?.bundle;
@@ -147,7 +147,7 @@ describe("External binary bundling configuration is removed", () => {
 });
 
 describe("Shell permissions are removed from capabilities", () => {
-  it.skip("capabilities/default.json does not include shell permissions", () => {
+  it("capabilities/default.json does not include shell permissions", () => {
     const capContent = readProductionFile(CAPABILITIES_PATH);
     expect(capContent).not.toContain("shell:allow-spawn");
     expect(capContent).not.toContain("shell:allow-execute");
