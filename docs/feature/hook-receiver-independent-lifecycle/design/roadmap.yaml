@@ -1,0 +1,89 @@
+roadmap:
+  feature: "hook-receiver-independent-lifecycle"
+  paradigm: "functional"
+  estimated_production_files: 6
+  # postinstall-core.js, postinstall.js, install.ps1, install.sh, lib.rs, tauri.conf.json
+  # capabilities/default.json, Cargo.toml are config changes bundled with their steps
+
+phases:
+  - id: "01"
+    name: "Startup Registration Infrastructure"
+    goal: "Enable install scripts to register and start hook receiver independently"
+
+    steps:
+      - id: "01-01"
+        title: "Task Scheduler registration in postinstall-core.js"
+        description: "Export task name constant and registration/start helper functions for Windows Task Scheduler"
+        acceptance_criteria:
+          - "Task name constant exported from postinstall-core.js"
+          - "Registration function creates Task Scheduler task at user logon trigger"
+          - "Registration is idempotent -- updates existing task if present"
+          - "Start function launches receiver and stops any prior instance"
+        architectural_constraints:
+          - "Pure functions: build task parameters, return PowerShell command strings"
+          - "Side-effecting callers (postinstall.js, install scripts) invoke separately"
+          - "Binary paths in PowerShell commands must be properly escaped/quoted"
+
+      - id: "01-02"
+        title: "Integrate registration into postinstall.js"
+        description: "Call registration and start functions from postinstall.js after binary installation"
+        acceptance_criteria:
+          - "Postinstall registers Task Scheduler task after binary extraction"
+          - "Postinstall starts hook receiver immediately after registration"
+          - "Registration failure logs warning and does not fail install (exit 0)"
+          - "Console output confirms registration and start on success"
+        architectural_constraints:
+          - "Non-fatal: try/catch around registration, install always succeeds"
+
+      - id: "01-03"
+        title: "Integrate registration into install.ps1 and install.sh"
+        description: "Add Task Scheduler registration and immediate receiver start to standalone install scripts"
+        acceptance_criteria:
+          - "install.ps1 registers task and starts receiver after binary extraction"
+          - "install.sh registers task and starts receiver on Windows (win32 platform)"
+          - "Both scripts handle registration failure as non-fatal warning"
+          - "Re-running install updates task without creating duplicates"
+          - "Running receiver stopped before binary overwrite, new instance started after"
+        architectural_constraints:
+          - "install.sh Windows path uses powershell.exe for Task Scheduler access"
+          - "Task name matches constant from postinstall-core.js"
+
+  - id: "02"
+    name: "GUI Sidecar Decoupling"
+    goal: "Remove hook receiver lifecycle management from the GUI"
+
+    steps:
+      - id: "02-01"
+        title: "Remove sidecar spawn and shell plugin from GUI"
+        description: "Delete sidecar spawning, remove tauri-plugin-shell dependency and all related config"
+        acceptance_criteria:
+          - "GUI starts without spawning hook receiver process"
+          - "GUI displays data correctly regardless of receiver running state"
+          - "tauri-plugin-shell removed from Cargo.toml"
+          - "Shell permissions removed from capabilities/default.json"
+          - "externalBin removed from tauri.conf.json"
+        architectural_constraints:
+          - "No new dependencies introduced"
+          - "Existing tray icon and window management behavior unchanged"
+
+validation:
+  step_ratio: 0.67  # 4 steps / 6 production files = 0.67 (well under 2.5)
+  identical_pattern_check: "01-02 and 01-03 differ in target scripts and execution context -- not identical pattern"
+
+implementation_scope:
+  production_files:
+    - "scripts/postinstall-core.js"
+    - "scripts/postinstall.js"
+    - "install.ps1"
+    - "install.sh"
+    - "src-tauri/src/lib.rs"
+    - "src-tauri/Cargo.toml"
+    - "src-tauri/tauri.conf.json"
+    - "src-tauri/capabilities/default.json"
+  stories_mapped:
+    - step: "01-01, 01-02, 01-03"
+      story: "US-HRIL-01 (Register Hook Receiver for Startup at Install Time)"
+    - step: "01-01, 01-02, 01-03"
+      story: "US-HRIL-02 (Singleton Behavior -- validated by start/stop logic)"
+    - step: "02-01"
+      story: "US-HRIL-03 (GUI Stops Spawning Hook Receiver Sidecar)"

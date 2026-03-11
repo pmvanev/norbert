@@ -1,0 +1,74 @@
+review_id: "arch_rev_20260311_001"
+reviewer: "solution-architect-reviewer"
+artifact: "docs/feature/hook-receiver-independent-lifecycle/design/architecture.md, docs/adrs/ADR-008-*, ADR-009-*"
+iteration: 1
+
+strengths:
+  - "No new dependencies introduced; one dependency removed (tauri-plugin-shell) -- net simplification"
+  - "Reuses existing PowerShell pattern from Start Menu shortcut creation -- consistent with codebase"
+  - "ADR-008 evaluates 3 alternatives with concrete rejection rationale tied to quality attributes"
+  - "Shared artifacts table with sources of truth prevents integration drift"
+  - "Roadmap step ratio 0.67 (4 steps / 6 files) -- well below 2.5 threshold"
+  - "Functional paradigm respected: postinstall-core.js exports pure functions for building commands, side effects isolated in callers"
+  - "Existing hook_receiver.rs singleton behavior validated as intentional -- no unnecessary code changes"
+  - "C4 L1 and L2 diagrams present with labeled relationships"
+
+issues_identified:
+  architectural_bias:
+    - issue: "No bias detected. Technology choices are all OS-native (PowerShell, Task Scheduler), no new frameworks introduced."
+      severity: "none"
+
+  decision_quality:
+    - issue: "ADR-008 could note that Task Scheduler task should be configured with 'Do not store password' (Run only when user is logged on) to avoid credential storage"
+      severity: "low"
+      location: "ADR-008"
+      recommendation: "Add note to Decision section about task logon type configuration"
+
+  completeness_gaps:
+    - issue: "Security consideration: install scripts execute PowerShell commands. The architecture doc does not discuss command injection risk from path values containing special characters."
+      severity: "medium"
+      location: "architecture.md, Integration Patterns"
+      recommendation: "Add note that binary paths passed to PowerShell commands must be escaped/quoted to prevent injection. This is a crafter-level concern but should be flagged as architectural constraint."
+
+    - issue: "No explicit mention of what happens when hook receiver binary is updated while running (file locking on Windows)"
+      severity: "medium"
+      location: "architecture.md, step 01-03"
+      recommendation: "The stop-before-start pattern in the install scripts handles this implicitly (stop running instance, overwrite binary, start new instance). Document this sequence explicitly in the roadmap step AC."
+
+  implementation_feasibility:
+    - issue: "No feasibility concerns. Solo developer, all technologies already in use, no learning curve."
+      severity: "none"
+
+  priority_validation:
+    q1_largest_bottleneck:
+      evidence: "JTBD analysis identifies data loss when GUI closed as primary pain. Feature directly addresses this."
+      assessment: "YES"
+    q2_simple_alternatives:
+      assessment: "ADEQUATE"
+      evidence: "Two simpler alternatives documented with expected impact percentages and evidence-based rejection."
+    q3_constraint_prioritization:
+      assessment: "CORRECT"
+      evidence: "Windows-only scope matches current user base. Cross-platform deferred but design extensible."
+    q4_data_justified:
+      assessment: "JUSTIFIED"
+      evidence: "Brownfield feature with clear gap analysis (Job Map steps 3, 4). No performance claims requiring measurement."
+
+revisions_required:
+  - id: "REV-01"
+    severity: "medium"
+    action: "Add architectural constraint about path escaping in PowerShell commands to roadmap step 01-01"
+    status: "RESOLVED -- added constraint to step 01-01 in roadmap.yaml"
+  - id: "REV-02"
+    severity: "medium"
+    action: "Add explicit stop-before-start sequence to step 01-03 AC for update scenario"
+    status: "RESOLVED -- added AC to step 01-03 in roadmap.yaml"
+  - id: "REV-03"
+    severity: "low"
+    action: "Note task logon type in ADR-008"
+    status: "RESOLVED -- added logon type note to ADR-008 Decision section"
+
+approval_status: "approved"
+critical_issues_count: 0
+high_issues_count: 0
+medium_issues_resolved: 2
+low_issues_resolved: 1
