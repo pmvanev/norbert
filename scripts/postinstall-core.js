@@ -2,6 +2,9 @@ import path from "node:path";
 
 const GITHUB_REPO = "pmvanev/norbert";
 const BINARY_NAME = "norbert";
+const HOOK_RECEIVER_BINARY = "norbert-hook-receiver.exe";
+
+export const TASK_NAME = "NorbertHookReceiver";
 
 const SUPPORTED_PLATFORMS = new Map([
   ["win32-x64", { os: "win32", arch: "x64", extension: ".tar.gz" }],
@@ -39,6 +42,35 @@ export function getInstallDirectory(homeDir) {
 
 export function getStartMenuShortcutPath(appDataDir) {
   return path.join(appDataDir, "Microsoft", "Windows", "Start Menu", "Programs", "Norbert.lnk");
+}
+
+function quotePath(filePath) {
+  return `'${filePath}'`;
+}
+
+function buildBinaryPath(installDir) {
+  return path.join(installDir, HOOK_RECEIVER_BINARY);
+}
+
+export function buildTaskRegistrationCommand(installDir) {
+  const binaryPath = buildBinaryPath(installDir);
+  const quotedPath = quotePath(binaryPath);
+
+  return [
+    `$action = New-ScheduledTaskAction -Execute ${quotedPath}`,
+    `$trigger = New-ScheduledTaskTrigger -AtLogOn`,
+    `Register-ScheduledTask -TaskName '${TASK_NAME}' -Action $action -Trigger $trigger -Force`,
+  ].join("; ");
+}
+
+export function buildStartReceiverCommand(installDir) {
+  const binaryPath = buildBinaryPath(installDir);
+  const quotedPath = quotePath(binaryPath);
+
+  return [
+    `Stop-Process -Name 'norbert-hook-receiver' -ErrorAction SilentlyContinue`,
+    `Start-Process -FilePath ${quotedPath}`,
+  ].join("; ");
 }
 
 export function buildInstallSuccessMessage() {

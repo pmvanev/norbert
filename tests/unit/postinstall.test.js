@@ -4,6 +4,9 @@ import {
   buildDownloadUrl,
   getInstallDirectory,
   buildAssetFilename,
+  TASK_NAME,
+  buildTaskRegistrationCommand,
+  buildStartReceiverCommand,
 } from "../../scripts/postinstall-core.js";
 
 describe("postinstall core logic", () => {
@@ -60,6 +63,65 @@ describe("postinstall core logic", () => {
 
       expect(installDir).toMatch(/\.norbert[/\\]bin$/);
     });
+  });
+});
+
+describe("TASK_NAME constant", () => {
+  it("is NorbertHookReceiver", () => {
+    expect(TASK_NAME).toBe("NorbertHookReceiver");
+  });
+});
+
+describe("buildTaskRegistrationCommand", () => {
+  const installDir = "C:\\Users\\Phil\\.norbert\\bin";
+
+  it("includes the task name in the command", () => {
+    const command = buildTaskRegistrationCommand(installDir);
+    expect(command).toContain("NorbertHookReceiver");
+  });
+
+  it("targets the hook receiver binary in the install directory", () => {
+    const command = buildTaskRegistrationCommand(installDir);
+    expect(command).toContain(
+      "C:\\Users\\Phil\\.norbert\\bin\\norbert-hook-receiver.exe"
+    );
+  });
+
+  it("uses a logon trigger for automatic startup", () => {
+    const command = buildTaskRegistrationCommand(installDir);
+    expect(command).toContain("New-ScheduledTaskTrigger");
+    expect(command).toContain("-AtLogOn");
+  });
+
+  it("uses Force flag for idempotent registration", () => {
+    const command = buildTaskRegistrationCommand(installDir);
+    expect(command).toContain("-Force");
+  });
+
+  it("properly quotes paths containing spaces", () => {
+    const dirWithSpaces = "C:\\Users\\Phil Van Every\\.norbert\\bin";
+    const command = buildTaskRegistrationCommand(dirWithSpaces);
+
+    // The binary path must be quoted in the PowerShell command
+    expect(command).toContain(
+      "'C:\\Users\\Phil Van Every\\.norbert\\bin\\norbert-hook-receiver.exe'"
+    );
+  });
+});
+
+describe("buildStartReceiverCommand", () => {
+  const installDir = "C:\\Users\\Phil\\.norbert\\bin";
+
+  it("stops any prior instance before starting", () => {
+    const command = buildStartReceiverCommand(installDir);
+    expect(command).toContain("Stop-Process");
+    expect(command).toContain("norbert-hook-receiver");
+  });
+
+  it("starts the hook receiver binary", () => {
+    const command = buildStartReceiverCommand(installDir);
+    expect(command).toContain("Start-Process");
+    expect(command).toContain("norbert-hook-receiver.exe");
   });
 });
 

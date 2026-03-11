@@ -16,6 +16,8 @@ import { describe, it, expect } from "vitest";
 import {
   getInstallDirectory,
   buildInstallSuccessMessage,
+  TASK_NAME,
+  buildTaskRegistrationCommand,
 } from "../../../scripts/postinstall-core.js";
 import path from "node:path";
 
@@ -47,14 +49,18 @@ describe("Install registers startup task and confirms to user", () => {
     expect(binaryPath).toContain("bin");
   });
 
-  it.skip("startup task is configured to run at user logon", () => {
+  it("startup task is configured to run at user logon", () => {
     // GIVEN: Phil installs Norbert on a fresh Windows machine
+    const homeDir = "C:\\Users\\Phil";
+    const installDir = getInstallDirectory(homeDir);
+
     // WHEN: the installer registers the hook receiver for automatic startup
+    const command = buildTaskRegistrationCommand(installDir);
+
     // THEN: the startup task is configured to run at user logon
-    //
-    // Driving port: buildTaskRegistrationCommand() from postinstall-core.js
-    // Will invoke the task registration function and verify the command
-    // includes a logon trigger parameter.
+    expect(command).toContain("New-ScheduledTaskTrigger");
+    expect(command).toContain("-AtLogOn");
+    expect(command).toContain(TASK_NAME);
   });
 
   it.skip("install output confirms 'Startup task registered'", () => {
