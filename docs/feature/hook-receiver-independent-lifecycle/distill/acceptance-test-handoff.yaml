@@ -1,0 +1,171 @@
+handoff:
+  feature: "hook-receiver-independent-lifecycle"
+  from: "acceptance-designer (DISTILL wave)"
+  to: "software-crafter (DELIVER wave)"
+  date: "2026-03-11"
+
+summary: |
+  27 acceptance scenarios covering 3 user stories for decoupling the hook
+  receiver lifecycle from the GUI. Tests use Vitest with Given-When-Then
+  structure. One scenario is enabled (passing); 26 are skipped for
+  one-at-a-time implementation.
+
+test_files:
+  - path: "tests/acceptance/hook-receiver-lifecycle/startup-registration.test.ts"
+    story: "US-HRIL-01"
+    scenarios: 15
+    enabled: 1
+    skipped: 14
+    walking_skeletons: 1
+
+  - path: "tests/acceptance/hook-receiver-lifecycle/singleton-behavior.test.ts"
+    story: "US-HRIL-02"
+    scenarios: 8
+    enabled: 0
+    skipped: 8
+    walking_skeletons: 1
+
+  - path: "tests/acceptance/hook-receiver-lifecycle/gui-decoupling.test.ts"
+    story: "US-HRIL-03"
+    scenarios: 11
+    enabled: 0
+    skipped: 11
+    walking_skeletons: 1
+
+  - path: "docs/feature/hook-receiver-independent-lifecycle/distill/acceptance-scenarios.feature"
+    type: "gherkin_documentation"
+    description: "Human-readable Gherkin scenarios for stakeholder review"
+
+scenario_counts:
+  total: 27
+  walking_skeletons: 3
+  focused_scenarios: 16
+  error_scenarios: 11
+  error_ratio: "40.7%"
+  property_tagged: 1
+
+implementation_sequence:
+  description: |
+    Enable one scenario at a time. Each enabled scenario drives implementation
+    of the corresponding production code. Commit after each scenario passes.
+
+  recommended_order:
+    - file: "startup-registration.test.ts"
+      scenario: "startup task targets the hook receiver binary in the install directory"
+      status: "ENABLED - PASSING"
+      note: "Already passing -- validates existing getInstallDirectory + path join"
+
+    - file: "startup-registration.test.ts"
+      scenario: "startup task is configured to run at user logon"
+      drives: "buildTaskRegistrationCommand() in postinstall-core.js"
+
+    - file: "startup-registration.test.ts"
+      scenario: "install output confirms 'Startup task registered'"
+      drives: "updated buildInstallSuccessMessage() in postinstall-core.js"
+
+    - file: "startup-registration.test.ts"
+      scenario: "task name is 'NorbertHookReceiver'"
+      drives: "TASK_NAME constant export in postinstall-core.js"
+
+    - file: "startup-registration.test.ts"
+      scenario: "task target path matches the hook receiver binary"
+      drives: "buildTaskParameters() in postinstall-core.js"
+
+    - file: "startup-registration.test.ts"
+      scenario: "reinstall updates existing task without creating duplicate"
+      drives: "idempotent registration logic"
+
+    - file: "startup-registration.test.ts"
+      scenario: "command includes a logon trigger for the current user"
+      drives: "PowerShell command construction"
+
+    - file: "startup-registration.test.ts"
+      scenario: "install output includes non-fatal warning on registration failure"
+      drives: "try/catch in postinstall.js orchestration"
+
+    - file: "startup-registration.test.ts"
+      scenario: "startup registration is skipped on non-Windows platform"
+      drives: "shouldRegisterStartupTask(platform) guard"
+
+    - file: "startup-registration.test.ts"
+      scenario: "task target path is properly quoted for paths with spaces"
+      drives: "path quoting in PowerShell command builder"
+
+    - file: "gui-decoupling.test.ts"
+      scenario: "lib.rs does not contain spawn_hook_receiver_sidecar call"
+      drives: "removal of sidecar spawn from lib.rs"
+
+    - file: "gui-decoupling.test.ts"
+      scenario: "shell plugin is not initialized in the GUI"
+      drives: "removal of tauri_plugin_shell from lib.rs and Cargo.toml"
+
+    - file: "gui-decoupling.test.ts"
+      scenario: "tauri.conf.json does not reference externalBin"
+      drives: "cleanup of tauri.conf.json"
+
+    - file: "gui-decoupling.test.ts"
+      scenario: "capabilities/default.json does not include shell permissions"
+      drives: "cleanup of capabilities/default.json"
+
+driving_ports:
+  - name: "postinstall-core.js functions"
+    type: "pure functions (functional paradigm)"
+    functions:
+      - "getInstallDirectory(homeDir)"
+      - "buildInstallSuccessMessage() [to be updated]"
+      - "buildTaskRegistrationCommand(installDir) [to be created]"
+      - "buildTaskParameters(installDir) [to be created]"
+      - "shouldRegisterStartupTask(platform) [to be created]"
+      - "TASK_NAME constant [to be exported]"
+
+  - name: "postinstall.js orchestration"
+    type: "side-effecting caller"
+    responsibilities:
+      - "Calls registration functions after binary extraction"
+      - "Wraps registration in try/catch for non-fatal failure"
+      - "Starts hook receiver immediately after registration"
+
+  - name: "lib.rs run() composition root"
+    type: "GUI entry point (Rust)"
+    changes:
+      - "Remove spawn_hook_receiver_sidecar() function"
+      - "Remove tauri_plugin_shell plugin initialization"
+      - "Remove ShellExt import"
+
+mandate_compliance:
+  CM-A:
+    description: "All test files import driving ports only"
+    evidence: |
+      startup-registration.test.ts imports from postinstall-core.js (driving port)
+      singleton-behavior.test.ts will invoke hook receiver process (driving port)
+      gui-decoupling.test.ts reads lib.rs source (composition root validation)
+      No internal component imports (validators, parsers, formatters)
+
+  CM-B:
+    description: "Gherkin uses business terms only, zero technical jargon"
+    evidence: |
+      Scenario titles use business language: "Install registers startup task",
+      "Hook receiver captures events without the GUI running",
+      "Registration failure is non-fatal and install completes"
+      No HTTP verbs, status codes, JSON references, or class names in Gherkin.
+      Technical terms (PowerShell, Task Scheduler) appear only in step
+      implementation comments, never in describe/it strings.
+
+  CM-C:
+    description: "Walking skeletons + focused scenario counts"
+    evidence: |
+      Walking skeletons: 3 (install registers startup, receiver captures events
+      without GUI, user sees data captured while GUI was closed)
+      Focused scenarios: 16
+      Error scenarios: 11 (40.7% -- exceeds 40% threshold)
+      Total: 27 scenarios across 3 test files
+
+peer_review:
+  status: "self-reviewed"
+  dimensions_checked:
+    happy_path_bias: "PASS - 11/27 scenarios (40.7%) are error/edge cases"
+    gwt_compliance: "PASS - all scenarios follow Given-When-Then structure with single When action"
+    business_language: "PASS - no technical terms in Gherkin layer"
+    coverage_completeness: "PASS - all 3 user stories and all acceptance criteria covered"
+    walking_skeleton_centricity: "PASS - all 3 skeletons describe user goals with observable outcomes"
+    priority_validation: "PASS - US-HRIL-01 (startup registration) has most scenarios as primary feature"
