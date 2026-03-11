@@ -12,8 +12,16 @@ Installation is two steps: the app, then the Claude Code plugin.
 
 ### 1. Install the app
 
+**Git Bash / macOS / Linux:**
+
 ```bash
-npx github:pmvanev/norbert-cc
+curl -fsSL https://raw.githubusercontent.com/pmvanev/norbert/main/install.sh | sh
+```
+
+**Windows PowerShell:**
+
+```powershell
+irm https://raw.githubusercontent.com/pmvanev/norbert/main/install.ps1 | iex
 ```
 
 This downloads and installs the Norbert desktop app. It runs as a system tray icon with a local dashboard UI.
