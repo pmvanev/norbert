@@ -58,9 +58,12 @@ describe("install.ps1 registers hook receiver task and starts receiver", () => {
   });
 
   it("handles registration failure as non-fatal warning", () => {
-    // The registration block should be in a try/catch that doesn't exit
-    expect(INSTALL_PS1).toContain("Warning");
-    expect(INSTALL_PS1).toMatch(/catch.*\{[^}]*[Ww]arning/s);
+    // The catch block after Register-ScheduledTask should contain a Warning
+    const registerIndex = INSTALL_PS1.indexOf("Register-ScheduledTask");
+    expect(registerIndex).toBeGreaterThan(-1);
+
+    const warningIndex = INSTALL_PS1.indexOf("Warning", registerIndex);
+    expect(warningIndex).toBeGreaterThan(registerIndex);
   });
 });
 

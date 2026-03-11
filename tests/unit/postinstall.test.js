@@ -4,7 +4,6 @@ import {
   buildDownloadUrl,
   getInstallDirectory,
   buildAssetFilename,
-  TASK_NAME,
   buildTaskRegistrationCommand,
   buildStartReceiverCommand,
 } from "../../scripts/postinstall-core.js";
@@ -66,11 +65,8 @@ describe("postinstall core logic", () => {
   });
 });
 
-describe("TASK_NAME constant", () => {
-  it("is NorbertHookReceiver", () => {
-    expect(TASK_NAME).toBe("NorbertHookReceiver");
-  });
-});
+// D3: TASK_NAME constant test removed -- constant value assertion, not behavioral.
+// The constant is exercised by buildTaskRegistrationCommand tests.
 
 describe("buildTaskRegistrationCommand", () => {
   const installDir = "C:\\Users\\Phil\\.norbert\\bin";

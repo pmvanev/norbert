@@ -73,6 +73,23 @@ export function buildStartReceiverCommand(installDir) {
   ].join("; ");
 }
 
+export function encodeForPowerShell(cmd) {
+  const encoder = new TextEncoder();
+  const utf8Bytes = encoder.encode(cmd);
+  // Convert UTF-8 to UTF-16LE: each byte becomes [byte, 0x00]
+  const utf16leBytes = new Uint8Array(utf8Bytes.length * 2);
+  for (let i = 0; i < utf8Bytes.length; i++) {
+    utf16leBytes[i * 2] = utf8Bytes[i];
+    utf16leBytes[i * 2 + 1] = 0;
+  }
+  // Convert to base64
+  let binary = "";
+  for (let i = 0; i < utf16leBytes.length; i++) {
+    binary += String.fromCharCode(utf16leBytes[i]);
+  }
+  return btoa(binary);
+}
+
 export function registerAndStartHookReceiver(installDir, platform, execCommand) {
   if (platform.os !== "win32") {
     return { registered: false, started: false, warnings: [] };
@@ -84,7 +101,8 @@ export function registerAndStartHookReceiver(installDir, platform, execCommand) 
 
   try {
     const registrationCmd = buildTaskRegistrationCommand(installDir);
-    execCommand(`powershell -NoProfile -Command "${registrationCmd}"`);
+    const encoded = encodeForPowerShell(registrationCmd);
+    execCommand(`powershell -NoProfile -EncodedCommand ${encoded}`);
     registered = true;
   } catch (_registrationError) {
     warnings.push("Could not register startup task (non-fatal).");
@@ -92,7 +110,8 @@ export function registerAndStartHookReceiver(installDir, platform, execCommand) 
 
   try {
     const startCmd = buildStartReceiverCommand(installDir);
-    execCommand(`powershell -NoProfile -Command "${startCmd}"`);
+    const encoded = encodeForPowerShell(startCmd);
+    execCommand(`powershell -NoProfile -EncodedCommand ${encoded}`);
     started = true;
   } catch (_startError) {
     warnings.push("Could not start hook receiver (non-fatal).");

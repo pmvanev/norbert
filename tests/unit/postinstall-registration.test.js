@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import {
   buildTaskRegistrationCommand,
   buildStartReceiverCommand,
+  encodeForPowerShell,
 } from "../../scripts/postinstall-core.js";
 
 /**
@@ -24,7 +25,7 @@ describe("registerAndStartHookReceiver", () => {
   const installDir = "C:\\Users\\Phil\\.norbert\\bin";
 
   describe("on Windows (win32) with successful registration", () => {
-    it("executes the task registration command", () => {
+    it("executes the task registration command via EncodedCommand", () => {
       const executedCommands = [];
       const execCommand = (cmd) => executedCommands.push(cmd);
       const platform = { os: "win32", arch: "x64", extension: ".tar.gz" };
@@ -32,13 +33,13 @@ describe("registerAndStartHookReceiver", () => {
       registerAndStartHookReceiver(installDir, platform, execCommand);
 
       const registrationCmd = buildTaskRegistrationCommand(installDir);
-      expect(executedCommands[0]).toContain("Register-ScheduledTask");
+      const encoded = encodeForPowerShell(registrationCmd);
       expect(executedCommands[0]).toBe(
-        `powershell -NoProfile -Command "${registrationCmd}"`
+        `powershell -NoProfile -EncodedCommand ${encoded}`
       );
     });
 
-    it("executes the start receiver command after registration", () => {
+    it("executes the start receiver command after registration via EncodedCommand", () => {
       const executedCommands = [];
       const execCommand = (cmd) => executedCommands.push(cmd);
       const platform = { os: "win32", arch: "x64", extension: ".tar.gz" };
@@ -46,9 +47,10 @@ describe("registerAndStartHookReceiver", () => {
       registerAndStartHookReceiver(installDir, platform, execCommand);
 
       const startCmd = buildStartReceiverCommand(installDir);
+      const encoded = encodeForPowerShell(startCmd);
       expect(executedCommands.length).toBeGreaterThanOrEqual(2);
       expect(executedCommands[1]).toBe(
-        `powershell -NoProfile -Command "${startCmd}"`
+        `powershell -NoProfile -EncodedCommand ${encoded}`
       );
     });
 
@@ -66,8 +68,10 @@ describe("registerAndStartHookReceiver", () => {
 
   describe("on Windows when registration fails", () => {
     it("returns registered false with warning message", () => {
-      const execCommand = (cmd) => {
-        if (cmd.includes("Register-ScheduledTask")) {
+      let callCount = 0;
+      const execCommand = () => {
+        callCount++;
+        if (callCount === 1) {
           throw new Error("Access denied");
         }
       };
@@ -82,8 +86,10 @@ describe("registerAndStartHookReceiver", () => {
 
     it("still attempts to start receiver even if registration fails", () => {
       const executedCommands = [];
+      let callCount = 0;
       const execCommand = (cmd) => {
-        if (cmd.includes("Register-ScheduledTask")) {
+        callCount++;
+        if (callCount === 1) {
           throw new Error("Access denied");
         }
         executedCommands.push(cmd);
@@ -93,14 +99,16 @@ describe("registerAndStartHookReceiver", () => {
       registerAndStartHookReceiver(installDir, platform, execCommand);
 
       expect(executedCommands.length).toBe(1);
-      expect(executedCommands[0]).toContain("Start-Process");
+      expect(executedCommands[0]).toContain("EncodedCommand");
     });
   });
 
   describe("on Windows when start fails", () => {
     it("returns started false with warning message", () => {
-      const execCommand = (cmd) => {
-        if (cmd.includes("Start-Process")) {
+      let callCount = 0;
+      const execCommand = () => {
+        callCount++;
+        if (callCount === 2) {
           throw new Error("Process not found");
         }
       };
@@ -127,6 +135,31 @@ describe("registerAndStartHookReceiver", () => {
       expect(result.registered).toBe(false);
       expect(result.started).toBe(false);
       expect(result.warnings).toEqual([]);
+    });
+  });
+
+  describe("paths with special characters", () => {
+    it("safely handles paths containing $ via EncodedCommand", () => {
+      const dirWithDollar = "C:\\Users\\$pecialUser\\.norbert\\bin";
+      const executedCommands = [];
+      const execCommand = (cmd) => executedCommands.push(cmd);
+      const platform = { os: "win32", arch: "x64", extension: ".tar.gz" };
+
+      registerAndStartHookReceiver(dirWithDollar, platform, execCommand);
+
+      // EncodedCommand avoids shell interpretation of $ in paths
+      expect(executedCommands[0]).toContain("-EncodedCommand");
+      expect(executedCommands[0]).not.toContain("$pecialUser");
+
+      // Decoding the base64 should reveal the original path
+      const encodedPart = executedCommands[0].split("-EncodedCommand ")[1];
+      const decoded = Buffer.from(encodedPart, "base64");
+      // UTF-16LE decode: take every other byte
+      let decodedStr = "";
+      for (let i = 0; i < decoded.length; i += 2) {
+        decodedStr += String.fromCharCode(decoded[i]);
+      }
+      expect(decodedStr).toContain("$pecialUser");
     });
   });
 });

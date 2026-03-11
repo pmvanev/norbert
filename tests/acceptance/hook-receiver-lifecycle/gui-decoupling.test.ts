@@ -140,9 +140,8 @@ describe("External binary bundling configuration is removed", () => {
     const confContent = readProductionFile(TAURI_CONF_PATH);
     const config = JSON.parse(confContent);
     const bundle = config?.bundle || config?.tauri?.bundle;
-    if (bundle) {
-      expect(bundle.externalBin).toBeUndefined();
-    }
+    expect(bundle).toBeDefined();
+    expect(bundle.externalBin).toBeUndefined();
   });
 });
 
