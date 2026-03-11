@@ -15,23 +15,12 @@
 import { describe, it, expect } from "vitest";
 import {
   getInstallDirectory,
-  buildInstallSuccessMessage,
   TASK_NAME,
   buildTaskRegistrationCommand,
 } from "../../../scripts/postinstall-core.js";
 import path from "node:path";
 
-// Domain constants -- shared artifacts
-const TASK_NAME = "NorbertHookReceiver";
 const HOOK_RECEIVER_BINARY = "norbert-hook-receiver.exe";
-const EXPECTED_PORT = 3748;
-
-/**
- * Helper: build the expected binary path for a given home directory.
- */
-function expectedBinaryPath(homeDir: string): string {
-  return path.join(getInstallDirectory(homeDir), HOOK_RECEIVER_BINARY);
-}
 
 // ---------------------------------------------------------------------------
 // WALKING SKELETON
