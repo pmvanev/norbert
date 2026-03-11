@@ -73,6 +73,34 @@ export function buildStartReceiverCommand(installDir) {
   ].join("; ");
 }
 
+export function registerAndStartHookReceiver(installDir, platform, execCommand) {
+  if (platform.os !== "win32") {
+    return { registered: false, started: false, warnings: [] };
+  }
+
+  const warnings = [];
+  let registered = false;
+  let started = false;
+
+  try {
+    const registrationCmd = buildTaskRegistrationCommand(installDir);
+    execCommand(`powershell -NoProfile -Command "${registrationCmd}"`);
+    registered = true;
+  } catch (_registrationError) {
+    warnings.push("Could not register startup task (non-fatal).");
+  }
+
+  try {
+    const startCmd = buildStartReceiverCommand(installDir);
+    execCommand(`powershell -NoProfile -Command "${startCmd}"`);
+    started = true;
+  } catch (_startError) {
+    warnings.push("Could not start hook receiver (non-fatal).");
+  }
+
+  return { registered, started, warnings };
+}
+
 export function buildInstallSuccessMessage() {
   return [
     "",

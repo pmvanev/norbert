@@ -13,7 +13,7 @@ import { extract } from "tar";
 import path from "node:path";
 import os from "node:os";
 import { execSync } from "node:child_process";
-import { detectPlatform, buildDownloadUrl, getInstallDirectory, getStartMenuShortcutPath, buildInstallSuccessMessage } from "./postinstall-core.js";
+import { detectPlatform, buildDownloadUrl, getInstallDirectory, getStartMenuShortcutPath, buildInstallSuccessMessage, registerAndStartHookReceiver } from "./postinstall-core.js";
 
 async function downloadFile(url, destPath) {
   const tempPath = `${destPath}.tmp`;
@@ -107,6 +107,23 @@ async function postinstall() {
       } catch (_shortcutError) {
         console.warn("Could not create Start Menu shortcut (non-fatal).");
       }
+    }
+
+    // Register hook receiver for automatic startup and start it immediately
+    const registrationResult = registerAndStartHookReceiver(
+      installDir,
+      platform,
+      (cmd) => execSync(cmd, { stdio: "ignore" })
+    );
+
+    if (registrationResult.registered) {
+      console.log("Startup task registered.");
+    }
+    if (registrationResult.started) {
+      console.log("Hook receiver started.");
+    }
+    for (const warning of registrationResult.warnings) {
+      console.warn(warning);
     }
 
     console.log(buildInstallSuccessMessage());
