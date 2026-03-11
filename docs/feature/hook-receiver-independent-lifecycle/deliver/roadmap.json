@@ -1,0 +1,103 @@
+{
+  "feature": "hook-receiver-independent-lifecycle",
+  "paradigm": "functional",
+  "architecture": "modular-monolith-ports-and-adapters",
+  "estimated_production_files": 8,
+  "phases": {
+    "01": {
+      "title": "Startup Registration Infrastructure",
+      "steps": {
+        "01-01": {
+          "title": "Task Scheduler registration in postinstall-core.js",
+          "description": "Export task name constant and registration/start helper functions for Windows Task Scheduler. Pure functions: build task parameters, return PowerShell command strings. Side effects isolated in callers.",
+          "acceptance_criteria": [
+            "Task name constant exported from postinstall-core.js",
+            "Registration function creates Task Scheduler task at user logon trigger",
+            "Registration is idempotent -- updates existing task if present",
+            "Start function launches receiver and stops any prior instance"
+          ],
+          "files_to_modify": [
+            "scripts/postinstall-core.js"
+          ],
+          "architectural_constraints": [
+            "Pure functions: build task parameters, return PowerShell command strings",
+            "Side-effecting callers invoke separately",
+            "Binary paths in PowerShell commands must be properly escaped/quoted"
+          ]
+        },
+        "01-02": {
+          "title": "Integrate registration into postinstall.js",
+          "description": "Call registration and start functions from postinstall.js after binary installation. Non-fatal: try/catch around registration, install always succeeds.",
+          "acceptance_criteria": [
+            "Postinstall registers Task Scheduler task after binary extraction",
+            "Postinstall starts hook receiver immediately after registration",
+            "Registration failure logs warning and does not fail install (exit 0)",
+            "Console output confirms registration and start on success"
+          ],
+          "files_to_modify": [
+            "scripts/postinstall.js"
+          ],
+          "architectural_constraints": [
+            "Non-fatal: try/catch around registration, install always succeeds"
+          ]
+        },
+        "01-03": {
+          "title": "Integrate registration into install.ps1 and install.sh",
+          "description": "Add Task Scheduler registration and immediate receiver start to standalone install scripts. Handle registration failure as non-fatal warning.",
+          "acceptance_criteria": [
+            "install.ps1 registers task and starts receiver after binary extraction",
+            "install.sh registers task and starts receiver on Windows (win32 platform)",
+            "Both scripts handle registration failure as non-fatal warning",
+            "Re-running install updates task without creating duplicates",
+            "Running receiver stopped before binary overwrite, new instance started after"
+          ],
+          "files_to_modify": [
+            "install.ps1",
+            "install.sh"
+          ],
+          "architectural_constraints": [
+            "install.sh Windows path uses powershell.exe for Task Scheduler access",
+            "Task name matches constant from postinstall-core.js"
+          ]
+        }
+      }
+    },
+    "02": {
+      "title": "GUI Sidecar Decoupling",
+      "steps": {
+        "02-01": {
+          "title": "Remove sidecar spawn and shell plugin from GUI",
+          "description": "Delete sidecar spawning, remove tauri-plugin-shell dependency and all related config. No new dependencies introduced. Existing tray icon and window management behavior unchanged.",
+          "acceptance_criteria": [
+            "GUI starts without spawning hook receiver process",
+            "GUI displays data correctly regardless of receiver running state",
+            "tauri-plugin-shell removed from Cargo.toml",
+            "Shell permissions removed from capabilities/default.json",
+            "externalBin removed from tauri.conf.json"
+          ],
+          "files_to_modify": [
+            "src-tauri/src/lib.rs",
+            "src-tauri/Cargo.toml",
+            "src-tauri/tauri.conf.json",
+            "src-tauri/capabilities/default.json"
+          ],
+          "architectural_constraints": [
+            "No new dependencies introduced",
+            "Existing tray icon and window management behavior unchanged"
+          ]
+        }
+      }
+    }
+  },
+  "validation": {
+    "status": "approved",
+    "quality_gates": [
+      "No AC references private methods",
+      "Step ratio: 4 steps / 8 files = 0.5 (under 2.5)",
+      "No identical AC patterns across steps",
+      "All steps have files_to_modify",
+      "Step IDs match NN-NN format"
+    ],
+    "step_ratio": 0.5
+  }
+}
