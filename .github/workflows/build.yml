@@ -31,6 +31,13 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Build hook receiver sidecar
+        shell: bash
+        run: |
+          cd src-tauri
+          cargo build --release --bin norbert-hook-receiver
+          cp target/release/norbert-hook-receiver.exe norbert-hook-receiver-x86_64-pc-windows-msvc.exe
+
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
