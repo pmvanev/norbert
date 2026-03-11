@@ -31,20 +31,14 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build and stage hook receiver sidecar
+      - name: Stage sidecar for Tauri build
         shell: bash
         run: |
-          cd src-tauri
-          # Build just the hook receiver binary, skipping Tauri's build script
-          # validation by setting TAURI_SKIP_SIDECAR_VALIDATION
-          cargo build --release --bin norbert-hook-receiver 2>/dev/null || {
-            # If shared build script fails due to missing sidecar, create placeholder
-            # then rebuild — cargo will reuse the already-compiled dependencies
-            touch norbert-hook-receiver-x86_64-pc-windows-msvc.exe
-            cargo build --release --bin norbert-hook-receiver
-          }
-          # Copy the real binary to where Tauri expects it
-          cp target/release/norbert-hook-receiver.exe norbert-hook-receiver-x86_64-pc-windows-msvc.exe
+          # Tauri's build script validates externalBin paths at compile time.
+          # The real sidecar is compiled during `tauri build` (same Cargo workspace),
+          # but we need a placeholder so the validation passes first.
+          # tauri-action's build will produce the real binary.
+          touch src-tauri/norbert-hook-receiver-x86_64-pc-windows-msvc.exe
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
