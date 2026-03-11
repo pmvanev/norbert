@@ -4,6 +4,8 @@ $ErrorActionPreference = "Stop"
 
 $Repo = "pmvanev/norbert"
 $InstallDir = Join-Path $HOME ".norbert" "bin"
+$TaskName = "NorbertHookReceiver"
+$HookReceiverBinary = "norbert-hook-receiver.exe"
 
 # --- Detect latest version ---
 
@@ -40,6 +42,11 @@ try {
     exit 1
 }
 
+# --- Stop existing receiver (unlock binary before overwrite) ---
+
+Write-Host "Stopping existing hook receiver..."
+Stop-Process -Name 'norbert-hook-receiver' -ErrorAction SilentlyContinue
+
 # --- Extract ---
 
 Write-Host "Installing to $InstallDir..."
@@ -70,6 +77,30 @@ try {
     $shortcut.Save()
 } catch {
     Write-Host "Warning: Could not create Start Menu shortcut." -ForegroundColor Yellow
+}
+
+# --- Register hook receiver startup task ---
+
+Write-Host "Registering hook receiver startup task..."
+try {
+    $binaryPath = Join-Path $InstallDir $HookReceiverBinary
+    $action = New-ScheduledTaskAction -Execute $binaryPath
+    $trigger = New-ScheduledTaskTrigger -AtLogOn
+    Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Force | Out-Null
+    Write-Host "Startup task registered."
+} catch {
+    Write-Host "Warning: Could not register startup task (non-fatal)." -ForegroundColor Yellow
+}
+
+# --- Start hook receiver ---
+
+Write-Host "Starting hook receiver..."
+try {
+    $binaryPath = Join-Path $InstallDir $HookReceiverBinary
+    Start-Process -FilePath $binaryPath
+    Write-Host "Hook receiver started."
+} catch {
+    Write-Host "Warning: Could not start hook receiver (non-fatal)." -ForegroundColor Yellow
 }
 
 # --- Success ---

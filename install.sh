@@ -99,6 +99,14 @@ TEMP_FILE="${TEMP_DIR}/${ASSET}"
 
 curl -fSL --progress-bar "$DOWNLOAD_URL" -o "$TEMP_FILE" || die "Failed to download ${DOWNLOAD_URL}. The release asset may not exist for your platform."
 
+# Stop existing hook receiver before binary overwrite (unlock file on Windows)
+case "$PLATFORM" in
+  win32-*)
+    echo "Stopping existing hook receiver..."
+    powershell.exe -NoProfile -Command "Stop-Process -Name 'norbert-hook-receiver' -ErrorAction SilentlyContinue" 2>/dev/null || true
+    ;;
+esac
+
 echo "Installing to ${INSTALL_DIR}..."
 mkdir -p "$INSTALL_DIR"
 tar -xzf "$TEMP_FILE" -C "$INSTALL_DIR" || die "Failed to extract archive."
@@ -127,6 +135,24 @@ case "$PLATFORM" in
         \$s.Save()
       " 2>/dev/null || echo "Warning: Could not create Start Menu shortcut."
     fi
+    ;;
+esac
+
+# Register hook receiver startup task on Windows
+case "$PLATFORM" in
+  win32-*)
+    echo "Registering hook receiver startup task..."
+    WIN_RECEIVER=$(cygpath -w "$INSTALL_DIR/norbert-hook-receiver.exe" 2>/dev/null || echo "$INSTALL_DIR/norbert-hook-receiver.exe")
+    powershell.exe -NoProfile -Command "
+      \$action = New-ScheduledTaskAction -Execute '$WIN_RECEIVER';
+      \$trigger = New-ScheduledTaskTrigger -AtLogOn;
+      Register-ScheduledTask -TaskName 'NorbertHookReceiver' -Action \$action -Trigger \$trigger -Force | Out-Null
+    " 2>/dev/null && echo "Startup task registered." || echo "Warning: Could not register startup task (non-fatal)."
+
+    echo "Starting hook receiver..."
+    powershell.exe -NoProfile -Command "
+      Start-Process -FilePath '$WIN_RECEIVER'
+    " 2>/dev/null && echo "Hook receiver started." || echo "Warning: Could not start hook receiver (non-fatal)."
     ;;
 esac
 
