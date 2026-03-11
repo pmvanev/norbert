@@ -53,14 +53,13 @@ describe("postinstall core logic", () => {
     it("returns ~/.norbert/bin/ path using provided home directory", () => {
       const installDir = getInstallDirectory("/home/user");
 
-      expect(installDir).toMatch(/\.norbert[/\\]bin$/);
-      expect(installDir).toMatch(/^[/\\]home[/\\]user/);
+      expect(installDir).toBe("\\home\\user\\.norbert\\bin");
     });
 
     it("handles Windows-style home directory", () => {
       const installDir = getInstallDirectory("C:\\Users\\dev");
 
-      expect(installDir).toMatch(/\.norbert[/\\]bin$/);
+      expect(installDir).toBe("C:\\Users\\dev\\.norbert\\bin");
     });
   });
 });

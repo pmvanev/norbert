@@ -1,9 +1,4 @@
 import { describe, it, expect, vi } from "vitest";
-import {
-  buildTaskRegistrationCommand,
-  buildStartReceiverCommand,
-  encodeForPowerShell,
-} from "../../scripts/postinstall-core.js";
 
 /**
  * Unit tests for hook receiver registration integration in postinstall.js.
@@ -16,10 +11,16 @@ import {
  * - Returns { registered: boolean, started: boolean, warnings: string[] }
  */
 
-// We will import the function once it exists in postinstall-core.js or postinstall.js.
-// For now, we import from postinstall-core.js where domain logic lives.
-// The orchestration function to be created:
 import { registerAndStartHookReceiver } from "../../scripts/postinstall-core.js";
+
+// Pre-computed expected base64 values for installDir = "C:\Users\Phil\.norbert\bin"
+// Independently verified using Node.js Buffer UTF-16LE encoding (not the production encoder).
+// Registration command: "$action = New-ScheduledTaskAction -Execute 'C:\Users\Phil\.norbert\bin\norbert-hook-receiver.exe'; $trigger = New-ScheduledTaskTrigger -AtLogOn; Register-ScheduledTask -TaskName 'NorbertHookReceiver' -Action $action -Trigger $trigger -Force"
+const EXPECTED_REGISTRATION_BASE64 =
+  "JABhAGMAdABpAG8AbgAgAD0AIABOAGUAdwAtAFMAYwBoAGUAZAB1AGwAZQBkAFQAYQBzAGsAQQBjAHQAaQBvAG4AIAAtAEUAeABlAGMAdQB0AGUAIAAnAEMAOgBcAFUAcwBlAHIAcwBcAFAAaABpAGwAXAAuAG4AbwByAGIAZQByAHQAXABiAGkAbgBcAG4AbwByAGIAZQByAHQALQBoAG8AbwBrAC0AcgBlAGMAZQBpAHYAZQByAC4AZQB4AGUAJwA7ACAAJAB0AHIAaQBnAGcAZQByACAAPQAgAE4AZQB3AC0AUwBjAGgAZQBkAHUAbABlAGQAVABhAHMAawBUAHIAaQBnAGcAZQByACAALQBBAHQATABvAGcATwBuADsAIABSAGUAZwBpAHMAdABlAHIALQBTAGMAaABlAGQAdQBsAGUAZABUAGEAcwBrACAALQBUAGEAcwBrAE4AYQBtAGUAIAAnAE4AbwByAGIAZQByAHQASABvAG8AawBSAGUAYwBlAGkAdgBlAHIAJwAgAC0AQQBjAHQAaQBvAG4AIAAkAGEAYwB0AGkAbwBuACAALQBUAHIAaQBnAGcAZQByACAAJAB0AHIAaQBnAGcAZQByACAALQBGAG8AcgBjAGUA";
+// Start command: "Stop-Process -Name 'norbert-hook-receiver' -ErrorAction SilentlyContinue; Start-Process -FilePath 'C:\Users\Phil\.norbert\bin\norbert-hook-receiver.exe'"
+const EXPECTED_START_BASE64 =
+  "UwB0AG8AcAAtAFAAcgBvAGMAZQBzAHMAIAAtAE4AYQBtAGUAIAAnAG4AbwByAGIAZQByAHQALQBoAG8AbwBrAC0AcgBlAGMAZQBpAHYAZQByACcAIAAtAEUAcgByAG8AcgBBAGMAdABpAG8AbgAgAFMAaQBsAGUAbgB0AGwAeQBDAG8AbgB0AGkAbgB1AGUAOwAgAFMAdABhAHIAdAAtAFAAcgBvAGMAZQBzAHMAIAAtAEYAaQBsAGUAUABhAHQAaAAgACcAQwA6AFwAVQBzAGUAcgBzAFwAUABoAGkAbABcAC4AbgBvAHIAYgBlAHIAdABcAGIAaQBuAFwAbgBvAHIAYgBlAHIAdAAtAGgAbwBvAGsALQByAGUAYwBlAGkAdgBlAHIALgBlAHgAZQAnAA==";
 
 describe("registerAndStartHookReceiver", () => {
   const installDir = "C:\\Users\\Phil\\.norbert\\bin";
@@ -32,10 +33,8 @@ describe("registerAndStartHookReceiver", () => {
 
       registerAndStartHookReceiver(installDir, platform, execCommand);
 
-      const registrationCmd = buildTaskRegistrationCommand(installDir);
-      const encoded = encodeForPowerShell(registrationCmd);
       expect(executedCommands[0]).toBe(
-        `powershell -NoProfile -EncodedCommand ${encoded}`
+        `powershell -NoProfile -EncodedCommand ${EXPECTED_REGISTRATION_BASE64}`
       );
     });
 
@@ -46,11 +45,9 @@ describe("registerAndStartHookReceiver", () => {
 
       registerAndStartHookReceiver(installDir, platform, execCommand);
 
-      const startCmd = buildStartReceiverCommand(installDir);
-      const encoded = encodeForPowerShell(startCmd);
       expect(executedCommands.length).toBeGreaterThanOrEqual(2);
       expect(executedCommands[1]).toBe(
-        `powershell -NoProfile -EncodedCommand ${encoded}`
+        `powershell -NoProfile -EncodedCommand ${EXPECTED_START_BASE64}`
       );
     });
 
@@ -99,7 +96,14 @@ describe("registerAndStartHookReceiver", () => {
       registerAndStartHookReceiver(installDir, platform, execCommand);
 
       expect(executedCommands.length).toBe(1);
-      expect(executedCommands[0]).toContain("EncodedCommand");
+      // Verify this is the start command (not registration) by decoding the base64
+      const encodedPart = executedCommands[0].split("-EncodedCommand ")[1];
+      const decoded = Buffer.from(encodedPart, "base64");
+      let decodedStr = "";
+      for (let i = 0; i < decoded.length; i += 2) {
+        decodedStr += String.fromCharCode(decoded[i]);
+      }
+      expect(decodedStr).toContain("Start-Process");
     });
   });
 
