@@ -22,6 +22,11 @@ pub trait EventStore {
 
     /// Return the most recently started session, if any.
     fn get_latest_session(&self) -> Result<Option<Session>, String>;
+
+    /// Retrieve all events for a given session, ordered chronologically.
+    ///
+    /// Returns an empty Vec when the session does not exist or has no events.
+    fn get_events_for_session(&self, session_id: &str) -> Result<Vec<Event>, String>;
 }
 
 /// Normalization contract for tool-specific event providers.
@@ -89,6 +94,15 @@ mod tests {
 
         fn get_latest_session(&self) -> Result<Option<Session>, String> {
             Ok(self.sessions.first().cloned())
+        }
+
+        fn get_events_for_session(&self, session_id: &str) -> Result<Vec<Event>, String> {
+            Ok(self
+                .events
+                .iter()
+                .filter(|e| e.session_id == session_id)
+                .cloned()
+                .collect())
         }
     }
 
@@ -183,6 +197,39 @@ mod tests {
     }
 
     // --- EventProvider trait tests ---
+
+    #[test]
+    fn event_store_stub_returns_events_for_matching_session() {
+        let store = StubEventStore {
+            events: vec![
+                Event {
+                    session_id: "sess-1".to_string(),
+                    event_type: EventType::ToolCallStart,
+                    payload: serde_json::json!({}),
+                    received_at: "2026-03-12T10:00:00Z".to_string(),
+                    provider: "claude_code".to_string(),
+                },
+                Event {
+                    session_id: "sess-2".to_string(),
+                    event_type: EventType::SessionStart,
+                    payload: serde_json::json!({}),
+                    received_at: "2026-03-12T10:01:00Z".to_string(),
+                    provider: "claude_code".to_string(),
+                },
+            ],
+            sessions: Vec::new(),
+        };
+        let events = store.get_events_for_session("sess-1").unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].session_id, "sess-1");
+    }
+
+    #[test]
+    fn event_store_stub_returns_empty_for_nonexistent_session() {
+        let store = StubEventStore::new();
+        let events = store.get_events_for_session("no-such-session").unwrap();
+        assert!(events.is_empty());
+    }
 
     #[test]
     fn event_provider_returns_provider_name() {

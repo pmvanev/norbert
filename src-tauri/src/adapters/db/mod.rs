@@ -185,6 +185,43 @@ impl EventStore for SqliteEventStore {
         Ok(count)
     }
 
+    fn get_events_for_session(&self, session_id: &str) -> Result<Vec<Event>, String> {
+        let mut stmt = self
+            .connection
+            .prepare(
+                "SELECT session_id, event_type, payload, received_at FROM events WHERE session_id = ?1 ORDER BY received_at ASC",
+            )
+            .map_err(|e| format!("Failed to prepare session events query: {}", e))?;
+
+        let events = stmt
+            .query_map(rusqlite::params![session_id], |row| {
+                let session_id: String = row.get(0)?;
+                let event_type_str: String = row.get(1)?;
+                let payload_str: String = row.get(2)?;
+                let received_at: String = row.get(3)?;
+
+                let event_type: EventType =
+                    serde_json::from_str(&format!("\"{}\"", event_type_str))
+                        .unwrap_or(EventType::ToolCallStart);
+
+                let payload: serde_json::Value =
+                    serde_json::from_str(&payload_str).unwrap_or(serde_json::json!({}));
+
+                Ok(Event {
+                    session_id,
+                    event_type,
+                    payload,
+                    received_at,
+                    provider: String::new(),
+                })
+            })
+            .map_err(|e| format!("Failed to query session events: {}", e))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("Failed to read event row: {}", e))?;
+
+        Ok(events)
+    }
+
     fn get_latest_session(&self) -> Result<Option<Session>, String> {
         let mut stmt = self
             .connection
@@ -494,6 +531,85 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_str(&stored_payload).unwrap();
         assert_eq!(parsed["tool"], "Read");
         assert_eq!(parsed["path"], "/tmp/test");
+    }
+
+    // --- get_events_for_session tests ---
+
+    #[test]
+    fn get_events_for_session_returns_events_for_matching_session() {
+        let store = create_test_store();
+        let event1 = Event {
+            session_id: "sess-1".to_string(),
+            event_type: EventType::ToolCallStart,
+            payload: serde_json::json!({"tool": "bash"}),
+            received_at: "2026-03-12T10:00:00Z".to_string(),
+            provider: "claude_code".to_string(),
+        };
+        let event2 = Event {
+            session_id: "sess-1".to_string(),
+            event_type: EventType::ToolCallEnd,
+            payload: serde_json::json!({"tool": "bash"}),
+            received_at: "2026-03-12T10:01:00Z".to_string(),
+            provider: "claude_code".to_string(),
+        };
+        let event3 = Event {
+            session_id: "sess-2".to_string(),
+            event_type: EventType::SessionStart,
+            payload: serde_json::json!({}),
+            received_at: "2026-03-12T10:02:00Z".to_string(),
+            provider: "claude_code".to_string(),
+        };
+
+        store.write_event(&event1).unwrap();
+        store.write_event(&event2).unwrap();
+        store.write_event(&event3).unwrap();
+
+        let events = store.get_events_for_session("sess-1").unwrap();
+        assert_eq!(events.len(), 2);
+        assert!(events.iter().all(|e| e.session_id == "sess-1"));
+    }
+
+    #[test]
+    fn get_events_for_session_returns_events_in_chronological_order() {
+        let store = create_test_store();
+        let event_late = Event {
+            session_id: "sess-1".to_string(),
+            event_type: EventType::ToolCallEnd,
+            payload: serde_json::json!({}),
+            received_at: "2026-03-12T10:05:00Z".to_string(),
+            provider: "claude_code".to_string(),
+        };
+        let event_early = Event {
+            session_id: "sess-1".to_string(),
+            event_type: EventType::ToolCallStart,
+            payload: serde_json::json!({}),
+            received_at: "2026-03-12T10:00:00Z".to_string(),
+            provider: "claude_code".to_string(),
+        };
+
+        // Write late event first to verify ordering is by received_at, not insertion order
+        store.write_event(&event_late).unwrap();
+        store.write_event(&event_early).unwrap();
+
+        let events = store.get_events_for_session("sess-1").unwrap();
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].received_at, "2026-03-12T10:00:00Z");
+        assert_eq!(events[1].received_at, "2026-03-12T10:05:00Z");
+    }
+
+    #[test]
+    fn get_events_for_session_returns_empty_for_nonexistent_session() {
+        let store = create_test_store();
+        let events = store.get_events_for_session("no-such-session").unwrap();
+        assert!(events.is_empty());
+    }
+
+    #[test]
+    fn get_events_for_session_returns_empty_array_not_error() {
+        let store = create_test_store();
+        let result = store.get_events_for_session("empty-session");
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
     }
 
     #[test]

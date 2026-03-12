@@ -51,6 +51,22 @@ fn get_latest_session(state: tauri::State<AppState>) -> Option<Session> {
     store.get_latest_session().unwrap_or(None)
 }
 
+/// Return all sessions, most recent first.
+#[tauri::command]
+fn get_sessions(state: tauri::State<AppState>) -> Vec<Session> {
+    let store = state.event_store.lock().unwrap();
+    store.get_sessions().unwrap_or_default()
+}
+
+/// Return all events for a given session, ordered chronologically.
+///
+/// Returns an empty array when the session does not exist or has no events.
+#[tauri::command]
+fn get_session_events(state: tauri::State<AppState>, session_id: String) -> Vec<domain::Event> {
+    let store = state.event_store.lock().unwrap();
+    store.get_events_for_session(&session_id).unwrap_or_default()
+}
+
 /// Initialize the SQLite event store from the platform data directory.
 fn initialize_event_store() -> Result<SqliteEventStore, String> {
     let db_path = adapters::db::resolve_database_path()?;
@@ -116,7 +132,7 @@ pub fn run() {
                 let _ = window.hide();
             }
         })
-        .invoke_handler(tauri::generate_handler![greet, get_status, get_latest_session])
+        .invoke_handler(tauri::generate_handler![greet, get_status, get_latest_session, get_sessions, get_session_events])
         .run(tauri::generate_context!())
         .expect("error while running Norbert");
 }
