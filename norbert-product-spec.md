@@ -1,7 +1,7 @@
 # Norbert — Product Specification & Feature Overview
 
 > *Named after Norbert Wiener, the father of cybernetics.*
-> Norbert is a local-first observability and configuration management desktop app for Claude Code users. Install it once, and it quietly watches everything — surfacing insights, visualizing agent orchestration, and giving you complete visibility into what your AI is actually doing.
+> Norbert is a local-first observability and configuration management desktop app for AI coding agents. Claude Code is the first supported tool, but the architecture is designed to accommodate other coding agent tools — Gemini CLI, Codex, OpenCode, Augment, and others — through a provider abstraction layer. Install it once, and it quietly watches everything — surfacing insights, visualizing agent orchestration, and giving you complete visibility into what your AI is actually doing.
 
 ---
 
@@ -56,7 +56,7 @@
   - [React + Recharts — Dashboard UI](#react--recharts--dashboard-ui)
   - [SQLite (WAL mode) — Local Storage](#sqlite-wal-mode--local-storage)
   - [Git (libgit2 / gitoxide) — Config Drift Tracking](#git-libgit2--gitoxide--config-drift-tracking)
-  - [Claude Code HTTP Hooks — Data Collection](#claude-code-http-hooks--data-collection)
+  - [Event Ingestion — Provider Abstraction](#event-ingestion--provider-abstraction)
   - [Anthropic Admin API — Account Integration](#anthropic-admin-api--account-integration)
 - [Distribution](#distribution)
   - [Install Method — npx from GitHub](#install-method--npx-from-github)
@@ -1302,6 +1302,8 @@ A Norbert plugin can contribute any combination of the following:
 
 **Notification Handlers** — a plugin can subscribe to Norbert's internal event bus (session start/end, anomaly detected, DES enforcement, etc.) and trigger custom notifications or actions.
 
+**Event Providers** — a plugin can register as an event provider for a specific AI coding tool, supplying an adapter that normalizes the tool's native event format into Norbert's canonical event model. The Claude Code provider is built-in; additional providers (Gemini CLI, Codex, OpenCode, Augment, etc.) can ship as plugins. See [Event Ingestion — Provider Abstraction](#event-ingestion--provider-abstraction).
+
 ---
 
 ### Plugin API Contract
@@ -1401,6 +1403,7 @@ With a well-defined plugin architecture in place, most of Norbert's own feature 
 The distinction between **core** (always present, cannot be disabled) and **first-party plugin** (bundled but optional) is:
 
 **Core — always present:**
+- Event provider abstraction and Claude Code provider (built-in default)
 - Hook receiver HTTP server
 - SQLite database and WAL setup
 - `~/.claude/settings.json` merge on install
@@ -1424,7 +1427,7 @@ The distinction between **core** (always present, cannot be disabled) and **firs
 **Third-party plugins — separate install:**
 - `norbert-cc-plugin-nwave` — nWave session visualization, DES Visualizer, wave analytics, Artifact Browser
 
-This architecture means a user who only wants cost tracking and the session visualizer can disable everything else and keep Norbert's resource footprint minimal. It also means the community can build plugins for other Claude Code frameworks — a ruflo plugin, a Claude Flow plugin, or framework-specific visualizations — using the same API the nWave plugin uses.
+This architecture means a user who only wants cost tracking and the session visualizer can disable everything else and keep Norbert's resource footprint minimal. It also means the community can build plugins for other Claude Code frameworks (ruflo, Claude Flow) or entirely different AI coding tools (Gemini CLI, Codex, OpenCode, Augment) — using the same plugin API the nWave plugin uses. A tool-specific plugin contributes an event provider adapter to normalize that tool's telemetry into Norbert's canonical event model, and optionally contributes tool-specific views and MCP tools.
 
 ---
 
@@ -1469,22 +1472,52 @@ Configuration drift detection is implemented using a shadow Git repository that 
 
 Using Git for this is deliberate: the diff format is universally understood, the storage is efficient (Git stores deltas), and the implementation is straightforward. Norbert's drift UI is essentially a purpose-built viewer over a standard Git log.
 
-### Claude Code HTTP Hooks — Data Collection
+### Event Ingestion — Provider Abstraction
 
-Norbert receives all telemetry via Claude Code's native HTTP hook system. Claude Code POSTs structured JSON to `http://localhost:3748/hooks/{event}` at each lifecycle point. Hooks are configured as `async: true` where the result is not needed, ensuring zero impact on Claude Code's execution performance.
+Norbert receives telemetry through **event providers** — adapters that normalize tool-specific hook formats into Norbert's canonical event model. Claude Code is the first and default provider, but the architecture explicitly supports additional providers for other AI coding agents.
 
-The hook events Norbert consumes:
+#### Design Goal: Multi-Tool Extensibility
 
-| Event | Purpose |
-|---|---|
-| `PreToolUse` | Capture tool invocation with arguments; identify MCP server from tool name prefix |
-| `PostToolUse` | Capture tool result, duration, token delta; record MCP server response latency |
-| `SubagentStop` | Record agent completion with transcript path |
-| `Stop` | Session end, trigger digest generation |
-| `SessionStart` | Initialize session record, snapshot config, detect nWave presence |
-| `UserPromptSubmit` | Capture prompt for Prompt Archaeology |
+Norbert's core event model (sessions, tool calls, agent spawns, completions) is **tool-agnostic**. Each provider is responsible for:
+
+1. **Receiving** events in the tool's native format (HTTP hooks, file watching, CLI output parsing, etc.)
+2. **Normalizing** them into Norbert's canonical event schema (event type, timestamp, session ID, agent ID, payload)
+3. **Registering** the provider's identity so the UI can display tool-specific branding and context
+
+The provider abstraction lives at the port boundary (ports-and-adapters). The hook receiver HTTP server, the SQLite event store, and all plugin/visualization code operate on normalized events — they never see tool-specific payload formats. This means a future `gemini-cli` provider or `codex` provider plugs in without touching any core code or existing plugins.
+
+**Architectural rule**: No code above the provider adapter layer may import or reference Claude Code-specific types, event names, or payload structures. If a feature needs tool-specific behavior, it goes through the provider interface.
+
+#### Claude Code Provider (Default)
+
+The Claude Code provider receives telemetry via Claude Code's native HTTP hook system. Claude Code POSTs structured JSON to `http://localhost:3748/hooks/{event}` at each lifecycle point. Hooks are configured as `async: true` where the result is not needed, ensuring zero impact on Claude Code's execution performance.
+
+The hook events the Claude Code provider normalizes:
+
+| Claude Code Event | Norbert Canonical Event | Purpose |
+|---|---|---|
+| `PreToolUse` | `tool_call_start` | Capture tool invocation with arguments; identify MCP server from tool name prefix |
+| `PostToolUse` | `tool_call_end` | Capture tool result, duration, token delta; record MCP server response latency |
+| `SubagentStop` | `agent_complete` | Record agent completion with transcript path |
+| `Stop` | `session_end` | Session end, trigger digest generation |
+| `SessionStart` | `session_start` | Initialize session record, snapshot config, detect nWave presence |
+| `UserPromptSubmit` | `prompt_submit` | Capture prompt for Prompt Archaeology |
 
 MCP tool calls are identified within `PreToolUse` and `PostToolUse` events by their tool name format (`server_name__tool_name`), allowing Norbert to attribute each tool call to its originating MCP server without any additional instrumentation.
+
+#### Future Providers (Not Yet Implemented)
+
+The following tools are candidates for future providers. Each would ship as a separate plugin or built-in adapter:
+
+| Tool | Ingestion Method | Status |
+|---|---|---|
+| Gemini CLI | TBD (likely file/log watching or HTTP hooks) | Planned |
+| Codex | TBD | Planned |
+| OpenCode | TBD | Planned |
+| Augment CLI | TBD | Planned |
+| Generic HTTP | Webhook endpoint with user-defined payload mapping | Planned |
+
+Provider plugins register via the same `NorbertPlugin` interface used by all plugins, contributing a `provider` capability alongside the existing `views`, `hooks`, `mcp`, etc.
 
 ### Anthropic Admin API — Account Integration
 
@@ -2650,15 +2683,17 @@ Development proceeds in phases where each phase is independently deliverable and
 
 ### Phase 2 — Does Something
 
-*The moment Norbert becomes real.*
+*The moment Norbert becomes real — and looks like it belongs.*
 
+- Apply the `norbert-mockup-v5.html` design system from day one: CSS custom property theming, glassmorphism surfaces, Rajdhani/Share Tech Mono typography, all five themes (Norbert, Claude Dark, Claude Light, VS Code Dark, VS Code Light). No "restyle later" — Phase 2 ships with the intended aesthetic.
 - Session list view: open Norbert after running Claude Code and see the session appear with timestamp, duration, and basic event count
 - Clicking a session shows its raw hook events in a simple list
-- The app is now genuinely useful in a minimal way — it proves data flows from Claude Code into a readable UI
+- Event ingestion uses the provider abstraction: the Claude Code provider normalizes hook payloads into canonical events stored in SQLite. No Claude Code-specific types leak above the adapter layer.
+- The app is now genuinely useful in a minimal way — it proves data flows from an AI coding agent into a readable, polished UI
 
-This is the first version worth sharing with a collaborator. It is not impressive but it is *alive* — Norbert observes something and shows you what it saw.
+This is the first version worth sharing with a collaborator. It looks and feels like the product it will become — not a prototype wearing placeholder clothes.
 
-**Exit criteria:** Run Claude Code, do something, open Norbert, see the session and its events displayed in the UI without any manual steps.
+**Exit criteria:** Run Claude Code, do something, open Norbert, see the session and its events displayed in the UI styled to match the mockup, with theme switching working. The event pipeline uses the provider abstraction so a future non-Claude provider could plug in without touching UI or storage code.
 
 ---
 

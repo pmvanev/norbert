@@ -1,0 +1,237 @@
+journey:
+  name: "Session Event Viewer: Browse Sessions and Inspect Events"
+  goal: "Open Norbert after running Claude Code and see sessions with their events displayed in a readable UI"
+  persona: "Priya Chandrasekaran, a Claude Code power user running multi-agent sessions daily on Windows 11, spending $15-30/week on API costs"
+  feature_id: "session-event-viewer"
+
+  emotional_arc:
+    start: "Curious -- what happened in my Claude Code sessions?"
+    middle: "Oriented by session list, then engaged drilling into event details"
+    end: "Informed and satisfied -- Norbert is genuinely useful"
+    pattern: "Discovery Joy"
+
+  prerequisite:
+    - "Walking skeleton delivered (Tauri app, hook receiver, SQLite, settings merge)"
+    - "At least one Claude Code session has been run with Norbert active"
+    - "norbert-mockup-v5.html design system available for styling reference"
+
+steps:
+  - id: 1
+    name: "Session List Loads"
+    action: "User opens Norbert window (tray icon click or app launch)"
+    trigger: "User wants to review recent Claude Code session activity"
+
+    ui_mockup: |
+      +-- Session List ------------------------------------------------+
+      |                                                                 |
+      |  SESSIONS                                                       |
+      |                                                                 |
+      |  +-- Session Row (live) -------------------------------------+  |
+      |  | * nw:deliver -- user-auth       12m 34s        47 events  |  |
+      |  |   2026-03-12 14:23:01                           $0.84     |  |
+      |  +-----------------------------------------------------------+  |
+      |                                                                 |
+      |  +-- Session Row (completed) --------------------------------+  |
+      |  | . refactor payment module       42m 18s       134 events  |  |
+      |  |   2026-03-12 09:15:33                           $3.21     |  |
+      |  +-----------------------------------------------------------+  |
+      |                                                                 |
+      |  +-- Session Row (completed) --------------------------------+  |
+      |  | . quick question                 2m 05s         8 events  |  |
+      |  |   2026-03-11 16:44:12                           $0.12     |  |
+      |  +-----------------------------------------------------------+  |
+      |                                                                 |
+      +--------- Status: Listening | 3 sessions | 189 events -----------+
+
+    shared_artifacts:
+      - name: "session_list"
+        source: "EventStore::get_sessions() query (SQLite sessions table)"
+        displayed_as: "List of session rows"
+        consumers:
+          - "Session list view"
+          - "Status bar session count"
+      - name: "design_system"
+        source: "norbert-mockup-v5.html CSS variables"
+        displayed_as: "Glassmorphism styling, fonts, colors"
+        consumers:
+          - "All UI components"
+
+    emotional_state:
+      entry: "Curious -- what happened in my sessions?"
+      exit: "Oriented -- I can see all my sessions at a glance"
+
+    error_paths:
+      - trigger: "No sessions in database"
+        user_sees: "Empty state: 'No sessions captured yet. Run a Claude Code session to see data here.'"
+        recovery: "User runs a Claude Code session; session appears on next poll"
+      - trigger: "Database read error"
+        user_sees: "Error message in main content area"
+        recovery: "Restart Norbert; if persistent, check database file permissions"
+
+    integration_checkpoint: |
+      1. get_sessions() IPC command returns session list from SQLite
+      2. Sessions ordered most-recent-first
+      3. Each session shows: timestamp, duration, event count
+      4. Live sessions show pulsing green dot
+      5. Completed sessions show dim dot
+      6. Design system CSS variables applied to all session row elements
+
+    gherkin: |
+      Scenario: Session list displays after running Claude Code
+        Given Priya has run 3 Claude Code sessions with Norbert active
+        And the sessions produced 47, 134, and 8 events respectively
+        When Priya opens the Norbert window
+        Then she sees 3 session rows in the session list
+        And the most recent session appears at the top
+        And each session shows its start timestamp, duration, and event count
+
+      Scenario: Empty state when no sessions exist
+        Given Priya has just installed Norbert and has not run any Claude Code sessions
+        When she opens the Norbert window
+        Then she sees "No sessions captured yet"
+        And the empty state message suggests running a Claude Code session
+
+  - id: 2
+    name: "User Clicks a Session"
+    action: "User clicks a session row to view its events"
+    trigger: "User wants to see what happened inside a specific session"
+
+    ui_mockup: |
+      +-- Session Detail + Event List ---------------------------------+
+      |                                                                 |
+      |  < Back to Sessions                                             |
+      |                                                                 |
+      |  SESSION: refactor payment module                               |
+      |  Started: 2026-03-12 09:15:33  |  Duration: 42m 18s            |
+      |  Events: 134                    |  Status: completed            |
+      |                                                                 |
+      |  EVENTS                                                134 total|
+      |                                                                 |
+      |  +-- Event Row -----------------------------------------------+ |
+      |  | 09:15:33  SESSION_START                                     | |
+      |  +-------------------------------------------------------------+ |
+      |                                                                 |
+      |  +-- Event Row -----------------------------------------------+ |
+      |  | 09:15:35  USER_PROMPT_SUBMIT                                | |
+      |  |   "Help me refactor the payment module to use..."           | |
+      |  +-------------------------------------------------------------+ |
+      |                                                                 |
+      |  +-- Event Row -----------------------------------------------+ |
+      |  | 09:15:38  PRE_TOOL_USE                        tool: Read    | |
+      |  |   path: src/payment/processor.ts                            | |
+      |  +-------------------------------------------------------------+ |
+      |                                                                 |
+      |  +-- Event Row -----------------------------------------------+ |
+      |  | 09:15:39  POST_TOOL_USE                       tool: Read    | |
+      |  +-------------------------------------------------------------+ |
+      |                                                                 |
+      |  +-- Event Row -----------------------------------------------+ |
+      |  | 09:57:51  STOP                                              | |
+      |  +-------------------------------------------------------------+ |
+      |                                                                 |
+      +--------- Status: Listening | 3 sessions | 189 events -----------+
+
+    shared_artifacts:
+      - name: "selected_session_id"
+        source: "User click on session row"
+        displayed_as: "Session header metadata"
+        consumers:
+          - "Session detail header"
+          - "Events query filter"
+      - name: "session_events"
+        source: "EventStore::get_events_for_session(session_id) query"
+        displayed_as: "Chronological event list"
+        consumers:
+          - "Event list view"
+          - "Event count in header"
+
+    emotional_state:
+      entry: "Engaged -- I want to see inside this session"
+      exit: "Informed -- I can see every event that happened"
+
+    error_paths:
+      - trigger: "Session has no events"
+        user_sees: "'No events recorded for this session.'"
+        recovery: "Informational only; user navigates back"
+      - trigger: "Session ID no longer exists in database"
+        user_sees: "Error state with message to return to session list"
+        recovery: "User clicks back to session list"
+
+    integration_checkpoint: |
+      1. Click on session row passes session.id to event detail view
+      2. get_events_for_session(session_id) IPC command returns events
+      3. Events ordered chronologically (oldest first within session)
+      4. Event type displayed as human-readable label
+      5. Timestamp shown relative to session date
+      6. Payload snippet visible for events with relevant data
+      7. Back navigation returns to session list
+
+    gherkin: |
+      Scenario: Clicking a session shows its events
+        Given Priya sees the session "refactor payment module" in the session list
+        And that session has 134 events including PreToolUse, PostToolUse, and Stop
+        When Priya clicks on the "refactor payment module" session row
+        Then she sees a session header with start time "2026-03-12 09:15:33"
+        And the header shows duration "42m 18s" and event count 134
+        And below the header she sees a chronological list of all 134 events
+        And the first event is SESSION_START at 09:15:33
+        And the last event is STOP at 09:57:51
+
+      Scenario: Event list shows tool names from payload
+        Given Priya is viewing events for the "refactor payment module" session
+        When she looks at a PRE_TOOL_USE event
+        Then she sees the tool name "Read" extracted from the event payload
+        And she sees a payload snippet showing the file path
+
+  - id: 3
+    name: "Navigate Back to Session List"
+    action: "User clicks 'Back to Sessions' link"
+    trigger: "User wants to view a different session or is done inspecting"
+
+    ui_mockup: |
+      +-- Back Navigation ---+
+      |  < Back to Sessions  |
+      +----------------------+
+
+    shared_artifacts: []
+
+    emotional_state:
+      entry: "Satisfied or curious about another session"
+      exit: "Oriented -- back to the full session list"
+
+    integration_checkpoint: |
+      1. Back navigation returns to session list view
+      2. Session list reflects any new sessions captured since last view
+
+    gherkin: |
+      Scenario: Back navigation returns to session list
+        Given Priya is viewing events for a specific session
+        When she clicks "Back to Sessions"
+        Then the event list is replaced by the full session list
+        And the session list shows all sessions including any newly captured ones
+
+integration_validation:
+  shared_artifact_consistency:
+    - artifact: "session_list"
+      must_match_across: [1, 3]
+      failure_message: "Session list data must be consistent between initial load and return from detail view"
+    - artifact: "design_system"
+      must_match_across: [1, 2, 3]
+      failure_message: "Glassmorphism styling must be consistent across all views"
+    - artifact: "selected_session_id"
+      must_match_across: [2]
+      failure_message: "Session ID passed to event query must match the clicked session row"
+
+  pipeline_validation:
+    - stage: "Session List Query"
+      input: "get_sessions() IPC call"
+      output: "Array of Session objects ordered by started_at DESC"
+      failure_mode: "Empty array despite sessions in database, or wrong ordering"
+    - stage: "Event List Query"
+      input: "get_events_for_session(session_id) IPC call"
+      output: "Array of HookEvent objects ordered chronologically"
+      failure_mode: "Empty array despite events in database, wrong session_id filter, or wrong ordering"
+    - stage: "UI Rendering"
+      input: "Session and event data from IPC"
+      output: "Styled list views matching design system"
+      failure_mode: "Raw unstyled data, missing glassmorphism theme, broken layout"
