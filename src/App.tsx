@@ -54,6 +54,16 @@ function App() {
     []
   );
 
+  /// Handler for selecting a session row to view its events.
+  const handleSessionSelect = useCallback((sessionId: string) => {
+    setSelectedSessionId(sessionId);
+  }, []);
+
+  /// Handler for navigating back to the session list.
+  const handleBackToSessions = useCallback(() => {
+    setSelectedSessionId(null);
+  }, []);
+
   useEffect(() => {
     function pollStatus() {
       invoke<AppStatus>("get_status")
@@ -100,16 +110,6 @@ function App() {
     selectedSessionId !== null
       ? sessions.find((s) => s.id === selectedSessionId) ?? null
       : null;
-
-  /// Handler for selecting a session row to view its events.
-  const handleSessionSelect = useCallback((sessionId: string) => {
-    setSelectedSessionId(sessionId);
-  }, []);
-
-  /// Handler for navigating back to the session list.
-  const handleBackToSessions = useCallback(() => {
-    setSelectedSessionId(null);
-  }, []);
 
   return (
     <main>
