@@ -1,0 +1,157 @@
+roadmap:
+  feature_id: "session-event-viewer"
+  title: "Session Event Viewer"
+  paradigm: "functional"
+  date: "2026-03-12"
+  estimated_effort: "4-7 days"
+  estimated_production_files: 12
+  step_ratio: 0.58  # 7 steps / 12 files = 0.58 (well under 2.5)
+
+  rejected_simple_alternatives:
+    - alternative: "Add event query to walking skeleton without provider abstraction"
+      expected_impact: "80% -- sessions and events displayable immediately"
+      why_insufficient: "Product spec Phase 2 exit criteria explicitly requires provider abstraction. Deferring creates Claude Code-specific types in storage and UI that require migration later. Cost grows with every feature built on wrong types."
+    - alternative: "Style with minimal CSS, no design system extraction"
+      expected_impact: "60% -- functional but visually inconsistent with target aesthetic"
+      why_insufficient: "Phase 2 is the 'becoming real' moment. Product spec states 'no restyle later'. User stories US-SEV-003 requires glassmorphism. Trust depends on polish."
+
+phases:
+  - id: "01"
+    title: "Provider Abstraction and Canonical Types"
+    description: "Establish the provider boundary and canonical event model"
+    steps:
+      - id: "01-01"
+        title: "Canonical event types and provider port"
+        description: "Replace Claude Code-specific EventType/HookEvent in domain with canonical equivalents. Add EventProvider port trait."
+        acceptance_criteria:
+          - "Domain module exports canonical event type enum with 6 tool-agnostic variants"
+          - "Domain module exports canonical event struct with provider field"
+          - "EventProvider port trait defines normalization contract"
+          - "No Claude Code-specific names in domain or ports modules"
+        architectural_constraints:
+          - "Canonical types are the only event types in domain"
+          - "EventProvider trait lives in ports module"
+          - "Pure types only -- no IO, no framework imports"
+        notes: "Existing EventType enum and HookEvent struct are refactored, not removed. Walking skeleton tests updated to use canonical types."
+
+      - id: "01-02"
+        title: "Claude Code provider adapter"
+        description: "Implement Claude Code provider that normalizes hook payloads into canonical events."
+        acceptance_criteria:
+          - "Provider maps all 6 Claude Code event types to canonical equivalents"
+          - "Provider extracts session_id from Claude Code payload"
+          - "Provider returns error for unrecognized event types"
+          - "Tool name extracted from PreToolUse/PostToolUse payloads"
+        architectural_constraints:
+          - "Claude Code-specific types private to this adapter module"
+          - "Provider is a pure function: raw input -> canonical output, no IO"
+          - "Lives in adapters/providers/claude_code"
+
+      - id: "01-03"
+        title: "Hook receiver integration with provider"
+        description: "Update hook receiver to delegate normalization to Claude Code provider before writing canonical events via EventStore."
+        acceptance_criteria:
+          - "Hook receiver uses provider to normalize before storage"
+          - "EventStore receives and stores canonical events"
+          - "All existing hook receiver behavior preserved (400 for unknown types, 200 after persist)"
+          - "SQLite stores canonical event type names (tool_call_start, not pre_tool_use)"
+        architectural_constraints:
+          - "Hook handler does not import Claude Code types directly"
+          - "EventStore write_event accepts canonical event type"
+
+  - id: "02"
+    title: "Backend Query Extension"
+    description: "Add event query capability for session drill-down"
+    steps:
+      - id: "02-01"
+        title: "EventStore session events query and IPC commands"
+        description: "Extend EventStore with get_events_for_session. Add get_sessions and get_session_events IPC commands."
+        acceptance_criteria:
+          - "get_events_for_session returns events filtered by session_id, ordered chronologically"
+          - "get_sessions IPC command exposes existing EventStore method to frontend"
+          - "get_session_events IPC command accepts session_id and returns canonical events"
+          - "Empty session returns empty array, not error"
+        architectural_constraints:
+          - "Query uses existing idx_events_session_id index"
+          - "IPC commands follow existing pattern (AppState, Mutex lock)"
+
+  - id: "03"
+    title: "Design System Foundation"
+    description: "Extract and apply the glassmorphism design system from the mockup"
+    steps:
+      - id: "03-01"
+        title: "Design system CSS, fonts, and theme switching"
+        description: "Extract all 5 theme CSS variable sets from norbert-mockup-v5.html. Load Rajdhani and Share Tech Mono fonts. Implement theme switching with localStorage persistence."
+        acceptance_criteria:
+          - "All 5 themes from mockup available (Norbert, Claude Dark, VS Code Dark, Claude Light, VS Code Light)"
+          - "Rajdhani font renders for UI labels; Share Tech Mono for data values"
+          - "Theme switching mechanism changes active theme on all UI elements"
+          - "Selected theme persists across app restarts via localStorage"
+          - "Norbert theme is the default when no preference is stored"
+        architectural_constraints:
+          - "All colors via CSS custom properties, never hardcoded"
+          - "Theme applied as CSS class on root element (.theme-nb, .theme-cd, .theme-vd, .theme-cl, .theme-vl)"
+          - "Fonts loaded via Google Fonts link in HTML head"
+
+  - id: "04"
+    title: "Session List and Event Detail Views"
+    description: "Build the two main UI views with full design system styling"
+    steps:
+      - id: "04-01"
+        title: "Session list view"
+        description: "Replace walking skeleton status display with session list. Session rows with glassmorphism cards, status dots, metadata."
+        acceptance_criteria:
+          - "Session list displays all sessions ordered most-recent-first"
+          - "Each row shows start timestamp, duration, and event count"
+          - "Active sessions show pulsing green status dot; completed show dim dot"
+          - "Empty state shows clear non-error message when no sessions exist"
+          - "List polls for updates at existing 1-second interval"
+        architectural_constraints:
+          - "Session rows use .srow/.sdot/.sname patterns from mockup"
+          - "Duration uses existing formatDuration/calculateDurationSeconds functions"
+          - "Status bar preserved at bottom"
+
+      - id: "04-02"
+        title: "Event detail view with navigation"
+        description: "Click session row to view chronological events. Back navigation returns to session list."
+        acceptance_criteria:
+          - "Clicking a session row shows event detail view with session header"
+          - "Session header displays start time, duration, event count, status"
+          - "Events listed chronologically with timestamp, canonical event type, and payload snippet"
+          - "Tool name displayed for tool_call_start and tool_call_end events"
+          - "Back to Sessions navigation returns to session list"
+        architectural_constraints:
+          - "Navigation via selectedSessionId state (null = list, non-null = detail)"
+          - "Event list scrollable; session header stays fixed"
+          - "Event type displayed as uppercase canonical label"
+
+validation:
+  quality_gates:
+    - "Provider abstraction enforced: no Claude Code types above adapter layer"
+    - "All canonical event types stored and queryable"
+    - "Session list and event detail views render with design system styling"
+    - "End-to-end: Claude Code hook -> provider -> canonical event -> SQLite -> IPC -> UI"
+    - "Walking skeleton behavior preserved (status, tray, polling)"
+
+  exit_criteria: "Run Claude Code, do something, open Norbert, see the session and its events displayed in the UI styled to match the mockup, with theme switching working. The event pipeline uses the provider abstraction so a future non-Claude provider could plug in without touching UI or storage code."
+
+implementation_scope:
+  in_scope:
+    - "Canonical event types in domain"
+    - "EventProvider port + Claude Code adapter"
+    - "EventStore extended with session event query"
+    - "Two new IPC commands (get_sessions, get_session_events)"
+    - "Session list view with glassmorphism styling"
+    - "Event detail view with navigation"
+    - "Design system CSS with all 5 themes and theme switching"
+    - "Font loading (Rajdhani, Share Tech Mono)"
+    - "Theme persistence via localStorage"
+
+  out_of_scope:
+    - "Event filtering, search, sorting"
+    - "Event payload expansion (click for full JSON)"
+    - "Plugin architecture"
+    - "Cost tracking display"
+    - "Session name from first prompt"
+    - "Provider registry or dynamic loading"
+    - "Pagination"
