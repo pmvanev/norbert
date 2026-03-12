@@ -106,6 +106,22 @@ fn map_row_to_session(row: &rusqlite::Row) -> rusqlite::Result<Session> {
     })
 }
 
+impl SqliteEventStore {
+    /// Query the stored event_type for a given session_id.
+    ///
+    /// Test helper: returns the event_type string as stored in SQLite
+    /// for the first event matching the given session_id.
+    pub fn get_stored_event_type(&self, session_id: &str) -> Result<String, String> {
+        self.connection
+            .query_row(
+                "SELECT event_type FROM events WHERE session_id = ?1 LIMIT 1",
+                rusqlite::params![session_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("Failed to query event type: {}", e))
+    }
+}
+
 impl EventStore for SqliteEventStore {
     fn write_event(&self, event: &Event) -> Result<(), String> {
         // Upsert session: create if not exists, increment event_count

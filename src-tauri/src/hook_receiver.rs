@@ -1,7 +1,8 @@
 /// Hook receiver sidecar binary.
 ///
 /// HTTP server on 127.0.0.1:3748 accepting POST /hooks/:event_type.
-/// Validates event type, persists to SQLite via EventStore, returns 200 after write.
+/// Delegates normalization to an EventProvider, persists canonical events
+/// via EventStore, returns 200 after write.
 /// This is a separate binary target sharing the same crate as the Tauri app.
 
 use std::net::SocketAddr;
@@ -15,38 +16,35 @@ use axum::{
     Json, Router,
 };
 use norbert_lib::adapters::db::SqliteEventStore;
-use norbert_lib::domain::{parse_event_type, Event, HOOK_PORT};
-use norbert_lib::ports::EventStore;
+use norbert_lib::adapters::providers::claude_code::ClaudeCodeProvider;
+use norbert_lib::domain::HOOK_PORT;
+use norbert_lib::ports::{EventProvider, EventStore};
 use rusqlite::Connection;
 
-/// Shared application state holding the event store.
+/// Shared application state holding the event store and provider.
 ///
 /// Wraps SqliteEventStore in a Mutex because rusqlite::Connection
 /// is Send but not Sync. The Mutex ensures safe concurrent access
 /// from multiple HTTP request handlers.
+///
+/// The provider handles normalization of raw hook events into
+/// canonical event types before storage.
 struct AppState {
     event_store: Mutex<SqliteEventStore>,
+    provider: Box<dyn EventProvider + Send + Sync>,
 }
 
 /// Handle POST /hooks/:event_type.
 ///
-/// Validates the event type from the URL path, parses the JSON body,
-/// creates a HookEvent, persists it, and returns 200 on success.
+/// Extracts session_id from payload, delegates normalization to the
+/// EventProvider, persists the canonical event via EventStore, and
+/// returns 200 on success. Returns 400 for unknown event types or
+/// missing session_id.
 async fn handle_hook_event(
     State(state): State<Arc<AppState>>,
     Path(event_type_name): Path<String>,
     Json(payload): Json<serde_json::Value>,
 ) -> impl IntoResponse {
-    let event_type = match parse_event_type(&event_type_name) {
-        Some(et) => et,
-        None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                format!("Unknown event type: {}", event_type_name),
-            );
-        }
-    };
-
     let session_id = match payload.get("session_id").and_then(|v| v.as_str()) {
         Some(id) => id.to_string(),
         None => {
@@ -60,16 +58,23 @@ async fn handle_hook_event(
 
     let received_at = chrono::Utc::now().to_rfc3339();
 
-    let hook_event = Event {
+    let canonical_event = match state.provider.normalize(
+        &event_type_name,
         session_id,
-        event_type,
         payload,
         received_at,
-        provider: "claude_code".to_string(),
+    ) {
+        Some(event) => event,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                format!("Unknown event type: {}", event_type_name),
+            );
+        }
     };
 
     let store = state.event_store.lock().unwrap();
-    match store.write_event(&hook_event) {
+    match store.write_event(&canonical_event) {
         Ok(()) => (StatusCode::OK, "OK".to_string()),
         Err(e) => {
             eprintln!("Failed to persist event: {}", e);
@@ -116,6 +121,7 @@ async fn main() {
 
     let state = Arc::new(AppState {
         event_store: Mutex::new(event_store),
+        provider: Box::new(ClaudeCodeProvider),
     });
     let app = build_router(state);
 
@@ -148,7 +154,8 @@ mod tests {
     };
     use tower::ServiceExt;
 
-    /// Create a test app state with an in-memory SQLite database.
+    /// Create a test app state with an in-memory SQLite database
+    /// and the ClaudeCodeProvider for normalization.
     fn test_state() -> Arc<AppState> {
         let conn =
             Connection::open_in_memory().expect("Failed to open in-memory database");
@@ -156,6 +163,7 @@ mod tests {
             SqliteEventStore::new(conn).expect("Failed to initialize schema");
         Arc::new(AppState {
             event_store: Mutex::new(event_store),
+            provider: Box::new(ClaudeCodeProvider),
         })
     }
 
@@ -287,6 +295,41 @@ mod tests {
                 event_type
             );
         }
+    }
+
+    #[tokio::test]
+    async fn provider_normalizes_event_before_storage() {
+        // Integration test: hook receiver delegates to EventProvider,
+        // which normalizes PascalCase -> canonical EventType before storage.
+        let state = test_state();
+        let app = build_router(state.clone());
+
+        let body = serde_json::json!({
+            "session_id": "sess-provider-test",
+            "tool": "bash"
+        });
+
+        // Send PascalCase event type (Claude Code format)
+        let request = Request::builder()
+            .method("POST")
+            .uri("/hooks/PreToolUse")
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::to_string(&body).unwrap()))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Verify event was stored with canonical event type, not raw PascalCase
+        let stored_type: String = {
+            let store = state.event_store.lock().unwrap();
+            store.get_stored_event_type("sess-provider-test")
+                .expect("should find stored event")
+        };
+        assert_eq!(
+            stored_type, "tool_call_start",
+            "SQLite should store canonical event type (tool_call_start), not raw name (PreToolUse)"
+        );
     }
 
     #[tokio::test]
