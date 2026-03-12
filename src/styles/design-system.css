@@ -201,6 +201,128 @@ code, pre, .mono,
   50% { opacity: 0.35; }
 }
 
+/* ═══ EVENT DETAIL VIEW ═══ */
+
+.event-detail {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+.event-detail-header {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-toolbar);
+  flex-shrink: 0;
+}
+
+.back-button {
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--font-ui);
+  color: var(--brand);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 0;
+  margin-bottom: 6px;
+  transition: color 0.12s;
+}
+
+.back-button:hover {
+  color: var(--text-p);
+}
+
+.session-header-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.session-header-field {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.session-header-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-m);
+  font-family: var(--font-mono);
+}
+
+.session-header-value {
+  font-size: 10px;
+  color: var(--text-s);
+}
+
+.session-header-value.status-active {
+  color: var(--success);
+}
+
+.session-header-value.status-completed {
+  color: var(--text-m);
+}
+
+/* ═══ EVENT LIST ═══ */
+
+.event-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 8px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.event-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--card-r);
+  transition: background 0.12s;
+}
+
+.event-row:hover {
+  background: var(--bg-card-h);
+}
+
+.event-time {
+  font-size: 9px;
+  color: var(--text-m);
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 65px;
+}
+
+.event-type {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--brand);
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 120px;
+  font-family: var(--font-mono);
+}
+
+.event-payload {
+  font-size: 9px;
+  color: var(--text-m);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
 /* ═══ STATUS BAR ═══ */
 
 .status-bar {

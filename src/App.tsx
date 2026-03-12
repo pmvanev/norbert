@@ -8,6 +8,7 @@ import {
   deriveConnectionStatus,
 } from "./domain/status";
 import { SessionListView } from "./views/SessionListView";
+import { EventDetailView } from "./views/EventDetailView";
 import {
   type ThemeName,
   THEME_NAMES,
@@ -34,6 +35,7 @@ function App() {
   const [status, setStatus] = useState<AppStatus | null>(null);
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [theme, setTheme] = useState<ThemeName>(() =>
     readStoredTheme(localStorage)
   );
@@ -93,6 +95,22 @@ function App() {
     latestSession
   );
 
+  /// Find the selected session object from the sessions list.
+  const selectedSession =
+    selectedSessionId !== null
+      ? sessions.find((s) => s.id === selectedSessionId) ?? null
+      : null;
+
+  /// Handler for selecting a session row to view its events.
+  const handleSessionSelect = useCallback((sessionId: string) => {
+    setSelectedSessionId(sessionId);
+  }, []);
+
+  /// Handler for navigating back to the session list.
+  const handleBackToSessions = useCallback(() => {
+    setSelectedSessionId(null);
+  }, []);
+
   return (
     <main>
       <h1>{formatHeader("Norbert", status.version)}</h1>
@@ -111,7 +129,17 @@ function App() {
           ))}
         </select>
       </div>
-      <SessionListView sessions={sessions} />
+      {selectedSession !== null ? (
+        <EventDetailView
+          session={selectedSession}
+          onBack={handleBackToSessions}
+        />
+      ) : (
+        <SessionListView
+          sessions={sessions}
+          onSessionSelect={handleSessionSelect}
+        />
+      )}
       <footer className="status-bar">
         <span>{formatField("Status", derivedStatus)}</span>
         <span>{formatField("Port", status.port)}</span>
