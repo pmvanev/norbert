@@ -42,10 +42,12 @@ try {
     exit 1
 }
 
-# --- Stop existing receiver (unlock binary before overwrite) ---
+# --- Stop existing Norbert processes (unlock binaries before overwrite) ---
 
-Write-Host "Stopping existing hook receiver..."
+Write-Host "Stopping existing Norbert processes..."
+Stop-Process -Name 'norbert' -ErrorAction SilentlyContinue
 Stop-Process -Name 'norbert-hook-receiver' -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 1
 
 # --- Extract ---
 

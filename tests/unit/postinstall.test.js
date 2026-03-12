@@ -104,10 +104,10 @@ describe("buildStartupShortcutCommand", () => {
 describe("buildStartReceiverCommand", () => {
   const installDir = "C:\\Users\\Phil\\.norbert\\bin";
 
-  it("stops any prior instance before starting", () => {
+  it("stops both norbert and hook receiver before starting", () => {
     const command = buildStartReceiverCommand(installDir);
-    expect(command).toContain("Stop-Process");
-    expect(command).toContain("norbert-hook-receiver");
+    expect(command).toContain("Stop-Process -Name 'norbert'");
+    expect(command).toContain("Stop-Process -Name 'norbert-hook-receiver'");
   });
 
   it("starts the hook receiver binary", () => {

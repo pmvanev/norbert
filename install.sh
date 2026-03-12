@@ -99,11 +99,11 @@ TEMP_FILE="${TEMP_DIR}/${ASSET}"
 
 curl -fSL --progress-bar "$DOWNLOAD_URL" -o "$TEMP_FILE" || die "Failed to download ${DOWNLOAD_URL}. The release asset may not exist for your platform."
 
-# Stop existing hook receiver before binary overwrite (unlock file on Windows)
+# Stop existing Norbert processes before binary overwrite (unlock files on Windows)
 case "$PLATFORM" in
   win32-*)
-    echo "Stopping existing hook receiver..."
-    powershell.exe -NoProfile -Command "Stop-Process -Name 'norbert-hook-receiver' -ErrorAction SilentlyContinue" 2>/dev/null || true
+    echo "Stopping existing Norbert processes..."
+    powershell.exe -NoProfile -Command "Stop-Process -Name 'norbert' -ErrorAction SilentlyContinue; Stop-Process -Name 'norbert-hook-receiver' -ErrorAction SilentlyContinue; Start-Sleep -Seconds 1" 2>/dev/null || true
     ;;
 esac
 

@@ -70,7 +70,9 @@ export function buildStartReceiverCommand(installDir) {
   const quotedPath = quotePath(binaryPath);
 
   return [
+    `Stop-Process -Name 'norbert' -ErrorAction SilentlyContinue`,
     `Stop-Process -Name 'norbert-hook-receiver' -ErrorAction SilentlyContinue`,
+    `Start-Sleep -Seconds 1`,
     `Start-Process -FilePath ${quotedPath} -WindowStyle Hidden`,
   ].join("; ");
 }
