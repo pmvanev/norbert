@@ -1,0 +1,145 @@
+handoff:
+  feature_id: "session-event-viewer"
+  from: "acceptance-designer (DISTILL wave)"
+  to: "software-crafter (DELIVER wave)"
+  date: "2026-03-12"
+  status: "ready-for-deliver"
+
+  artifacts:
+    feature_file: "docs/feature/session-event-viewer/distill/acceptance-scenarios.feature"
+    test_scenarios: "docs/feature/session-event-viewer/distill/test-scenarios.md"
+    handoff: "docs/feature/session-event-viewer/distill/acceptance-test-handoff.yaml"
+
+  summary:
+    total_scenarios: 24
+    walking_skeletons: 2
+    focused_scenarios: 22
+    error_edge_ratio: "42%"
+    property_scenarios: 1
+    stories_covered:
+      - "US-SEV-001: Session List View (7 focused scenarios)"
+      - "US-SEV-002: Event Detail View (8 focused scenarios)"
+      - "US-SEV-003: Design System Application (4 focused scenarios)"
+      - "Provider Abstraction Boundary (3 focused scenarios)"
+
+  walking_skeleton_identification:
+    - id: "WS-1"
+      title: "Priya browses her session history and inspects a session's events"
+      stories: ["US-SEV-001", "US-SEV-002"]
+      implement_first: true
+      rationale: "Thinnest vertical slice delivering observable user value: list sessions, click one, see events, navigate back. Touches IPC, EventStore, frontend views, and design system."
+    - id: "WS-2"
+      title: "Priya sees sessions from multiple tools displayed with tool-agnostic labels"
+      stories: ["US-SEV-001", "US-SEV-002"]
+      implement_first: false
+      rationale: "Proves the provider abstraction boundary delivers user-visible value: canonical labels in the UI, no Claude Code jargon."
+
+  implementation_sequence:
+    description: "One-at-a-time enablement order. All scenarios start with @skip. Enable one, make it pass, commit, enable next."
+    order:
+      - { position: 1, scenario: "WS-1: Browse sessions and inspect events", file: "session-list.test.ts + event-detail.test.ts" }
+      - { position: 2, scenario: "WS-2: Tool-agnostic labels", file: "provider-boundary.test.ts" }
+      - { position: 3, scenario: "S1: Session list ordered", file: "session-list.test.ts" }
+      - { position: 4, scenario: "S5: Empty state", file: "session-list.test.ts" }
+      - { position: 5, scenario: "S2: Completed session duration", file: "session-list.test.ts" }
+      - { position: 6, scenario: "S3: Active session live indicator", file: "session-list.test.ts" }
+      - { position: 7, scenario: "S4: Session list updates", file: "session-list.test.ts" }
+      - { position: 8, scenario: "E1: Click session shows events", file: "event-detail.test.ts" }
+      - { position: 9, scenario: "E2: Tool call shows tool name", file: "event-detail.test.ts" }
+      - { position: 10, scenario: "E3: Prompt shows truncated text", file: "event-detail.test.ts" }
+      - { position: 11, scenario: "E5: Back navigation", file: "event-detail.test.ts" }
+      - { position: 12, scenario: "E8: Empty event message", file: "event-detail.test.ts" }
+      - { position: 13, scenario: "E7: Single event session", file: "event-detail.test.ts" }
+      - { position: 14, scenario: "E4: Scrollable event list", file: "event-detail.test.ts" }
+      - { position: 15, scenario: "E6: Navigate to different session", file: "event-detail.test.ts" }
+      - { position: 16, scenario: "P1: Canonical types throughout", file: "provider-boundary.test.ts" }
+      - { position: 17, scenario: "P2: Unknown event type rejected", file: "provider-boundary.test.ts" }
+      - { position: 18, scenario: "P3: Events isolated by session", file: "provider-boundary.test.ts" }
+      - { position: 19, scenario: "D1: Glassmorphism cards", file: "design-system.test.ts" }
+      - { position: 20, scenario: "D2: Typography fonts", file: "design-system.test.ts" }
+      - { position: 21, scenario: "D3: Visual consistency", file: "design-system.test.ts" }
+      - { position: 22, scenario: "D4: Empty state styling", file: "design-system.test.ts" }
+      - { position: 23, scenario: "S6: Zero-length duration", file: "session-list.test.ts" }
+      - { position: 24, scenario: "S7: Many sessions", file: "session-list.test.ts" }
+
+  driving_ports:
+    - port: "get_sessions IPC command"
+      module: "app (Tauri IPC)"
+      scenarios: ["WS-1", "S1-S7"]
+    - port: "get_session_events IPC command"
+      module: "app (Tauri IPC)"
+      scenarios: ["WS-1", "E1-E8"]
+    - port: "EventProvider::normalize() port"
+      module: "ports"
+      scenarios: ["WS-2", "P1-P3"]
+    - port: "Domain status/duration functions"
+      module: "domain"
+      scenarios: ["S2", "S3", "S6"]
+    - port: "Frontend navigation state (selectedSessionId)"
+      module: "ui"
+      scenarios: ["E1", "E5", "E6"]
+
+  test_file_structure:
+    root: "tests/acceptance/session-event-viewer/"
+    files:
+      - name: "session-list.test.ts"
+        scenarios: ["WS-1 (list portion)", "S1", "S2", "S3", "S4", "S5", "S6", "S7"]
+        driving_port: "get_sessions IPC command"
+      - name: "event-detail.test.ts"
+        scenarios: ["WS-1 (detail portion)", "E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8"]
+        driving_port: "get_session_events IPC command"
+      - name: "provider-boundary.test.ts"
+        scenarios: ["WS-2", "P1", "P2", "P3"]
+        driving_port: "EventProvider::normalize() port"
+      - name: "design-system.test.ts"
+        scenarios: ["D1", "D2", "D3", "D4"]
+        driving_port: "CSS custom properties / computed styles"
+
+  mandate_compliance:
+    CM-A_hexagonal_boundary:
+      status: "pass"
+      evidence: "All scenarios invoke through IPC commands (get_sessions, get_session_events), EventProvider port, or domain functions. No scenario imports or tests internal components (SQLite adapter, Claude Code provider internals, React component internals)."
+    CM-B_business_language:
+      status: "pass"
+      evidence: "Feature file uses domain terms only: session, event, session list, event detail, canonical label, status indicator, design system. Zero technical terms: no HTTP, JSON, SQL, API, useState, component, database, SELECT, IPC in Gherkin steps."
+    CM-C_user_journey_completeness:
+      status: "pass"
+      evidence: "2 walking skeletons deliver observable user value (browse sessions, inspect events, see tool-agnostic labels). 22 focused scenarios cover business rules at driving port boundary. Each scenario title describes user goal, not technical operation."
+
+  property_scenarios:
+    - tag: "@property"
+      scenario: "P1: Canonical event types are tool-agnostic throughout the display"
+      invariant: "For any event from any provider, the displayed type is always a canonical label"
+      implementation_hint: "Use property-based testing with generated event types. Verify all rendered labels belong to the canonical set {SESSION_START, SESSION_END, TOOL_CALL_START, TOOL_CALL_END, AGENT_COMPLETE, PROMPT_SUBMIT}."
+
+  peer_review:
+    status: "self-reviewed"
+    dimensions_checked:
+      happy_path_bias:
+        status: "pass"
+        detail: "42% error/edge ratio across 24 scenarios. Every story group has at least one error scenario."
+      gwt_format:
+        status: "pass"
+        detail: "All scenarios follow Given-When-Then structure. No multiple When actions (WS-1 is a walking skeleton with intentional multi-step journey). Background shares common Given."
+      business_language:
+        status: "pass"
+        detail: "No technical terms in Gherkin. Event types use display labels (SESSION_START) not enum names. Navigation uses 'clicks Back to Sessions' not 'sets selectedSessionId to null'."
+      coverage_completeness:
+        status: "pass"
+        detail: "All acceptance criteria from US-SEV-001, US-SEV-002, US-SEV-003 have corresponding scenarios. ADR-010 provider boundary explicitly tested."
+      walking_skeleton_centricity:
+        status: "pass"
+        detail: "WS-1 title describes user goal ('browses session history and inspects events'). Then steps are observable outcomes ('sees session in the list', 'sees chronological list of events'). Demo-able to stakeholder."
+      priority_validation:
+        status: "pass"
+        detail: "Session list and event detail are the top-scoring outcomes from JTBD analysis (16.2, 15.3). Walking skeletons address the largest gap: users currently have zero visibility into sessions."
+
+  notes_for_crafter:
+    - "Test framework: Vitest with custom BDD-style Given-When-Then (TypeScript). Follow the pattern in tests/acceptance/hook-receiver-lifecycle/*.test.ts."
+    - "All tests start with it.skip(). Enable one at a time per the implementation sequence."
+    - "For provider boundary tests, invoke the EventProvider port directly -- it is a driving port (normalization contract)."
+    - "Design system tests will need computed style assertions or snapshot testing. Consider the visual nature of these scenarios."
+    - "The @property scenario P1 should use fast-check or similar for property-based testing with generated event types."
+    - "WS-1 spans two test files (session-list.test.ts and event-detail.test.ts). The walking skeleton describe block should appear in session-list.test.ts with the full journey, while event-detail.test.ts focuses on detail-specific scenarios."
+    - "Canonical event type display labels: SESSION_START, SESSION_END, TOOL_CALL_START, TOOL_CALL_END, AGENT_COMPLETE, PROMPT_SUBMIT. These are the only labels that should appear in the UI."
+    - "Functional programming paradigm: test pure functions for domain logic, test through ports for integration."
