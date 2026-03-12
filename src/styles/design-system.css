@@ -78,3 +78,144 @@ code, pre, .mono,
   border-color: var(--brand);
   color: var(--text-p);
 }
+
+/* ═══ SESSION LIST ═══ */
+
+.session-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.session-list-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px 16px;
+  flex: 1;
+  color: var(--text-m);
+  font-size: 12px;
+  text-align: center;
+}
+
+.session-list-empty code {
+  font-size: 11px;
+  color: var(--text-s);
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--card-r);
+  padding: 4px 8px;
+}
+
+/* ═══ SESSION ROW ═══ */
+
+.srow {
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--card-r);
+  padding: 7px 10px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  transition: all 0.12s;
+  position: relative;
+  margin-bottom: 3px;
+}
+
+.srow:hover {
+  border-color: var(--border-card-h);
+  background: var(--bg-card-h);
+}
+
+.srow.live-s {
+  border-color: var(--live-b);
+  background: var(--live-bg);
+}
+
+.srow::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  border-radius: var(--card-r) 0 0 var(--card-r);
+  background: transparent;
+}
+
+.srow.live-s::before {
+  background: var(--brand);
+}
+
+.sdot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.sdot.live {
+  background: var(--success);
+  animation: lpulse 2s infinite;
+}
+
+.sdot.done {
+  background: var(--text-m);
+  opacity: 0.5;
+}
+
+.sname {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-p);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  flex: 1;
+}
+
+.sbadge {
+  font-size: 8px;
+  padding: 2px 5px;
+  border-radius: var(--badge-r);
+  font-weight: 700;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+
+.sbadge.br {
+  background: var(--badge-brand-bg);
+  color: var(--brand);
+  border: 1px solid var(--badge-brand-b);
+}
+
+@keyframes lpulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* ═══ STATUS BAR ═══ */
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 4px 10px;
+  background: var(--bg-status);
+  border-top: 1px solid var(--border);
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-s);
+  flex-shrink: 0;
+}
+
+.status-bar span {
+  white-space: nowrap;
+}

@@ -5,14 +5,9 @@ import {
   type SessionInfo,
   formatHeader,
   formatField,
-  isEmptyState,
-  EMPTY_STATE_MESSAGE,
-  PLUGIN_INSTALL_COMMAND,
-  formatDuration,
-  calculateDurationSeconds,
-  formatSessionTimestamp,
   deriveConnectionStatus,
 } from "./domain/status";
+import { SessionListView } from "./views/SessionListView";
 import {
   type ThemeName,
   THEME_NAMES,
@@ -37,7 +32,7 @@ const applyThemeToDocument = (theme: ThemeName): void => {
 
 function App() {
   const [status, setStatus] = useState<AppStatus | null>(null);
-  const [latestSession, setLatestSession] = useState<SessionInfo | null>(null);
+  const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [theme, setTheme] = useState<ThemeName>(() =>
     readStoredTheme(localStorage)
@@ -63,8 +58,8 @@ function App() {
         .then(setStatus)
         .catch((err) => setError(String(err)));
 
-      invoke<SessionInfo | null>("get_latest_session")
-        .then(setLatestSession)
+      invoke<SessionInfo[]>("get_sessions")
+        .then(setSessions)
         .catch((err) => setError(String(err)));
     }
 
@@ -89,15 +84,14 @@ function App() {
     );
   }
 
+  /// Derive the latest session from the sessions list for status calculation.
+  const latestSession = sessions.length > 0 ? sessions[0] : null;
+
   const derivedStatus = deriveConnectionStatus(
     status.session_count,
     status.event_count,
     latestSession
   );
-
-  const durationSeconds = latestSession
-    ? calculateDurationSeconds(latestSession.started_at, latestSession.ended_at)
-    : null;
 
   return (
     <main>
@@ -117,26 +111,13 @@ function App() {
           ))}
         </select>
       </div>
-      <p>{formatField("Status", derivedStatus)}</p>
-      <p>{formatField("Port", status.port)}</p>
-      <p>{formatField("Sessions", status.session_count)}</p>
-      <p>{formatField("Events", status.event_count)}</p>
-      {isEmptyState(status.session_count) && (
-        <section>
-          <p>{EMPTY_STATE_MESSAGE}</p>
-          <code>{PLUGIN_INSTALL_COMMAND}</code>
-        </section>
-      )}
-      {latestSession && (
-        <section>
-          <h2>Last Session</h2>
-          <p>{formatField("Started", formatSessionTimestamp(latestSession.started_at))}</p>
-          {durationSeconds !== null && (
-            <p>{formatField("Duration", formatDuration(durationSeconds))}</p>
-          )}
-          <p>{formatField("Events", latestSession.event_count)}</p>
-        </section>
-      )}
+      <SessionListView sessions={sessions} />
+      <footer className="status-bar">
+        <span>{formatField("Status", derivedStatus)}</span>
+        <span>{formatField("Port", status.port)}</span>
+        <span>{formatField("Sessions", status.session_count)}</span>
+        <span>{formatField("Events", status.event_count)}</span>
+      </footer>
     </main>
   );
 }

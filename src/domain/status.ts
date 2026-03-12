@@ -116,6 +116,36 @@ export function deriveConnectionStatus(
   return deriveStatus(latestSession);
 }
 
+/// Determine whether a session is currently active (no ended_at timestamp).
+///
+/// Pure function: returns true when the session has not ended.
+export function isSessionActive(session: SessionInfo): boolean {
+  return session.ended_at === null;
+}
+
+/// Sort sessions by started_at timestamp, most recent first.
+///
+/// Pure function: returns a new sorted array without mutating the input.
+export function sortSessionsMostRecentFirst(
+  sessions: readonly SessionInfo[]
+): readonly SessionInfo[] {
+  return [...sessions].sort(
+    (a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime()
+  );
+}
+
+/// Format the duration of a session for display.
+///
+/// Pure function: returns "Active" for ongoing sessions,
+/// or a human-readable duration string for completed sessions.
+export function formatSessionDuration(session: SessionInfo): string {
+  const seconds = calculateDurationSeconds(session.started_at, session.ended_at);
+  if (seconds === null) {
+    return "Active";
+  }
+  return formatDuration(seconds);
+}
+
 /// Format the tray tooltip based on active state.
 ///
 /// Pure function: when listening, shows "AppName vVersion".
