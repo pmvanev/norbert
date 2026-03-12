@@ -5,17 +5,15 @@
 /// are private to this module.
 ///
 /// No IO imports. This module is a pure transformation layer.
-use crate::domain::{parse_event_type, Event};
+use crate::domain::{Event, EventType};
 use crate::ports::EventProvider;
 
-/// Claude Code event provider.
+/// The 6 hook event type names as they appear in Claude Code settings.json.
 ///
-/// Implements EventProvider to normalize Claude Code hook payloads
-/// into canonical events. Stateless -- all normalization is pure.
-pub struct ClaudeCodeProvider;
-
-/// The 6 Claude Code hook event names this provider handles.
-const CLAUDE_CODE_EVENT_NAMES: &[&str] = &[
+/// These are PascalCase strings matching the Claude Code hook configuration format.
+/// Used by the Claude Code adapter to register hooks and by the hook receiver
+/// to validate incoming event types.
+pub const HOOK_EVENT_NAMES: [&str; 6] = [
     "PreToolUse",
     "PostToolUse",
     "SubagentStop",
@@ -23,6 +21,30 @@ const CLAUDE_CODE_EVENT_NAMES: &[&str] = &[
     "SessionStart",
     "UserPromptSubmit",
 ];
+
+/// Parse a PascalCase event type name from a Claude Code URL path segment
+/// into a canonical EventType.
+///
+/// Claude Code hook URLs use PascalCase names (e.g., "PreToolUse").
+/// This function normalizes them into canonical event types.
+/// Returns None for unrecognized event type names.
+pub fn parse_event_type(name: &str) -> Option<EventType> {
+    match name {
+        "PreToolUse" => Some(EventType::ToolCallStart),
+        "PostToolUse" => Some(EventType::ToolCallEnd),
+        "SubagentStop" => Some(EventType::AgentComplete),
+        "Stop" => Some(EventType::SessionEnd),
+        "SessionStart" => Some(EventType::SessionStart),
+        "UserPromptSubmit" => Some(EventType::PromptSubmit),
+        _ => None,
+    }
+}
+
+/// Claude Code event provider.
+///
+/// Implements EventProvider to normalize Claude Code hook payloads
+/// into canonical events. Stateless -- all normalization is pure.
+pub struct ClaudeCodeProvider;
 
 impl EventProvider for ClaudeCodeProvider {
     fn provider_name(&self) -> &str {
@@ -47,7 +69,7 @@ impl EventProvider for ClaudeCodeProvider {
     }
 
     fn supported_event_names(&self) -> &[&str] {
-        CLAUDE_CODE_EVENT_NAMES
+        &HOOK_EVENT_NAMES
     }
 }
 
@@ -76,193 +98,71 @@ mod tests {
         assert_eq!(provider.provider_name(), "claude_code");
     }
 
-    // --- Event type mapping (all 6 types) ---
+    // --- Event type mapping (all 6 types, consolidated) ---
 
     #[test]
-    fn normalize_maps_pre_tool_use_to_tool_call_start() {
+    fn normalize_maps_all_claude_code_names_to_canonical_types() {
         let provider = ClaudeCodeProvider;
+        let cases: Vec<(&str, EventType)> = vec![
+            ("PreToolUse", EventType::ToolCallStart),
+            ("PostToolUse", EventType::ToolCallEnd),
+            ("SubagentStop", EventType::AgentComplete),
+            ("Stop", EventType::SessionEnd),
+            ("SessionStart", EventType::SessionStart),
+            ("UserPromptSubmit", EventType::PromptSubmit),
+        ];
+        for (raw_name, expected_type) in cases {
+            let event = provider
+                .normalize(
+                    raw_name,
+                    "sess-1".to_string(),
+                    json!({"session_id": "sess-1"}),
+                    "2026-03-12T10:00:00Z".to_string(),
+                )
+                .unwrap_or_else(|| panic!("{} should normalize", raw_name));
+            assert_eq!(
+                event.event_type, expected_type,
+                "{} should map to {:?}",
+                raw_name, expected_type
+            );
+        }
+    }
+
+    // --- Normalize preserves all fields ---
+
+    #[test]
+    fn normalize_preserves_session_id_provider_payload_and_timestamp() {
+        let provider = ClaudeCodeProvider;
+        let payload = json!({"session_id": "sess-unique-42", "tool": "bash", "extra": 42});
         let event = provider
             .normalize(
                 "PreToolUse",
-                "sess-1".to_string(),
-                json!({"session_id": "sess-1", "tool": "bash"}),
-                "2026-03-12T10:00:00Z".to_string(),
-            )
-            .expect("PreToolUse should normalize");
-        assert_eq!(event.event_type, EventType::ToolCallStart);
-    }
-
-    #[test]
-    fn normalize_maps_post_tool_use_to_tool_call_end() {
-        let provider = ClaudeCodeProvider;
-        let event = provider
-            .normalize(
-                "PostToolUse",
-                "sess-1".to_string(),
-                json!({"session_id": "sess-1", "tool": "Read"}),
-                "2026-03-12T10:00:00Z".to_string(),
-            )
-            .expect("PostToolUse should normalize");
-        assert_eq!(event.event_type, EventType::ToolCallEnd);
-    }
-
-    #[test]
-    fn normalize_maps_subagent_stop_to_agent_complete() {
-        let provider = ClaudeCodeProvider;
-        let event = provider
-            .normalize(
-                "SubagentStop",
-                "sess-1".to_string(),
-                json!({"session_id": "sess-1"}),
-                "2026-03-12T10:00:00Z".to_string(),
-            )
-            .expect("SubagentStop should normalize");
-        assert_eq!(event.event_type, EventType::AgentComplete);
-    }
-
-    #[test]
-    fn normalize_maps_stop_to_session_end() {
-        let provider = ClaudeCodeProvider;
-        let event = provider
-            .normalize(
-                "Stop",
-                "sess-1".to_string(),
-                json!({"session_id": "sess-1"}),
-                "2026-03-12T10:00:00Z".to_string(),
-            )
-            .expect("Stop should normalize");
-        assert_eq!(event.event_type, EventType::SessionEnd);
-    }
-
-    #[test]
-    fn normalize_maps_session_start_to_session_start() {
-        let provider = ClaudeCodeProvider;
-        let event = provider
-            .normalize(
-                "SessionStart",
-                "sess-1".to_string(),
-                json!({"session_id": "sess-1"}),
-                "2026-03-12T10:00:00Z".to_string(),
-            )
-            .expect("SessionStart should normalize");
-        assert_eq!(event.event_type, EventType::SessionStart);
-    }
-
-    #[test]
-    fn normalize_maps_user_prompt_submit_to_prompt_submit() {
-        let provider = ClaudeCodeProvider;
-        let event = provider
-            .normalize(
-                "UserPromptSubmit",
-                "sess-1".to_string(),
-                json!({"session_id": "sess-1"}),
-                "2026-03-12T10:00:00Z".to_string(),
-            )
-            .expect("UserPromptSubmit should normalize");
-        assert_eq!(event.event_type, EventType::PromptSubmit);
-    }
-
-    // --- Session ID extraction ---
-
-    #[test]
-    fn normalize_preserves_session_id() {
-        let provider = ClaudeCodeProvider;
-        let event = provider
-            .normalize(
-                "SessionStart",
                 "sess-unique-42".to_string(),
-                json!({"session_id": "sess-unique-42"}),
-                "2026-03-12T10:00:00Z".to_string(),
-            )
-            .expect("should normalize");
-        assert_eq!(event.session_id, "sess-unique-42");
-    }
-
-    // --- Provider field ---
-
-    #[test]
-    fn normalize_sets_provider_to_claude_code() {
-        let provider = ClaudeCodeProvider;
-        let event = provider
-            .normalize(
-                "Stop",
-                "sess-1".to_string(),
-                json!({"session_id": "sess-1"}),
-                "2026-03-12T10:00:00Z".to_string(),
-            )
-            .expect("should normalize");
-        assert_eq!(event.provider, "claude_code");
-    }
-
-    // --- Payload preservation ---
-
-    #[test]
-    fn normalize_preserves_raw_payload() {
-        let provider = ClaudeCodeProvider;
-        let payload = json!({"session_id": "sess-1", "tool": "bash", "extra": 42});
-        let event = provider
-            .normalize(
-                "PreToolUse",
-                "sess-1".to_string(),
                 payload.clone(),
-                "2026-03-12T10:00:00Z".to_string(),
-            )
-            .expect("should normalize");
-        assert_eq!(event.payload, payload);
-    }
-
-    // --- Timestamp preservation ---
-
-    #[test]
-    fn normalize_preserves_received_at_timestamp() {
-        let provider = ClaudeCodeProvider;
-        let event = provider
-            .normalize(
-                "SessionStart",
-                "sess-1".to_string(),
-                json!({"session_id": "sess-1"}),
                 "2026-03-12T14:30:00Z".to_string(),
             )
             .expect("should normalize");
+        assert_eq!(event.session_id, "sess-unique-42");
+        assert_eq!(event.provider, "claude_code");
+        assert_eq!(event.payload, payload);
         assert_eq!(event.received_at, "2026-03-12T14:30:00Z");
     }
 
-    // --- Error cases ---
+    // --- Error cases (consolidated) ---
 
     #[test]
-    fn normalize_returns_none_for_unrecognized_event_type() {
+    fn normalize_returns_none_for_invalid_event_types() {
         let provider = ClaudeCodeProvider;
-        let result = provider.normalize(
-            "UnknownEvent",
-            "sess-1".to_string(),
-            json!({"session_id": "sess-1"}),
-            "2026-03-12T10:00:00Z".to_string(),
-        );
-        assert!(result.is_none());
-    }
-
-    #[test]
-    fn normalize_returns_none_for_empty_event_type() {
-        let provider = ClaudeCodeProvider;
-        let result = provider.normalize(
-            "",
-            "sess-1".to_string(),
-            json!({"session_id": "sess-1"}),
-            "2026-03-12T10:00:00Z".to_string(),
-        );
-        assert!(result.is_none());
-    }
-
-    #[test]
-    fn normalize_returns_none_for_snake_case_event_type() {
-        let provider = ClaudeCodeProvider;
-        let result = provider.normalize(
-            "tool_call_start",
-            "sess-1".to_string(),
-            json!({"session_id": "sess-1"}),
-            "2026-03-12T10:00:00Z".to_string(),
-        );
-        assert!(result.is_none());
+        let invalid_names = vec!["UnknownEvent", "", "tool_call_start"];
+        for name in invalid_names {
+            let result = provider.normalize(
+                name,
+                "sess-1".to_string(),
+                json!({"session_id": "sess-1"}),
+                "2026-03-12T10:00:00Z".to_string(),
+            );
+            assert!(result.is_none(), "'{}' should not normalize", name);
+        }
     }
 
     // --- Tool name extraction ---
@@ -274,27 +174,9 @@ mod tests {
     }
 
     #[test]
-    fn extract_tool_name_returns_none_when_tool_absent() {
-        let payload = json!({"session_id": "sess-1"});
-        assert_eq!(extract_tool_name(&payload), None);
-    }
-
-    #[test]
-    fn extract_tool_name_returns_none_when_tool_not_string() {
-        let payload = json!({"session_id": "sess-1", "tool": 42});
-        assert_eq!(extract_tool_name(&payload), None);
-    }
-
-    #[test]
-    fn extract_tool_name_handles_various_tool_names() {
-        let payload = json!({"tool": "Read"});
-        assert_eq!(extract_tool_name(&payload), Some("Read".to_string()));
-
-        let payload = json!({"tool": "Write"});
-        assert_eq!(extract_tool_name(&payload), Some("Write".to_string()));
-
-        let payload = json!({"tool": "Glob"});
-        assert_eq!(extract_tool_name(&payload), Some("Glob".to_string()));
+    fn extract_tool_name_returns_none_when_tool_absent_or_not_string() {
+        assert_eq!(extract_tool_name(&json!({"session_id": "sess-1"})), None);
+        assert_eq!(extract_tool_name(&json!({"session_id": "sess-1", "tool": 42})), None);
     }
 
     // --- Supported event names ---
@@ -311,12 +193,76 @@ mod tests {
         assert!(names.contains(&"SessionStart"));
         assert!(names.contains(&"UserPromptSubmit"));
     }
+
+    // --- parse_event_type tests ---
+
+    #[test]
+    fn parse_event_type_normalizes_claude_code_names_to_canonical() {
+        assert_eq!(parse_event_type("PreToolUse"), Some(EventType::ToolCallStart));
+        assert_eq!(parse_event_type("PostToolUse"), Some(EventType::ToolCallEnd));
+        assert_eq!(parse_event_type("SubagentStop"), Some(EventType::AgentComplete));
+        assert_eq!(parse_event_type("Stop"), Some(EventType::SessionEnd));
+        assert_eq!(parse_event_type("SessionStart"), Some(EventType::SessionStart));
+        assert_eq!(parse_event_type("UserPromptSubmit"), Some(EventType::PromptSubmit));
+    }
+
+    #[test]
+    fn parse_event_type_returns_none_for_invalid_inputs() {
+        assert_eq!(parse_event_type("UnknownEvent"), None);
+        assert_eq!(parse_event_type("tool_call_start"), None);
+        assert_eq!(parse_event_type(""), None);
+    }
+
+    // --- HOOK_EVENT_NAMES consistency ---
+
+    #[test]
+    fn hook_event_names_contains_six_unique_entries() {
+        assert_eq!(HOOK_EVENT_NAMES.len(), 6);
+        let mut seen = std::collections::HashSet::new();
+        for name in &HOOK_EVENT_NAMES {
+            assert!(seen.insert(name), "Duplicate entry in HOOK_EVENT_NAMES: {}", name);
+        }
+    }
+
+    #[test]
+    fn every_hook_event_name_is_parseable_and_every_variant_has_a_hook_name() {
+        // All EventType variants
+        let all_variants = vec![
+            EventType::SessionStart,
+            EventType::SessionEnd,
+            EventType::ToolCallStart,
+            EventType::ToolCallEnd,
+            EventType::AgentComplete,
+            EventType::PromptSubmit,
+        ];
+
+        // Every hook name parses successfully
+        let parseable_variants: Vec<EventType> = HOOK_EVENT_NAMES
+            .iter()
+            .map(|name| {
+                parse_event_type(name).unwrap_or_else(|| {
+                    panic!("HOOK_EVENT_NAMES contains '{}' which parse_event_type does not recognize", name)
+                })
+            })
+            .collect();
+
+        // Same count
+        assert_eq!(HOOK_EVENT_NAMES.len(), all_variants.len());
+
+        // Every variant is covered
+        for variant in &all_variants {
+            assert!(
+                parseable_variants.contains(variant),
+                "EventType::{:?} has no corresponding entry in HOOK_EVENT_NAMES",
+                variant
+            );
+        }
+    }
 }
 
 #[cfg(test)]
 mod property_tests {
     use super::*;
-    use crate::domain::HOOK_EVENT_NAMES;
     use proptest::prelude::*;
 
     /// Strategy that generates valid Claude Code event type names.

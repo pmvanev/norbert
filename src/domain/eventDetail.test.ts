@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   type SessionEvent,
+  CANONICAL_EVENT_TYPES,
   formatCanonicalEventType,
   extractToolName,
   formatEventTimestamp,
@@ -43,6 +44,16 @@ describe("formatCanonicalEventType", () => {
 
   it("converts prompt_submit to uppercase label", () => {
     expect(formatCanonicalEventType("prompt_submit")).toBe("PROMPT SUBMIT");
+  });
+
+  it("prefixes unrecognized event types with UNKNOWN", () => {
+    expect(formatCanonicalEventType("mystery_event")).toBe(
+      "UNKNOWN: MYSTERY EVENT"
+    );
+  });
+
+  it("prefixes empty string with UNKNOWN", () => {
+    expect(formatCanonicalEventType("")).toBe("UNKNOWN: ");
   });
 });
 

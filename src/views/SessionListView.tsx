@@ -34,8 +34,15 @@ function SessionRow({
     onSelect?.(session.id);
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onSelect?.(session.id);
+    }
+  };
+
   return (
-    <div className={rowClassName} onClick={handleClick} role="button" tabIndex={0}>
+    <div className={rowClassName} onClick={handleClick} onKeyDown={handleKeyDown} role="button" tabIndex={0}>
       <span className={dotClassName} />
       <span className="sname">{formatSessionTimestamp(session.started_at)}</span>
       <span className="sbadge br">{formatSessionDuration(session)}</span>

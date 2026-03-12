@@ -10,12 +10,30 @@ export interface SessionEvent {
   readonly provider: string;
 }
 
+/// The six canonical event types the frontend expects from the backend.
+///
+/// Any event_type string not in this set is unrecognized and will be
+/// labelled with an "UNKNOWN: " prefix by formatCanonicalEventType.
+export const CANONICAL_EVENT_TYPES = new Set([
+  "session_start",
+  "session_end",
+  "tool_call_start",
+  "tool_call_end",
+  "agent_complete",
+  "prompt_submit",
+] as const);
+
 /// Convert a snake_case canonical event type to an uppercase display label.
 ///
 /// Pure function: replaces underscores with spaces and uppercases.
+/// Returns "UNKNOWN: <LABEL>" for unrecognized event types.
 /// Example: "tool_call_start" -> "TOOL CALL START"
 export function formatCanonicalEventType(eventType: string): string {
-  return eventType.replace(/_/g, " ").toUpperCase();
+  const label = eventType.replace(/_/g, " ").toUpperCase();
+  if (!CANONICAL_EVENT_TYPES.has(eventType)) {
+    return `UNKNOWN: ${label}`;
+  }
+  return label;
 }
 
 /// Event types that carry a tool name in their payload.

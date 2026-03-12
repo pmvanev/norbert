@@ -334,7 +334,7 @@ code, pre, .mono,
   border-top: 1px solid var(--border);
   font-size: 10px;
   font-family: var(--font-mono);
-  color: var(--text-s);
+  color: var(--status-text-override, var(--text-s));
   flex-shrink: 0;
 }
 

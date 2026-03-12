@@ -14,6 +14,7 @@ import {
   type AppStatus,
   type SessionInfo,
 } from "./status";
+import { CANONICAL_EVENT_TYPES } from "./eventDetail";
 
 describe("formatHeader", () => {
   it("uppercases app name and prepends v to version", () => {
@@ -122,49 +123,6 @@ describe("formatSessionTimestamp", () => {
   });
 });
 
-describe("SessionInfo type", () => {
-  it("represents a session with correct shape", () => {
-    const session: SessionInfo = {
-      id: "sess-1",
-      started_at: "2026-03-08T10:00:00Z",
-      ended_at: "2026-03-08T10:08:12Z",
-      event_count: 30,
-    };
-    expect(session.id).toBe("sess-1");
-    expect(session.started_at).toBe("2026-03-08T10:00:00Z");
-    expect(session.ended_at).toBe("2026-03-08T10:08:12Z");
-    expect(session.event_count).toBe(30);
-  });
-
-  it("allows null ended_at for active sessions", () => {
-    const session: SessionInfo = {
-      id: "sess-2",
-      started_at: "2026-03-08T10:00:00Z",
-      ended_at: null,
-      event_count: 5,
-    };
-    expect(session.ended_at).toBeNull();
-  });
-});
-
-describe("AppStatus type", () => {
-  it("represents initial status with correct shape", () => {
-    const status: AppStatus = {
-      version: "0.1.0",
-      status: "No plugin connected",
-      port: 3748,
-      session_count: 0,
-      event_count: 0,
-    };
-
-    expect(status.version).toBe("0.1.0");
-    expect(status.status).toBe("No plugin connected");
-    expect(status.port).toBe(3748);
-    expect(status.session_count).toBe(0);
-    expect(status.event_count).toBe(0);
-  });
-});
-
 describe("deriveStatus", () => {
   it("returns Listening when latest session is null", () => {
     expect(deriveStatus(null)).toBe("Listening");
@@ -246,40 +204,24 @@ describe("formatActiveTooltip", () => {
 });
 
 describe("cross-component event type consistency", () => {
-  // These event type names must match the Rust-side HOOK_EVENT_NAMES constant
-  // and the parse_event_type function. Any mismatch breaks the data pipeline.
-  const EXPECTED_EVENT_TYPES = [
-    "PreToolUse",
-    "PostToolUse",
-    "SubagentStop",
-    "Stop",
-    "SessionStart",
-    "UserPromptSubmit",
-  ] as const;
+  // These are the six snake_case canonical event types the frontend
+  // receives from the Rust backend via get_session_events IPC.
+  // This canary test ensures CANONICAL_EVENT_TYPES stays in sync.
+  const EXPECTED_CANONICAL_TYPES = new Set([
+    "session_start",
+    "session_end",
+    "tool_call_start",
+    "tool_call_end",
+    "agent_complete",
+    "prompt_submit",
+  ]);
 
-  it("has exactly six event types", () => {
-    expect(EXPECTED_EVENT_TYPES.length).toBe(6);
+  it("CANONICAL_EVENT_TYPES contains exactly the six expected snake_case types", () => {
+    expect(CANONICAL_EVENT_TYPES).toEqual(EXPECTED_CANONICAL_TYPES);
   });
 
-  it("event types match the Rust-side HOOK_EVENT_NAMES", () => {
-    // This acts as a canary: if Rust adds/removes an event type,
-    // this test reminds the developer to update the TS side too.
-    expect(EXPECTED_EVENT_TYPES).toEqual([
-      "PreToolUse",
-      "PostToolUse",
-      "SubagentStop",
-      "Stop",
-      "SessionStart",
-      "UserPromptSubmit",
-    ]);
-  });
-
-  it("all event types are PascalCase strings", () => {
-    for (const eventType of EXPECTED_EVENT_TYPES) {
-      expect(eventType[0]).toBe(eventType[0].toUpperCase());
-      expect(eventType).not.toContain("_");
-      expect(eventType).not.toContain(" ");
-    }
+  it("CANONICAL_EVENT_TYPES has exactly six entries", () => {
+    expect(CANONICAL_EVENT_TYPES.size).toBe(6);
   });
 
   it("hook port matches expected value", () => {

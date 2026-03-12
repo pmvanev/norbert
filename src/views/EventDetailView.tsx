@@ -47,19 +47,34 @@ function EventRow({ event }: { readonly event: SessionEvent }) {
 /// Back navigation returns to the session list.
 export function EventDetailView({ session, onBack }: EventDetailViewProps) {
   const [events, setEvents] = useState<SessionEvent[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+
     function fetchEvents() {
       invoke<SessionEvent[]>("get_session_events", {
         sessionId: session.id,
       })
-        .then(setEvents)
-        .catch(() => setEvents([]));
+        .then((data) => {
+          if (!cancelled) {
+            setEvents(data);
+            setError(null);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setError("Failed to load events");
+          }
+        });
     }
 
     fetchEvents();
     const intervalId = setInterval(fetchEvents, EVENT_POLL_INTERVAL_MS);
-    return () => clearInterval(intervalId);
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
   }, [session.id]);
 
   const active = isSessionActive(session);
@@ -98,9 +113,13 @@ export function EventDetailView({ session, onBack }: EventDetailViewProps) {
           </span>
         </div>
       </div>
+      {error !== null && (
+        <div className="event-error" role="alert">{error}</div>
+      )}
       <div className="event-list">
+        {/* TODO: A proper event ID from the backend would produce stable keys */}
         {events.map((event, index) => (
-          <EventRow key={`${event.received_at}-${index}`} event={event} />
+          <EventRow key={`${event.received_at}-${event.event_type}-${index}`} event={event} />
         ))}
       </div>
     </section>

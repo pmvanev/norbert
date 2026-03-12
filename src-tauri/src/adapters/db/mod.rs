@@ -31,7 +31,8 @@ const CREATE_EVENTS_TABLE: &str = "
         session_id TEXT NOT NULL,
         event_type TEXT NOT NULL,
         payload TEXT NOT NULL,
-        received_at TEXT NOT NULL
+        received_at TEXT NOT NULL,
+        provider TEXT NOT NULL DEFAULT 'unknown'
     )
 ";
 
@@ -124,42 +125,63 @@ impl SqliteEventStore {
 
 impl EventStore for SqliteEventStore {
     fn write_event(&self, event: &Event) -> Result<(), String> {
-        // Upsert session: create if not exists, increment event_count
+        // Wrap all mutations in a transaction for atomicity (D3)
         self.connection
-            .execute(
-                "INSERT INTO sessions (id, started_at, ended_at, event_count)
-                 VALUES (?1, ?2, NULL, 1)
-                 ON CONFLICT(id) DO UPDATE SET event_count = event_count + 1",
-                rusqlite::params![event.session_id, event.received_at],
-            )
-            .map_err(|e| format!("Failed to upsert session: {}", e))?;
+            .execute_batch("BEGIN IMMEDIATE")
+            .map_err(|e| format!("Failed to begin transaction: {}", e))?;
 
-        // Set ended_at when a Stop event finalizes the session
-        if event.event_type == EventType::SessionEnd {
+        let result = (|| -> Result<(), String> {
+            // Upsert session: create if not exists, increment event_count
             self.connection
                 .execute(
-                    "UPDATE sessions SET ended_at = ?1 WHERE id = ?2 AND ended_at IS NULL",
-                    rusqlite::params![event.received_at, event.session_id],
+                    "INSERT INTO sessions (id, started_at, ended_at, event_count)
+                     VALUES (?1, ?2, NULL, 1)
+                     ON CONFLICT(id) DO UPDATE SET event_count = event_count + 1",
+                    rusqlite::params![event.session_id, event.received_at],
                 )
-                .map_err(|e| format!("Failed to set session ended_at: {}", e))?;
+                .map_err(|e| format!("Failed to upsert session: {}", e))?;
+
+            // Set ended_at when a Stop event finalizes the session
+            if event.event_type == EventType::SessionEnd {
+                self.connection
+                    .execute(
+                        "UPDATE sessions SET ended_at = ?1 WHERE id = ?2 AND ended_at IS NULL",
+                        rusqlite::params![event.received_at, event.session_id],
+                    )
+                    .map_err(|e| format!("Failed to set session ended_at: {}", e))?;
+            }
+
+            // Insert the event with provider
+            let payload_str = event.payload.to_string();
+            self.connection
+                .execute(
+                    "INSERT INTO events (session_id, event_type, payload, received_at, provider)
+                     VALUES (?1, ?2, ?3, ?4, ?5)",
+                    rusqlite::params![
+                        event.session_id,
+                        event.event_type.to_string(),
+                        payload_str,
+                        event.received_at,
+                        event.provider,
+                    ],
+                )
+                .map_err(|e| format!("Failed to insert event: {}", e))?;
+
+            Ok(())
+        })();
+
+        match result {
+            Ok(()) => {
+                self.connection
+                    .execute_batch("COMMIT")
+                    .map_err(|e| format!("Failed to commit transaction: {}", e))?;
+                Ok(())
+            }
+            Err(e) => {
+                let _ = self.connection.execute_batch("ROLLBACK");
+                Err(e)
+            }
         }
-
-        // Insert the event
-        let payload_str = event.payload.to_string();
-        self.connection
-            .execute(
-                "INSERT INTO events (session_id, event_type, payload, received_at)
-                 VALUES (?1, ?2, ?3, ?4)",
-                rusqlite::params![
-                    event.session_id,
-                    event.event_type.to_string(),
-                    payload_str,
-                    event.received_at,
-                ],
-            )
-            .map_err(|e| format!("Failed to insert event: {}", e))?;
-
-        Ok(())
     }
 
     fn get_sessions(&self) -> Result<Vec<Session>, String> {
@@ -189,7 +211,7 @@ impl EventStore for SqliteEventStore {
         let mut stmt = self
             .connection
             .prepare(
-                "SELECT session_id, event_type, payload, received_at FROM events WHERE session_id = ?1 ORDER BY received_at ASC",
+                "SELECT session_id, event_type, payload, received_at, provider FROM events WHERE session_id = ?1 ORDER BY received_at ASC",
             )
             .map_err(|e| format!("Failed to prepare session events query: {}", e))?;
 
@@ -199,10 +221,17 @@ impl EventStore for SqliteEventStore {
                 let event_type_str: String = row.get(1)?;
                 let payload_str: String = row.get(2)?;
                 let received_at: String = row.get(3)?;
+                let provider: String = row.get(4)?;
 
                 let event_type: EventType =
                     serde_json::from_str(&format!("\"{}\"", event_type_str))
-                        .unwrap_or(EventType::ToolCallStart);
+                        .map_err(|e| {
+                            rusqlite::Error::FromSqlConversionFailure(
+                                1,
+                                rusqlite::types::Type::Text,
+                                Box::new(e),
+                            )
+                        })?;
 
                 let payload: serde_json::Value =
                     serde_json::from_str(&payload_str).unwrap_or(serde_json::json!({}));
@@ -212,7 +241,7 @@ impl EventStore for SqliteEventStore {
                     event_type,
                     payload,
                     received_at,
-                    provider: String::new(),
+                    provider,
                 })
             })
             .map_err(|e| format!("Failed to query session events: {}", e))?
@@ -329,6 +358,7 @@ mod tests {
         assert!(columns.contains(&"event_type".to_string()), "Missing column: event_type");
         assert!(columns.contains(&"payload".to_string()), "Missing column: payload");
         assert!(columns.contains(&"received_at".to_string()), "Missing column: received_at");
+        assert!(columns.contains(&"provider".to_string()), "Missing column: provider");
     }
 
     #[test]
@@ -397,24 +427,11 @@ mod tests {
     }
 
     #[test]
-    fn get_sessions_returns_empty_when_no_events() {
+    fn empty_store_returns_no_data() {
         let store = create_test_store();
-        let sessions = store.get_sessions().unwrap();
-        assert!(sessions.is_empty());
-    }
-
-    #[test]
-    fn get_event_count_returns_zero_when_no_events() {
-        let store = create_test_store();
-        let count = store.get_event_count().unwrap();
-        assert_eq!(count, 0);
-    }
-
-    #[test]
-    fn get_latest_session_returns_none_when_no_sessions() {
-        let store = create_test_store();
-        let latest = store.get_latest_session().unwrap();
-        assert!(latest.is_none());
+        assert!(store.get_sessions().unwrap().is_empty());
+        assert_eq!(store.get_event_count().unwrap(), 0);
+        assert!(store.get_latest_session().unwrap().is_none());
     }
 
     #[test]
@@ -567,6 +584,7 @@ mod tests {
         let events = store.get_events_for_session("sess-1").unwrap();
         assert_eq!(events.len(), 2);
         assert!(events.iter().all(|e| e.session_id == "sess-1"));
+        assert!(events.iter().all(|e| e.provider == "claude_code"), "Provider should roundtrip through storage");
     }
 
     #[test]
@@ -600,14 +618,7 @@ mod tests {
     #[test]
     fn get_events_for_session_returns_empty_for_nonexistent_session() {
         let store = create_test_store();
-        let events = store.get_events_for_session("no-such-session").unwrap();
-        assert!(events.is_empty());
-    }
-
-    #[test]
-    fn get_events_for_session_returns_empty_array_not_error() {
-        let store = create_test_store();
-        let result = store.get_events_for_session("empty-session");
+        let result = store.get_events_for_session("no-such-session");
         assert!(result.is_ok());
         assert!(result.unwrap().is_empty());
     }

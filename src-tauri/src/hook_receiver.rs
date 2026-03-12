@@ -274,7 +274,7 @@ mod tests {
 
     #[tokio::test]
     async fn all_valid_event_types_accepted() {
-        for event_type in &norbert_lib::domain::HOOK_EVENT_NAMES {
+        for event_type in &norbert_lib::adapters::providers::claude_code::HOOK_EVENT_NAMES {
             let state = test_state();
             let app = build_router(state);
 

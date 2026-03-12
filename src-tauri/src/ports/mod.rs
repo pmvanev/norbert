@@ -140,10 +140,11 @@ mod tests {
         }
     }
 
-    // --- EventStore stub tests ---
+    // --- EventStore trait contract tests ---
 
     #[test]
-    fn event_store_stub_write_event_succeeds() {
+    fn event_store_stub_satisfies_trait_contract() {
+        // Empty store: write succeeds, returns empty collections, zero counts
         let store = StubEventStore::new();
         let event = Event {
             session_id: "sess-1".to_string(),
@@ -153,17 +154,14 @@ mod tests {
             provider: "claude_code".to_string(),
         };
         assert!(store.write_event(&event).is_ok());
+        assert!(store.get_sessions().unwrap().is_empty());
+        assert_eq!(store.get_event_count().unwrap(), 0);
+        assert!(store.get_latest_session().unwrap().is_none());
+        assert!(store.get_events_for_session("no-such-session").unwrap().is_empty());
     }
 
     #[test]
-    fn event_store_stub_returns_empty_sessions() {
-        let store = StubEventStore::new();
-        let sessions = store.get_sessions().unwrap();
-        assert!(sessions.is_empty());
-    }
-
-    #[test]
-    fn event_store_stub_returns_provided_sessions() {
+    fn event_store_stub_returns_configured_data() {
         let sessions = vec![Session {
             id: "sess-1".to_string(),
             started_at: "2026-03-08T10:00:00Z".to_string(),
@@ -171,36 +169,12 @@ mod tests {
             event_count: 3,
         }];
         let store = StubEventStore::with_sessions(sessions);
-        let result = store.get_sessions().unwrap();
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0].id, "sess-1");
-    }
+        assert_eq!(store.get_sessions().unwrap().len(), 1);
+        assert_eq!(store.get_sessions().unwrap()[0].id, "sess-1");
+        assert_eq!(store.get_latest_session().unwrap().unwrap().id, "sess-1");
 
-    #[test]
-    fn event_store_stub_returns_zero_event_count() {
-        let store = StubEventStore::new();
-        assert_eq!(store.get_event_count().unwrap(), 0);
-    }
-
-    #[test]
-    fn event_store_stub_returns_latest_session() {
-        let sessions = vec![Session {
-            id: "sess-latest".to_string(),
-            started_at: "2026-03-08T12:00:00Z".to_string(),
-            ended_at: None,
-            event_count: 1,
-        }];
-        let store = StubEventStore::with_sessions(sessions);
-        let latest = store.get_latest_session().unwrap();
-        assert!(latest.is_some());
-        assert_eq!(latest.unwrap().id, "sess-latest");
-    }
-
-    // --- EventProvider trait tests ---
-
-    #[test]
-    fn event_store_stub_returns_events_for_matching_session() {
-        let store = StubEventStore {
+        // Store with events filters by session_id
+        let store_with_events = StubEventStore {
             events: vec![
                 Event {
                     session_id: "sess-1".to_string(),
@@ -219,74 +193,50 @@ mod tests {
             ],
             sessions: Vec::new(),
         };
-        let events = store.get_events_for_session("sess-1").unwrap();
+        let events = store_with_events.get_events_for_session("sess-1").unwrap();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].session_id, "sess-1");
     }
 
-    #[test]
-    fn event_store_stub_returns_empty_for_nonexistent_session() {
-        let store = StubEventStore::new();
-        let events = store.get_events_for_session("no-such-session").unwrap();
-        assert!(events.is_empty());
-    }
+    // --- EventProvider trait contract tests ---
 
     #[test]
-    fn event_provider_returns_provider_name() {
+    fn event_provider_stub_satisfies_trait_contract() {
         let provider = StubEventProvider;
         assert_eq!(provider.provider_name(), "test_provider");
-    }
 
-    #[test]
-    fn event_provider_normalizes_known_event_type() {
-        let provider = StubEventProvider;
+        // Known types normalize successfully with correct fields
         let event = provider.normalize(
             "start",
             "sess-1".to_string(),
             serde_json::json!({}),
             "2026-03-12T10:00:00Z".to_string(),
-        );
-        assert!(event.is_some());
-        let event = event.unwrap();
+        ).unwrap();
         assert_eq!(event.event_type, EventType::SessionStart);
         assert_eq!(event.provider, "test_provider");
         assert_eq!(event.session_id, "sess-1");
-    }
 
-    #[test]
-    fn event_provider_returns_none_for_unknown_event_type() {
-        let provider = StubEventProvider;
         let event = provider.normalize(
+            "end",
+            "sess-42".to_string(),
+            serde_json::json!({"reason": "done"}),
+            "2026-03-12T11:00:00Z".to_string(),
+        ).unwrap();
+        assert_eq!(event.event_type, EventType::SessionEnd);
+        assert_eq!(event.provider, "test_provider");
+
+        // Unknown types return None
+        assert!(provider.normalize(
             "unknown",
             "sess-1".to_string(),
             serde_json::json!({}),
             "2026-03-12T10:00:00Z".to_string(),
-        );
-        assert!(event.is_none());
-    }
+        ).is_none());
 
-    #[test]
-    fn event_provider_lists_supported_event_names() {
-        let provider = StubEventProvider;
+        // Supported names
         let names = provider.supported_event_names();
         assert_eq!(names.len(), 2);
         assert!(names.contains(&"start"));
         assert!(names.contains(&"end"));
-    }
-
-    #[test]
-    fn event_provider_normalized_event_contains_provider_field() {
-        let provider = StubEventProvider;
-        let event = provider
-            .normalize(
-                "end",
-                "sess-42".to_string(),
-                serde_json::json!({"reason": "done"}),
-                "2026-03-12T11:00:00Z".to_string(),
-            )
-            .unwrap();
-        assert_eq!(event.provider, "test_provider");
-        assert_eq!(event.event_type, EventType::SessionEnd);
-        assert_eq!(event.session_id, "sess-42");
     }
 }
