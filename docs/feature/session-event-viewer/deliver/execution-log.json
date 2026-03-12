@@ -2,76 +2,16 @@
   "project_id": "session-event-viewer",
   "feature_id": "session-event-viewer",
   "created_at": "2026-03-12T04:30:00Z",
-  "steps": [
-    {
-      "step_id": "01-01",
-      "phase": "PREPARE",
-      "status": "EXECUTED",
-      "data": "PASS",
-      "timestamp": "2026-03-12T05:00:00Z"
-    },
-    {
-      "step_id": "01-01",
-      "phase": "RED_ACCEPTANCE",
-      "status": "EXECUTED",
-      "data": "SKIP - pure type definitions do not warrant acceptance test; canonical types verified through unit tests",
-      "timestamp": "2026-03-12T05:01:00Z"
-    },
-    {
-      "step_id": "01-01",
-      "phase": "RED_UNIT",
-      "status": "EXECUTED",
-      "data": "PASS",
-      "timestamp": "2026-03-12T05:02:00Z"
-    },
-    {
-      "step_id": "01-01",
-      "phase": "GREEN",
-      "status": "EXECUTED",
-      "data": "PASS",
-      "timestamp": "2026-03-12T05:03:00Z"
-    },
-    {
-      "step_id": "01-01",
-      "phase": "COMMIT",
-      "status": "EXECUTED",
-      "data": "PASS",
-      "timestamp": "2026-03-12T05:04:00Z"
-    },
-    {
-      "step_id": "01-02",
-      "phase": "PREPARE",
-      "status": "EXECUTED",
-      "data": "PASS",
-      "timestamp": "2026-03-12T06:00:00Z"
-    },
-    {
-      "step_id": "01-02",
-      "phase": "RED_ACCEPTANCE",
-      "status": "EXECUTED",
-      "data": "SKIP - pure function adapter; acceptance coverage through unit and property tests",
-      "timestamp": "2026-03-12T06:01:00Z"
-    },
-    {
-      "step_id": "01-02",
-      "phase": "RED_UNIT",
-      "status": "EXECUTED",
-      "data": "PASS",
-      "timestamp": "2026-03-12T06:02:00Z"
-    },
-    {
-      "step_id": "01-02",
-      "phase": "GREEN",
-      "status": "EXECUTED",
-      "data": "PASS",
-      "timestamp": "2026-03-12T06:03:00Z"
-    },
-    {
-      "step_id": "01-02",
-      "phase": "COMMIT",
-      "status": "EXECUTED",
-      "data": "PASS",
-      "timestamp": "2026-03-12T06:04:00Z"
-    }
+  "events": [
+    "01-01|PREPARE|EXECUTED|PASS|2026-03-12T05:00:00Z",
+    "01-01|RED_ACCEPTANCE|SKIPPED|NOT_APPLICABLE: pure type definitions do not warrant acceptance test; canonical types verified through unit tests|2026-03-12T05:01:00Z",
+    "01-01|RED_UNIT|EXECUTED|PASS|2026-03-12T05:02:00Z",
+    "01-01|GREEN|EXECUTED|PASS|2026-03-12T05:03:00Z",
+    "01-01|COMMIT|EXECUTED|PASS|2026-03-12T05:04:00Z",
+    "01-02|PREPARE|EXECUTED|PASS|2026-03-12T14:32:00Z",
+    "01-02|RED_ACCEPTANCE|SKIPPED|NOT_APPLICABLE: pure function adapter; acceptance coverage through unit and property tests|2026-03-12T14:34:00Z",
+    "01-02|RED_UNIT|EXECUTED|PASS|2026-03-12T14:36:00Z",
+    "01-02|GREEN|EXECUTED|PASS|2026-03-12T14:42:00Z",
+    "01-02|COMMIT|EXECUTED|PASS|2026-03-12T14:48:00Z"
   ]
 }
