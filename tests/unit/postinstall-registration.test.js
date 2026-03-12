@@ -6,7 +6,7 @@ import { describe, it, expect, vi } from "vitest";
  * Step 01-02: postinstall.js calls registration and start after binary
  * extraction. Registration failure is non-fatal (try/catch, exit 0).
  *
- * The function under test: registerAndStartHookReceiver(installDir, platform, execCommand)
+ * The function under test: registerAndStartHookReceiver(installDir, platform, execCommand, appDataDir)
  * - execCommand is injected (dependency injection via function parameter)
  * - Returns { registered: boolean, started: boolean, warnings: string[] }
  */
@@ -14,24 +14,26 @@ import { describe, it, expect, vi } from "vitest";
 import { registerAndStartHookReceiver } from "../../scripts/postinstall-core.js";
 
 // Pre-computed expected base64 values for installDir = "C:\Users\Phil\.norbert\bin"
+// and appDataDir = "C:\Users\Phil\AppData\Roaming"
 // Independently verified using Node.js Buffer UTF-16LE encoding (not the production encoder).
-// Registration command: "$action = New-ScheduledTaskAction -Execute '...'; $trigger = New-ScheduledTaskTrigger -AtLogOn; $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0; Register-ScheduledTask -TaskName 'NorbertHookReceiver' -Action $action -Trigger $trigger -Settings $settings -Force"
+// Registration command: "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('...Startup\NorbertHookReceiver.lnk'); $s.TargetPath = '...norbert-hook-receiver.exe'; $s.WindowStyle = 7; $s.Save()"
 const EXPECTED_REGISTRATION_BASE64 =
-  "JABhAGMAdABpAG8AbgAgAD0AIABOAGUAdwAtAFMAYwBoAGUAZAB1AGwAZQBkAFQAYQBzAGsAQQBjAHQAaQBvAG4AIAAtAEUAeABlAGMAdQB0AGUAIAAnAEMAOgBcAFUAcwBlAHIAcwBcAFAAaABpAGwAXAAuAG4AbwByAGIAZQByAHQAXABiAGkAbgBcAG4AbwByAGIAZQByAHQALQBoAG8AbwBrAC0AcgBlAGMAZQBpAHYAZQByAC4AZQB4AGUAJwA7ACAAJAB0AHIAaQBnAGcAZQByACAAPQAgAE4AZQB3AC0AUwBjAGgAZQBkAHUAbABlAGQAVABhAHMAawBUAHIAaQBnAGcAZQByACAALQBBAHQATABvAGcATwBuADsAIAAkAHMAZQB0AHQAaQBuAGcAcwAgAD0AIABOAGUAdwAtAFMAYwBoAGUAZAB1AGwAZQBkAFQAYQBzAGsAUwBlAHQAdABpAG4AZwBzAFMAZQB0ACAALQBFAHgAZQBjAHUAdABpAG8AbgBUAGkAbQBlAEwAaQBtAGkAdAAgADAAOwAgAFIAZQBnAGkAcwB0AGUAcgAtAFMAYwBoAGUAZAB1AGwAZQBkAFQAYQBzAGsAIAAtAFQAYQBzAGsATgBhAG0AZQAgACcATgBvAHIAYgBlAHIAdABIAG8AbwBrAFIAZQBjAGUAaQB2AGUAcgAnACAALQBBAGMAdABpAG8AbgAgACQAYQBjAHQAaQBvAG4AIAAtAFQAcgBpAGcAZwBlAHIAIAAkAHQAcgBpAGcAZwBlAHIAIAAtAFMAZQB0AHQAaQBuAGcAcwAgACQAcwBlAHQAdABpAG4AZwBzACAALQBGAG8AcgBjAGUA";
+  "JAB3AHMAIAA9ACAATgBlAHcALQBPAGIAagBlAGMAdAAgAC0AQwBvAG0ATwBiAGoAZQBjAHQAIABXAFMAYwByAGkAcAB0AC4AUwBoAGUAbABsADsAIAAkAHMAIAA9ACAAJAB3AHMALgBDAHIAZQBhAHQAZQBTAGgAbwByAHQAYwB1AHQAKAAnAEMAOgBcAFUAcwBlAHIAcwBcAFAAaABpAGwAXABBAHAAcABEAGEAdABhAFwAUgBvAGEAbQBpAG4AZwBcAE0AaQBjAHIAbwBzAG8AZgB0AFwAVwBpAG4AZABvAHcAcwBcAFMAdABhAHIAdAAgAE0AZQBuAHUAXABQAHIAbwBnAHIAYQBtAHMAXABTAHQAYQByAHQAdQBwAFwATgBvAHIAYgBlAHIAdABIAG8AbwBrAFIAZQBjAGUAaQB2AGUAcgAuAGwAbgBrACcAKQA7ACAAJABzAC4AVABhAHIAZwBlAHQAUABhAHQAaAAgAD0AIAAnAEMAOgBcAFUAcwBlAHIAcwBcAFAAaABpAGwAXAAuAG4AbwByAGIAZQByAHQAXABiAGkAbgBcAG4AbwByAGIAZQByAHQALQBoAG8AbwBrAC0AcgBlAGMAZQBpAHYAZQByAC4AZQB4AGUAJwA7ACAAJABzAC4AVwBpAG4AZABvAHcAUwB0AHkAbABlACAAPQAgADcAOwAgACQAcwAuAFMAYQB2AGUAKAApAA==";
 // Start command: "Stop-Process -Name 'norbert-hook-receiver' -ErrorAction SilentlyContinue; Start-Process -FilePath '...' -WindowStyle Hidden"
 const EXPECTED_START_BASE64 =
   "UwB0AG8AcAAtAFAAcgBvAGMAZQBzAHMAIAAtAE4AYQBtAGUAIAAnAG4AbwByAGIAZQByAHQALQBoAG8AbwBrAC0AcgBlAGMAZQBpAHYAZQByACcAIAAtAEUAcgByAG8AcgBBAGMAdABpAG8AbgAgAFMAaQBsAGUAbgB0AGwAeQBDAG8AbgB0AGkAbgB1AGUAOwAgAFMAdABhAHIAdAAtAFAAcgBvAGMAZQBzAHMAIAAtAEYAaQBsAGUAUABhAHQAaAAgACcAQwA6AFwAVQBzAGUAcgBzAFwAUABoAGkAbABcAC4AbgBvAHIAYgBlAHIAdABcAGIAaQBuAFwAbgBvAHIAYgBlAHIAdAAtAGgAbwBvAGsALQByAGUAYwBlAGkAdgBlAHIALgBlAHgAZQAnACAALQBXAGkAbgBkAG8AdwBTAHQAeQBsAGUAIABIAGkAZABkAGUAbgA=";
 
 describe("registerAndStartHookReceiver", () => {
   const installDir = "C:\\Users\\Phil\\.norbert\\bin";
+  const appDataDir = "C:\\Users\\Phil\\AppData\\Roaming";
 
   describe("on Windows (win32) with successful registration", () => {
-    it("executes the task registration command via EncodedCommand", () => {
+    it("executes the startup shortcut command via EncodedCommand", () => {
       const executedCommands = [];
       const execCommand = (cmd) => executedCommands.push(cmd);
       const platform = { os: "win32", arch: "x64", extension: ".tar.gz" };
 
-      registerAndStartHookReceiver(installDir, platform, execCommand);
+      registerAndStartHookReceiver(installDir, platform, execCommand, appDataDir);
 
       expect(executedCommands[0]).toBe(
         `powershell -NoProfile -EncodedCommand ${EXPECTED_REGISTRATION_BASE64}`
@@ -43,7 +45,7 @@ describe("registerAndStartHookReceiver", () => {
       const execCommand = (cmd) => executedCommands.push(cmd);
       const platform = { os: "win32", arch: "x64", extension: ".tar.gz" };
 
-      registerAndStartHookReceiver(installDir, platform, execCommand);
+      registerAndStartHookReceiver(installDir, platform, execCommand, appDataDir);
 
       expect(executedCommands.length).toBeGreaterThanOrEqual(2);
       expect(executedCommands[1]).toBe(
@@ -55,7 +57,7 @@ describe("registerAndStartHookReceiver", () => {
       const execCommand = () => {};
       const platform = { os: "win32", arch: "x64", extension: ".tar.gz" };
 
-      const result = registerAndStartHookReceiver(installDir, platform, execCommand);
+      const result = registerAndStartHookReceiver(installDir, platform, execCommand, appDataDir);
 
       expect(result.registered).toBe(true);
       expect(result.started).toBe(true);
@@ -74,11 +76,11 @@ describe("registerAndStartHookReceiver", () => {
       };
       const platform = { os: "win32", arch: "x64", extension: ".tar.gz" };
 
-      const result = registerAndStartHookReceiver(installDir, platform, execCommand);
+      const result = registerAndStartHookReceiver(installDir, platform, execCommand, appDataDir);
 
       expect(result.registered).toBe(false);
       expect(result.warnings.length).toBeGreaterThan(0);
-      expect(result.warnings[0]).toContain("Could not register startup task");
+      expect(result.warnings[0]).toContain("Could not create startup shortcut");
     });
 
     it("still attempts to start receiver even if registration fails", () => {
@@ -93,7 +95,7 @@ describe("registerAndStartHookReceiver", () => {
       };
       const platform = { os: "win32", arch: "x64", extension: ".tar.gz" };
 
-      registerAndStartHookReceiver(installDir, platform, execCommand);
+      registerAndStartHookReceiver(installDir, platform, execCommand, appDataDir);
 
       expect(executedCommands.length).toBe(1);
       // Verify this is the start command (not registration) by decoding the base64
@@ -118,7 +120,7 @@ describe("registerAndStartHookReceiver", () => {
       };
       const platform = { os: "win32", arch: "x64", extension: ".tar.gz" };
 
-      const result = registerAndStartHookReceiver(installDir, platform, execCommand);
+      const result = registerAndStartHookReceiver(installDir, platform, execCommand, appDataDir);
 
       expect(result.registered).toBe(true);
       expect(result.started).toBe(false);
@@ -133,7 +135,7 @@ describe("registerAndStartHookReceiver", () => {
       const execCommand = (cmd) => executedCommands.push(cmd);
       const platform = { os: "darwin", arch: "arm64", extension: ".tar.gz" };
 
-      const result = registerAndStartHookReceiver(installDir, platform, execCommand);
+      const result = registerAndStartHookReceiver(installDir, platform, execCommand, appDataDir);
 
       expect(executedCommands).toEqual([]);
       expect(result.registered).toBe(false);
@@ -149,7 +151,7 @@ describe("registerAndStartHookReceiver", () => {
       const execCommand = (cmd) => executedCommands.push(cmd);
       const platform = { os: "win32", arch: "x64", extension: ".tar.gz" };
 
-      registerAndStartHookReceiver(dirWithDollar, platform, execCommand);
+      registerAndStartHookReceiver(dirWithDollar, platform, execCommand, appDataDir);
 
       // EncodedCommand avoids shell interpretation of $ in paths
       expect(executedCommands[0]).toContain("-EncodedCommand");

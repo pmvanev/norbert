@@ -138,17 +138,20 @@ case "$PLATFORM" in
     ;;
 esac
 
-# Register hook receiver startup task on Windows
+# Create startup shortcut and start hook receiver on Windows
 case "$PLATFORM" in
   win32-*)
-    echo "Registering hook receiver startup task..."
+    echo "Creating startup shortcut for hook receiver..."
     WIN_RECEIVER=$(cygpath -w "$INSTALL_DIR/norbert-hook-receiver.exe" 2>/dev/null || echo "$INSTALL_DIR/norbert-hook-receiver.exe")
+    STARTUP_DIR="$APPDATA/Microsoft/Windows/Start Menu/Programs/Startup"
+    WIN_STARTUP_SHORTCUT=$(cygpath -w "$STARTUP_DIR/NorbertHookReceiver.lnk" 2>/dev/null || echo "$STARTUP_DIR/NorbertHookReceiver.lnk")
     powershell.exe -NoProfile -Command "
-      \$action = New-ScheduledTaskAction -Execute '$WIN_RECEIVER';
-      \$trigger = New-ScheduledTaskTrigger -AtLogOn;
-      \$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -Hidden;
-      Register-ScheduledTask -TaskName 'NorbertHookReceiver' -Action \$action -Trigger \$trigger -Settings \$settings -Force | Out-Null
-    " 2>/dev/null && echo "Startup task registered." || echo "Warning: Could not register startup task (non-fatal)."
+      \$ws = New-Object -ComObject WScript.Shell;
+      \$s = \$ws.CreateShortcut('$WIN_STARTUP_SHORTCUT');
+      \$s.TargetPath = '$WIN_RECEIVER';
+      \$s.WindowStyle = 7;
+      \$s.Save()
+    " 2>/dev/null && echo "Startup shortcut created." || echo "Warning: Could not create startup shortcut (non-fatal)."
 
     echo "Starting hook receiver..."
     powershell.exe -NoProfile -Command "

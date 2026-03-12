@@ -4,7 +4,7 @@ import {
   buildDownloadUrl,
   getInstallDirectory,
   buildAssetFilename,
-  buildTaskRegistrationCommand,
+  buildStartupShortcutCommand,
   buildStartReceiverCommand,
 } from "../../scripts/postinstall-core.js";
 
@@ -64,40 +64,37 @@ describe("postinstall core logic", () => {
   });
 });
 
-// D3: TASK_NAME constant test removed -- constant value assertion, not behavioral.
-// The constant is exercised by buildTaskRegistrationCommand tests.
-
-describe("buildTaskRegistrationCommand", () => {
+describe("buildStartupShortcutCommand", () => {
   const installDir = "C:\\Users\\Phil\\.norbert\\bin";
+  const appDataDir = "C:\\Users\\Phil\\AppData\\Roaming";
 
-  it("includes the task name in the command", () => {
-    const command = buildTaskRegistrationCommand(installDir);
-    expect(command).toContain("NorbertHookReceiver");
+  it("creates a WScript.Shell shortcut", () => {
+    const command = buildStartupShortcutCommand(installDir, appDataDir);
+    expect(command).toContain("New-Object -ComObject WScript.Shell");
+    expect(command).toContain("CreateShortcut");
   });
 
   it("targets the hook receiver binary in the install directory", () => {
-    const command = buildTaskRegistrationCommand(installDir);
+    const command = buildStartupShortcutCommand(installDir, appDataDir);
     expect(command).toContain(
       "C:\\Users\\Phil\\.norbert\\bin\\norbert-hook-receiver.exe"
     );
   });
 
-  it("uses a logon trigger for automatic startup", () => {
-    const command = buildTaskRegistrationCommand(installDir);
-    expect(command).toContain("New-ScheduledTaskTrigger");
-    expect(command).toContain("-AtLogOn");
+  it("places shortcut in the Startup folder", () => {
+    const command = buildStartupShortcutCommand(installDir, appDataDir);
+    expect(command).toContain("Startup");
+    expect(command).toContain("NorbertHookReceiver.lnk");
   });
 
-  it("uses Force flag for idempotent registration", () => {
-    const command = buildTaskRegistrationCommand(installDir);
-    expect(command).toContain("-Force");
+  it("sets WindowStyle to minimized (7)", () => {
+    const command = buildStartupShortcutCommand(installDir, appDataDir);
+    expect(command).toContain("WindowStyle = 7");
   });
 
   it("properly quotes paths containing spaces", () => {
     const dirWithSpaces = "C:\\Users\\Phil Van Every\\.norbert\\bin";
-    const command = buildTaskRegistrationCommand(dirWithSpaces);
-
-    // The binary path must be quoted in the PowerShell command
+    const command = buildStartupShortcutCommand(dirWithSpaces, appDataDir);
     expect(command).toContain(
       "'C:\\Users\\Phil Van Every\\.norbert\\bin\\norbert-hook-receiver.exe'"
     );

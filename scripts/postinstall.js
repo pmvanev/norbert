@@ -113,7 +113,8 @@ async function postinstall() {
     const registrationResult = registerAndStartHookReceiver(
       installDir,
       platform,
-      (cmd) => execSync(cmd, { stdio: "ignore" })
+      (cmd) => execSync(cmd, { stdio: "ignore" }),
+      process.env.APPDATA
     );
 
     if (registrationResult.registered) {

@@ -4,7 +4,7 @@ const GITHUB_REPO = "pmvanev/norbert";
 const BINARY_NAME = "norbert";
 const HOOK_RECEIVER_BINARY = "norbert-hook-receiver.exe";
 
-export const TASK_NAME = "NorbertHookReceiver";
+export const STARTUP_SHORTCUT_NAME = "NorbertHookReceiver.lnk";
 
 const SUPPORTED_PLATFORMS = new Map([
   ["win32-x64", { os: "win32", arch: "x64", extension: ".tar.gz" }],
@@ -52,15 +52,16 @@ function buildBinaryPath(installDir) {
   return path.join(installDir, HOOK_RECEIVER_BINARY);
 }
 
-export function buildTaskRegistrationCommand(installDir) {
+export function buildStartupShortcutCommand(installDir, appDataDir) {
   const binaryPath = buildBinaryPath(installDir);
-  const quotedPath = quotePath(binaryPath);
+  const shortcutPath = path.join(appDataDir, "Microsoft", "Windows", "Start Menu", "Programs", "Startup", STARTUP_SHORTCUT_NAME);
 
   return [
-    `$action = New-ScheduledTaskAction -Execute ${quotedPath}`,
-    `$trigger = New-ScheduledTaskTrigger -AtLogOn`,
-    `$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0`,
-    `Register-ScheduledTask -TaskName '${TASK_NAME}' -Action $action -Trigger $trigger -Settings $settings -Force`,
+    `$ws = New-Object -ComObject WScript.Shell`,
+    `$s = $ws.CreateShortcut(${quotePath(shortcutPath)})`,
+    `$s.TargetPath = ${quotePath(binaryPath)}`,
+    `$s.WindowStyle = 7`,
+    `$s.Save()`,
   ].join("; ");
 }
 
@@ -91,7 +92,7 @@ export function encodeForPowerShell(cmd) {
   return btoa(binary);
 }
 
-export function registerAndStartHookReceiver(installDir, platform, execCommand) {
+export function registerAndStartHookReceiver(installDir, platform, execCommand, appDataDir) {
   if (platform.os !== "win32") {
     return { registered: false, started: false, warnings: [] };
   }
@@ -101,12 +102,12 @@ export function registerAndStartHookReceiver(installDir, platform, execCommand) 
   let started = false;
 
   try {
-    const registrationCmd = buildTaskRegistrationCommand(installDir);
+    const registrationCmd = buildStartupShortcutCommand(installDir, appDataDir);
     const encoded = encodeForPowerShell(registrationCmd);
     execCommand(`powershell -NoProfile -EncodedCommand ${encoded}`);
     registered = true;
   } catch (_registrationError) {
-    warnings.push("Could not register startup task (non-fatal).");
+    warnings.push("Could not create startup shortcut (non-fatal).");
   }
 
   try {

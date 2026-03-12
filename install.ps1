@@ -4,8 +4,8 @@ $ErrorActionPreference = "Stop"
 
 $Repo = "pmvanev/norbert"
 $InstallDir = Join-Path $HOME ".norbert" "bin"
-$TaskName = "NorbertHookReceiver"
 $HookReceiverBinary = "norbert-hook-receiver.exe"
+$StartupShortcutName = "NorbertHookReceiver.lnk"
 
 # --- Detect latest version ---
 
@@ -79,18 +79,22 @@ try {
     Write-Host "Warning: Could not create Start Menu shortcut." -ForegroundColor Yellow
 }
 
-# --- Register hook receiver startup task ---
+# --- Create startup shortcut for hook receiver ---
 
-Write-Host "Registering hook receiver startup task..."
+Write-Host "Creating startup shortcut for hook receiver..."
 try {
     $binaryPath = Join-Path $InstallDir $HookReceiverBinary
-    $action = New-ScheduledTaskAction -Execute $binaryPath
-    $trigger = New-ScheduledTaskTrigger -AtLogOn
-    $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -Hidden
-    Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Force | Out-Null
-    Write-Host "Startup task registered."
+    $startupDir = Join-Path $env:APPDATA "Microsoft" "Windows" "Start Menu" "Programs" "Startup"
+    $shortcutPath = Join-Path $startupDir $StartupShortcutName
+
+    $ws = New-Object -ComObject WScript.Shell
+    $shortcut = $ws.CreateShortcut($shortcutPath)
+    $shortcut.TargetPath = $binaryPath
+    $shortcut.WindowStyle = 7
+    $shortcut.Save()
+    Write-Host "Startup shortcut created."
 } catch {
-    Write-Host "Warning: Could not register startup task (non-fatal)." -ForegroundColor Yellow
+    Write-Host "Warning: Could not create startup shortcut (non-fatal)." -ForegroundColor Yellow
 }
 
 # --- Start hook receiver ---
