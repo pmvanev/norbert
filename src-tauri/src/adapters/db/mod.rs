@@ -5,7 +5,7 @@
 
 use rusqlite::Connection;
 
-use crate::domain::{EventType, HookEvent, Session};
+use crate::domain::{Event, EventType, Session};
 use crate::ports::EventStore;
 
 /// SQL pragma to enable write-ahead logging for concurrent access.
@@ -107,7 +107,7 @@ fn map_row_to_session(row: &rusqlite::Row) -> rusqlite::Result<Session> {
 }
 
 impl EventStore for SqliteEventStore {
-    fn write_event(&self, event: &HookEvent) -> Result<(), String> {
+    fn write_event(&self, event: &Event) -> Result<(), String> {
         // Upsert session: create if not exists, increment event_count
         self.connection
             .execute(
@@ -119,7 +119,7 @@ impl EventStore for SqliteEventStore {
             .map_err(|e| format!("Failed to upsert session: {}", e))?;
 
         // Set ended_at when a Stop event finalizes the session
-        if event.event_type == EventType::Stop {
+        if event.event_type == EventType::SessionEnd {
             self.connection
                 .execute(
                     "UPDATE sessions SET ended_at = ?1 WHERE id = ?2 AND ended_at IS NULL",
@@ -200,13 +200,14 @@ mod tests {
         SqliteEventStore::new(conn).expect("Failed to initialize schema")
     }
 
-    /// Helper: create a test HookEvent with given session_id and event_type.
-    fn test_event(session_id: &str, event_type: EventType) -> HookEvent {
-        HookEvent {
+    /// Helper: create a test Event with given session_id and event_type.
+    fn test_event(session_id: &str, event_type: EventType) -> Event {
+        Event {
             session_id: session_id.to_string(),
             event_type,
             payload: serde_json::json!({"tool": "bash"}),
             received_at: "2026-03-08T12:00:00Z".to_string(),
+            provider: "claude_code".to_string(),
         }
     }
 
@@ -312,7 +313,7 @@ mod tests {
     #[test]
     fn write_event_creates_session_and_stores_event() {
         let store = create_test_store();
-        let event = test_event("sess-1", EventType::PreToolUse);
+        let event = test_event("sess-1", EventType::ToolCallStart);
 
         store.write_event(&event).unwrap();
 
@@ -328,8 +329,8 @@ mod tests {
     #[test]
     fn write_event_increments_session_event_count() {
         let store = create_test_store();
-        let event1 = test_event("sess-1", EventType::PreToolUse);
-        let event2 = test_event("sess-1", EventType::PostToolUse);
+        let event1 = test_event("sess-1", EventType::ToolCallStart);
+        let event2 = test_event("sess-1", EventType::ToolCallEnd);
 
         store.write_event(&event1).unwrap();
         store.write_event(&event2).unwrap();
@@ -367,17 +368,19 @@ mod tests {
     fn get_latest_session_returns_most_recent() {
         let store = create_test_store();
 
-        let early_event = HookEvent {
+        let early_event = Event {
             session_id: "sess-early".to_string(),
             event_type: EventType::SessionStart,
             payload: serde_json::json!({}),
             received_at: "2026-03-08T10:00:00Z".to_string(),
+            provider: "claude_code".to_string(),
         };
-        let late_event = HookEvent {
+        let late_event = Event {
             session_id: "sess-late".to_string(),
             event_type: EventType::SessionStart,
             payload: serde_json::json!({}),
             received_at: "2026-03-08T12:00:00Z".to_string(),
+            provider: "claude_code".to_string(),
         };
 
         store.write_event(&early_event).unwrap();
@@ -388,37 +391,39 @@ mod tests {
     }
 
     #[test]
-    fn write_event_sets_ended_at_on_stop_event() {
+    fn write_event_sets_ended_at_on_session_end_event() {
         let store = create_test_store();
 
         // First, create the session with a SessionStart event
-        let start_event = HookEvent {
+        let start_event = Event {
             session_id: "sess-1".to_string(),
             event_type: EventType::SessionStart,
             payload: serde_json::json!({}),
             received_at: "2026-03-08T10:00:00Z".to_string(),
+            provider: "claude_code".to_string(),
         };
         store.write_event(&start_event).unwrap();
 
         // Session should not have ended_at yet
         let session = store.get_latest_session().unwrap().unwrap();
-        assert!(session.ended_at.is_none(), "Session should not have ended_at before Stop event");
+        assert!(session.ended_at.is_none(), "Session should not have ended_at before SessionEnd event");
 
-        // Now send a Stop event
-        let stop_event = HookEvent {
+        // Now send a SessionEnd event
+        let end_event = Event {
             session_id: "sess-1".to_string(),
-            event_type: EventType::Stop,
+            event_type: EventType::SessionEnd,
             payload: serde_json::json!({}),
             received_at: "2026-03-08T10:08:12Z".to_string(),
+            provider: "claude_code".to_string(),
         };
-        store.write_event(&stop_event).unwrap();
+        store.write_event(&end_event).unwrap();
 
         // Session should now have ended_at set
         let session = store.get_latest_session().unwrap().unwrap();
         assert_eq!(
             session.ended_at,
             Some("2026-03-08T10:08:12Z".to_string()),
-            "Stop event should set ended_at on the session"
+            "SessionEnd event should set ended_at on the session"
         );
     }
 
@@ -426,11 +431,12 @@ mod tests {
     fn write_event_sets_started_at_from_session_start_event() {
         let store = create_test_store();
 
-        let start_event = HookEvent {
+        let start_event = Event {
             session_id: "sess-1".to_string(),
             event_type: EventType::SessionStart,
             payload: serde_json::json!({}),
             received_at: "2026-03-08T10:00:00Z".to_string(),
+            provider: "claude_code".to_string(),
         };
         store.write_event(&start_event).unwrap();
 
@@ -441,7 +447,7 @@ mod tests {
     #[test]
     fn write_event_stores_correct_event_type() {
         let store = create_test_store();
-        let event = test_event("sess-1", EventType::SubagentStop);
+        let event = test_event("sess-1", EventType::AgentComplete);
 
         store.write_event(&event).unwrap();
 
@@ -449,17 +455,18 @@ mod tests {
             .connection
             .query_row("SELECT event_type FROM events LIMIT 1", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(stored_type, "subagent_stop");
+        assert_eq!(stored_type, "agent_complete");
     }
 
     #[test]
     fn write_event_stores_payload_as_json() {
         let store = create_test_store();
-        let event = HookEvent {
+        let event = Event {
             session_id: "sess-1".to_string(),
-            event_type: EventType::PreToolUse,
+            event_type: EventType::ToolCallStart,
             payload: serde_json::json!({"tool": "Read", "path": "/tmp/test"}),
             received_at: "2026-03-08T12:00:00Z".to_string(),
+            provider: "claude_code".to_string(),
         };
 
         store.write_event(&event).unwrap();
@@ -496,11 +503,12 @@ mod tests {
             let store = SqliteEventStore::new(conn).expect("Failed to initialize schema");
 
             for i in 0..20 {
-                let event = HookEvent {
+                let event = Event {
                     session_id: "sess-durable".to_string(),
-                    event_type: EventType::PreToolUse,
+                    event_type: EventType::ToolCallStart,
                     payload: serde_json::json!({"index": i}),
                     received_at: format!("2026-03-08T12:{:02}:00Z", i),
+                    provider: "claude_code".to_string(),
                 };
                 store.write_event(&event).unwrap();
             }
@@ -544,11 +552,12 @@ mod tests {
             let conn = Connection::open(&db_path).expect("Failed to reopen database");
             let store = SqliteEventStore::new(conn).expect("Failed to reinitialize schema");
 
-            let event = HookEvent {
+            let event = Event {
                 session_id: "sess-1".to_string(),
-                event_type: EventType::PreToolUse,
+                event_type: EventType::ToolCallStart,
                 payload: serde_json::json!({"tool": "Read"}),
                 received_at: "2026-03-08T12:01:00Z".to_string(),
+                provider: "claude_code".to_string(),
             };
             store.write_event(&event).unwrap();
 
@@ -576,11 +585,12 @@ mod tests {
         let reader_store = SqliteEventStore::new(reader_conn).expect("Failed to initialize reader");
 
         // Writer stores an event
-        let event = HookEvent {
+        let event = Event {
             session_id: "sess-concurrent".to_string(),
-            event_type: EventType::PreToolUse,
+            event_type: EventType::ToolCallStart,
             payload: serde_json::json!({"tool": "bash"}),
             received_at: "2026-03-08T12:00:00Z".to_string(),
+            provider: "claude_code".to_string(),
         };
         writer_store.write_event(&event).unwrap();
 

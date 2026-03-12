@@ -15,7 +15,7 @@ use axum::{
     Json, Router,
 };
 use norbert_lib::adapters::db::SqliteEventStore;
-use norbert_lib::domain::{parse_event_type, HookEvent, HOOK_PORT};
+use norbert_lib::domain::{parse_event_type, Event, HOOK_PORT};
 use norbert_lib::ports::EventStore;
 use rusqlite::Connection;
 
@@ -60,11 +60,12 @@ async fn handle_hook_event(
 
     let received_at = chrono::Utc::now().to_rfc3339();
 
-    let hook_event = HookEvent {
+    let hook_event = Event {
         session_id,
         event_type,
         payload,
         received_at,
+        provider: "claude_code".to_string(),
     };
 
     let store = state.event_store.lock().unwrap();

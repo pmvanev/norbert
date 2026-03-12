@@ -148,78 +148,66 @@ pub fn format_tooltip(app_name: &str, version: &str) -> String {
     format!("{} v{}", app_name, version)
 }
 
-/// Classification of hook events received from Claude Code.
+/// Canonical classification of events across all tool providers.
 ///
-/// Each variant corresponds to a specific lifecycle event in a Claude Code session.
+/// Each variant represents a tool-agnostic lifecycle event.
 /// Serializes to/from snake_case strings for JSON compatibility.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EventType {
-    /// Fired before a tool is invoked.
-    PreToolUse,
-    /// Fired after a tool invocation completes.
-    PostToolUse,
-    /// Fired when a subagent stops.
-    SubagentStop,
-    /// Fired when the session stops.
-    Stop,
-    /// Fired when a new session begins.
+    /// A new session has started.
     SessionStart,
-    /// Fired when the user submits a prompt.
-    UserPromptSubmit,
-}
-
-/// Parse a PascalCase event type name from a URL path segment into an EventType.
-///
-/// Claude Code hook URLs use PascalCase names (e.g., "PreToolUse").
-/// Returns None for unrecognized event type names.
-pub fn parse_event_type(name: &str) -> Option<EventType> {
-    match name {
-        "PreToolUse" => Some(EventType::PreToolUse),
-        "PostToolUse" => Some(EventType::PostToolUse),
-        "SubagentStop" => Some(EventType::SubagentStop),
-        "Stop" => Some(EventType::Stop),
-        "SessionStart" => Some(EventType::SessionStart),
-        "UserPromptSubmit" => Some(EventType::UserPromptSubmit),
-        _ => None,
-    }
+    /// A session has ended.
+    SessionEnd,
+    /// A tool invocation is beginning.
+    ToolCallStart,
+    /// A tool invocation has completed.
+    ToolCallEnd,
+    /// An agent has completed its work.
+    AgentComplete,
+    /// The user has submitted a prompt.
+    PromptSubmit,
 }
 
 impl fmt::Display for EventType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let label = match self {
-            EventType::PreToolUse => "pre_tool_use",
-            EventType::PostToolUse => "post_tool_use",
-            EventType::SubagentStop => "subagent_stop",
-            EventType::Stop => "stop",
             EventType::SessionStart => "session_start",
-            EventType::UserPromptSubmit => "user_prompt_submit",
+            EventType::SessionEnd => "session_end",
+            EventType::ToolCallStart => "tool_call_start",
+            EventType::ToolCallEnd => "tool_call_end",
+            EventType::AgentComplete => "agent_complete",
+            EventType::PromptSubmit => "prompt_submit",
         };
         write!(f, "{}", label)
     }
 }
 
-/// A single hook event received from Claude Code.
+/// A canonical event received from any tool provider.
 ///
-/// Immutable record capturing what happened, in which session, and when.
+/// Immutable record capturing what happened, in which session, from which
+/// provider, and when. The provider field identifies the source tool
+/// (e.g., "claude_code", "cursor", "windsurf").
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct HookEvent {
-    /// Identifier of the Claude Code session that produced this event.
+pub struct Event {
+    /// Identifier of the session that produced this event.
     pub session_id: String,
-    /// Classification of the event.
+    /// Canonical classification of the event.
     pub event_type: EventType,
-    /// Raw JSON payload from Claude Code.
+    /// Raw JSON payload from the provider.
     pub payload: serde_json::Value,
     /// ISO 8601 timestamp when the event was received by Norbert.
     pub received_at: String,
+    /// Identifier of the tool provider that produced this event.
+    pub provider: String,
 }
 
-/// A Claude Code session tracked by Norbert.
+/// A session tracked by Norbert.
 ///
 /// Immutable snapshot of session metadata.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Session {
-    /// Unique session identifier from Claude Code.
+    /// Unique session identifier.
     pub id: String,
     /// ISO 8601 timestamp when the session started.
     pub started_at: String,
@@ -241,6 +229,7 @@ pub fn calculate_duration_seconds(started_at: &str, ended_at: &str) -> Option<i6
 /// The 6 hook event type names as they appear in Claude Code settings.json.
 ///
 /// These are PascalCase strings matching the Claude Code hook configuration format.
+/// Used by the Claude Code adapter to register hooks.
 pub const HOOK_EVENT_NAMES: [&str; 6] = [
     "PreToolUse",
     "PostToolUse",
@@ -249,6 +238,24 @@ pub const HOOK_EVENT_NAMES: [&str; 6] = [
     "SessionStart",
     "UserPromptSubmit",
 ];
+
+/// Parse a PascalCase event type name from a Claude Code URL path segment
+/// into a canonical EventType.
+///
+/// Claude Code hook URLs use PascalCase names (e.g., "PreToolUse").
+/// This function normalizes them into canonical event types.
+/// Returns None for unrecognized event type names.
+pub fn parse_event_type(name: &str) -> Option<EventType> {
+    match name {
+        "PreToolUse" => Some(EventType::ToolCallStart),
+        "PostToolUse" => Some(EventType::ToolCallEnd),
+        "SubagentStop" => Some(EventType::AgentComplete),
+        "Stop" => Some(EventType::SessionEnd),
+        "SessionStart" => Some(EventType::SessionStart),
+        "UserPromptSubmit" => Some(EventType::PromptSubmit),
+        _ => None,
+    }
+}
 
 /// Build the hook URL for a given event type name.
 ///
@@ -281,13 +288,13 @@ mod tests {
     #[test]
     fn version_constant_matches_cargo_version() {
         // VERSION is pulled from Cargo.toml via env!("CARGO_PKG_VERSION")
-        assert_eq!(VERSION, "0.1.0");
+        assert_eq!(VERSION, "0.2.0");
     }
 
     #[test]
     fn tooltip_for_current_app_matches_expected() {
         let tooltip = format_tooltip(APP_NAME, VERSION);
-        assert_eq!(tooltip, "Norbert v0.1.0");
+        assert_eq!(tooltip, "Norbert v0.2.0");
     }
 
     #[test]
@@ -335,71 +342,107 @@ mod tests {
         assert_eq!(toggle_window_action(false), WindowAction::ShowAndFocus);
     }
 
-    // --- EventType tests ---
+    // --- Canonical EventType tests ---
 
     #[test]
-    fn event_type_has_six_variants() {
+    fn event_type_has_six_canonical_variants() {
         let variants = vec![
-            EventType::PreToolUse,
-            EventType::PostToolUse,
-            EventType::SubagentStop,
-            EventType::Stop,
             EventType::SessionStart,
-            EventType::UserPromptSubmit,
+            EventType::SessionEnd,
+            EventType::ToolCallStart,
+            EventType::ToolCallEnd,
+            EventType::AgentComplete,
+            EventType::PromptSubmit,
         ];
         assert_eq!(variants.len(), 6);
     }
 
     #[test]
     fn event_type_serializes_to_snake_case() {
-        let json = serde_json::to_string(&EventType::PreToolUse).unwrap();
-        assert_eq!(json, "\"pre_tool_use\"");
+        assert_eq!(
+            serde_json::to_string(&EventType::ToolCallStart).unwrap(),
+            "\"tool_call_start\""
+        );
     }
 
     #[test]
     fn event_type_deserializes_from_snake_case() {
-        let event_type: EventType = serde_json::from_str("\"post_tool_use\"").unwrap();
-        assert_eq!(event_type, EventType::PostToolUse);
+        let event_type: EventType = serde_json::from_str("\"tool_call_end\"").unwrap();
+        assert_eq!(event_type, EventType::ToolCallEnd);
     }
 
     #[test]
-    fn event_type_display_matches_variant_name() {
-        assert_eq!(EventType::PreToolUse.to_string(), "pre_tool_use");
-        assert_eq!(EventType::PostToolUse.to_string(), "post_tool_use");
-        assert_eq!(EventType::SubagentStop.to_string(), "subagent_stop");
-        assert_eq!(EventType::Stop.to_string(), "stop");
+    fn event_type_display_matches_canonical_snake_case() {
         assert_eq!(EventType::SessionStart.to_string(), "session_start");
-        assert_eq!(EventType::UserPromptSubmit.to_string(), "user_prompt_submit");
+        assert_eq!(EventType::SessionEnd.to_string(), "session_end");
+        assert_eq!(EventType::ToolCallStart.to_string(), "tool_call_start");
+        assert_eq!(EventType::ToolCallEnd.to_string(), "tool_call_end");
+        assert_eq!(EventType::AgentComplete.to_string(), "agent_complete");
+        assert_eq!(EventType::PromptSubmit.to_string(), "prompt_submit");
     }
 
-    // --- HookEvent tests ---
+    #[test]
+    fn event_type_variants_are_tool_agnostic() {
+        // Verify no Claude Code-specific names exist in canonical variants
+        let display_names: Vec<String> = vec![
+            EventType::SessionStart,
+            EventType::SessionEnd,
+            EventType::ToolCallStart,
+            EventType::ToolCallEnd,
+            EventType::AgentComplete,
+            EventType::PromptSubmit,
+        ]
+        .into_iter()
+        .map(|v| v.to_string())
+        .collect();
+
+        for name in &display_names {
+            assert!(
+                !name.contains("hook"),
+                "Canonical event type '{}' should not contain tool-specific term 'hook'",
+                name
+            );
+            assert!(
+                !name.contains("subagent"),
+                "Canonical event type '{}' should not contain tool-specific term 'subagent'",
+                name
+            );
+        }
+    }
+
+    // --- Canonical Event tests ---
 
     #[test]
-    fn hook_event_holds_event_type_session_id_and_payload() {
-        let event = HookEvent {
+    fn event_holds_event_type_session_id_provider_and_payload() {
+        let event = Event {
             session_id: "sess-123".to_string(),
-            event_type: EventType::PreToolUse,
+            event_type: EventType::ToolCallStart,
             payload: serde_json::json!({"tool": "bash"}),
             received_at: "2026-03-08T12:00:00Z".to_string(),
+            provider: "claude_code".to_string(),
         };
         assert_eq!(event.session_id, "sess-123");
-        assert_eq!(event.event_type, EventType::PreToolUse);
+        assert_eq!(event.event_type, EventType::ToolCallStart);
         assert_eq!(event.received_at, "2026-03-08T12:00:00Z");
+        assert_eq!(event.provider, "claude_code");
     }
 
     #[test]
-    fn hook_event_serializes_to_json() {
-        let event = HookEvent {
+    fn event_serializes_to_json_with_provider_field() {
+        let event = Event {
             session_id: "sess-1".to_string(),
-            event_type: EventType::Stop,
+            event_type: EventType::SessionEnd,
             payload: serde_json::json!({}),
             received_at: "2026-03-08T12:00:00Z".to_string(),
+            provider: "claude_code".to_string(),
         };
         let json = serde_json::to_value(&event).unwrap();
         assert!(json.get("session_id").is_some());
         assert!(json.get("event_type").is_some());
         assert!(json.get("payload").is_some());
         assert!(json.get("received_at").is_some());
+        assert!(json.get("provider").is_some());
+        assert_eq!(json["provider"], "claude_code");
     }
 
     // --- Session tests ---
@@ -446,16 +489,16 @@ mod tests {
         assert_eq!(url, "http://localhost:3748/hooks/PreToolUse");
     }
 
-    // --- parse_event_type tests ---
+    // --- parse_event_type tests (Claude Code normalization) ---
 
     #[test]
-    fn parse_event_type_recognizes_all_pascal_case_names() {
-        assert_eq!(parse_event_type("PreToolUse"), Some(EventType::PreToolUse));
-        assert_eq!(parse_event_type("PostToolUse"), Some(EventType::PostToolUse));
-        assert_eq!(parse_event_type("SubagentStop"), Some(EventType::SubagentStop));
-        assert_eq!(parse_event_type("Stop"), Some(EventType::Stop));
+    fn parse_event_type_normalizes_claude_code_names_to_canonical() {
+        assert_eq!(parse_event_type("PreToolUse"), Some(EventType::ToolCallStart));
+        assert_eq!(parse_event_type("PostToolUse"), Some(EventType::ToolCallEnd));
+        assert_eq!(parse_event_type("SubagentStop"), Some(EventType::AgentComplete));
+        assert_eq!(parse_event_type("Stop"), Some(EventType::SessionEnd));
         assert_eq!(parse_event_type("SessionStart"), Some(EventType::SessionStart));
-        assert_eq!(parse_event_type("UserPromptSubmit"), Some(EventType::UserPromptSubmit));
+        assert_eq!(parse_event_type("UserPromptSubmit"), Some(EventType::PromptSubmit));
     }
 
     #[test]
@@ -465,7 +508,7 @@ mod tests {
 
     #[test]
     fn parse_event_type_returns_none_for_snake_case_name() {
-        assert_eq!(parse_event_type("pre_tool_use"), None);
+        assert_eq!(parse_event_type("tool_call_start"), None);
     }
 
     #[test]
@@ -636,7 +679,7 @@ mod tests {
         assert_eq!(result, "Norbert v0.1.0 - Active session (15 events)");
     }
 
-    // --- Event type consistency (Scenario #36) ---
+    // --- Event type consistency ---
 
     #[test]
     fn every_hook_event_name_is_parseable_by_parse_event_type() {
@@ -663,18 +706,16 @@ mod tests {
         }
     }
 
-    // --- Event type consistency property tests (Scenario #37) ---
-
     /// All EventType variants as a complete list.
     /// If a new variant is added to EventType, this test must be updated.
     fn all_event_type_variants() -> Vec<EventType> {
         vec![
-            EventType::PreToolUse,
-            EventType::PostToolUse,
-            EventType::SubagentStop,
-            EventType::Stop,
             EventType::SessionStart,
-            EventType::UserPromptSubmit,
+            EventType::SessionEnd,
+            EventType::ToolCallStart,
+            EventType::ToolCallEnd,
+            EventType::AgentComplete,
+            EventType::PromptSubmit,
         ]
     }
 
