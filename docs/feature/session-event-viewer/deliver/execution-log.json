@@ -1,4 +1,5 @@
 {
+  "project_id": "session-event-viewer",
   "feature_id": "session-event-viewer",
   "created_at": "2026-03-12T04:30:00Z",
   "steps": [
@@ -29,6 +30,48 @@
       "status": "EXECUTED",
       "data": "PASS",
       "timestamp": "2026-03-12T05:03:00Z"
+    },
+    {
+      "step_id": "01-01",
+      "phase": "COMMIT",
+      "status": "EXECUTED",
+      "data": "PASS",
+      "timestamp": "2026-03-12T05:04:00Z"
+    },
+    {
+      "step_id": "01-02",
+      "phase": "PREPARE",
+      "status": "EXECUTED",
+      "data": "PASS",
+      "timestamp": "2026-03-12T06:00:00Z"
+    },
+    {
+      "step_id": "01-02",
+      "phase": "RED_ACCEPTANCE",
+      "status": "EXECUTED",
+      "data": "SKIP - pure function adapter; acceptance coverage through unit and property tests",
+      "timestamp": "2026-03-12T06:01:00Z"
+    },
+    {
+      "step_id": "01-02",
+      "phase": "RED_UNIT",
+      "status": "EXECUTED",
+      "data": "PASS",
+      "timestamp": "2026-03-12T06:02:00Z"
+    },
+    {
+      "step_id": "01-02",
+      "phase": "GREEN",
+      "status": "EXECUTED",
+      "data": "PASS",
+      "timestamp": "2026-03-12T06:03:00Z"
+    },
+    {
+      "step_id": "01-02",
+      "phase": "COMMIT",
+      "status": "EXECUTED",
+      "data": "PASS",
+      "timestamp": "2026-03-12T06:04:00Z"
     }
   ]
 }
