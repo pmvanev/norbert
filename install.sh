@@ -100,9 +100,13 @@ TEMP_FILE="${TEMP_DIR}/${ASSET}"
 curl -fSL --progress-bar "$DOWNLOAD_URL" -o "$TEMP_FILE" || die "Failed to download ${DOWNLOAD_URL}. The release asset may not exist for your platform."
 
 # Stop existing Norbert processes before binary overwrite (unlock files on Windows)
+NORBERT_WAS_RUNNING=false
 case "$PLATFORM" in
   win32-*)
     echo "Stopping existing Norbert processes..."
+    if powershell.exe -NoProfile -Command "Get-Process -Name 'norbert' -ErrorAction SilentlyContinue" 2>/dev/null | grep -q norbert; then
+      NORBERT_WAS_RUNNING=true
+    fi
     powershell.exe -NoProfile -Command "Stop-Process -Name 'norbert' -ErrorAction SilentlyContinue; Stop-Process -Name 'norbert-hook-receiver' -ErrorAction SilentlyContinue; Start-Sleep -Seconds 1" 2>/dev/null || true
     ;;
 esac
@@ -157,6 +161,14 @@ case "$PLATFORM" in
     powershell.exe -NoProfile -Command "
       Start-Process -FilePath '$WIN_RECEIVER' -WindowStyle Hidden
     " 2>/dev/null && echo "Hook receiver started." || echo "Warning: Could not start hook receiver (non-fatal)."
+
+    if [ "$NORBERT_WAS_RUNNING" = true ]; then
+      echo "Reopening Norbert..."
+      WIN_NORBERT=$(cygpath -w "$INSTALL_DIR/norbert.exe" 2>/dev/null || echo "$INSTALL_DIR/norbert.exe")
+      powershell.exe -NoProfile -Command "
+        Start-Process -FilePath '$WIN_NORBERT'
+      " 2>/dev/null && echo "Norbert reopened." || echo "Warning: Could not reopen Norbert (non-fatal)."
+    fi
     ;;
 esac
 

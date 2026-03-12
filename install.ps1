@@ -45,6 +45,7 @@ try {
 # --- Stop existing Norbert processes (unlock binaries before overwrite) ---
 
 Write-Host "Stopping existing Norbert processes..."
+$NorbertWasRunning = $null -ne (Get-Process -Name 'norbert' -ErrorAction SilentlyContinue)
 Stop-Process -Name 'norbert' -ErrorAction SilentlyContinue
 Stop-Process -Name 'norbert-hook-receiver' -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 1
@@ -108,6 +109,19 @@ try {
     Write-Host "Hook receiver started."
 } catch {
     Write-Host "Warning: Could not start hook receiver (non-fatal)." -ForegroundColor Yellow
+}
+
+# --- Reopen Norbert if it was running before install ---
+
+if ($NorbertWasRunning) {
+    Write-Host "Reopening Norbert..."
+    try {
+        $norbertPath = Join-Path $InstallDir "norbert.exe"
+        Start-Process -FilePath $norbertPath
+        Write-Host "Norbert reopened."
+    } catch {
+        Write-Host "Warning: Could not reopen Norbert (non-fatal)." -ForegroundColor Yellow
+    }
 }
 
 # --- Success ---
