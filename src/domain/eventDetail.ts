@@ -30,7 +30,7 @@ export const CANONICAL_EVENT_TYPES = new Set([
 /// Example: "tool_call_start" -> "TOOL CALL START"
 export function formatCanonicalEventType(eventType: string): string {
   const label = eventType.replace(/_/g, " ").toUpperCase();
-  if (!CANONICAL_EVENT_TYPES.has(eventType)) {
+  if (!(CANONICAL_EVENT_TYPES as Set<string>).has(eventType)) {
     return `UNKNOWN: ${label}`;
   }
   return label;

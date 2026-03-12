@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
   type SessionEvent,
-  CANONICAL_EVENT_TYPES,
   formatCanonicalEventType,
   extractToolName,
   formatEventTimestamp,
