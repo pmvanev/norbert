@@ -1,0 +1,80 @@
+/* ═══ DESIGN SYSTEM ═══
+   Base reset and global styles using CSS custom properties.
+   All colors come from themes.css -- never hardcode colors here. */
+
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-ui);
+  color: var(--text-p);
+  background: var(--bg-app);
+  background-image: var(--scanlines);
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+/* ═══ TYPOGRAPHY ═══ */
+
+/* UI labels, headings -- Rajdhani */
+h1, h2, h3, h4, h5, h6,
+label, button, select, option {
+  font-family: var(--font-ui);
+}
+
+/* Data values, monospace -- Share Tech Mono */
+code, pre, .mono,
+[data-mono] {
+  font-family: var(--font-mono);
+}
+
+/* ═══ THEME SWITCHER ═══ */
+
+.theme-switcher {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.theme-switcher-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-m);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.theme-switcher-select {
+  height: 22px;
+  padding: 0 6px;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--font-ui);
+  color: var(--text-s);
+  background: var(--bg-toolbar);
+  border: 1px solid var(--border);
+  border-radius: var(--btn-r, 2px);
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.12s;
+}
+
+.theme-switcher-select:hover,
+.theme-switcher-select:focus {
+  border-color: var(--brand);
+  color: var(--text-p);
+}
