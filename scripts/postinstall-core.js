@@ -59,7 +59,8 @@ export function buildTaskRegistrationCommand(installDir) {
   return [
     `$action = New-ScheduledTaskAction -Execute ${quotedPath}`,
     `$trigger = New-ScheduledTaskTrigger -AtLogOn`,
-    `Register-ScheduledTask -TaskName '${TASK_NAME}' -Action $action -Trigger $trigger -Force`,
+    `$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0`,
+    `Register-ScheduledTask -TaskName '${TASK_NAME}' -Action $action -Trigger $trigger -Settings $settings -Force`,
   ].join("; ");
 }
 
@@ -69,7 +70,7 @@ export function buildStartReceiverCommand(installDir) {
 
   return [
     `Stop-Process -Name 'norbert-hook-receiver' -ErrorAction SilentlyContinue`,
-    `Start-Process -FilePath ${quotedPath}`,
+    `Start-Process -FilePath ${quotedPath} -WindowStyle Hidden`,
   ].join("; ");
 }
 

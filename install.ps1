@@ -86,7 +86,8 @@ try {
     $binaryPath = Join-Path $InstallDir $HookReceiverBinary
     $action = New-ScheduledTaskAction -Execute $binaryPath
     $trigger = New-ScheduledTaskTrigger -AtLogOn
-    Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Force | Out-Null
+    $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -Hidden
+    Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Force | Out-Null
     Write-Host "Startup task registered."
 } catch {
     Write-Host "Warning: Could not register startup task (non-fatal)." -ForegroundColor Yellow
@@ -97,7 +98,7 @@ try {
 Write-Host "Starting hook receiver..."
 try {
     $binaryPath = Join-Path $InstallDir $HookReceiverBinary
-    Start-Process -FilePath $binaryPath
+    Start-Process -FilePath $binaryPath -WindowStyle Hidden
     Write-Host "Hook receiver started."
 } catch {
     Write-Host "Warning: Could not start hook receiver (non-fatal)." -ForegroundColor Yellow

@@ -146,12 +146,13 @@ case "$PLATFORM" in
     powershell.exe -NoProfile -Command "
       \$action = New-ScheduledTaskAction -Execute '$WIN_RECEIVER';
       \$trigger = New-ScheduledTaskTrigger -AtLogOn;
-      Register-ScheduledTask -TaskName 'NorbertHookReceiver' -Action \$action -Trigger \$trigger -Force | Out-Null
+      \$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -Hidden;
+      Register-ScheduledTask -TaskName 'NorbertHookReceiver' -Action \$action -Trigger \$trigger -Settings \$settings -Force | Out-Null
     " 2>/dev/null && echo "Startup task registered." || echo "Warning: Could not register startup task (non-fatal)."
 
     echo "Starting hook receiver..."
     powershell.exe -NoProfile -Command "
-      Start-Process -FilePath '$WIN_RECEIVER'
+      Start-Process -FilePath '$WIN_RECEIVER' -WindowStyle Hidden
     " 2>/dev/null && echo "Hook receiver started." || echo "Warning: Could not start hook receiver (non-fatal)."
     ;;
 esac
