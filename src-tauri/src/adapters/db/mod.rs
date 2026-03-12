@@ -36,6 +36,13 @@ const CREATE_EVENTS_TABLE: &str = "
     )
 ";
 
+/// SQL migration: add provider column to events table created before v0.2.
+/// ALTER TABLE with IF NOT EXISTS is not supported in SQLite, so we check
+/// the column list first via a conditional INSERT into a temp migration tracker.
+const MIGRATE_ADD_PROVIDER_COLUMN: &str = "
+    ALTER TABLE events ADD COLUMN provider TEXT NOT NULL DEFAULT 'unknown'
+";
+
 /// SQL to create index on events.session_id for session lookups.
 const CREATE_INDEX_EVENTS_SESSION_ID: &str =
     "CREATE INDEX IF NOT EXISTS idx_events_session_id ON events (session_id)";
@@ -71,6 +78,19 @@ impl SqliteEventStore {
         Ok(SqliteEventStore { connection })
     }
 
+    /// Check whether a column exists in a table.
+    fn column_exists(connection: &Connection, table: &str, column: &str) -> Result<bool, String> {
+        let mut stmt = connection
+            .prepare(&format!("PRAGMA table_info({})", table))
+            .map_err(|e| format!("Failed to query table info: {}", e))?;
+        let columns: Vec<String> = stmt
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(|e| format!("Failed to read table info: {}", e))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("Failed to collect columns: {}", e))?;
+        Ok(columns.iter().any(|c| c == column))
+    }
+
     /// Apply pragmas and create schema on the connection.
     fn initialize_schema(connection: &Connection) -> Result<(), String> {
         connection
@@ -85,6 +105,12 @@ impl SqliteEventStore {
         connection
             .execute_batch(CREATE_EVENTS_TABLE)
             .map_err(|e| format!("Failed to create events table: {}", e))?;
+        // Migrate: add provider column if missing (pre-v0.2 databases)
+        if !Self::column_exists(connection, "events", "provider")? {
+            connection
+                .execute_batch(MIGRATE_ADD_PROVIDER_COLUMN)
+                .map_err(|e| format!("Failed to migrate events table: {}", e))?;
+        }
         connection
             .execute_batch(CREATE_INDEX_EVENTS_SESSION_ID)
             .map_err(|e| format!("Failed to create session_id index: {}", e))?;
@@ -631,6 +657,52 @@ mod tests {
         // Calling initialize_schema again should not fail
         let result = SqliteEventStore::initialize_schema(&store.connection);
         assert!(result.is_ok(), "Re-initialization should succeed: {:?}", result.err());
+    }
+
+    #[test]
+    fn migration_adds_provider_column_to_legacy_events_table() {
+        let conn = Connection::open_in_memory().expect("Failed to open in-memory database");
+
+        // Simulate a pre-v0.2 database: events table without provider column
+        conn.execute_batch(
+            "CREATE TABLE sessions (
+                id TEXT PRIMARY KEY,
+                started_at TEXT NOT NULL,
+                ended_at TEXT,
+                event_count INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                received_at TEXT NOT NULL
+            );"
+        ).expect("Failed to create legacy schema");
+
+        // Insert a legacy event (no provider column)
+        conn.execute(
+            "INSERT INTO events (session_id, event_type, payload, received_at) VALUES ('s1', 'session_start', '{}', '2026-03-08T10:00:00Z')",
+            [],
+        ).expect("Failed to insert legacy event");
+
+        // Now initialize with current schema — migration should add provider column
+        let store = SqliteEventStore::new(conn).expect("Migration should succeed");
+
+        // New events with provider should work
+        let event = test_event("sess-new", EventType::SessionStart);
+        store.write_event(&event).expect("Write should succeed after migration");
+
+        // Legacy event should have default provider value
+        let legacy_provider: String = store
+            .connection
+            .query_row(
+                "SELECT provider FROM events WHERE session_id = 's1'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("Should read legacy event provider");
+        assert_eq!(legacy_provider, "unknown");
     }
 
     // --- Data durability: events persist across connections (Scenario #31) ---

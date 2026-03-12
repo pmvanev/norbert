@@ -1,9 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   type AppStatus,
   type SessionInfo,
-  formatHeader,
   formatField,
   deriveConnectionStatus,
 } from "./domain/status";
@@ -12,11 +11,12 @@ import { EventDetailView } from "./views/EventDetailView";
 import {
   type ThemeName,
   THEME_NAMES,
-  THEME_LABELS,
   readStoredTheme,
   storeTheme,
   themeToClassName,
 } from "./domain/theme";
+import { buildMenuBar } from "./domain/menu";
+import { MenuBar } from "./components/MenuBar";
 
 /// Polling interval in milliseconds for live UI updates.
 const POLL_INTERVAL_MS = 1000;
@@ -45,13 +45,14 @@ function App() {
     applyThemeToDocument(theme);
   }, [theme]);
 
-  const handleThemeChange = useCallback(
-    (event: React.ChangeEvent<HTMLSelectElement>) => {
-      const newTheme = event.target.value as ThemeName;
-      setTheme(newTheme);
-      storeTheme(newTheme, localStorage);
-    },
-    []
+  const handleThemeSelect = useCallback((newTheme: ThemeName) => {
+    setTheme(newTheme);
+    storeTheme(newTheme, localStorage);
+  }, []);
+
+  const menuEntries = useMemo(
+    () => buildMenuBar(theme, handleThemeSelect),
+    [theme, handleThemeSelect]
   );
 
   /// Handler for selecting a session row to view its events.
@@ -113,22 +114,7 @@ function App() {
 
   return (
     <main>
-      <h1>{formatHeader("Norbert", status.version)}</h1>
-      <div className="theme-switcher">
-        <span className="theme-switcher-label">Theme</span>
-        <select
-          className="theme-switcher-select"
-          value={theme}
-          onChange={handleThemeChange}
-          aria-label="Select theme"
-        >
-          {THEME_NAMES.map((name) => (
-            <option key={name} value={name}>
-              {THEME_LABELS[name]}
-            </option>
-          ))}
-        </select>
-      </div>
+      <MenuBar entries={menuEntries} />
       {selectedSession !== null ? (
         <EventDetailView
           session={selectedSession}

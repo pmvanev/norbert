@@ -68,14 +68,12 @@ beforeEach(() => {
 });
 
 describe("App smoke test — catches black screen regressions", () => {
-  it("renders the header with app name", async () => {
+  it("renders the menu bar with View entry", async () => {
     render(<App />);
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
+      expect(screen.getByText("View")).toBeInTheDocument();
     });
-
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/norbert/i);
   });
 
   it("renders the status bar footer", async () => {
@@ -90,14 +88,6 @@ describe("App smoke test — catches black screen regressions", () => {
     expect(screen.getByText(/Events: \d+/)).toBeInTheDocument();
   });
 
-  it("renders the theme switcher", async () => {
-    render(<App />);
-
-    await waitFor(() => {
-      expect(screen.getByLabelText(/select theme/i)).toBeInTheDocument();
-    });
-  });
-
   it("renders session rows when sessions exist", async () => {
     render(<App />);
 
@@ -110,7 +100,7 @@ describe("App smoke test — catches black screen regressions", () => {
     const { container } = render(<App />);
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
+      expect(screen.getByText("View")).toBeInTheDocument();
     });
 
     const main = container.querySelector("main");
