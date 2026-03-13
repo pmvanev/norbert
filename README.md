@@ -37,6 +37,20 @@ From inside Claude Code:
 
 This registers hooks so Claude Code sends session events to Norbert. The app and plugin are independent — Norbert runs fine without the plugin (it just won't receive events), and the plugin can be installed or removed without affecting the app or its data.
 
+## Development install
+
+If you're building Norbert from source, use `local_install.sh` to install your local build to `~/.norbert/bin/`:
+
+```bash
+# Install from an existing build (src-tauri/target/release/)
+./local_install.sh
+
+# Build and install in one step
+./local_install.sh --build
+```
+
+This copies the binaries, creates shortcuts, and starts the hook receiver — same as the production installer but skipping the GitHub download.
+
 ## How it works
 
 Norbert listens on `localhost:3748` for HTTP hook events from Claude Code. Each event (tool use, agent activity, session start/stop) is stored in a local SQLite database. The dashboard gives you real-time and historical views of your sessions.
