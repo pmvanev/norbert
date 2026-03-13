@@ -19,6 +19,15 @@ import { loadPlugins } from "./plugins/lifecycleManager";
 import { createNorbertAPI } from "./plugins/apiFactory";
 import { createPluginRegistry, getAllViews } from "./plugins/pluginRegistry";
 import { norbertSessionPlugin } from "./plugins/norbert-session/index";
+import { norbertUsagePlugin } from "./plugins/norbert-usage/index";
+import { GaugeClusterView } from "./plugins/norbert-usage/views/GaugeClusterView";
+import { OscilloscopeView } from "./plugins/norbert-usage/views/OscilloscopeView";
+import { UsageDashboardView } from "./plugins/norbert-usage/views/UsageDashboardView";
+import { CostTicker } from "./plugins/norbert-usage/views/CostTicker";
+import { computeDashboardData } from "./plugins/norbert-usage/domain/dashboard";
+import { computeGaugeClusterData } from "./plugins/norbert-usage/domain/gaugeCluster";
+import { computeCostTickerData } from "./plugins/norbert-usage/domain/costTicker";
+import { createMetricsStore } from "./plugins/norbert-usage/adapters/metricsStore";
 import { resetHookBridge } from "./plugins/hookBridge";
 import { createDefaultLayoutState, isSecondaryVisible, toggleSecondaryZone, type TwoZoneLayoutState } from "./layout/zoneToggle";
 import { assignView } from "./layout/assignmentEngine";
@@ -47,13 +56,13 @@ const applyThemeToDocument = (theme: ThemeName): void => {
   root.classList.add(themeToClassName(theme));
 };
 
-/// Initializes the plugin system by loading norbert-session via the standard
-/// plugin lifecycle. Returns the plugin registry with all registered views,
-/// tabs, and hooks.
+/// Initializes the plugin system by loading norbert-session and norbert-usage
+/// via the standard plugin lifecycle. Returns the plugin registry with all
+/// registered views, tabs, and hooks.
 const initializePluginSystem = () => {
   resetHookBridge();
   return loadPlugins(
-    [norbertSessionPlugin],
+    [norbertSessionPlugin, norbertUsagePlugin],
     createPluginRegistry(),
     createNorbertAPI
   );
@@ -78,6 +87,9 @@ function App() {
 
   /// Initialize plugin system once on mount.
   const [pluginRegistry] = useState(initializePluginSystem);
+
+  /// Metrics store for norbert-usage views (single mutable cell at the edge).
+  const [metricsStore] = useState(() => createMetricsStore("default"));
 
   /// Initialize sidebar from plugin registry views.
   const sidebarState = useMemo(
@@ -199,6 +211,37 @@ function App() {
 
     registry.set("session-list", SessionListWrapper);
     registry.set("session-detail", SessionDetailWrapper);
+
+    // norbert-usage views: each wrapper reads current metrics from the store
+    // and delegates to pure domain functions for computation.
+    const GaugeClusterWrapper: FC = () => {
+      const metrics = metricsStore.getMetrics();
+      return <GaugeClusterView data={computeGaugeClusterData(metrics)} />;
+    };
+    GaugeClusterWrapper.displayName = "GaugeClusterWrapper";
+
+    const OscilloscopeWrapper: FC = () => (
+      <OscilloscopeView store={metricsStore} />
+    );
+    OscilloscopeWrapper.displayName = "OscilloscopeWrapper";
+
+    const UsageDashboardWrapper: FC = () => {
+      const metrics = metricsStore.getMetrics();
+      const dashboard = computeDashboardData(metrics);
+      return <UsageDashboardView dashboard={dashboard} dailyCosts={[]} />;
+    };
+    UsageDashboardWrapper.displayName = "UsageDashboardWrapper";
+
+    const CostTickerWrapper: FC = () => {
+      const metrics = metricsStore.getMetrics();
+      return <CostTicker data={computeCostTickerData(metrics.sessionCost, 0)} />;
+    };
+    CostTickerWrapper.displayName = "CostTickerWrapper";
+
+    registry.set("gauge-cluster", GaugeClusterWrapper);
+    registry.set("oscilloscope", OscilloscopeWrapper);
+    registry.set("usage-dashboard", UsageDashboardWrapper);
+    registry.set("cost-ticker", CostTickerWrapper);
 
     return registry;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
