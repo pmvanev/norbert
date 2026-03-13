@@ -251,13 +251,13 @@ mod tests {
     #[test]
     fn version_constant_matches_cargo_version() {
         // VERSION is pulled from Cargo.toml via env!("CARGO_PKG_VERSION")
-        assert_eq!(VERSION, "0.2.1");
+        assert_eq!(VERSION, "0.4.0");
     }
 
     #[test]
     fn tooltip_for_current_app_matches_expected() {
         let tooltip = format_tooltip(APP_NAME, VERSION);
-        assert_eq!(tooltip, "Norbert v0.2.1");
+        assert_eq!(tooltip, "Norbert v0.4.0");
     }
 
     #[test]

@@ -103,9 +103,43 @@ pub fn run() {
                 .default_window_icon()
                 .cloned()
                 .expect("default window icon must be set in tauri.conf.json");
+
+            let show_hide = tauri::menu::MenuItemBuilder::with_id("show_hide", "Show / Hide")
+                .build(app)?;
+            let quit = tauri::menu::MenuItemBuilder::with_id("quit", "Quit Norbert")
+                .build(app)?;
+            let menu = tauri::menu::MenuBuilder::new(app)
+                .item(&show_hide)
+                .separator()
+                .item(&quit)
+                .build()?;
+
             let _tray = tauri::tray::TrayIconBuilder::new()
                 .icon(icon)
                 .tooltip(&tooltip)
+                .menu(&menu)
+                .on_menu_event(|app_handle, event| {
+                    match event.id().as_ref() {
+                        "show_hide" => {
+                            if let Some(window) = app_handle.get_webview_window("main") {
+                                let is_visible = window.is_visible().unwrap_or(false);
+                                match toggle_window_action(is_visible) {
+                                    WindowAction::ShowAndFocus => {
+                                        let _ = window.show();
+                                        let _ = window.set_focus();
+                                    }
+                                    WindowAction::Hide => {
+                                        let _ = window.hide();
+                                    }
+                                }
+                            }
+                        }
+                        "quit" => {
+                            app_handle.exit(0);
+                        }
+                        _ => {}
+                    }
+                })
                 .on_tray_icon_event(|tray_icon, event| {
                     if let tauri::tray::TrayIconEvent::Click { .. } = event {
                         let app_handle = tray_icon.app_handle();
@@ -125,12 +159,6 @@ pub fn run() {
                 })
                 .build(app)?;
             Ok(())
-        })
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = window.hide();
-            }
         })
         .invoke_handler(tauri::generate_handler![greet, get_status, get_latest_session, get_sessions, get_session_events])
         .run(tauri::generate_context!())

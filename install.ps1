@@ -50,6 +50,31 @@ Stop-Process -Name 'norbert' -ErrorAction SilentlyContinue
 Stop-Process -Name 'norbert-hook-receiver' -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 1
 
+# --- Clear Windows icon cache (ensures updated icons on new installs) ---
+
+Write-Host "Clearing Windows icon cache..."
+try {
+    $iconCacheDir = Join-Path $env:LOCALAPPDATA "Microsoft" "Windows" "Explorer"
+    $iconCacheFiles = Get-ChildItem -Path $iconCacheDir -Filter "iconcache*" -ErrorAction SilentlyContinue
+    if ($iconCacheFiles) {
+        foreach ($file in $iconCacheFiles) {
+            Remove-Item -Path $file.FullName -Force -ErrorAction SilentlyContinue
+        }
+    }
+    # Also clear the thumbcache files that can hold stale icons
+    $thumbCacheFiles = Get-ChildItem -Path $iconCacheDir -Filter "thumbcache*" -ErrorAction SilentlyContinue
+    if ($thumbCacheFiles) {
+        foreach ($file in $thumbCacheFiles) {
+            Remove-Item -Path $file.FullName -Force -ErrorAction SilentlyContinue
+        }
+    }
+    # Refresh the shell icon cache
+    ie4uinit.exe -show 2>$null
+    Write-Host "Icon cache cleared."
+} catch {
+    Write-Host "Warning: Could not clear icon cache (non-fatal)." -ForegroundColor Yellow
+}
+
 # --- Extract ---
 
 Write-Host "Installing to $InstallDir..."

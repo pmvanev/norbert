@@ -108,6 +108,16 @@ case "$PLATFORM" in
       NORBERT_WAS_RUNNING=true
     fi
     powershell.exe -NoProfile -Command "Stop-Process -Name 'norbert' -ErrorAction SilentlyContinue; Stop-Process -Name 'norbert-hook-receiver' -ErrorAction SilentlyContinue; Start-Sleep -Seconds 1" 2>/dev/null || true
+
+    # Clear Windows icon cache to ensure updated icons on new installs
+    echo "Clearing Windows icon cache..."
+    ICON_CACHE_DIR="$LOCALAPPDATA/Microsoft/Windows/Explorer"
+    if [ -d "$ICON_CACHE_DIR" ]; then
+      rm -f "$ICON_CACHE_DIR"/iconcache* 2>/dev/null || true
+      rm -f "$ICON_CACHE_DIR"/thumbcache* 2>/dev/null || true
+    fi
+    ie4uinit.exe -show 2>/dev/null || true
+    echo "Icon cache cleared."
     ;;
 esac
 
