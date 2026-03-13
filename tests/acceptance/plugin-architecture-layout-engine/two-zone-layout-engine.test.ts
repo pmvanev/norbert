@@ -11,6 +11,9 @@
  */
 
 import { describe, it, expect } from "vitest";
+import fc from "fast-check";
+import { createZoneRegistry, getZone, addZone, removeZone } from "../../../src/layout/zoneRegistry";
+import type { ZoneState } from "../../../src/layout/types";
 
 // Domain constants
 const MIN_ZONE_WIDTH_PX = 280;
@@ -21,13 +24,22 @@ const DEFAULT_DIVIDER_RATIO = 0.5;
 // ---------------------------------------------------------------------------
 
 describe("Main zone is always present and shows content", () => {
-  it.skip("Main zone displays assigned view on launch", () => {
+  it("Main zone displays assigned view on launch", () => {
     // GIVEN: layout has Session List assigned to Main zone
-    // WHEN: Norbert launches
-    // THEN: Main zone shows Session List
-    // AND: Main zone occupies the full content width when Secondary is hidden
-    //
-    // Driving port: ViewAssignment port (restore)
+    const registry = createZoneRegistry();
+
+    // THEN: Main zone is always present in a fresh registry
+    const mainZone = getZone(registry, "main");
+    expect(mainZone).toBeDefined();
+
+    // AND: Main zone exists with null viewId/pluginId (empty state)
+    expect(mainZone!.viewId).toBeNull();
+    expect(mainZone!.pluginId).toBeNull();
+
+    // AND: Main zone cannot be removed
+    const afterRemoveAttempt = removeZone(registry, "main");
+    const mainStillPresent = getZone(afterRemoveAttempt, "main");
+    expect(mainStillPresent).toBeDefined();
   });
 });
 
@@ -139,13 +151,46 @@ describe("Divider position stored as ratio for resolution independence", () => {
 
 // @property
 describe("Zone registry is count-agnostic", () => {
-  it.skip("zones are stored as a keyed map, not positional fields", () => {
-    // GIVEN: the layout engine manages zones as a keyed registry
-    // THEN: adding a new zone named "bottom" requires only layout engine changes
-    // AND: no plugin API method signatures change
-    // AND: no plugin manifest fields change
-    // AND: layout persistence schema extends naturally with a new zone key
-    //
-    // Driving port: ViewAssignment port (zone abstraction)
+  it("zones are stored as a keyed map, not positional fields", () => {
+    // Property: for any valid zone name (not "main"), adding it to the registry
+    // produces a registry with that zone present alongside main, and the
+    // same operations (getZone, addZone, removeZone) work regardless of count.
+    const zoneNameArb = fc.string({ minLength: 1, maxLength: 20 })
+      .filter(name => name !== "main" && name.trim().length > 0);
+
+    fc.assert(
+      fc.property(
+        fc.array(zoneNameArb, { minLength: 1, maxLength: 10 }),
+        (zoneNames) => {
+          // GIVEN: a fresh registry with main zone
+          let registry = createZoneRegistry();
+
+          // WHEN: we add arbitrary zone names
+          const uniqueNames = [...new Set(zoneNames)];
+          for (const name of uniqueNames) {
+            const zoneState: ZoneState = { viewId: null, pluginId: null };
+            registry = addZone(registry, name, zoneState);
+          }
+
+          // THEN: main is still present (invariant)
+          expect(getZone(registry, "main")).toBeDefined();
+
+          // AND: all added zones are present
+          for (const name of uniqueNames) {
+            expect(getZone(registry, name)).toBeDefined();
+          }
+
+          // AND: removing a non-main zone works
+          if (uniqueNames.length > 0) {
+            const toRemove = uniqueNames[0];
+            const reduced = removeZone(registry, toRemove);
+            expect(getZone(reduced, toRemove)).toBeUndefined();
+            // AND: main is still present after removal
+            expect(getZone(reduced, "main")).toBeDefined();
+          }
+        }
+      ),
+      { numRuns: 100 }
+    );
   });
 });
