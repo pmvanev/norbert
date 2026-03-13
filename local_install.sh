@@ -22,8 +22,10 @@ die() {
 # --- Optional build step ---
 
 if [ "$1" = "--build" ]; then
+  echo "Building frontend..."
+  (cd "$SCRIPT_DIR" && npm run build) || die "Frontend build failed."
   echo "Building Norbert (release mode)..."
-  (cd "$SCRIPT_DIR/src-tauri" && cargo build --release) || die "Build failed."
+  (cd "$SCRIPT_DIR/src-tauri" && cargo build --release) || die "Rust build failed."
   echo "Build complete."
 fi
 
