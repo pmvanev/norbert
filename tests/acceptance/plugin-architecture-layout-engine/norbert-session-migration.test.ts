@@ -275,7 +275,6 @@ describe("Session List in floating panel shows live metric", () => {
 
     // AND: the hook processor can receive session events to update the count
     // Deliver session events and verify the processor receives them
-    let receivedPayloads: unknown[] = [];
     resetHookBridge();
     const freshRegistry = loadPlugins(
       [norbertSessionPlugin],

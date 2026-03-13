@@ -20,17 +20,22 @@ export const serializeSidebarState = (state: SidebarState): string =>
 
 /// Restores a SidebarState from a JSON string.
 /// The JSON is expected to match the SidebarState shape.
-export const deserializeSidebarState = (json: string): SidebarState => {
-  const parsed = JSON.parse(json) as { items: SidebarItem[] };
-  return {
-    items: parsed.items.map((item) => ({
-      id: item.id,
-      pluginId: item.pluginId,
-      label: item.label,
-      icon: item.icon,
-      visible: item.visible,
-      pinned: item.pinned,
-      order: item.order,
-    })),
-  };
+/// Returns null if the JSON is malformed, so callers fall back to defaults.
+export const deserializeSidebarState = (json: string): SidebarState | null => {
+  try {
+    const parsed = JSON.parse(json) as { items: SidebarItem[] };
+    return {
+      items: parsed.items.map((item) => ({
+        id: item.id,
+        pluginId: item.pluginId,
+        label: item.label,
+        icon: item.icon,
+        visible: item.visible,
+        pinned: item.pinned,
+        order: item.order,
+      })),
+    };
+  } catch {
+    return null;
+  }
 };

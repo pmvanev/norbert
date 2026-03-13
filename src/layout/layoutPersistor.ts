@@ -57,9 +57,20 @@ const dtoToLayout = (dto: LayoutDto): LayoutState => ({
 /**
  * Deserializes a JSON string to a LayoutState.
  * Restores zones from array-of-entries back to a Map.
+ * Returns a default empty layout if the JSON is malformed.
  */
-export const deserializeLayout = (json: string): LayoutState =>
-  dtoToLayout(JSON.parse(json) as LayoutDto);
+export const deserializeLayout = (json: string): LayoutState => {
+  try {
+    return dtoToLayout(JSON.parse(json) as LayoutDto);
+  } catch {
+    return {
+      zones: new Map(),
+      floatingPanels: [],
+      dividerPosition: 0.5,
+      activePreset: "Default",
+    };
+  }
+};
 
 // ---------------------------------------------------------------------------
 // validateViewIds — replace invalid view IDs with graceful empty state
@@ -75,11 +86,6 @@ const validateZoneEntry = (
   return [name, { viewId: null, pluginId: null }];
 };
 
-/**
- * Validates all view IDs in a LayoutState against available views.
- * Zones referencing uninstalled/unavailable views get null viewId and pluginId.
- * Does not modify divider position, active preset, or floating panels.
- */
 // ---------------------------------------------------------------------------
 // Window set serialization -- windows.json for restart restore
 // ---------------------------------------------------------------------------
@@ -106,14 +112,25 @@ export const serializeWindowSet = (state: MultiWindowState): string =>
 /**
  * Deserializes a JSON string to an array of window entries.
  * Returns the window IDs and labels needed to restore windows on restart.
+ * Returns an empty array if the JSON is malformed.
  */
-export const deserializeWindowSet = (json: string): readonly WindowEntryDto[] =>
-  JSON.parse(json) as readonly WindowEntryDto[];
+export const deserializeWindowSet = (json: string): readonly WindowEntryDto[] => {
+  try {
+    return JSON.parse(json) as readonly WindowEntryDto[];
+  } catch {
+    return [];
+  }
+};
 
 // ---------------------------------------------------------------------------
 // validateViewIds — replace invalid view IDs with graceful empty state
 // ---------------------------------------------------------------------------
 
+/**
+ * Validates all view IDs in a LayoutState against available views.
+ * Zones referencing uninstalled/unavailable views get null viewId and pluginId.
+ * Does not modify divider position, active preset, or floating panels.
+ */
 export const validateViewIds = (
   layout: LayoutState,
   availableViewIds: ReadonlySet<string>

@@ -10,7 +10,6 @@ import type {
   NorbertAPI,
   PluginPublicAPI,
   PluginRegistry,
-  DegradationWarning,
   DisablePluginResult,
   Result,
 } from "./types";
@@ -26,6 +25,7 @@ import {
   removePlugin,
 } from "./pluginRegistry";
 import { validateManifest } from "./pluginLoader";
+import { createDegradationWarning } from "./dependencyResolver";
 
 /// Type for the API factory function — a driven port injected as a parameter.
 type CreateNorbertAPI = (
@@ -107,17 +107,6 @@ export const loadPlugins = (
 // ---------------------------------------------------------------------------
 // Runtime disable
 // ---------------------------------------------------------------------------
-
-/// Creates a degradation warning for a dependent plugin losing a dependency.
-const createDegradationWarning = (
-  pluginId: string,
-  disabledDependency: string
-): DegradationWarning => ({
-  pluginId,
-  disabledDependency,
-  message: `${disabledDependency} is disabled. Features depending on it will not be available. Re-enable ${disabledDependency} to restore full functionality.`,
-  reEnableAction: disabledDependency,
-});
 
 /// Finds all loaded plugins that depend on the given plugin.
 const findDependents = (

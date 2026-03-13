@@ -44,9 +44,20 @@ export const registerHookProcessor = (
 };
 
 /// Delivers an event payload to all processors registered for the given hook name.
+/// Each processor is called independently — a throwing processor does not prevent
+/// delivery to subsequent processors.
 export const deliverHookEvent = (hookName: string, payload: unknown): void => {
   const processors = hookProcessors.get(hookName) ?? [];
-  processors.forEach(({ processor }) => processor(payload));
+  processors.forEach(({ pluginId, processor }) => {
+    try {
+      processor(payload);
+    } catch (error) {
+      console.error(
+        `Hook processor for "${hookName}" from plugin "${pluginId}" threw:`,
+        error
+      );
+    }
+  });
 };
 
 // ---------------------------------------------------------------------------
@@ -88,11 +99,12 @@ export const updateStatusItem = (
   const existing = statusItems.get(key);
   if (existing === undefined) return;
 
-  statusItems.set(key, {
+  const updated: StatusItemRegistration = {
     ...existing,
-    ...(changes.label !== undefined ? { label: changes.label } : {}),
-    ...(changes.icon !== undefined ? { icon: changes.icon } : {}),
-  });
+    label: changes.label ?? existing.label,
+    icon: changes.icon ?? existing.icon,
+  };
+  statusItems.set(key, updated);
 };
 
 // ---------------------------------------------------------------------------
@@ -105,11 +117,8 @@ export const resetHookBridge = (): void => {
   statusItems = new Map();
 };
 
-// ---------------------------------------------------------------------------
-// Factory placeholder (unused but exported for API completeness)
-// ---------------------------------------------------------------------------
-
-/// Creates a fresh hook bridge state. Currently a no-op since state is module-level.
+/// Creates a fresh hook bridge state by resetting all registrations.
 export const createHookBridge = (): void => {
   resetHookBridge();
 };
+

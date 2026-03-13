@@ -70,7 +70,7 @@ const validateAllDependencies = (
 // ---------------------------------------------------------------------------
 
 /// Creates a degradation warning for a plugin that depends on a disabled plugin.
-const createDegradationWarning = (
+export const createDegradationWarning = (
   pluginId: string,
   disabledDependency: string
 ): DegradationWarning => ({
@@ -95,7 +95,7 @@ const collectDegradationWarnings = (
 // Graph construction
 // ---------------------------------------------------------------------------
 
-/// Builds a directed acency graph: edges from dependency -> dependent.
+/// Builds a directed adjacency graph: edges from dependency -> dependent.
 /// In-degree counts how many dependencies a plugin has among the manifest set.
 /// Disabled plugins are excluded from edges (their dependents don't wait for them).
 const buildDependencyGraph = (

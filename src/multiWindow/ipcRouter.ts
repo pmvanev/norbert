@@ -70,7 +70,16 @@ export const createIpcRouter = (): IpcRouter => {
   };
 
   const broadcastEvent = (event: HookEvent): void => {
-    subscribers.forEach((s) => s.handler(event));
+    subscribers.forEach((s) => {
+      try {
+        s.handler(event);
+      } catch (error) {
+        console.error(
+          `IPC broadcast to window "${s.windowLabel}" threw:`,
+          error
+        );
+      }
+    });
   };
 
   const subscriberCount = (): number => subscribers.length;
