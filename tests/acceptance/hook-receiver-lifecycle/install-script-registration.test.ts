@@ -1,13 +1,11 @@
 /**
- * Acceptance tests: Install scripts integrate hook receiver registration (US-HRIL-01, Step 01-03)
+ * Acceptance tests: Install scripts integrate hook receiver startup (US-HRIL-01, Step 01-03)
  *
  * Validates that the standalone install scripts (install.ps1, install.sh) include
- * hook receiver task registration, process lifecycle management, and non-fatal
- * error handling -- without requiring Node.js at runtime.
+ * hook receiver startup shortcut creation, process lifecycle management, and
+ * non-fatal error handling -- without requiring Node.js at runtime.
  *
- * Testing approach: Static content verification of script files. The domain logic
- * (command building, registration) is tested via postinstall-core.js unit tests.
- * These tests verify the scripts contain the correct integration of that logic.
+ * Testing approach: Static content verification of script files.
  */
 
 import { describe, it, expect } from "vitest";
@@ -24,21 +22,21 @@ const INSTALL_SH = readFileSync(
   "utf-8"
 );
 
-const TASK_NAME = "NorbertHookReceiver";
+const SHORTCUT_NAME = "NorbertHookReceiver.lnk";
 
-describe("install.ps1 registers hook receiver task and starts receiver", () => {
-  it("registers a scheduled task named NorbertHookReceiver", () => {
-    expect(INSTALL_PS1).toContain("Register-ScheduledTask");
-    expect(INSTALL_PS1).toContain(TASK_NAME);
+describe("install.ps1 creates startup shortcut and starts receiver", () => {
+  it("creates a startup shortcut named NorbertHookReceiver.lnk", () => {
+    expect(INSTALL_PS1).toContain("CreateShortcut");
+    expect(INSTALL_PS1).toContain(SHORTCUT_NAME);
   });
 
-  it("uses AtLogOn trigger for automatic startup", () => {
-    expect(INSTALL_PS1).toContain("New-ScheduledTaskTrigger");
-    expect(INSTALL_PS1).toContain("-AtLogOn");
+  it("places shortcut in the Windows Startup folder", () => {
+    expect(INSTALL_PS1).toContain("Startup");
+    expect(INSTALL_PS1).toContain(SHORTCUT_NAME);
   });
 
-  it("uses Force flag for idempotent re-registration", () => {
-    expect(INSTALL_PS1).toContain("-Force");
+  it("uses hidden window style for the shortcut", () => {
+    expect(INSTALL_PS1).toContain("WindowStyle");
   });
 
   it("stops existing receiver before binary extraction", () => {
@@ -49,44 +47,39 @@ describe("install.ps1 registers hook receiver task and starts receiver", () => {
     expect(stopIndex).toBeLessThan(extractIndex);
   });
 
-  it("starts new receiver after extraction and registration", () => {
+  it("starts new receiver after extraction", () => {
     const extractIndex = INSTALL_PS1.indexOf("tar -xzf");
-    const registerIndex = INSTALL_PS1.indexOf("Register-ScheduledTask");
     const startIndex = INSTALL_PS1.indexOf("Start-Process");
     expect(startIndex).toBeGreaterThan(extractIndex);
-    expect(startIndex).toBeGreaterThan(registerIndex);
   });
 
-  it("handles registration failure as non-fatal warning", () => {
-    // The catch block after Register-ScheduledTask should contain a Warning
-    const registerIndex = INSTALL_PS1.indexOf("Register-ScheduledTask");
-    expect(registerIndex).toBeGreaterThan(-1);
+  it("handles shortcut creation failure as non-fatal warning", () => {
+    const shortcutIndex = INSTALL_PS1.indexOf("startup shortcut");
+    expect(shortcutIndex).toBeGreaterThan(-1);
 
-    const warningIndex = INSTALL_PS1.indexOf("Warning", registerIndex);
-    expect(warningIndex).toBeGreaterThan(registerIndex);
+    const warningIndex = INSTALL_PS1.indexOf("Warning", shortcutIndex);
+    expect(warningIndex).toBeGreaterThan(shortcutIndex);
   });
 });
 
-describe("install.sh registers hook receiver on Windows (win32 platform)", () => {
-  it("registers a scheduled task named NorbertHookReceiver via powershell.exe", () => {
-    expect(INSTALL_SH).toContain("Register-ScheduledTask");
-    expect(INSTALL_SH).toContain(TASK_NAME);
+describe("install.sh creates startup shortcut on Windows (win32 platform)", () => {
+  it("creates a startup shortcut via powershell.exe", () => {
+    expect(INSTALL_SH).toContain("CreateShortcut");
+    expect(INSTALL_SH).toContain(SHORTCUT_NAME);
     expect(INSTALL_SH).toContain("powershell.exe");
   });
 
-  it("uses AtLogOn trigger for automatic startup", () => {
-    expect(INSTALL_SH).toContain("New-ScheduledTaskTrigger");
-    expect(INSTALL_SH).toContain("-AtLogOn");
+  it("places shortcut in the Windows Startup folder", () => {
+    expect(INSTALL_SH).toContain("Startup");
+    expect(INSTALL_SH).toContain(SHORTCUT_NAME);
   });
 
-  it("uses Force flag for idempotent re-registration", () => {
-    // Check -Force appears in the registration context
-    expect(INSTALL_SH).toContain("-Force");
+  it("uses hidden window style for the shortcut", () => {
+    expect(INSTALL_SH).toContain("WindowStyle");
   });
 
-  it("only runs registration on win32 platform", () => {
-    // Registration should be inside a win32-* case block
-    expect(INSTALL_SH).toMatch(/win32-\*\)[\s\S]*Register-ScheduledTask/);
+  it("only runs shortcut creation on win32 platform", () => {
+    expect(INSTALL_SH).toMatch(/win32-\*\)[\s\S]*CreateShortcut/);
   });
 
   it("stops existing receiver before binary extraction", () => {
@@ -97,15 +90,13 @@ describe("install.sh registers hook receiver on Windows (win32 platform)", () =>
     expect(stopIndex).toBeLessThan(extractIndex);
   });
 
-  it("starts new receiver after extraction and registration", () => {
+  it("starts new receiver after extraction", () => {
     const extractIndex = INSTALL_SH.indexOf("tar -xzf");
-    const registerIndex = INSTALL_SH.indexOf("Register-ScheduledTask");
     const startIndex = INSTALL_SH.indexOf("Start-Process -FilePath");
     expect(startIndex).toBeGreaterThan(extractIndex);
-    expect(startIndex).toBeGreaterThan(registerIndex);
   });
 
-  it("handles registration failure as non-fatal warning", () => {
-    expect(INSTALL_SH).toMatch(/[Ww]arning.*[Cc]ould not register/i);
+  it("handles shortcut creation failure as non-fatal warning", () => {
+    expect(INSTALL_SH).toMatch(/[Ww]arning.*[Cc]ould not create startup shortcut/i);
   });
 });

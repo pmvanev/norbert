@@ -1,22 +1,22 @@
 /**
  * Acceptance tests: Hook Receiver Startup Registration (US-HRIL-01)
  *
- * Validates that the install process registers the hook receiver for
- * automatic startup at user logon, idempotently, with non-fatal failure.
+ * Validates that the install process creates a startup shortcut for the hook
+ * receiver for automatic startup at user logon, idempotently, with non-fatal
+ * failure handling.
  *
  * Driving ports: postinstall-core.js domain functions
- * (getInstallDirectory, buildInstallSuccessMessage, and the new
- * task registration functions to be implemented).
+ * (getInstallDirectory, buildStartupShortcutCommand, registerAndStartHookReceiver).
  *
- * External dependencies (Task Scheduler, filesystem) are mocked.
+ * External dependencies (filesystem, PowerShell) are mocked.
  * Internal components are never tested directly.
  */
 
 import { describe, it, expect } from "vitest";
 import {
   getInstallDirectory,
-  TASK_NAME,
-  buildTaskRegistrationCommand,
+  STARTUP_SHORTCUT_NAME,
+  buildStartupShortcutCommand,
   registerAndStartHookReceiver,
 } from "../../../scripts/postinstall-core.js";
 
@@ -25,54 +25,51 @@ import {
 // ---------------------------------------------------------------------------
 
 // @walking_skeleton
-describe("Install registers startup task and confirms to user", () => {
-  it("startup task targets the hook receiver binary in the install directory", () => {
+describe("Install creates startup shortcut and confirms to user", () => {
+  it("startup shortcut targets the hook receiver binary in the install directory", () => {
     const homeDir = "C:\\Users\\Phil";
     const installDir = getInstallDirectory(homeDir);
-    const command = buildTaskRegistrationCommand(installDir);
+    const appDataDir = "C:\\Users\\Phil\\AppData\\Roaming";
+    const command = buildStartupShortcutCommand(installDir, appDataDir);
 
-    // Assert the complete expected path appears in the registration command
     expect(command).toContain(
       "C:\\Users\\Phil\\.norbert\\bin\\norbert-hook-receiver.exe"
     );
   });
 
-  it("startup task is configured to run at user logon", () => {
-    // GIVEN: Phil installs Norbert on a fresh Windows machine
+  it("startup shortcut is placed in the Windows Startup folder", () => {
     const homeDir = "C:\\Users\\Phil";
     const installDir = getInstallDirectory(homeDir);
+    const appDataDir = "C:\\Users\\Phil\\AppData\\Roaming";
+    const command = buildStartupShortcutCommand(installDir, appDataDir);
 
-    // WHEN: the installer registers the hook receiver for automatic startup
-    const command = buildTaskRegistrationCommand(installDir);
-
-    // THEN: the startup task is configured to run at user logon
-    expect(command).toContain("New-ScheduledTaskTrigger");
-    expect(command).toContain("-AtLogOn");
-    expect(command).toContain(TASK_NAME);
+    expect(command).toContain("Startup");
+    expect(command).toContain(STARTUP_SHORTCUT_NAME);
   });
 
-  // PENDING: requires buildInstallSuccessMessage() to include registration confirmation
-  it.skip("install output confirms 'Startup task registered'", () => {
+  it.skip("install output confirms 'Startup shortcut created'", () => {
     // Driving port: buildInstallSuccessMessage() updated to include
-    // startup registration confirmation.
+    // startup shortcut confirmation.
   });
 });
 
 // ---------------------------------------------------------------------------
-// FOCUSED SCENARIOS: Registration Parameters
+// FOCUSED SCENARIOS: Shortcut Parameters
 // ---------------------------------------------------------------------------
 
-describe("Registration builds correct task parameters from install directory", () => {
-  it("task name is 'NorbertHookReceiver' in the registration command", () => {
+describe("Shortcut command builds correct parameters from install directory", () => {
+  it("shortcut name is 'NorbertHookReceiver.lnk' in the command", () => {
     const installDir = "C:\\Users\\Phil\\.norbert\\bin";
-    const command = buildTaskRegistrationCommand(installDir);
+    const appDataDir = "C:\\Users\\Phil\\AppData\\Roaming";
+    const command = buildStartupShortcutCommand(installDir, appDataDir);
 
-    expect(command).toContain("NorbertHookReceiver");
+    expect(command).toContain("NorbertHookReceiver.lnk");
   });
 
-  it("task target path matches the hook receiver binary in the install directory", () => {
+  it("shortcut target path matches the hook receiver binary in the install directory", () => {
     const installDir = "C:\\Users\\Phil\\.norbert\\bin";
-    const command = buildTaskRegistrationCommand(installDir);
+    const appDataDir = "C:\\Users\\Phil\\AppData\\Roaming";
+    const command = buildStartupShortcutCommand(installDir, appDataDir);
 
     expect(command).toContain(
       "C:\\Users\\Phil\\.norbert\\bin\\norbert-hook-receiver.exe"
@@ -80,65 +77,45 @@ describe("Registration builds correct task parameters from install directory", (
   });
 });
 
-describe("Registration is idempotent on reinstall", () => {
-  it("registration command uses -Force for idempotent re-registration", () => {
+describe("Shortcut creation is idempotent on reinstall", () => {
+  it("shortcut command uses WScript.Shell CreateShortcut (overwrites existing)", () => {
     const installDir = "C:\\Users\\Phil\\.norbert\\bin";
-    const command = buildTaskRegistrationCommand(installDir);
+    const appDataDir = "C:\\Users\\Phil\\AppData\\Roaming";
+    const command = buildStartupShortcutCommand(installDir, appDataDir);
 
-    // -Force overwrites any existing task, ensuring idempotency
-    expect(command).toContain("-Force");
-    expect(command).toContain("Register-ScheduledTask");
+    expect(command).toContain("CreateShortcut");
+    expect(command).toContain("WScript.Shell");
   });
 });
 
-describe("Install output confirms startup task registration", () => {
-  it.skip("output includes 'Startup task registered' on successful registration", () => {
-    // GIVEN: the installer has successfully registered the startup task
-    // WHEN: the install success message is generated
-    // THEN: the output includes "Startup task registered"
-    //
+describe("Install output confirms startup shortcut creation", () => {
+  it.skip("output includes 'Startup shortcut created' on successful creation", () => {
     // Driving port: updated buildInstallSuccessMessage() from postinstall-core.js
   });
 });
 
 describe("Install success message guides user to start receiver or reboot", () => {
   it.skip("output includes guidance to start the hook receiver manually", () => {
-    // WHEN: the install success message is generated
-    // THEN: the output includes guidance to start the hook receiver manually
-    //
     // Driving port: buildInstallSuccessMessage() from postinstall-core.js
   });
 
   it.skip("output mentions automatic startup on reboot", () => {
-    // WHEN: the install success message is generated
-    // THEN: the output mentions automatic startup on reboot
-    //
     // Driving port: buildInstallSuccessMessage() from postinstall-core.js
   });
 });
 
-describe("Task registration command specifies user logon trigger", () => {
-  it("command includes a logon trigger for the current user", () => {
-    const installDir = "C:\\Users\\Phil\\.norbert\\bin";
-    const command = buildTaskRegistrationCommand(installDir);
-
-    expect(command).toContain("New-ScheduledTaskTrigger");
-    expect(command).toContain("-AtLogOn");
-  });
-});
-
 // @property
-describe("Task target path always matches the install directory binary", () => {
-  it("for any valid install directory, the task target ends with the hook receiver binary", () => {
+describe("Shortcut target path always matches the install directory binary", () => {
+  it("for any valid install directory, the shortcut targets the hook receiver binary", () => {
+    const appDataDir = "C:\\Users\\Phil\\AppData\\Roaming";
     const sampleDirs = [
       "C:\\Users\\Phil\\.norbert\\bin",
       "C:\\Users\\Another User\\.norbert\\bin",
       "D:\\custom\\.norbert\\bin",
-      "/home/user/.norbert/bin",
     ];
 
     for (const installDir of sampleDirs) {
-      const command = buildTaskRegistrationCommand(installDir);
+      const command = buildStartupShortcutCommand(installDir, appDataDir);
       expect(command).toContain("norbert-hook-receiver.exe");
     }
   });
@@ -148,10 +125,11 @@ describe("Task target path always matches the install directory binary", () => {
 // ERROR SCENARIOS
 // ---------------------------------------------------------------------------
 
-describe("Registration failure is non-fatal and install completes", () => {
-  it("install output includes non-fatal warning on registration failure", () => {
+describe("Shortcut creation failure is non-fatal and install completes", () => {
+  it("install output includes non-fatal warning on creation failure", () => {
     const installDir = "C:\\Users\\Phil\\.norbert\\bin";
     const platform = { os: "win32", arch: "x64", extension: ".tar.gz" };
+    const appDataDir = "C:\\Users\\Phil\\AppData\\Roaming";
     let callCount = 0;
     const execCommand = () => {
       callCount++;
@@ -160,9 +138,9 @@ describe("Registration failure is non-fatal and install completes", () => {
       }
     };
 
-    const result = registerAndStartHookReceiver(installDir, platform, execCommand);
+    const result = registerAndStartHookReceiver(installDir, platform, execCommand, appDataDir);
 
-    expect(result.warnings).toContain("Could not register startup task (non-fatal).");
+    expect(result.warnings).toContain("Could not create startup shortcut (non-fatal).");
     expect(result.started).toBe(true);
   });
 });
@@ -184,20 +162,16 @@ describe("Registration on unsupported platform is skipped", () => {
 });
 
 describe("Registration with missing binary path produces clear feedback", () => {
-  // INTEGRATION: requires real Task Scheduler and filesystem to validate
-  // binary existence check before registration attempt.
   it.skip("install output warns about the missing binary", () => {
-    // GIVEN: the Norbert install directory does not contain the hook receiver binary
-    // WHEN: the installer attempts to register the startup task
-    // THEN: the install output warns about the missing binary
-    // AND: the install completes without crashing
+    // INTEGRATION: requires real filesystem to validate binary existence check.
   });
 });
 
-describe("Registration handles special characters in home directory path", () => {
-  it("task target path is properly quoted for paths with spaces", () => {
+describe("Shortcut handles special characters in home directory path", () => {
+  it("shortcut target path is properly quoted for paths with spaces", () => {
     const installDir = "C:\\Users\\Phil Van Every\\.norbert\\bin";
-    const command = buildTaskRegistrationCommand(installDir);
+    const appDataDir = "C:\\Users\\Phil Van Every\\AppData\\Roaming";
+    const command = buildStartupShortcutCommand(installDir, appDataDir);
 
     expect(command).toContain(
       "'C:\\Users\\Phil Van Every\\.norbert\\bin\\norbert-hook-receiver.exe'"
