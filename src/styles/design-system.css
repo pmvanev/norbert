@@ -358,7 +358,8 @@ code, pre, .mono,
 
 .sdot.live {
   background: var(--success);
-  animation: lpulse 2s infinite;
+  box-shadow: 0 0 6px var(--success);
+  animation: heartbeat 1.5s ease-in-out infinite;
 }
 
 .sdot.done {
@@ -395,6 +396,14 @@ code, pre, .mono,
 @keyframes lpulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
+}
+
+@keyframes heartbeat {
+  0%, 100% { transform: scale(1); opacity: 1; box-shadow: 0 0 4px var(--success); }
+  15% { transform: scale(1.4); opacity: 1; box-shadow: 0 0 10px var(--success); }
+  30% { transform: scale(1); opacity: 0.8; box-shadow: 0 0 4px var(--success); }
+  45% { transform: scale(1.25); opacity: 1; box-shadow: 0 0 8px var(--success); }
+  60% { transform: scale(1); opacity: 0.6; box-shadow: 0 0 3px var(--success); }
 }
 
 /* ═══ EVENT DETAIL VIEW ═══ */
