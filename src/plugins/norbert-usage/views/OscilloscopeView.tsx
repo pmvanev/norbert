@@ -8,12 +8,13 @@
  * This component handles only canvas drawing and animation frame scheduling.
  */
 
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, useMemo } from "react";
 import type { TimeSeriesBuffer } from "../domain/types";
 import {
   prepareWaveformPoints,
   computeGridLines,
   formatRateOverlay,
+  formatStatsBar,
   type CanvasDimensions,
   type WaveformPoint,
   type GridLine,
@@ -117,6 +118,9 @@ export const OscilloscopeView = ({ buffer }: OscilloscopeViewProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const stats = useMemo(() => computeStats(buffer), [buffer]);
+  const statsDisplay = useMemo(() => formatStatsBar(stats), [stats]);
+
   const renderFrame = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -172,6 +176,12 @@ export const OscilloscopeView = ({ buffer }: OscilloscopeViewProps) => {
         height={CANVAS_HEIGHT}
         className="oscilloscope-canvas"
       />
+      <div className="oscilloscope-stats-bar" role="status" aria-label="Oscilloscope statistics">
+        <span className="oscilloscope-stat" data-stat="peak">Peak: {statsDisplay.peakRate}</span>
+        <span className="oscilloscope-stat" data-stat="avg">Avg: {statsDisplay.avgRate}</span>
+        <span className="oscilloscope-stat" data-stat="total">Total: {statsDisplay.totalTokens}</span>
+        <span className="oscilloscope-stat" data-stat="window">Window: {statsDisplay.windowDuration}</span>
+      </div>
     </div>
   );
 };

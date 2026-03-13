@@ -8,7 +8,7 @@
  * structures to draw on HTML Canvas.
  */
 
-import type { RateSample } from "./types";
+import type { RateSample, OscilloscopeStats } from "./types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -141,3 +141,44 @@ export const formatRateOverlay = (rate: number): string => {
   }
   return `${rate} tok/s`;
 };
+
+// ---------------------------------------------------------------------------
+// Stats bar formatting -- pure functions for stats bar display
+// ---------------------------------------------------------------------------
+
+/** Display-ready strings for the stats bar. */
+export interface StatsBarDisplay {
+  readonly peakRate: string;
+  readonly avgRate: string;
+  readonly totalTokens: string;
+  readonly windowDuration: string;
+}
+
+/**
+ * Format a token count with comma thousand separators.
+ *
+ * Example: 87241 -> "87,241"
+ */
+export const formatTokenCount = (count: number): string =>
+  Math.round(count).toLocaleString("en-US");
+
+/**
+ * Format a window duration from milliseconds to seconds display.
+ *
+ * Example: 60000 -> "60s"
+ */
+export const formatWindowDuration = (durationMs: number): string =>
+  `${Math.round(durationMs / 1000)}s`;
+
+/**
+ * Compose OscilloscopeStats into display-ready strings for the stats bar.
+ *
+ * Peak and average rates use "tok/s" suffix (via formatRateOverlay).
+ * Total tokens use comma formatting. Window uses seconds.
+ */
+export const formatStatsBar = (stats: OscilloscopeStats): StatsBarDisplay => ({
+  peakRate: formatRateOverlay(stats.peakRate),
+  avgRate: formatRateOverlay(stats.avgRate),
+  totalTokens: formatTokenCount(stats.totalTokens),
+  windowDuration: formatWindowDuration(stats.windowDuration),
+});
