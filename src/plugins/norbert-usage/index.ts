@@ -14,6 +14,13 @@ import { createMetricsStore } from "./adapters/metricsStore";
 import { DEFAULT_PRICING_TABLE } from "./domain/pricingModel";
 
 // ---------------------------------------------------------------------------
+// Shared metrics store -- module-level so App.tsx and the hook processor
+// operate on the same instance. This is the single mutable cell.
+// ---------------------------------------------------------------------------
+
+export const usageMetricsStore = createMetricsStore();
+
+// ---------------------------------------------------------------------------
 // View constants
 // ---------------------------------------------------------------------------
 
@@ -117,12 +124,11 @@ const onLoad = (api: NorbertAPI): void => {
     );
   }
 
-  // Wire real hook processor with metricsStore and pricing table
-  const metricsStore = createMetricsStore();
+  // Wire hook processor to the shared module-level store
   const processor = createHookProcessor({
     updateMetrics: (reducer) => {
-      const nextMetrics = reducer(metricsStore.getMetrics());
-      metricsStore.update(nextMetrics, metricsStore.getTimeSeries());
+      const nextMetrics = reducer(usageMetricsStore.getMetrics());
+      usageMetricsStore.update(nextMetrics, usageMetricsStore.getTimeSeries());
     },
     pricingTable: DEFAULT_PRICING_TABLE,
   });

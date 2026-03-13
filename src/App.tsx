@@ -19,7 +19,7 @@ import { loadPlugins } from "./plugins/lifecycleManager";
 import { createNorbertAPI } from "./plugins/apiFactory";
 import { createPluginRegistry, getAllViews } from "./plugins/pluginRegistry";
 import { norbertSessionPlugin } from "./plugins/norbert-session/index";
-import { norbertUsagePlugin } from "./plugins/norbert-usage/index";
+import { norbertUsagePlugin, usageMetricsStore } from "./plugins/norbert-usage/index";
 import { GaugeClusterView } from "./plugins/norbert-usage/views/GaugeClusterView";
 import { OscilloscopeView } from "./plugins/norbert-usage/views/OscilloscopeView";
 import { UsageDashboardView } from "./plugins/norbert-usage/views/UsageDashboardView";
@@ -27,8 +27,7 @@ import { CostTicker } from "./plugins/norbert-usage/views/CostTicker";
 import { computeDashboardData } from "./plugins/norbert-usage/domain/dashboard";
 import { computeGaugeClusterData } from "./plugins/norbert-usage/domain/gaugeCluster";
 import { computeCostTickerData } from "./plugins/norbert-usage/domain/costTicker";
-import { createMetricsStore } from "./plugins/norbert-usage/adapters/metricsStore";
-import { resetHookBridge } from "./plugins/hookBridge";
+import { resetHookBridge, deliverHookEvent } from "./plugins/hookBridge";
 import { createDefaultLayoutState, isSecondaryVisible, toggleSecondaryZone, type TwoZoneLayoutState } from "./layout/zoneToggle";
 import { assignView } from "./layout/assignmentEngine";
 import { ZoneRenderer, type ViewRegistry } from "./layout/zoneRenderer";
@@ -88,9 +87,6 @@ function App() {
   /// Initialize plugin system once on mount.
   const [pluginRegistry] = useState(initializePluginSystem);
 
-  /// Metrics store for norbert-usage views (single mutable cell at the edge).
-  const [metricsStore] = useState(() => createMetricsStore("default"));
-
   /// Initialize sidebar from plugin registry views.
   const sidebarState = useMemo(
     () => createDefaultSidebarState(getAllViews(pluginRegistry), []),
@@ -149,6 +145,12 @@ function App() {
     }));
   }, []);
 
+  /// Reactive metrics: re-render views when the store updates.
+  const [metrics, setMetrics] = useState(() => usageMetricsStore.getMetrics());
+  useEffect(() => {
+    return usageMetricsStore.subscribe((m) => setMetrics(m));
+  }, []);
+
   useEffect(() => {
     function pollStatus() {
       invoke<AppStatus>("get_status")
@@ -165,6 +167,42 @@ function App() {
     return () => clearInterval(intervalId);
   }, []);
 
+  /// Event poller: bridges SQLite events → hook bridge → metricsStore.
+  /// Tracks the count of already-processed events per session to avoid
+  /// re-delivering events on each poll cycle.
+  const processedCountRef = useRef(0);
+  const lastPolledSessionRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      const latestSess = sessions.length > 0 ? sessions[0] : null;
+      if (!latestSess) return;
+
+      // Reset processed count when session changes
+      if (latestSess.id !== lastPolledSessionRef.current) {
+        processedCountRef.current = 0;
+        lastPolledSessionRef.current = latestSess.id;
+      }
+
+      invoke<Array<{ session_id: string; event_type: string; payload: unknown; received_at: string; provider: string }>>(
+        "get_session_events",
+        { sessionId: latestSess.id }
+      )
+        .then((events) => {
+          const newEvents = events.slice(processedCountRef.current);
+          for (const event of newEvents) {
+            deliverHookEvent("session-event", event);
+          }
+          processedCountRef.current = events.length;
+        })
+        .catch(() => {
+          // Silently ignore event polling failures — status poller handles connectivity errors
+        });
+    }, POLL_INTERVAL_MS);
+
+    return () => clearInterval(intervalId);
+  }, [sessions]);
+
   /// Use refs so wrapper components stay referentially stable across re-renders.
   /// This prevents ZoneRenderer from unmounting/remounting views every poll cycle.
   const sessionsRef = useRef(sessions);
@@ -175,6 +213,8 @@ function App() {
   handleSessionSelectRef.current = handleSessionSelect;
   const handleBackToSessionsRef = useRef(handleBackToSessions);
   handleBackToSessionsRef.current = handleBackToSessions;
+  const metricsRef = useRef(metrics);
+  metricsRef.current = metrics;
 
   /// Build the view registry once — wrapper components read from refs,
   /// so they always render current data without changing identity.
@@ -212,34 +252,27 @@ function App() {
     registry.set("session-list", SessionListWrapper);
     registry.set("session-detail", SessionDetailWrapper);
 
-    // norbert-usage views: each wrapper reads current metrics from the store
-    // and delegates to pure domain functions for computation.
+    // norbert-usage views: each wrapper reads current metrics from the
+    // reactive ref (updated via store subscription) and delegates to
+    // pure domain functions for computation.
     const GaugeClusterWrapper: FC = () => {
-      const metrics = metricsStore.getMetrics();
-      return <GaugeClusterView data={computeGaugeClusterData(metrics)} />;
+      return <GaugeClusterView data={computeGaugeClusterData(metricsRef.current)} />;
     };
     GaugeClusterWrapper.displayName = "GaugeClusterWrapper";
 
     const OscilloscopeWrapper: FC = () => (
-      <OscilloscopeView store={metricsStore} />
+      <OscilloscopeView store={usageMetricsStore} />
     );
     OscilloscopeWrapper.displayName = "OscilloscopeWrapper";
 
-    // TODO: Daily cost aggregation requires querying historical events from
-    // SQLite via the EventsAPI, which the plugin doesn't support yet.
-    // Passing empty array triggers the onboarding state in the dashboard
-    // when all session metrics are zero, so users see a helpful message
-    // instead of a silently empty burn chart.
     const UsageDashboardWrapper: FC = () => {
-      const metrics = metricsStore.getMetrics();
-      const dashboard = computeDashboardData(metrics);
+      const dashboard = computeDashboardData(metricsRef.current);
       return <UsageDashboardView dashboard={dashboard} dailyCosts={[]} />;
     };
     UsageDashboardWrapper.displayName = "UsageDashboardWrapper";
 
     const CostTickerWrapper: FC = () => {
-      const metrics = metricsStore.getMetrics();
-      return <CostTicker data={computeCostTickerData(metrics.sessionCost, 0)} />;
+      return <CostTicker data={computeCostTickerData(metricsRef.current.sessionCost, 0)} />;
     };
     CostTickerWrapper.displayName = "CostTickerWrapper";
 

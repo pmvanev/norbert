@@ -251,7 +251,7 @@ mod tests {
     #[test]
     fn version_constant_matches_cargo_version() {
         // VERSION is pulled from Cargo.toml via env!("CARGO_PKG_VERSION")
-        assert_eq!(VERSION, "0.4.2");
+        assert_eq!(VERSION, "0.4.3");
     }
 
     #[test]
