@@ -1,0 +1,558 @@
+{
+  "feature_id": "plugin-architecture-layout-engine",
+  "goal": "Introduce plugin architecture with NorbertAPI contract, flexible two-zone layout engine with floating panels, multi-window support, sidebar customization, and validate via norbert-session first-party plugin migration.",
+  "paradigm": "functional",
+  "validation": {
+    "status": "approved",
+    "total_acceptance_scenarios": 85,
+    "total_estimated_production_files": 37,
+    "decomposition_ratio": 2.16
+  },
+  "phases": [
+    {
+      "phase_id": "01",
+      "name": "Plugin Host Foundation (M1)",
+      "description": "Plugin loading pipeline, NorbertAPI contract, sandbox, dependency resolution.",
+      "user_stories": ["US-001", "US-002"],
+      "steps": [
+        {
+          "step_id": "01-01",
+          "name": "Plugin types and NorbertAPI contract definition",
+          "description": "Define algebraic data types for PluginManifest, NorbertPlugin interface, NorbertAPI with all 7 sub-APIs, ViewRegistration, TabRegistration, and resolution error types.",
+          "acceptance_criteria": [
+            "NorbertAPI type provides db, hooks, ui, mcp, events, config, plugins sub-APIs",
+            "PluginManifest type captures id, name, version, norbert_api, dependencies",
+            "ViewRegistration type captures id, pluginId, label, icon, primaryView, minWidth, minHeight, floatMetric"
+          ],
+          "test_file": "tests/acceptance/plugin-architecture-layout-engine/plugin-api-contract.test.ts",
+          "scenarios": ["NorbertAPI provides all required sub-APIs"],
+          "files_to_modify": [
+            "src/plugins/types.ts"
+          ],
+          "dependencies": [],
+          "estimated_hours": 3
+        },
+        {
+          "step_id": "01-02",
+          "name": "Walking skeleton: plugin loads, registers view, appears in UI",
+          "description": "Implement PluginLoader scan pipeline, NorbertAPI Factory, Plugin Registry, and Lifecycle Manager so a test plugin can register a view discoverable in the view picker and sidebar.",
+          "acceptance_criteria": [
+            "Plugin loader scans and finds installed plugin packages",
+            "NorbertAPI Factory creates scoped API instance per plugin",
+            "Registered view appears in view picker grouped under plugin name",
+            "Sidebar icon appears for the registering plugin",
+            "Clicking sidebar icon assigns plugin's primaryView to Main zone"
+          ],
+          "test_file": "tests/acceptance/plugin-architecture-layout-engine/plugin-api-contract.test.ts",
+          "scenarios": [
+            "Plugin registers a view and user can access it (walking skeleton)",
+            "Plugin registers view via api.ui.registerView()"
+          ],
+          "files_to_modify": [
+            "src/plugins/pluginLoader.ts",
+            "src/plugins/apiFactory.ts",
+            "src/plugins/pluginRegistry.ts",
+            "src/plugins/lifecycleManager.ts"
+          ],
+          "dependencies": ["01-01"],
+          "estimated_hours": 8
+        },
+        {
+          "step_id": "01-03",
+          "name": "Plugin sandbox enforcement",
+          "description": "Enforce namespace scoping on plugin db access. Core tables read-only for plugins. Plugin writes restricted to plugin_{id}_* tables.",
+          "acceptance_criteria": [
+            "Plugin db writes scoped to plugin_{pluginId}_* tables succeed",
+            "Write to core 'sessions' table rejected with explicit namespace error",
+            "Plugin with invalid manifest rejected at load time with missing field identified"
+          ],
+          "test_file": "tests/acceptance/plugin-architecture-layout-engine/plugin-api-contract.test.ts",
+          "scenarios": [
+            "Plugin sandbox prevents writes to core tables",
+            "Plugin can only write to its own namespaced tables",
+            "Plugin with invalid manifest is rejected at load time"
+          ],
+          "files_to_modify": [
+            "src/plugins/sandboxEnforcer.ts",
+            "src/plugins/apiFactory.ts"
+          ],
+          "dependencies": ["01-02"],
+          "estimated_hours": 4
+        },
+        {
+          "step_id": "01-04",
+          "name": "Hook processor registration and status bar API",
+          "description": "Implement api.hooks.register() for event delivery to plugins and api.ui.registerStatusItem() for dynamic status bar items.",
+          "acceptance_criteria": [
+            "Registered hook processor receives hook events after registration",
+            "Plugin can write derived data to namespaced tables from hook handler",
+            "Status bar item appears and updates dynamically"
+          ],
+          "test_file": "tests/acceptance/plugin-architecture-layout-engine/plugin-api-contract.test.ts",
+          "scenarios": [
+            "Plugin registers hook processor via api.hooks",
+            "Plugin registers status bar item via api.ui"
+          ],
+          "files_to_modify": [
+            "src/plugins/hookBridge.ts",
+            "src/plugins/apiFactory.ts",
+            "src-tauri/src/lib.rs"
+          ],
+          "dependencies": ["01-02"],
+          "estimated_hours": 4
+        },
+        {
+          "step_id": "01-05",
+          "name": "Inter-plugin API composition",
+          "description": "Implement api.plugins.get() for declared dependency API access. Undeclared dependencies rejected.",
+          "acceptance_criteria": [
+            "api.plugins.get() returns dependency's public API for declared dependencies",
+            "api.plugins.get() for undeclared dependency returns error"
+          ],
+          "test_file": "tests/acceptance/plugin-architecture-layout-engine/plugin-api-contract.test.ts",
+          "scenarios": [
+            "Plugin accesses dependency public API via api.plugins",
+            "Plugin cannot access undeclared dependency API"
+          ],
+          "files_to_modify": [
+            "src/plugins/apiFactory.ts",
+            "src/plugins/pluginRegistry.ts"
+          ],
+          "dependencies": ["01-02"],
+          "estimated_hours": 3
+        },
+        {
+          "step_id": "01-06",
+          "name": "Dependency resolver with topological sort and semver",
+          "description": "Resolve plugin dependency graph via topological sort with semver range validation. Handle missing, disabled, circular, and version-mismatch cases.",
+          "acceptance_criteria": [
+            "Dependent plugin loads after its dependency",
+            "Startup reports correct plugin and view counts",
+            "Missing dependency prevents load with actionable error listing what to install",
+            "Version mismatch is a hard failure with specific version in error",
+            "Circular dependency detected and reported"
+          ],
+          "test_file": "tests/acceptance/plugin-architecture-layout-engine/plugin-loader-dependencies.test.ts",
+          "scenarios": [
+            "Plugins load in topological dependency order",
+            "All dependencies satisfied results in clean startup",
+            "Missing dependency prevents plugin load with actionable error",
+            "Version mismatch is a hard failure",
+            "Circular dependency is detected and reported",
+            "Multiple missing dependencies listed in single error"
+          ],
+          "files_to_modify": [
+            "src/plugins/dependencyResolver.ts",
+            "src/plugins/pluginLoader.ts"
+          ],
+          "dependencies": ["01-02"],
+          "estimated_hours": 6
+        },
+        {
+          "step_id": "01-07",
+          "name": "Disabled dependency degradation and runtime disable",
+          "description": "Handle disabled dependencies with degradation warnings, greyed-out placeholders with re-enable action, and runtime disable/enable without crash.",
+          "acceptance_criteria": [
+            "Disabled dependency triggers per-feature degradation warning with re-enable action",
+            "Greyed-out placeholders include one-click re-enable path",
+            "Runtime dependency disable triggers graceful degradation without crash"
+          ],
+          "test_file": "tests/acceptance/plugin-architecture-layout-engine/plugin-loader-dependencies.test.ts",
+          "scenarios": [
+            "Disabled dependency triggers degradation warning",
+            "Runtime dependency disable triggers graceful degradation",
+            "Greyed-out placeholders include one-click re-enable path"
+          ],
+          "files_to_modify": [
+            "src/plugins/lifecycleManager.ts",
+            "src/plugins/dependencyResolver.ts",
+            "src/plugins/pluginRegistry.ts"
+          ],
+          "dependencies": ["01-06"],
+          "estimated_hours": 5
+        }
+      ]
+    },
+    {
+      "phase_id": "02",
+      "name": "Layout Engine and Persistence (M2)",
+      "description": "Two-zone model, divider, view assignment, floating panels, persistence, presets.",
+      "user_stories": ["US-003", "US-004", "US-005", "US-008"],
+      "steps": [
+        {
+          "step_id": "02-01",
+          "name": "Layout state types and zone registry",
+          "description": "Define algebraic data types for LayoutState, ZoneState, PresetState, FloatingPanelState. Implement zone registry as named Map with Main always present.",
+          "acceptance_criteria": [
+            "Zone registry stores zones as keyed map, not positional fields",
+            "Main zone is always present and cannot be removed",
+            "Zone abstraction is count-agnostic"
+          ],
+          "test_file": "tests/acceptance/plugin-architecture-layout-engine/two-zone-layout-engine.test.ts",
+          "scenarios": [
+            "Main zone is always present and shows content",
+            "Zone registry is count-agnostic (@property)"
+          ],
+          "files_to_modify": [
+            "src/layout/types.ts",
+            "src/layout/zoneRegistry.ts"
+          ],
+          "dependencies": ["01-01"],
+          "estimated_hours": 4
+        },
+        {
+          "step_id": "02-02",
+          "name": "Walking skeleton: layout persists across restart",
+          "description": "Implement Layout Persistor with auto-save (debounced) and restore. Atomic write-then-rename pattern for crash safety. Validate view IDs against plugin registry on restore.",
+          "acceptance_criteria": [
+            "Layout with zone assignments and divider position survives restart",
+            "Auto-save triggers on every layout change without manual action",
+            "Divider position persisted as 0.0-1.0 ratio",
+            "Invalid view IDs on restore show graceful empty state",
+            "Layout save-restore roundtrip preserves all state (@property)"
+          ],
+          "test_file": "tests/acceptance/plugin-architecture-layout-engine/layout-persistence-presets.test.ts",
+          "scenarios": [
+            "User arranges workspace and arrangement survives restart (walking skeleton)",
+            "Layout auto-saves on every change",
+            "Layout save-restore roundtrip preserves all state (@property)",
+            "Layout restore validates view IDs against current plugin registry"
+          ],
+          "files_to_modify": [
+            "src/layout/layoutPersistor.ts",
+            "src/layout/zoneRegistry.ts"
+          ],
+          "dependencies": ["02-01"],
+          "estimated_hours": 6
+        },
+        {
+          "step_id": "02-03",
+          "name": "Secondary zone toggle and divider",
+          "description": "Implement Secondary zone toggle, draggable divider with 280px minimum constraint, double-click 50/50 snap, and zone renderer mounting views into zones.",
+          "acceptance_criteria": [
+            "Secondary zone toggleable; hiding collapses to full-width Main",
+            "Reshowing Secondary restores last-used view",
+            "Divider drag resizes both zones with 280px minimum enforced",
+            "Double-click divider snaps to 50/50",
+            "First launch with no layout file shows empty Main with guidance"
+          ],
+          "test_file": "tests/acceptance/plugin-architecture-layout-engine/two-zone-layout-engine.test.ts",
+          "scenarios": [
+            "Secondary zone opens with view assignment",
+            "Toggle Secondary zone hides and restores (both sub-scenarios)",
+            "Dragging the divider resizes both zones",
+            "Double-click divider snaps to 50/50 split",
+            "Minimum zone width is enforced at 280px (both directions)",
+            "First launch with no layout file shows empty Main with guidance",
+            "Divider position stored as ratio for resolution independence"
+          ],
+          "files_to_modify": [
+            "src/layout/dividerManager.ts",
+            "src/layout/zoneRenderer.tsx",
+            "src/layout/zoneRegistry.ts",
+            "src/App.tsx"
+          ],
+          "dependencies": ["02-02"],
+          "estimated_hours": 8
+        },
+        {
+          "step_id": "02-04",
+          "name": "View assignment engine (right-click, drag, picker)",
+          "description": "Unify four assignment mechanisms into single state mutation. Context menu generated from zone registry. Drag with drop overlay. Searchable view picker via command palette.",
+          "acceptance_criteria": [
+            "Right-click context menu offers zone targets generated from registry",
+            "Drag from sidebar to zone shows branded overlay and assigns on drop",
+            "View picker shows searchable list grouped by plugin",
+            "All four mechanisms produce identical layout state (@property)",
+            "Assigning a view replaces current zone occupant"
+          ],
+          "test_file": "tests/acceptance/plugin-architecture-layout-engine/view-assignment.test.ts",
+          "scenarios": [
+            "Right-click context menu assigns view to zone",
+            "Drag sidebar icon to zone with visual feedback",
+            "View picker assigns view via keyboard search",
+            "All assignment mechanisms produce identical zone state (@property)",
+            "Assigning a view replaces the current zone occupant",
+            "Drag to invalid drop area has no effect",
+            "Context menu items generated dynamically from zone registry",
+            "Assigning unregistered view ID shows graceful empty state"
+          ],
+          "files_to_modify": [
+            "src/layout/assignmentEngine.ts",
+            "src/layout/contextMenu.tsx",
+            "src/layout/dragDrop.tsx",
+            "src/layout/viewPicker.tsx"
+          ],
+          "dependencies": ["02-03"],
+          "estimated_hours": 8
+        },
+        {
+          "step_id": "02-05",
+          "name": "Floating panels with pill minimize",
+          "description": "Implement floating panel lifecycle: open, resize, reposition, snap-to-edge, minimize to pill with live floatMetric, restore, switch mode, close. Multiple panels simultaneously.",
+          "acceptance_criteria": [
+            "Any registered view opens as resizable, repositionable floating panel",
+            "Panel snaps to window edge within 20px",
+            "Minimize collapses to pill with view name and live floatMetric",
+            "Pill click restores panel to previous size and position",
+            "Multiple floating panels coexist independently"
+          ],
+          "test_file": "tests/acceptance/plugin-architecture-layout-engine/floating-panels.test.ts",
+          "scenarios": [
+            "Any registered view can open as a floating panel",
+            "Floating panel snaps to window edges",
+            "Minimize to pill with live metric",
+            "Clicking pill restores panel to previous size and position",
+            "Floating panel Switch Mode via menu",
+            "Multiple floating panels can be open simultaneously",
+            "View without floatMetric minimizes to pill with name only",
+            "Floating panel position and size persist across restarts",
+            "Closing floating panel removes it from layout state"
+          ],
+          "files_to_modify": [
+            "src/layout/floatingPanelManager.tsx",
+            "src/layout/pillMinimize.tsx",
+            "src/layout/layoutPersistor.ts"
+          ],
+          "dependencies": ["02-04"],
+          "estimated_hours": 8
+        },
+        {
+          "step_id": "02-06",
+          "name": "Named presets with Layout Picker",
+          "description": "Implement Layout Picker (Ctrl+Shift+L) for save/recall of named presets. Built-in presets immutable. Custom presets support create, rename, delete. Reset to Default escape hatch.",
+          "acceptance_criteria": [
+            "Named preset saved and appears in Layout Picker",
+            "Selecting preset instantly changes layout",
+            "Built-in presets cannot be deleted; Save Copy available",
+            "Reset to Default restores single Main zone",
+            "Preset referencing uninstalled plugin shows graceful empty state"
+          ],
+          "test_file": "tests/acceptance/plugin-architecture-layout-engine/layout-persistence-presets.test.ts",
+          "scenarios": [
+            "Save named layout preset",
+            "Switch between layout presets",
+            "Built-in presets cannot be deleted",
+            "Reset to Default layout",
+            "Preset referencing uninstalled plugin shows graceful empty state",
+            "Custom presets can be renamed and deleted"
+          ],
+          "files_to_modify": [
+            "src/layout/presetManager.ts",
+            "src/layout/layoutPicker.tsx",
+            "src/layout/layoutPersistor.ts"
+          ],
+          "dependencies": ["02-05"],
+          "estimated_hours": 6
+        }
+      ]
+    },
+    {
+      "phase_id": "03",
+      "name": "Multi-Window Support",
+      "description": "Independent windows sharing single backend, per-window layout, window labels.",
+      "user_stories": ["US-006"],
+      "steps": [
+        {
+          "step_id": "03-01",
+          "name": "Window factory and IPC router",
+          "description": "Implement Tauri window creation from multiple entry points (right-click, Ctrl+Shift+N, tray, command palette). IPC event subscription per window. Single backend process invariant.",
+          "acceptance_criteria": [
+            "New window opens via right-click 'Open in New Window' with selected view",
+            "New window opens via keyboard shortcut with default layout",
+            "Both windows receive live hook event updates",
+            "Single backend process regardless of window count"
+          ],
+          "test_file": "tests/acceptance/plugin-architecture-layout-engine/multi-window.test.ts",
+          "scenarios": [
+            "Open new window via right-click on sidebar icon",
+            "Open new window via keyboard shortcut",
+            "Both windows receive live event updates",
+            "Single backend process regardless of window count"
+          ],
+          "files_to_modify": [
+            "src/multiWindow/windowFactory.ts",
+            "src/multiWindow/ipcRouter.ts",
+            "src-tauri/src/lib.rs"
+          ],
+          "dependencies": ["02-04"],
+          "estimated_hours": 6
+        },
+        {
+          "step_id": "03-02",
+          "name": "Per-window layout independence and persistence",
+          "description": "Each window gets independent Layout Engine instance. Per-window layout files. Window labels in title and status bar. Window set persisted for restart restore.",
+          "acceptance_criteria": [
+            "Two windows maintain fully independent layouts",
+            "Per-window layout persists as layout-{window-id}.json",
+            "All open windows reopen on next launch with saved layouts",
+            "Window label appears in title bar and status bar",
+            "Closing one window does not affect others"
+          ],
+          "test_file": "tests/acceptance/plugin-architecture-layout-engine/multi-window.test.ts",
+          "scenarios": [
+            "Two windows with independent layouts",
+            "Per-window layout persists across restart",
+            "Label a window for identification",
+            "Closing one window does not affect others",
+            "Last window closing keeps backend alive in tray mode",
+            "No performance degradation with two windows (@property)"
+          ],
+          "files_to_modify": [
+            "src/multiWindow/windowStateManager.ts",
+            "src/multiWindow/windowFactory.ts",
+            "src-tauri/src/lib.rs",
+            "src/layout/layoutPersistor.ts"
+          ],
+          "dependencies": ["03-01"],
+          "estimated_hours": 6
+        }
+      ]
+    },
+    {
+      "phase_id": "04",
+      "name": "Sidebar Customization",
+      "description": "Sidebar icon visibility toggle, drag-to-reorder, persistence, command palette fallback.",
+      "user_stories": ["US-007"],
+      "steps": [
+        {
+          "step_id": "04-01",
+          "name": "Sidebar visibility, reorder, and persistence",
+          "description": "Right-click toggle list with checkmarks. Drag-to-reorder for core and plugin sections. Persist to sidebar.json. Hidden sections accessible via command palette. Reset to defaults. New plugins append at end.",
+          "acceptance_criteria": [
+            "Right-click shows full section toggle list; unchecking hides icon",
+            "Drag-to-reorder changes display order and persists",
+            "Hidden sections accessible via command palette without changing visibility",
+            "Reset Sidebar restores default visibility and order",
+            "Newly installed plugin icon appends at end without disrupting order"
+          ],
+          "test_file": "tests/acceptance/plugin-architecture-layout-engine/sidebar-customization.test.ts",
+          "scenarios": [
+            "Toggle sidebar icon visibility via right-click",
+            "Right-click shows full section toggle list with checkmarks",
+            "Drag sidebar icons to reorder",
+            "Hidden sections accessible via command palette",
+            "Reset sidebar to defaults",
+            "Newly installed plugin appears at end of sidebar",
+            "Bottom-pinned items always remain at bottom",
+            "Sidebar state survives app restart"
+          ],
+          "files_to_modify": [
+            "src/sidebar/sidebarManager.tsx",
+            "src/sidebar/sidebarPersistor.ts",
+            "src/sidebar/types.ts"
+          ],
+          "dependencies": ["01-02"],
+          "estimated_hours": 6
+        }
+      ]
+    },
+    {
+      "phase_id": "05",
+      "name": "norbert-session Migration (M3)",
+      "description": "Migrate Phase 2 session list into first-party plugin. Validate API sufficiency across all placement targets.",
+      "user_stories": ["US-009"],
+      "steps": [
+        {
+          "step_id": "05-01",
+          "name": "norbert-session plugin entry and view registration",
+          "description": "Implement norbert-session as standalone plugin using only public NorbertAPI. Register Session List and Session Detail views, sidebar tab, hook processor. Uses zero internal Norbert APIs.",
+          "acceptance_criteria": [
+            "norbert-session registers views via standard plugin API",
+            "Plugin uses only public NorbertPlugin/NorbertAPI interface",
+            "norbert-session loads via standard plugin loader like any plugin",
+            "Sessions sidebar icon appears and clicking assigns to Main zone"
+          ],
+          "test_file": "tests/acceptance/plugin-architecture-layout-engine/norbert-session-migration.test.ts",
+          "scenarios": [
+            "norbert-session registers views via plugin API",
+            "norbert-session is a standalone plugin using only public API",
+            "norbert-session loads via plugin loader like any plugin"
+          ],
+          "files_to_modify": [
+            "src/plugins/norbert-session/index.ts",
+            "src/plugins/norbert-session/manifest.ts",
+            "src/plugins/norbert-session/sessionListView.tsx",
+            "src/plugins/norbert-session/sessionDetailView.tsx",
+            "src/plugins/norbert-session/hookProcessor.ts"
+          ],
+          "dependencies": ["01-07", "02-06", "04-01"],
+          "estimated_hours": 8
+        },
+        {
+          "step_id": "05-02",
+          "name": "Walking skeleton: norbert-session across all placement targets",
+          "description": "Validate Session List works in Main zone, Secondary zone, floating panel with live pill metric, and new window with live updates. Verify all assignment mechanisms. Persist placement across restart.",
+          "acceptance_criteria": [
+            "Session List assignable to Main, Secondary, floating panel, and new window",
+            "Floating panel pill shows live active session count",
+            "Session List in new window receives live updates",
+            "All Phase 2 session list functionality preserved (no regression)",
+            "Session List placement persists in layout file across restart"
+          ],
+          "test_file": "tests/acceptance/plugin-architecture-layout-engine/norbert-session-migration.test.ts",
+          "scenarios": [
+            "norbert-session works across all placement targets (walking skeleton)",
+            "Session List view persists in layout across restart",
+            "Session List in floating panel shows live metric",
+            "Session List in new window receives live updates",
+            "All Phase 2 session list functionality preserved",
+            "norbert-session hook processor receives session events",
+            "Session List placement persists in layout file"
+          ],
+          "files_to_modify": [
+            "src/plugins/norbert-session/index.ts",
+            "src/plugins/norbert-session/hookProcessor.ts",
+            "src/App.tsx"
+          ],
+          "dependencies": ["05-01", "03-02"],
+          "estimated_hours": 6
+        },
+        {
+          "step_id": "05-03",
+          "name": "App.tsx refactor and legacy view removal",
+          "description": "Remove hardcoded session views from App.tsx. Layout Engine + plugin view rendering replaces monolithic layout. Existing domain modules remain shared.",
+          "acceptance_criteria": [
+            "App.tsx delegates view rendering to Layout Engine",
+            "No hardcoded view imports remain in core app shell",
+            "Domain types (status.ts, eventDetail.ts) remain accessible to plugins"
+          ],
+          "test_file": "tests/acceptance/plugin-architecture-layout-engine/norbert-session-migration.test.ts",
+          "scenarios": [
+            "All Phase 2 session list functionality preserved"
+          ],
+          "files_to_modify": [
+            "src/App.tsx",
+            "src/views/SessionListView.tsx",
+            "src/views/EventDetailView.tsx"
+          ],
+          "dependencies": ["05-02"],
+          "estimated_hours": 4
+        }
+      ]
+    }
+  ],
+  "implementation_scope": {
+    "total_steps": 20,
+    "total_estimated_hours": 109,
+    "estimated_production_files": 37,
+    "decomposition_ratio": 0.54,
+    "milestone_mapping": {
+      "M1_plugin_host": ["01-01", "01-02", "01-03", "01-04", "01-05", "01-06", "01-07"],
+      "M2_layout_engine": ["02-01", "02-02", "02-03", "02-04", "02-05", "02-06"],
+      "M3_norbert_session": ["05-01", "05-02", "05-03"]
+    },
+    "walking_skeleton_steps": ["01-02", "02-02", "05-02"],
+    "user_story_coverage": {
+      "US-001": ["01-01", "01-02", "01-03", "01-04", "01-05"],
+      "US-002": ["01-06", "01-07"],
+      "US-003": ["02-01", "02-03"],
+      "US-004": ["02-04"],
+      "US-005": ["02-05"],
+      "US-006": ["03-01", "03-02"],
+      "US-007": ["04-01"],
+      "US-008": ["02-02", "02-06"],
+      "US-009": ["05-01", "05-02", "05-03"]
+    }
+  }
+}
