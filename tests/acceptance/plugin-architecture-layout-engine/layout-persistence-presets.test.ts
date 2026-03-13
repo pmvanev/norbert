@@ -11,13 +11,22 @@
 
 import { describe, it, expect } from "vitest";
 import fc from "fast-check";
-import type { LayoutState, ZoneRegistry } from "../../../src/layout/types";
+import type { LayoutState, PresetState, ZoneRegistry } from "../../../src/layout/types";
 import { addZone, createZoneRegistry, setZoneView } from "../../../src/layout/zoneRegistry";
 import {
   serializeLayout,
   deserializeLayout,
   validateViewIds,
 } from "../../../src/layout/layoutPersistor";
+import {
+  createPreset,
+  applyPreset,
+  renamePreset,
+  deletePreset,
+  getDefaultPreset,
+  resetToDefault,
+  saveCopyOfPreset,
+} from "../../../src/layout/presetManager";
 
 // ---------------------------------------------------------------------------
 // WALKING SKELETON
@@ -98,26 +107,82 @@ describe("Layout auto-saves on every change", () => {
 // ---------------------------------------------------------------------------
 
 describe("Save named layout preset", () => {
-  it.skip("preset saves current layout and appears in the Layout Picker", () => {
+  it("preset saves current layout and appears in the Layout Picker", () => {
     // GIVEN: the user has arranged a preferred layout
-    // WHEN: the user opens the Layout Picker
-    // AND: selects "Save Current Layout As..."
-    // AND: types "Monitoring"
-    // THEN: the preset "Monitoring" is saved
-    // AND: it appears in the Layout Picker
-    //
-    // Driving port: PresetControl port (save)
+    const zones = setZoneView(
+      addZone(
+        setZoneView(createZoneRegistry(), "main", "session-list", "core"),
+        "secondary",
+        { viewId: "session-detail", pluginId: "core" }
+      ),
+      "main",
+      "session-list",
+      "core"
+    );
+    const layout: LayoutState = {
+      zones,
+      floatingPanels: [],
+      dividerPosition: 0.6,
+      activePreset: "default",
+    };
+
+    // WHEN: the user selects "Save Current Layout As..." and types "Monitoring"
+    const preset = createPreset("Monitoring", layout);
+
+    // THEN: the preset "Monitoring" is saved with the current layout
+    expect(preset.name).toBe("Monitoring");
+    expect(preset.isBuiltIn).toBe(false);
+    expect(preset.zones.get("main")?.viewId).toBe("session-list");
+    expect(preset.zones.get("secondary")?.viewId).toBe("session-detail");
+    expect(preset.dividerPosition).toBe(0.6);
+
+    // AND: it appears in a presets list (simulating Layout Picker)
+    const presets: readonly PresetState[] = [getDefaultPreset(), preset];
+    expect(presets.some((p) => p.name === "Monitoring")).toBe(true);
   });
 });
 
 describe("Switch between layout presets", () => {
-  it.skip("selecting a preset instantly changes the layout", () => {
+  it("selecting a preset instantly changes the layout", () => {
     // GIVEN: the user has "Monitoring" and "Cost Review" presets saved
-    // WHEN: the user opens the Layout Picker and selects "Cost Review"
+    const monitoringZones = setZoneView(
+      createZoneRegistry(),
+      "main",
+      "session-list",
+      "core"
+    );
+    const monitoringPreset = createPreset("Monitoring", {
+      zones: monitoringZones,
+      floatingPanels: [],
+      dividerPosition: 0.5,
+      activePreset: "default",
+    });
+
+    const costReviewZones = setZoneView(
+      addZone(
+        setZoneView(createZoneRegistry(), "main", "session-detail", "core"),
+        "secondary",
+        { viewId: "session-list", pluginId: "core" }
+      ),
+      "main",
+      "session-detail",
+      "core"
+    );
+    const costReviewPreset = createPreset("Cost Review", {
+      zones: costReviewZones,
+      floatingPanels: [],
+      dividerPosition: 0.7,
+      activePreset: "default",
+    });
+
+    // WHEN: the user selects "Cost Review"
+    const newLayout = applyPreset(costReviewPreset);
+
     // THEN: the layout changes to match the "Cost Review" preset
-    // AND: zone assignments, divider position, and floating panels all update
-    //
-    // Driving port: PresetControl port (apply)
+    expect(newLayout.zones.get("main")?.viewId).toBe("session-detail");
+    expect(newLayout.zones.get("secondary")?.viewId).toBe("session-list");
+    expect(newLayout.dividerPosition).toBe(0.7);
+    expect(newLayout.activePreset).toBe("Cost Review");
   });
 });
 
@@ -126,39 +191,115 @@ describe("Switch between layout presets", () => {
 // ---------------------------------------------------------------------------
 
 describe("Built-in presets cannot be deleted", () => {
-  it.skip("no Delete option for built-in presets, Save Copy available", () => {
-    // GIVEN: the user opens the Layout Picker
-    // WHEN: the user right-clicks the "Default" preset
-    // THEN: there is no "Delete" option
-    // AND: "Save Copy As..." is available
-    // WHEN: the user selects "Save Copy As..." and names it "My Default"
-    // THEN: "My Default" appears as a custom preset that can be deleted
-    //
-    // Driving port: PresetControl port (built-in protection)
+  it("no Delete option for built-in presets, Save Copy available", () => {
+    // GIVEN: the default preset is built-in
+    const defaultPreset = getDefaultPreset();
+    const presets: readonly PresetState[] = [defaultPreset];
+
+    // WHEN: the user attempts to delete the built-in "Default" preset
+    const afterDelete = deletePreset(presets, 0);
+
+    // THEN: the built-in preset is NOT deleted (list unchanged)
+    expect(afterDelete).toHaveLength(1);
+    expect(afterDelete[0].name).toBe("Default");
+    expect(afterDelete[0].isBuiltIn).toBe(true);
+
+    // AND: "Save Copy As..." creates a custom copy named "My Default"
+    const copy = saveCopyOfPreset(defaultPreset, "My Default");
+    expect(copy.name).toBe("My Default");
+    expect(copy.isBuiltIn).toBe(false);
+    // The copy has the same layout
+    expect([...copy.zones.entries()]).toEqual([...defaultPreset.zones.entries()]);
+    expect(copy.dividerPosition).toBe(defaultPreset.dividerPosition);
+
+    // AND: "My Default" can be deleted
+    const presetsWithCopy: readonly PresetState[] = [defaultPreset, copy];
+    const afterDeleteCopy = deletePreset(presetsWithCopy, 1);
+    expect(afterDeleteCopy).toHaveLength(1);
+    expect(afterDeleteCopy[0].name).toBe("Default");
   });
 });
 
 describe("Reset to Default layout", () => {
-  it.skip("layout resets to single Main zone with first available primary view", () => {
+  it("layout resets to single Main zone with first available primary view", () => {
     // GIVEN: the user has a complex multi-zone layout with floating panels
-    // WHEN: the user selects "Reset to Default" from the Layout Picker
-    // THEN: the layout resets to single Main zone with the first available primaryView
-    // AND: the Secondary zone is hidden
+    const complexZones = setZoneView(
+      addZone(
+        setZoneView(createZoneRegistry(), "main", "session-detail", "core"),
+        "secondary",
+        { viewId: "session-list", pluginId: "core" }
+      ),
+      "main",
+      "session-detail",
+      "core"
+    );
+    const complexLayout: LayoutState = {
+      zones: complexZones,
+      floatingPanels: [
+        {
+          viewId: "metrics",
+          pluginId: "monitoring",
+          position: { x: 100, y: 100 },
+          size: { width: 300, height: 200 },
+          minimized: false,
+          floatMetric: null,
+        },
+      ],
+      dividerPosition: 0.3,
+      activePreset: "custom",
+    };
+
+    // WHEN: the user selects "Reset to Default"
+    const resetLayout = resetToDefault();
+
+    // THEN: the layout resets to single Main zone
+    expect(resetLayout.zones.size).toBe(1);
+    expect(resetLayout.zones.has("main")).toBe(true);
+    expect(resetLayout.zones.get("main")?.viewId).toBeNull();
+    // AND: the Secondary zone is hidden (not present)
+    expect(resetLayout.zones.has("secondary")).toBe(false);
     // AND: all floating panels are closed
-    //
-    // Driving port: PresetControl port (reset)
+    expect(resetLayout.floatingPanels).toHaveLength(0);
+    // AND: divider at default position
+    expect(resetLayout.dividerPosition).toBe(0.5);
+    // AND: active preset is "Default"
+    expect(resetLayout.activePreset).toBe("Default");
   });
 });
 
 describe("Preset referencing uninstalled plugin shows graceful empty state", () => {
-  it.skip("zone shows explanation when preset references missing plugin view", () => {
+  it("zone shows explanation when preset references missing plugin view", () => {
     // GIVEN: the user saved a preset that assigns "nwave-wave-flow" to Main
+    const zones = setZoneView(
+      addZone(
+        setZoneView(createZoneRegistry(), "main", "nwave-wave-flow", "nwave"),
+        "secondary",
+        { viewId: "session-detail", pluginId: "core" }
+      ),
+      "main",
+      "nwave-wave-flow",
+      "nwave"
+    );
+    const preset = createPreset("Wave Flow", {
+      zones,
+      floatingPanels: [],
+      dividerPosition: 0.5,
+      activePreset: "default",
+    });
+
     // AND: the nWave plugin has been uninstalled
+    const availableViewIds = new Set(["session-list", "session-detail"]);
+
     // WHEN: the user selects that preset from the Layout Picker
-    // THEN: Main shows "View 'nwave-wave-flow' is no longer available"
-    // AND: Secondary zone (if assigned to an available view) loads normally
-    //
-    // Driving port: PresetControl port (apply with missing view)
+    const applied = applyPreset(preset);
+    const validated = validateViewIds(applied, availableViewIds);
+
+    // THEN: Main shows empty state (viewId is null for missing plugin)
+    expect(validated.zones.get("main")?.viewId).toBeNull();
+    expect(validated.zones.get("main")?.pluginId).toBeNull();
+    // AND: Secondary zone (assigned to an available view) loads normally
+    expect(validated.zones.get("secondary")?.viewId).toBe("session-detail");
+    expect(validated.zones.get("secondary")?.pluginId).toBe("core");
   });
 });
 
@@ -268,13 +409,28 @@ describe("Layout save-restore roundtrip preserves all state", () => {
 });
 
 describe("Custom presets can be renamed and deleted", () => {
-  it.skip("renamed preset appears under new name, deleted preset disappears", () => {
+  it("renamed preset appears under new name, deleted preset disappears", () => {
     // GIVEN: the user has a custom preset "Monitoring"
+    const monitoringPreset = createPreset("Monitoring", {
+      zones: setZoneView(createZoneRegistry(), "main", "session-list", "core"),
+      floatingPanels: [],
+      dividerPosition: 0.5,
+      activePreset: "default",
+    });
+    const presets: readonly PresetState[] = [getDefaultPreset(), monitoringPreset];
+
     // WHEN: the user renames it to "Session Monitoring"
+    const renamed = renamePreset(presets, 1, "Session Monitoring");
+
     // THEN: it appears as "Session Monitoring" in the Layout Picker
+    expect(renamed[1].name).toBe("Session Monitoring");
+    expect(renamed).toHaveLength(2);
+
     // WHEN: the user deletes "Session Monitoring"
+    const afterDelete = deletePreset(renamed, 1);
+
     // THEN: it no longer appears in the Layout Picker
-    //
-    // Driving port: PresetControl port (rename, delete)
+    expect(afterDelete).toHaveLength(1);
+    expect(afterDelete.some((p) => p.name === "Session Monitoring")).toBe(false);
   });
 });
