@@ -151,14 +151,21 @@ export function sortSessionsMostRecentFirst(
 
 /// Format the duration of a session for display.
 ///
-/// Pure function: returns "Active" for ongoing sessions,
-/// or a human-readable duration string for completed sessions.
-export function formatSessionDuration(session: SessionInfo): string {
-  const seconds = calculateDurationSeconds(session.started_at, session.ended_at);
-  if (seconds === null) {
-    return "Active";
+/// Pure function: for ended sessions, shows total duration.
+/// For open sessions, shows elapsed time since start (live counter).
+/// The green dot from isSessionActive() indicates true activity status.
+export function formatSessionDuration(
+  session: SessionInfo,
+  now: number = Date.now(),
+): string {
+  if (session.ended_at !== null) {
+    const seconds = calculateDurationSeconds(session.started_at, session.ended_at);
+    return seconds !== null ? formatDuration(seconds) : "—";
   }
-  return formatDuration(seconds);
+  // Open session — show elapsed time since start
+  const elapsedMs = now - new Date(session.started_at).getTime();
+  const elapsedSec = Math.max(0, Math.floor(elapsedMs / 1000));
+  return formatDuration(elapsedSec);
 }
 
 /// Format the tray tooltip based on active state.

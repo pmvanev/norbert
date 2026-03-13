@@ -173,36 +173,32 @@ function App() {
   }, []);
 
   /// Event poller: bridges SQLite events → hook bridge → metricsStore.
-  /// Tracks the count of already-processed events per session to avoid
-  /// re-delivering events on each poll cycle.
-  const processedCountRef = useRef(0);
-  const lastPolledSessionRef = useRef<string | null>(null);
+  /// Polls ALL un-ended sessions for new events, tracking processed count
+  /// per session in a Map to avoid re-delivering on each poll cycle.
+  const processedCountsRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
     const intervalId = setInterval(() => {
-      const latestSess = sessions.length > 0 ? sessions[0] : null;
-      if (!latestSess) return;
+      const activeSessions = sessions.filter((s) => s.ended_at === null);
 
-      // Reset processed count when session changes
-      if (latestSess.id !== lastPolledSessionRef.current) {
-        processedCountRef.current = 0;
-        lastPolledSessionRef.current = latestSess.id;
+      for (const sess of activeSessions) {
+        const processed = processedCountsRef.current.get(sess.id) ?? 0;
+
+        invoke<Array<{ session_id: string; event_type: string; payload: unknown; received_at: string; provider: string }>>(
+          "get_session_events",
+          { sessionId: sess.id }
+        )
+          .then((events) => {
+            const newEvents = events.slice(processed);
+            for (const event of newEvents) {
+              deliverHookEvent("session-event", event);
+            }
+            processedCountsRef.current.set(sess.id, events.length);
+          })
+          .catch(() => {
+            // Silently ignore — status poller handles connectivity errors
+          });
       }
-
-      invoke<Array<{ session_id: string; event_type: string; payload: unknown; received_at: string; provider: string }>>(
-        "get_session_events",
-        { sessionId: latestSess.id }
-      )
-        .then((events) => {
-          const newEvents = events.slice(processedCountRef.current);
-          for (const event of newEvents) {
-            deliverHookEvent("session-event", event);
-          }
-          processedCountRef.current = events.length;
-        })
-        .catch(() => {
-          // Silently ignore event polling failures — status poller handles connectivity errors
-        });
     }, POLL_INTERVAL_MS);
 
     return () => clearInterval(intervalId);

@@ -81,9 +81,14 @@ describe("sortSessionsMostRecentFirst", () => {
 });
 
 describe("formatSessionDuration", () => {
-  it("returns 'Active' for a session with no ended_at", () => {
-    const session = buildSession({ ended_at: null });
-    expect(formatSessionDuration(session)).toBe("Active");
+  it("returns elapsed time for an open session", () => {
+    const session = buildSession({
+      started_at: "2026-03-12T10:00:00Z",
+      ended_at: null,
+    });
+    // 5 minutes after session start
+    const now = new Date("2026-03-12T10:05:00Z").getTime();
+    expect(formatSessionDuration(session, now)).toBe("5m 0s");
   });
 
   it("returns formatted duration for a completed session", () => {
