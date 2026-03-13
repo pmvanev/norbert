@@ -20,11 +20,21 @@ import {
 } from "../../../src/plugins/types";
 import type {
   NorbertAPI,
+  NorbertPlugin,
   PluginManifest,
   ViewRegistration,
   TabRegistration,
   ResolutionError,
 } from "../../../src/plugins/types";
+import { scanPlugins } from "../../../src/plugins/pluginLoader";
+import { createNorbertAPI } from "../../../src/plugins/apiFactory";
+import {
+  createPluginRegistry,
+  getViewsByPlugin,
+  getTabsByPlugin,
+  getAllViews,
+} from "../../../src/plugins/pluginRegistry";
+import { loadPlugins } from "../../../src/plugins/lifecycleManager";
 
 // ---------------------------------------------------------------------------
 // WALKING SKELETON
@@ -32,17 +42,64 @@ import type {
 
 // @walking_skeleton
 describe("Plugin registers a view and user can access it", () => {
-  it.skip("plugin loads, registers view, and view appears in sidebar and view picker", () => {
+  it("plugin loads, registers view, and view appears in sidebar and view picker", () => {
     // GIVEN: the "team-monitor" plugin implements the NorbertPlugin interface
     // AND: the plugin registers a view "team-dashboard" with primaryView: true
+    const teamMonitorPlugin: NorbertPlugin = {
+      manifest: {
+        id: "team-monitor",
+        name: "Team Monitor",
+        version: "1.0.0",
+        norbert_api: "^1.0.0",
+        dependencies: {},
+      },
+      onLoad: (api) => {
+        api.ui.registerView({
+          id: "team-dashboard",
+          label: "Team Dashboard",
+          icon: "users",
+          primaryView: true,
+          minWidth: 300,
+          minHeight: 200,
+          floatMetric: null,
+        });
+        api.ui.registerTab({
+          id: "team-monitor-tab",
+          icon: "users",
+          label: "Team Monitor",
+          order: 10,
+        });
+      },
+      onUnload: () => {},
+    };
+
+    // Stub scan port: returns the team-monitor plugin
+    const stubScanPlugins = () => [teamMonitorPlugin];
+
     // WHEN: the plugin loader loads "team-monitor"
+    const plugins = stubScanPlugins();
+    const initialRegistry = createPluginRegistry();
+    const registry = loadPlugins(plugins, initialRegistry, createNorbertAPI);
+
     // THEN: "team-dashboard" appears in the view picker
+    const views = getAllViews(registry);
+    const teamDashboard = views.find((v) => v.id === "team-dashboard");
+    expect(teamDashboard).toBeDefined();
+    expect(teamDashboard!.pluginId).toBe("team-monitor");
+    expect(teamDashboard!.label).toBe("Team Dashboard");
+
     // AND: a sidebar icon for "team-monitor" appears in the sidebar
+    const tabs = getTabsByPlugin(registry, "team-monitor");
+    expect(tabs).toHaveLength(1);
+    expect(tabs[0].icon).toBe("users");
+
     // AND: clicking the sidebar icon assigns "team-dashboard" to the Main zone
-    //
-    // Driving port: PluginLoader port -> LifecycleManager port -> NorbertAPI.ui
-    // Observable outcome: view visible in picker, sidebar icon present,
-    // view assignable to zone.
+    // (the primary view for this plugin is "team-dashboard")
+    const primaryView = views.find(
+      (v) => v.pluginId === "team-monitor" && v.primaryView
+    );
+    expect(primaryView).toBeDefined();
+    expect(primaryView!.id).toBe("team-dashboard");
   });
 });
 
@@ -51,14 +108,51 @@ describe("Plugin registers a view and user can access it", () => {
 // ---------------------------------------------------------------------------
 
 describe("Plugin registers view via api.ui.registerView()", () => {
-  it.skip("registered view appears in view picker and is assignable to any zone", () => {
+  it("registered view appears in view picker and is assignable to any zone", () => {
     // GIVEN: a plugin calls api.ui.registerView() with id "team-dashboard",
     //        label "Team Dashboard", primaryView: true, minWidth: 300, minHeight: 200
+    const testPlugin: NorbertPlugin = {
+      manifest: {
+        id: "team-monitor",
+        name: "Team Monitor",
+        version: "1.0.0",
+        norbert_api: "^1.0.0",
+        dependencies: {},
+      },
+      onLoad: (api) => {
+        api.ui.registerView({
+          id: "team-dashboard",
+          label: "Team Dashboard",
+          icon: "users",
+          primaryView: true,
+          minWidth: 300,
+          minHeight: 200,
+          floatMetric: null,
+        });
+      },
+      onUnload: () => {},
+    };
+
     // WHEN: the view registration completes
+    const registry = loadPlugins(
+      [testPlugin],
+      createPluginRegistry(),
+      createNorbertAPI
+    );
+
     // THEN: "team-dashboard" appears in the view picker grouped under plugin name
-    // AND: the view can be assigned to any zone
-    //
-    // Driving port: NorbertAPI.ui.registerView()
+    const views = getViewsByPlugin(registry, "team-monitor");
+    expect(views).toHaveLength(1);
+    expect(views[0].id).toBe("team-dashboard");
+    expect(views[0].pluginId).toBe("team-monitor");
+    expect(views[0].label).toBe("Team Dashboard");
+    expect(views[0].primaryView).toBe(true);
+    expect(views[0].minWidth).toBe(300);
+    expect(views[0].minHeight).toBe(200);
+
+    // AND: the view can be assigned to any zone (it's in the registry)
+    const allViews = getAllViews(registry);
+    expect(allViews.some((v) => v.id === "team-dashboard")).toBe(true);
   });
 });
 

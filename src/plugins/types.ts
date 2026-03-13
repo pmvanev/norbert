@@ -43,9 +43,32 @@ export interface HooksAPI {
   readonly _brand: "HooksAPI";
 }
 
+/// Input for registering a view from within a plugin's onLoad callback.
+/// The pluginId is injected by the API factory, so plugins omit it.
+export interface RegisterViewInput {
+  readonly id: string;
+  readonly label: string;
+  readonly icon: string;
+  readonly primaryView: boolean;
+  readonly minWidth: number;
+  readonly minHeight: number;
+  readonly floatMetric: string | null;
+}
+
+/// Input for registering a sidebar tab from within a plugin's onLoad callback.
+/// The pluginId is injected by the API factory, so plugins omit it.
+export interface RegisterTabInput {
+  readonly id: string;
+  readonly icon: string;
+  readonly label: string;
+  readonly order: number;
+}
+
 /// UI registration API (views, tabs, status items).
 export interface UiAPI {
   readonly _brand: "UiAPI";
+  readonly registerView: (input: RegisterViewInput) => void;
+  readonly registerTab: (input: RegisterTabInput) => void;
 }
 
 /// MCP tool registration API.
@@ -168,6 +191,17 @@ export const isValidResolutionErrorType = (
 ): value is ResolutionErrorType =>
   typeof value === "string" &&
   RESOLUTION_ERROR_TYPES.includes(value as ResolutionErrorType);
+
+// ---------------------------------------------------------------------------
+// PluginRegistry — immutable store of loaded plugin state
+// ---------------------------------------------------------------------------
+
+/// Immutable registry of all loaded plugins and their registrations.
+export interface PluginRegistry {
+  readonly views: readonly ViewRegistration[];
+  readonly tabs: readonly TabRegistration[];
+  readonly loadedPluginIds: readonly string[];
+}
 
 /// A dependency resolution error for a specific plugin.
 export interface ResolutionError {
