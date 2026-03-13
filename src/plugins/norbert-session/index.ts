@@ -17,6 +17,7 @@ import {
 import {
   SESSION_DETAIL_VIEW_ID,
   SESSION_DETAIL_VIEW_LABEL,
+  SESSION_DETAIL_VIEW_ICON,
 } from "./sessionDetailView";
 import { createSessionHookProcessor } from "./hookProcessor";
 
@@ -41,7 +42,7 @@ const onLoad = (api: NorbertAPI): void => {
   api.ui.registerView({
     id: SESSION_DETAIL_VIEW_ID,
     label: SESSION_DETAIL_VIEW_LABEL,
-    icon: "detail",
+    icon: SESSION_DETAIL_VIEW_ICON,
     primaryView: false,
     minWidth: 400,
     minHeight: 300,

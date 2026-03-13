@@ -77,6 +77,7 @@ export const MenuBar = ({ entries }: MenuBarProps) => {
 
   return (
     <div className="menu-bar" ref={barRef} onClick={handleBarClick}>
+      <div className="tb-logo">{"\u2B21"}</div>
       {entries.map((entry) => (
         <div
           key={entry.label}

@@ -10,3 +10,4 @@
 /// Rendering is handled by the layout engine based on view registration.
 export const SESSION_DETAIL_VIEW_ID = "session-detail" as const;
 export const SESSION_DETAIL_VIEW_LABEL = "Session Detail" as const;
+export const SESSION_DETAIL_VIEW_ICON = "\u25C8" as const;

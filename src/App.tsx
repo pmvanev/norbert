@@ -20,13 +20,13 @@ import { createNorbertAPI } from "./plugins/apiFactory";
 import { createPluginRegistry, getAllViews } from "./plugins/pluginRegistry";
 import { norbertSessionPlugin } from "./plugins/norbert-session/index";
 import { resetHookBridge } from "./plugins/hookBridge";
-import { createDefaultLayoutState } from "./layout/zoneToggle";
+import { createDefaultLayoutState, isSecondaryVisible, toggleSecondaryZone, type TwoZoneLayoutState } from "./layout/zoneToggle";
 import { assignView } from "./layout/assignmentEngine";
 import { ZoneRenderer, type ViewRegistry } from "./layout/zoneRenderer";
 import { SessionListView } from "./views/SessionListView";
 import { EventDetailView } from "./views/EventDetailView";
 import { createDefaultSidebarState, getVisibleItems } from "./sidebar/sidebarManager";
-import type { LayoutState } from "./layout/types";
+// LayoutState base type imported via TwoZoneLayoutState from zoneToggle
 
 /// Polling interval in milliseconds for live UI updates.
 const POLL_INTERVAL_MS = 1000;
@@ -60,9 +60,10 @@ const initializePluginSystem = () => {
 };
 
 /// Creates the initial layout state with session-list assigned to the main zone.
-const createInitialLayout = (): LayoutState => {
+const createInitialLayout = (): TwoZoneLayoutState => {
   const defaultLayout = createDefaultLayoutState();
-  return assignView(defaultLayout, "main", "session-list", "norbert-session");
+  const withView = assignView(defaultLayout, "main", "session-list", "norbert-session");
+  return { ...defaultLayout, ...withView };
 };
 
 function App() {
@@ -73,7 +74,7 @@ function App() {
   const [theme, setTheme] = useState<ThemeName>(() =>
     readStoredTheme(localStorage)
   );
-  const [layout, setLayout] = useState<LayoutState>(createInitialLayout);
+  const [layout, setLayout] = useState<TwoZoneLayoutState>(createInitialLayout);
 
   /// Initialize plugin system once on mount.
   const [pluginRegistry] = useState(initializePluginSystem);
@@ -104,20 +105,27 @@ function App() {
   );
 
   /// Handler for selecting a session row to view its events.
-  /// Assigns session-detail view to the main zone.
+  /// Opens session-detail in the secondary zone (side-by-side layout).
   const handleSessionSelect = useCallback((sessionId: string) => {
     setSelectedSessionId(sessionId);
-    setLayout((currentLayout) =>
-      assignView(currentLayout, "main", "session-detail", "norbert-session")
-    );
+    setLayout((currentLayout) => {
+      // Ensure secondary zone is visible
+      const withSecondary = isSecondaryVisible(currentLayout)
+        ? currentLayout
+        : toggleSecondaryZone(currentLayout);
+      const assigned = assignView(withSecondary, "secondary", "session-detail", "norbert-session");
+      return { ...withSecondary, ...assigned };
+    });
   }, []);
 
   /// Handler for navigating back to the session list.
-  /// Assigns session-list view back to the main zone.
+  /// Closes the secondary zone.
   const handleBackToSessions = useCallback(() => {
     setSelectedSessionId(null);
     setLayout((currentLayout) =>
-      assignView(currentLayout, "main", "session-list", "norbert-session")
+      isSecondaryVisible(currentLayout)
+        ? toggleSecondaryZone(currentLayout)
+        : currentLayout
     );
   }, []);
 
@@ -198,9 +206,10 @@ function App() {
   /// Handle sidebar icon click — assign the view to the main zone.
   const handleSidebarClick = useCallback((viewId: string, pluginId: string) => {
     setSelectedSessionId(null);
-    setLayout((currentLayout) =>
-      assignView(currentLayout, "main", viewId, pluginId)
-    );
+    setLayout((currentLayout) => ({
+      ...currentLayout,
+      ...assignView(currentLayout, "main", viewId, pluginId),
+    }));
   }, []);
 
   if (error) {
@@ -240,7 +249,7 @@ function App() {
               title={item.label}
               onClick={() => handleSidebarClick(item.id, item.pluginId)}
             >
-              <span className="sidebar-icon-emoji">{item.icon}</span>
+              <span className="sidebar-icon-symbol">{item.icon}</span>
             </button>
           ))}
         </nav>

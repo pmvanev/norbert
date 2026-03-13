@@ -11,7 +11,7 @@ import { type FC, useRef, useCallback } from "react";
 import type { LayoutState, ZoneState } from "./types";
 import { getZone } from "./zoneRegistry";
 import { isSecondaryVisible } from "./zoneToggle";
-import { computeZoneWidths, clampDividerPosition, snapToCenter } from "./dividerManager";
+import { clampDividerPosition, snapToCenter } from "./dividerManager";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -152,7 +152,6 @@ export const ZoneRenderer: FC<ZoneRendererProps> = ({
   }
 
   // Two zones with divider
-  const widths = computeZoneWidths(layout.dividerPosition, containerWidth);
   const secondaryZone = getZone(layout.zones, "secondary");
 
   return (
@@ -160,12 +159,11 @@ export const ZoneRenderer: FC<ZoneRendererProps> = ({
       className="zone-container"
       data-testid="zone-container"
       ref={containerRef}
-      style={{ display: "flex", width: containerWidth }}
     >
       <div
         className="zone zone-main"
         data-testid="zone-main"
-        style={{ width: widths.mainWidth, flexShrink: 0 }}
+        style={{ flex: `0 0 ${layout.dividerPosition * 100}%` }}
       >
         <ZoneContent
           zone={mainZone}
@@ -181,7 +179,7 @@ export const ZoneRenderer: FC<ZoneRendererProps> = ({
       <div
         className="zone zone-secondary"
         data-testid="zone-secondary"
-        style={{ width: widths.secondaryWidth, flexShrink: 0 }}
+        style={{ flex: 1 }}
       >
         <ZoneContent
           zone={secondaryZone}
