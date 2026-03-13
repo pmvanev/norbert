@@ -1,10 +1,10 @@
 /// Dependency Resolver — topological sort with semver range validation.
 ///
-/// Pipeline: validate versions -> build adjacency graph -> Kahn's algorithm
+/// Pipeline: validate versions -> collect disabled warnings -> build adjacency graph -> Kahn's algorithm
 /// Pure functions operating on PluginManifest arrays.
-/// Returns Result<readonly string[], string> — ordered plugin IDs or error.
+/// Returns Result<DependencyResolution, string> — ordered plugin IDs with warnings or error.
 
-import type { PluginManifest } from "./types";
+import type { PluginManifest, DependencyResolution, DegradationWarning } from "./types";
 import type { Result } from "./types";
 import { ok, err } from "./types";
 import semver from "semver";
@@ -24,12 +24,19 @@ interface DependencyGraph {
 // ---------------------------------------------------------------------------
 
 /// Checks a single dependency entry: is it installed and version-compatible?
+/// Disabled dependencies are skipped (they are not missing, just inactive).
 const validateDependency = (
   pluginId: string,
   dependencyId: string,
   requiredRange: string,
-  manifestMap: ReadonlyMap<string, PluginManifest>
+  manifestMap: ReadonlyMap<string, PluginManifest>,
+  disabledPluginIds: ReadonlySet<string>
 ): string | null => {
+  // Disabled dependencies are valid — they just trigger degradation warnings
+  if (disabledPluginIds.has(dependencyId)) {
+    return null;
+  }
+
   const dependency = manifestMap.get(dependencyId);
 
   if (dependency === undefined) {
@@ -47,14 +54,41 @@ const validateDependency = (
 /// Returns collected error messages for all missing or version-mismatched deps.
 const validateAllDependencies = (
   manifests: readonly PluginManifest[],
-  manifestMap: ReadonlyMap<string, PluginManifest>
+  manifestMap: ReadonlyMap<string, PluginManifest>,
+  disabledPluginIds: ReadonlySet<string>
 ): readonly string[] =>
   manifests.flatMap((manifest) =>
     Object.entries(manifest.dependencies)
       .map(([dependencyId, requiredRange]) =>
-        validateDependency(manifest.id, dependencyId, requiredRange, manifestMap)
+        validateDependency(manifest.id, dependencyId, requiredRange, manifestMap, disabledPluginIds)
       )
       .filter((error): error is string => error !== null)
+  );
+
+// ---------------------------------------------------------------------------
+// Degradation warning collection
+// ---------------------------------------------------------------------------
+
+/// Creates a degradation warning for a plugin that depends on a disabled plugin.
+const createDegradationWarning = (
+  pluginId: string,
+  disabledDependency: string
+): DegradationWarning => ({
+  pluginId,
+  disabledDependency,
+  message: `${disabledDependency} is disabled. Features depending on it will not be available. Re-enable ${disabledDependency} to restore full functionality.`,
+  reEnableAction: disabledDependency,
+});
+
+/// Collects degradation warnings for all plugins whose dependencies are disabled.
+const collectDegradationWarnings = (
+  manifests: readonly PluginManifest[],
+  disabledPluginIds: ReadonlySet<string>
+): readonly DegradationWarning[] =>
+  manifests.flatMap((manifest) =>
+    Object.keys(manifest.dependencies)
+      .filter((dependencyId) => disabledPluginIds.has(dependencyId))
+      .map((dependencyId) => createDegradationWarning(manifest.id, dependencyId))
   );
 
 // ---------------------------------------------------------------------------
@@ -63,9 +97,11 @@ const validateAllDependencies = (
 
 /// Builds a directed acency graph: edges from dependency -> dependent.
 /// In-degree counts how many dependencies a plugin has among the manifest set.
+/// Disabled plugins are excluded from edges (their dependents don't wait for them).
 const buildDependencyGraph = (
   manifests: readonly PluginManifest[],
-  manifestMap: ReadonlyMap<string, PluginManifest>
+  manifestMap: ReadonlyMap<string, PluginManifest>,
+  disabledPluginIds: ReadonlySet<string>
 ): DependencyGraph => {
   const adjacency = new Map<string, string[]>();
   const inDegree = new Map<string, number>();
@@ -80,7 +116,8 @@ const buildDependencyGraph = (
   for (const manifest of manifests) {
     for (const dependencyId of Object.keys(manifest.dependencies)) {
       // Only add edges for dependencies within the manifest set
-      if (manifestMap.has(dependencyId)) {
+      // and that are not disabled
+      if (manifestMap.has(dependencyId) && !disabledPluginIds.has(dependencyId)) {
         const neighbors = adjacency.get(dependencyId);
         if (neighbors !== undefined) {
           neighbors.push(manifest.id);
@@ -152,28 +189,42 @@ const topologicalSort = (
 ///
 /// Pipeline:
 /// 1. Build manifest lookup map
-/// 2. Validate all dependencies (missing + version mismatch)
-/// 3. Build dependency graph
-/// 4. Topological sort via Kahn's algorithm
+/// 2. Validate all dependencies (missing + version mismatch, skipping disabled)
+/// 3. Collect degradation warnings for disabled dependencies
+/// 4. Build dependency graph (excluding disabled edges)
+/// 5. Topological sort via Kahn's algorithm
 ///
-/// Returns: Result containing ordered plugin IDs (load order) or error message.
+/// Returns: Result containing DependencyResolution (load order + warnings) or error message.
 export const resolveDependencies = (
-  manifests: readonly PluginManifest[]
-): Result<readonly string[]> => {
+  manifests: readonly PluginManifest[],
+  disabledPluginIds: ReadonlySet<string> = new Set()
+): Result<DependencyResolution> => {
   if (manifests.length === 0) {
-    return ok([]);
+    return ok({ loadOrder: [], degradationWarnings: [] });
   }
 
   // Build lookup map
   const manifestMap = new Map(manifests.map((m) => [m.id, m]));
 
   // Validate all dependencies first (missing + version mismatch)
-  const validationErrors = validateAllDependencies(manifests, manifestMap);
+  const validationErrors = validateAllDependencies(manifests, manifestMap, disabledPluginIds);
   if (validationErrors.length > 0) {
     return err(validationErrors.join("\n"));
   }
 
+  // Collect degradation warnings for disabled dependencies
+  const degradationWarnings = collectDegradationWarnings(manifests, disabledPluginIds);
+
   // Build graph and sort
-  const graph = buildDependencyGraph(manifests, manifestMap);
-  return topologicalSort(graph);
+  const graph = buildDependencyGraph(manifests, manifestMap, disabledPluginIds);
+  const sortResult = topologicalSort(graph);
+
+  if (!sortResult.ok) {
+    return sortResult;
+  }
+
+  return ok({
+    loadOrder: sortResult.value,
+    degradationWarnings,
+  });
 };

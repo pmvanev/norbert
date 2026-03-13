@@ -10,7 +10,11 @@ import type {
   NorbertAPI,
   PluginPublicAPI,
   PluginRegistry,
+  DegradationWarning,
+  DisablePluginResult,
+  Result,
 } from "./types";
+import { ok, err } from "./types";
 import type { RegistrationCollector } from "./apiFactory";
 import {
   addView,
@@ -19,6 +23,7 @@ import {
   addStatusItem,
   markPluginLoaded,
   registerPublicAPI,
+  removePlugin,
 } from "./pluginRegistry";
 import { validateManifest } from "./pluginLoader";
 
@@ -98,3 +103,62 @@ export const loadPlugins = (
 
     return withPluginLoaded;
   }, initialRegistry);
+
+// ---------------------------------------------------------------------------
+// Runtime disable
+// ---------------------------------------------------------------------------
+
+/// Creates a degradation warning for a dependent plugin losing a dependency.
+const createDegradationWarning = (
+  pluginId: string,
+  disabledDependency: string
+): DegradationWarning => ({
+  pluginId,
+  disabledDependency,
+  message: `${disabledDependency} is disabled. Features depending on it will not be available. Re-enable ${disabledDependency} to restore full functionality.`,
+  reEnableAction: disabledDependency,
+});
+
+/// Finds all loaded plugins that depend on the given plugin.
+const findDependents = (
+  pluginId: string,
+  allPlugins: readonly NorbertPlugin[],
+  loadedPluginIds: readonly string[]
+): readonly string[] =>
+  allPlugins
+    .filter(
+      (p) =>
+        loadedPluginIds.includes(p.manifest.id) &&
+        Object.keys(p.manifest.dependencies).includes(pluginId)
+    )
+    .map((p) => p.manifest.id);
+
+/// Disables a plugin at runtime, removing it from the registry and
+/// producing degradation warnings for dependent plugins that remain loaded.
+///
+/// Returns: Result containing updated registry + degradation warnings, or error.
+export const disablePlugin = (
+  registry: PluginRegistry,
+  pluginId: string,
+  allPlugins: readonly NorbertPlugin[]
+): Result<DisablePluginResult> => {
+  if (!registry.loadedPluginIds.includes(pluginId)) {
+    return err(`Cannot disable '${pluginId}': plugin is not loaded.`);
+  }
+
+  // Remove the plugin from the registry
+  const updatedRegistry = removePlugin(registry, pluginId);
+
+  // Find all loaded plugins that depend on the disabled plugin
+  const dependents = findDependents(pluginId, allPlugins, registry.loadedPluginIds);
+
+  // Create degradation warnings for each dependent
+  const degradationWarnings = dependents.map((dependentId) =>
+    createDegradationWarning(dependentId, pluginId)
+  );
+
+  return ok({
+    registry: updatedRegistry,
+    degradationWarnings,
+  });
+};

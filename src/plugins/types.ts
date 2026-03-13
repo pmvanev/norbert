@@ -271,6 +271,42 @@ export const isValidResolutionErrorType = (
   RESOLUTION_ERROR_TYPES.includes(value as ResolutionErrorType);
 
 // ---------------------------------------------------------------------------
+// DegradationWarning — produced when a disabled dependency is encountered
+// ---------------------------------------------------------------------------
+
+/// Warning produced when a plugin depends on a disabled dependency.
+/// Includes the re-enable action for UI to offer one-click re-enable.
+export interface DegradationWarning {
+  readonly pluginId: string;
+  readonly disabledDependency: string;
+  readonly message: string;
+  readonly reEnableAction: string;
+}
+
+// ---------------------------------------------------------------------------
+// DependencyResolution — result of dependency resolution
+// ---------------------------------------------------------------------------
+
+/// The successful result of resolving plugin dependencies.
+/// Contains the topological load order and any degradation warnings
+/// for disabled dependencies.
+export interface DependencyResolution {
+  readonly loadOrder: readonly string[];
+  readonly degradationWarnings: readonly DegradationWarning[];
+}
+
+// ---------------------------------------------------------------------------
+// DisablePluginResult — result of runtime plugin disable
+// ---------------------------------------------------------------------------
+
+/// The successful result of disabling a plugin at runtime.
+/// Contains the updated registry and degradation warnings for dependents.
+export interface DisablePluginResult {
+  readonly registry: PluginRegistry;
+  readonly degradationWarnings: readonly DegradationWarning[];
+}
+
+// ---------------------------------------------------------------------------
 // PluginRegistry — immutable store of loaded plugin state
 // ---------------------------------------------------------------------------
 

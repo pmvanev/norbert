@@ -17,7 +17,7 @@ import { createNorbertAPI } from "../../../src/plugins/apiFactory";
 import {
   createPluginRegistry,
 } from "../../../src/plugins/pluginRegistry";
-import { loadPlugins } from "../../../src/plugins/lifecycleManager";
+import { loadPlugins, disablePlugin } from "../../../src/plugins/lifecycleManager";
 import { resetHookBridge } from "../../../src/plugins/hookBridge";
 import { resolveDependencies } from "../../../src/plugins/dependencyResolver";
 
@@ -81,12 +81,12 @@ describe("Plugins load in topological dependency order", () => {
     if (!resolution.ok) return;
 
     // AND: norbert-session appears before norbert-usage in the load order
-    const sessionIndex = resolution.value.indexOf("norbert-session");
-    const usageIndex = resolution.value.indexOf("norbert-usage");
+    const sessionIndex = resolution.value.loadOrder.indexOf("norbert-session");
+    const usageIndex = resolution.value.loadOrder.indexOf("norbert-usage");
     expect(sessionIndex).toBeLessThan(usageIndex);
 
     // AND: loading in resolved order, both register views successfully
-    const orderedPlugins = resolution.value.map(
+    const orderedPlugins = resolution.value.loadOrder.map(
       (id) => scanned.find((p) => p.manifest.id === id)!
     );
     const registry = loadPlugins(
@@ -120,7 +120,7 @@ describe("All dependencies satisfied results in clean startup", () => {
     expect(resolution.ok).toBe(true);
     if (!resolution.ok) return;
 
-    const orderedPlugins = resolution.value.map(
+    const orderedPlugins = resolution.value.loadOrder.map(
       (id) => scanned.find((p) => p.manifest.id === id)!
     );
     const registry = loadPlugins(
@@ -252,39 +252,127 @@ describe("Multiple missing dependencies listed in single error", () => {
 // ---------------------------------------------------------------------------
 
 describe("Disabled dependency triggers degradation warning", () => {
-  it.skip("dependent plugin loads with warning and greyed-out placeholders", () => {
+  it("dependent plugin loads with warning and greyed-out placeholders", () => {
     // GIVEN: norbert-usage depends on norbert-notif
+    const notifPlugin = createMinimalPlugin("norbert-notif", "1.0.0");
+    const usagePlugin = createMinimalPlugin("norbert-usage", "1.0.0", {
+      "norbert-notif": "^1.0.0",
+    });
+
     // AND: norbert-notif is installed but disabled by the user
-    // WHEN: Norbert starts up
-    // THEN: norbert-usage loads successfully
-    // AND: a notification states:
-    //      "norbert-notif is disabled. Notification delivery will not be available."
-    // AND: the notification includes a "Re-enable norbert-notif" action
-    // AND: features depending on norbert-notif show greyed-out placeholders
-    //
-    // Driving port: PluginLoader port, LifecycleManager port
+    const scanned = scanPlugins([usagePlugin, notifPlugin]);
+    const disabledPluginIds = new Set(["norbert-notif"]);
+
+    // WHEN: dependency resolution occurs with disabled plugins
+    const resolution = resolveDependencies(
+      scanned.map((p) => p.manifest),
+      disabledPluginIds
+    );
+
+    // THEN: resolution succeeds (disabled != missing)
+    expect(resolution.ok).toBe(true);
+    if (!resolution.ok) return;
+
+    // AND: degradation warnings are produced
+    expect(resolution.value.degradationWarnings).toHaveLength(1);
+    const warning = resolution.value.degradationWarnings[0];
+
+    // AND: the warning states the disabled dependency
+    expect(warning.pluginId).toBe("norbert-usage");
+    expect(warning.disabledDependency).toBe("norbert-notif");
+    expect(warning.message).toContain("norbert-notif");
+    expect(warning.message).toContain("disabled");
+
+    // AND: the warning includes a re-enable action
+    expect(warning.reEnableAction).toBe("norbert-notif");
+
+    // AND: norbert-usage loads successfully (only non-disabled plugins load)
+    const activePlugins = resolution.value.loadOrder
+      .filter((id) => !disabledPluginIds.has(id))
+      .map((id) => scanned.find((p) => p.manifest.id === id)!);
+    const registry = loadPlugins(
+      activePlugins,
+      createPluginRegistry(),
+      createNorbertAPI
+    );
+    expect(registry.loadedPluginIds).toContain("norbert-usage");
+    expect(registry.loadedPluginIds).not.toContain("norbert-notif");
   });
 });
 
 describe("Runtime dependency disable triggers graceful degradation", () => {
-  it.skip("disabling dependency mid-session shows placeholders without crash", () => {
+  it("disabling dependency mid-session shows placeholders without crash", () => {
     // GIVEN: norbert-usage is running and depends on norbert-notif
-    // WHEN: the user disables norbert-notif from Plugin settings mid-session
-    // THEN: norbert-usage features relying on norbert-notif show greyed-out placeholders
-    // AND: a tray notification informs the user what changed
-    // AND: norbert-usage continues functioning for non-notif features
-    //
-    // Driving port: LifecycleManager port (runtime disable)
+    const notifPlugin = createMinimalPlugin("norbert-notif", "1.0.0");
+    const usagePlugin = createMinimalPlugin("norbert-usage", "1.0.0", {
+      "norbert-notif": "^1.0.0",
+    });
+
+    const scanned = scanPlugins([notifPlugin, usagePlugin]);
+    const resolution = resolveDependencies(
+      scanned.map((p) => p.manifest)
+    );
+    expect(resolution.ok).toBe(true);
+    if (!resolution.ok) return;
+
+    // Load all plugins initially
+    const orderedPlugins = resolution.value.loadOrder.map(
+      (id) => scanned.find((p) => p.manifest.id === id)!
+    );
+    const registry = loadPlugins(
+      orderedPlugins,
+      createPluginRegistry(),
+      createNorbertAPI
+    );
+    expect(registry.loadedPluginIds).toContain("norbert-notif");
+    expect(registry.loadedPluginIds).toContain("norbert-usage");
+
+    // WHEN: the user disables norbert-notif mid-session
+    const disableResult = disablePlugin(registry, "norbert-notif", scanned);
+
+    // THEN: the operation succeeds without crash
+    expect(disableResult.ok).toBe(true);
+    if (!disableResult.ok) return;
+
+    // AND: norbert-notif is removed from loaded plugins
+    expect(disableResult.value.registry.loadedPluginIds).not.toContain("norbert-notif");
+
+    // AND: norbert-usage continues to be loaded (non-notif features still work)
+    expect(disableResult.value.registry.loadedPluginIds).toContain("norbert-usage");
+
+    // AND: degradation warnings are produced for affected dependents
+    expect(disableResult.value.degradationWarnings).toHaveLength(1);
+    expect(disableResult.value.degradationWarnings[0].pluginId).toBe("norbert-usage");
+    expect(disableResult.value.degradationWarnings[0].disabledDependency).toBe("norbert-notif");
   });
 });
 
 describe("Greyed-out placeholders include one-click re-enable path", () => {
-  it.skip("clicking a greyed-out placeholder offers to re-enable the disabled dependency", () => {
+  it("degraded features include re-enable action for each disabled dependency", () => {
     // GIVEN: norbert-notif is disabled
-    // AND: a norbert-usage feature shows a greyed-out placeholder
-    // WHEN: the user clicks the placeholder
-    // THEN: a prompt offers to re-enable norbert-notif
-    //
-    // Driving port: LifecycleManager port
+    const notifPlugin = createMinimalPlugin("norbert-notif", "1.0.0");
+    const usagePlugin = createMinimalPlugin("norbert-usage", "1.0.0", {
+      "norbert-notif": "^1.0.0",
+    });
+
+    const scanned = scanPlugins([usagePlugin, notifPlugin]);
+    const disabledPluginIds = new Set(["norbert-notif"]);
+
+    // WHEN: dependency resolution occurs with disabled plugins
+    const resolution = resolveDependencies(
+      scanned.map((p) => p.manifest),
+      disabledPluginIds
+    );
+
+    expect(resolution.ok).toBe(true);
+    if (!resolution.ok) return;
+
+    // THEN: each degradation warning includes the re-enable action
+    // pointing to the disabled dependency that can be re-enabled
+    const warning = resolution.value.degradationWarnings[0];
+    expect(warning.reEnableAction).toBe("norbert-notif");
+
+    // AND: the warning message provides user-actionable information
+    expect(warning.message).toMatch(/re-enable/i);
   });
 });

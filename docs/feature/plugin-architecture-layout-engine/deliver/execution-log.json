@@ -2,30 +2,243 @@
   "project_id": "plugin-architecture-layout-engine",
   "schema_version": "3.0",
   "events": [
-    {"sid": "01-01", "p": "PREPARE", "s": "EXECUTED", "d": "PASS", "t": "2026-03-12T23:35:00Z"},
-    {"sid": "01-01", "p": "RED_ACCEPTANCE", "s": "EXECUTED", "d": "PASS", "t": "2026-03-12T23:38:00Z"},
-    {"sid": "01-01", "p": "RED_UNIT", "s": "EXECUTED", "d": "PASS", "t": "2026-03-12T23:40:00Z"},
-    {"sid": "01-01", "p": "GREEN", "s": "EXECUTED", "d": "PASS", "t": "2026-03-12T23:42:00Z"},
-    {"sid": "01-01", "p": "COMMIT", "s": "EXECUTED", "d": "PASS", "t": "2026-03-12T23:44:00Z"},
-    {"sid": "01-02", "p": "PREPARE", "s": "EXECUTED", "d": "PASS", "t": "2026-03-13T01:49:00Z"},
-    {"sid": "01-02", "p": "RED_ACCEPTANCE", "s": "EXECUTED", "d": "PASS", "t": "2026-03-13T01:50:00Z"},
-    {"sid": "01-02", "p": "RED_UNIT", "s": "EXECUTED", "d": "PASS", "t": "2026-03-13T01:52:00Z"},
-    {"sid": "01-02", "p": "GREEN", "s": "EXECUTED", "d": "PASS", "t": "2026-03-13T01:53:00Z"},
-    {"sid": "01-02", "p": "COMMIT", "s": "EXECUTED", "d": "PASS", "t": "2026-03-13T01:53:30Z"},
-    {"sid": "01-03", "p": "PREPARE", "s": "EXECUTED", "d": "PASS", "t": "2026-03-12T18:57:00Z"},
-    {"sid": "01-03", "p": "RED_ACCEPTANCE", "s": "EXECUTED", "d": "PASS", "t": "2026-03-12T18:59:07Z"},
-    {"sid": "01-03", "p": "RED_UNIT", "s": "EXECUTED", "d": "PASS", "t": "2026-03-12T18:59:45Z"},
-    {"sid": "01-03", "p": "GREEN", "s": "EXECUTED", "d": "PASS", "t": "2026-03-12T19:01:06Z"},
-    {"sid": "01-03", "p": "COMMIT", "s": "EXECUTED", "d": "PASS", "t": "2026-03-12T19:01:30Z"},
-    {"sid": "01-04", "p": "PREPARE", "s": "EXECUTED", "d": "PASS", "t": "2026-03-12T18:56:00Z"},
-    {"sid": "01-04", "p": "RED_ACCEPTANCE", "s": "EXECUTED", "d": "PASS", "t": "2026-03-12T18:58:00Z"},
-    {"sid": "01-04", "p": "RED_UNIT", "s": "EXECUTED", "d": "PASS", "t": "2026-03-12T18:59:00Z"},
-    {"sid": "01-04", "p": "GREEN", "s": "EXECUTED", "d": "PASS", "t": "2026-03-12T19:01:00Z"},
-    {"sid": "01-04", "p": "COMMIT", "s": "EXECUTED", "d": "PASS", "t": "2026-03-12T19:02:00Z"},
-    {"sid": "01-05", "p": "PREPARE", "s": "EXECUTED", "d": "PASS", "t": "2026-03-12T18:55:00Z"},
-    {"sid": "01-05", "p": "RED_ACCEPTANCE", "s": "EXECUTED", "d": "PASS", "t": "2026-03-12T18:59:00Z"},
-    {"sid": "01-05", "p": "RED_UNIT", "s": "EXECUTED", "d": "PASS", "t": "2026-03-12T19:00:00Z"},
-    {"sid": "01-05", "p": "GREEN", "s": "EXECUTED", "d": "PASS", "t": "2026-03-12T19:02:00Z"},
-    {"sid": "01-05", "p": "COMMIT", "s": "EXECUTED", "d": "PASS", "t": "2026-03-12T19:03:00Z"}
+    {
+      "sid": "01-01",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-12T23:35:00Z"
+    },
+    {
+      "sid": "01-01",
+      "p": "RED_ACCEPTANCE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-12T23:38:00Z"
+    },
+    {
+      "sid": "01-01",
+      "p": "RED_UNIT",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-12T23:40:00Z"
+    },
+    {
+      "sid": "01-01",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-12T23:42:00Z"
+    },
+    {
+      "sid": "01-01",
+      "p": "COMMIT",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-12T23:44:00Z"
+    },
+    {
+      "sid": "01-02",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-13T01:49:00Z"
+    },
+    {
+      "sid": "01-02",
+      "p": "RED_ACCEPTANCE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-13T01:50:00Z"
+    },
+    {
+      "sid": "01-02",
+      "p": "RED_UNIT",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-13T01:52:00Z"
+    },
+    {
+      "sid": "01-02",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-13T01:53:00Z"
+    },
+    {
+      "sid": "01-02",
+      "p": "COMMIT",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-13T01:53:30Z"
+    },
+    {
+      "sid": "01-03",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-12T18:57:00Z"
+    },
+    {
+      "sid": "01-03",
+      "p": "RED_ACCEPTANCE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-12T18:59:07Z"
+    },
+    {
+      "sid": "01-03",
+      "p": "RED_UNIT",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-12T18:59:45Z"
+    },
+    {
+      "sid": "01-03",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-12T19:01:06Z"
+    },
+    {
+      "sid": "01-03",
+      "p": "COMMIT",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-12T19:01:30Z"
+    },
+    {
+      "sid": "01-04",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-12T18:56:00Z"
+    },
+    {
+      "sid": "01-04",
+      "p": "RED_ACCEPTANCE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-12T18:58:00Z"
+    },
+    {
+      "sid": "01-04",
+      "p": "RED_UNIT",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-12T18:59:00Z"
+    },
+    {
+      "sid": "01-04",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-12T19:01:00Z"
+    },
+    {
+      "sid": "01-04",
+      "p": "COMMIT",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-12T19:02:00Z"
+    },
+    {
+      "sid": "01-05",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-12T18:55:00Z"
+    },
+    {
+      "sid": "01-05",
+      "p": "RED_ACCEPTANCE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-12T18:59:00Z"
+    },
+    {
+      "sid": "01-05",
+      "p": "RED_UNIT",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-12T19:00:00Z"
+    },
+    {
+      "sid": "01-05",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-12T19:02:00Z"
+    },
+    {
+      "sid": "01-05",
+      "p": "COMMIT",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-12T19:03:00Z"
+    },
+    {
+      "sid": "01-06",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-13T01:18:19Z"
+    },
+    {
+      "sid": "01-06",
+      "p": "RED_ACCEPTANCE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-13T01:18:26Z"
+    },
+    {
+      "sid": "01-06",
+      "p": "RED_UNIT",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-13T01:18:26Z"
+    },
+    {
+      "sid": "01-06",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-13T01:18:26Z"
+    },
+    {
+      "sid": "01-06",
+      "p": "COMMIT",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-13T01:18:27Z"
+    },
+    {
+      "sid": "01-07",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-13T01:20:22Z"
+    },
+    {
+      "sid": "01-07",
+      "p": "RED_ACCEPTANCE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-13T01:22:08Z"
+    },
+    {
+      "sid": "01-07",
+      "p": "RED_UNIT",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-13T01:23:38Z"
+    },
+    {
+      "sid": "01-07",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-13T01:25:38Z"
+    }
   ]
 }

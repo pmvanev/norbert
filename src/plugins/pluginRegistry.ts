@@ -120,3 +120,25 @@ export const getPublicAPI = (
   registry: PluginRegistry,
   pluginId: string
 ): PluginPublicAPI | undefined => registry.publicApis.get(pluginId);
+
+/// Returns a new registry with all traces of the specified plugin removed.
+/// Removes from loadedPluginIds, views, tabs, hookRegistrations, statusItems,
+/// and publicApis.
+export const removePlugin = (
+  registry: PluginRegistry,
+  pluginId: string
+): PluginRegistry => {
+  const publicApis = new Map(registry.publicApis);
+  publicApis.delete(pluginId);
+
+  return {
+    views: registry.views.filter((v) => v.pluginId !== pluginId),
+    tabs: registry.tabs.filter((t) => t.pluginId !== pluginId),
+    hookRegistrations: registry.hookRegistrations.filter(
+      (h) => h.pluginId !== pluginId
+    ),
+    statusItems: registry.statusItems.filter((s) => s.pluginId !== pluginId),
+    loadedPluginIds: registry.loadedPluginIds.filter((id) => id !== pluginId),
+    publicApis,
+  };
+};
