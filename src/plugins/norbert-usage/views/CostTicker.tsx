@@ -18,18 +18,14 @@ interface CostTickerProps {
 // Zone-to-CSS class mapping
 // ---------------------------------------------------------------------------
 
-const zoneClass = (zone: ColorZone): string => {
-  switch (zone) {
-    case "red":
-      return "cost-ticker-red";
-    case "amber":
-      return "cost-ticker-amber";
-    case "dim":
-      return "cost-ticker-dim";
-    default:
-      return "cost-ticker-brand";
-  }
+const ZONE_CLASS_MAP: Record<ColorZone, string> = {
+  red: "cost-ticker-red",
+  amber: "cost-ticker-amber",
+  dim: "cost-ticker-dim",
+  brand: "cost-ticker-brand",
 };
+
+const zoneClass = (zone: ColorZone): string => ZONE_CLASS_MAP[zone];
 
 // ---------------------------------------------------------------------------
 // Digit roll helper: split label into individual characters for animation

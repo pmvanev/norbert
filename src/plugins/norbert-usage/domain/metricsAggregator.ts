@@ -114,36 +114,36 @@ const applyCommonFields = (
  * - session_start: increment active agent count
  * - All events: increment hookEventCount, update lastEventAt
  */
+/** Dispatch table: event type -> metrics transformation. */
+const eventHandlers: Record<
+  string,
+  (metrics: SessionMetrics, event: AggregatorEvent, pricingTable: PricingTable) => SessionMetrics
+> = {
+  prompt_submit: (metrics, event, pricingTable) =>
+    applyTokenUsage(metrics, event.payload, pricingTable),
+
+  tool_call_end: (metrics, event, pricingTable) =>
+    applyTokenUsage(metrics, event.payload, pricingTable),
+
+  tool_call_start: (metrics) =>
+    applyToolCallStart(metrics),
+
+  session_start: (metrics, event) =>
+    applySessionStart(metrics, event.receivedAt),
+
+  agent_complete: (metrics, event, pricingTable) =>
+    applyAgentCompleteCount(applyTokenUsage(metrics, event.payload, pricingTable)),
+};
+
+/** Identity handler for unknown event types: only common fields updated. */
+const identityHandler = (metrics: SessionMetrics): SessionMetrics => metrics;
+
 export const aggregateEvent = (
   previous: SessionMetrics,
   event: AggregatorEvent,
   pricingTable: PricingTable,
 ): SessionMetrics => {
-  let metrics = previous;
-
-  switch (event.eventType) {
-    case "prompt_submit":
-    case "tool_call_end":
-      metrics = applyTokenUsage(metrics, event.payload, pricingTable);
-      break;
-
-    case "tool_call_start":
-      metrics = applyToolCallStart(metrics);
-      break;
-
-    case "session_start":
-      metrics = applySessionStart(metrics, event.receivedAt);
-      break;
-
-    case "agent_complete":
-      metrics = applyTokenUsage(metrics, event.payload, pricingTable);
-      metrics = applyAgentCompleteCount(metrics);
-      break;
-
-    default:
-      // Unknown event types: only common fields updated
-      break;
-  }
-
-  return applyCommonFields(metrics, event.receivedAt);
+  const handler = eventHandlers[event.eventType] ?? identityHandler;
+  const updated = handler(previous, event, pricingTable);
+  return applyCommonFields(updated, event.receivedAt);
 };

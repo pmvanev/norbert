@@ -18,16 +18,13 @@ interface GaugeClusterViewProps {
 // Urgency-to-CSS class mapping
 // ---------------------------------------------------------------------------
 
-const urgencyClass = (urgency: string): string => {
-  switch (urgency) {
-    case "red":
-      return "gauge-urgency-red";
-    case "amber":
-      return "gauge-urgency-amber";
-    default:
-      return "gauge-urgency-normal";
-  }
+const URGENCY_CLASS_MAP: Record<string, string> = {
+  red: "gauge-urgency-red",
+  amber: "gauge-urgency-amber",
 };
+
+const urgencyClass = (urgency: string): string =>
+  URGENCY_CLASS_MAP[urgency] ?? "gauge-urgency-normal";
 
 // ---------------------------------------------------------------------------
 // Component

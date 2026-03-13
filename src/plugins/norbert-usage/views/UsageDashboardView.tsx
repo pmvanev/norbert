@@ -20,16 +20,13 @@ interface UsageDashboardViewProps {
 // Urgency-to-CSS class mapping
 // ---------------------------------------------------------------------------
 
-const urgencyClass = (urgency: string): string => {
-  switch (urgency) {
-    case "red":
-      return "metric-card-urgency-red";
-    case "amber":
-      return "metric-card-urgency-amber";
-    default:
-      return "metric-card-urgency-normal";
-  }
+const URGENCY_CLASS_MAP: Record<string, string> = {
+  red: "metric-card-urgency-red",
+  amber: "metric-card-urgency-amber",
 };
+
+const urgencyClass = (urgency: string): string =>
+  URGENCY_CLASS_MAP[urgency] ?? "metric-card-urgency-normal";
 
 // ---------------------------------------------------------------------------
 // Metric card renderer
