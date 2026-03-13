@@ -33,7 +33,7 @@ const urgencyClass = (urgency: string): string =>
 export const GaugeClusterView = ({ data }: GaugeClusterViewProps) => (
   <div className="gauge-cluster" role="region" aria-label="Gauge Cluster">
     <div className="sec-hdr">
-      <span className="sec-t">// gauge cluster</span>
+      <span className="sec-t">Gauge Cluster</span>
     </div>
     <div className="gauge-cluster-grid">
       <div className={`gauge-card tachometer ${urgencyClass(data.tachometer.urgency)}`}>

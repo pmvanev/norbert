@@ -556,26 +556,25 @@ code, pre, .mono,
 
 .sec-hdr {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
-  margin-bottom: 6px;
-  padding: 0 11px;
+  margin-bottom: 8px;
+  padding: 6px 12px 4px;
+  border-bottom: 1px solid var(--border-card);
 }
 
 .sec-t {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: var(--sec-ls);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
   text-transform: uppercase;
-  color: var(--text-m);
+  color: var(--text-p);
   font-family: var(--font-mono);
 }
 
 .sec-a {
-  font-size: 9px;
-  color: var(--brand);
-  cursor: pointer;
-  opacity: 0.7;
+  font-size: 10px;
+  color: var(--text-m);
   font-family: var(--font-mono);
 }
 

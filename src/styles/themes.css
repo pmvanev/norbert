@@ -92,7 +92,7 @@
   --node-spec-bg: rgba(0, 229, 204, 0.02);
   --node-spec-b: rgba(0, 229, 204, 0.15);
   --node-active-bg: rgba(0, 229, 204, 0.08);
-  --osc-bg: rgba(0, 8, 6, 0.85);
+  --osc-bg: rgb(0, 8, 6);
   --osc-grid: rgba(0, 229, 204, 0.08);
   --scanlines: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0, 0, 0, 0.07) 3px, rgba(0, 0, 0, 0.07) 4px);
   --live-bg: rgba(0, 229, 204, 0.04);
@@ -190,7 +190,7 @@
   --node-spec-bg: rgba(255, 255, 255, 0.03);
   --node-spec-b: rgba(255, 255, 255, 0.1);
   --node-active-bg: rgba(34, 197, 94, 0.07);
-  --osc-bg: rgba(30, 29, 26, 0.85);
+  --osc-bg: rgb(30, 29, 26);
   --osc-grid: rgba(218, 119, 86, 0.1);
   --scanlines: none;
   --live-bg: rgba(218, 119, 86, 0.05);
@@ -288,7 +288,7 @@
   --node-spec-bg: rgba(255, 255, 255, 0.03);
   --node-spec-b: rgba(255, 255, 255, 0.1);
   --node-active-bg: rgba(137, 209, 133, 0.07);
-  --osc-bg: rgba(15, 15, 15, 0.9);
+  --osc-bg: rgb(15, 15, 15);
   --osc-grid: rgba(0, 120, 212, 0.12);
   --scanlines: none;
   --live-bg: rgba(0, 120, 212, 0.04);
@@ -386,7 +386,7 @@
   --node-spec-bg: rgba(0, 0, 0, 0.02);
   --node-spec-b: rgba(0, 0, 0, 0.08);
   --node-active-bg: rgba(22, 163, 74, 0.07);
-  --osc-bg: rgba(242, 241, 238, 0.9);
+  --osc-bg: rgb(242, 241, 238);
   --osc-grid: rgba(218, 119, 86, 0.1);
   --scanlines: none;
   --live-bg: rgba(218, 119, 86, 0.05);
@@ -484,7 +484,7 @@
   --node-spec-bg: rgba(0, 0, 0, 0.02);
   --node-spec-b: rgba(0, 0, 0, 0.1);
   --node-active-bg: rgba(56, 138, 52, 0.07);
-  --osc-bg: rgba(243, 243, 243, 0.9);
+  --osc-bg: rgb(243, 243, 243);
   --osc-grid: rgba(0, 120, 212, 0.1);
   --scanlines: none;
   --live-bg: rgba(0, 120, 212, 0.04);

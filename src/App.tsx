@@ -88,8 +88,13 @@ function App() {
   const [pluginRegistry] = useState(initializePluginSystem);
 
   /// Initialize sidebar from plugin registry views.
+  /// Filter out drill-down views (session-detail) that only make sense
+  /// as a navigation target, not a standalone sidebar entry.
   const sidebarState = useMemo(
-    () => createDefaultSidebarState(getAllViews(pluginRegistry), []),
+    () => createDefaultSidebarState(
+      getAllViews(pluginRegistry).filter((v) => v.id !== "session-detail"),
+      [],
+    ),
     [pluginRegistry]
   );
   const visibleSidebarItems = useMemo(

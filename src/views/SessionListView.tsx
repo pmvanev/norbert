@@ -69,6 +69,10 @@ export function SessionListView({ sessions, onSessionSelect }: SessionListViewPr
 
   return (
     <section className="session-list">
+      <div className="sec-hdr">
+        <span className="sec-t">Sessions</span>
+        <span className="sec-a">{sessions.length} total</span>
+      </div>
       {sortedSessions.map((session) => (
         <SessionRow key={session.id} session={session} onSelect={onSessionSelect} />
       ))}

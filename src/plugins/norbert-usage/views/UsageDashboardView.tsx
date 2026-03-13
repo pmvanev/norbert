@@ -105,7 +105,7 @@ export const UsageDashboardView = ({
 }: UsageDashboardViewProps) => (
   <div className="usage-dashboard" role="region" aria-label="Usage Dashboard">
     <div className="sec-hdr">
-      <span className="sec-t">// session metrics</span>
+      <span className="sec-t">Session Usage</span>
     </div>
 
     {dashboard.isOnboarding && dailyCosts.length === 0 && <OnboardingMessage />}
@@ -122,7 +122,7 @@ export const UsageDashboardView = ({
     {dailyCosts.length > 0 && (
       <>
         <div className="sec-hdr" style={{ marginTop: 11 }}>
-          <span className="sec-t">// 7-day burn</span>
+          <span className="sec-t">7-Day Burn</span>
         </div>
         <BurnChart dailyCosts={dailyCosts} />
       </>

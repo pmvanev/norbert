@@ -54,7 +54,7 @@ const GRID_LABEL_COLOR = "rgba(255, 255, 255, 0.4)";
 const OVERLAY_COLOR_PROP = "--text-p";
 const OVERLAY_COLOR_FALLBACK = "#c8f0e8";
 const BACKGROUND_COLOR_PROP = "--osc-bg";
-const BACKGROUND_COLOR_FALLBACK = "rgba(0, 8, 6, 0.85)";
+const BACKGROUND_COLOR_FALLBACK = "rgb(0, 8, 6)";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -236,7 +236,7 @@ export const OscilloscopeView = ({ store }: OscilloscopeViewProps) => {
   return (
     <div className="oscilloscope" role="img" aria-label="Token burn oscilloscope">
       <div className="sec-hdr">
-        <span className="sec-t">// token burn rate</span>
+        <span className="sec-t">Token Burn Rate</span>
         <span className="sec-a">60s · 10Hz</span>
       </div>
       <div ref={containerRef} className="osc-main">
