@@ -158,12 +158,14 @@ impl EventStore for SqliteEventStore {
             .map_err(|e| format!("Failed to begin transaction: {}", e))?;
 
         let result = (|| -> Result<(), String> {
-            // Upsert session: create if not exists, increment event_count
+            // Upsert session: create if not exists, increment event_count.
+            // Clear ended_at on any new event — Claude Code reuses session IDs
+            // after sending SessionEnd, so a session can "reopen".
             self.connection
                 .execute(
                     "INSERT INTO sessions (id, started_at, ended_at, event_count)
                      VALUES (?1, ?2, NULL, 1)
-                     ON CONFLICT(id) DO UPDATE SET event_count = event_count + 1",
+                     ON CONFLICT(id) DO UPDATE SET event_count = event_count + 1, ended_at = NULL",
                     rusqlite::params![event.session_id, event.received_at],
                 )
                 .map_err(|e| format!("Failed to upsert session: {}", e))?;

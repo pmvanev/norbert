@@ -67,6 +67,33 @@ fn get_session_events(state: tauri::State<AppState>, session_id: String) -> Vec<
     store.get_events_for_session(&session_id).unwrap_or_default()
 }
 
+/// DEBUG: dump top sessions to a file for diagnosing active-session detection.
+/// Writes to %APPDATA%/norbert/debug-sessions.txt.
+#[tauri::command]
+fn debug_sessions(state: tauri::State<AppState>) -> String {
+    let store = state.event_store.lock().unwrap();
+    let sessions = store.get_sessions().unwrap_or_default();
+    let mut lines = Vec::new();
+    lines.push(format!("timestamp: {}", chrono::Utc::now().to_rfc3339()));
+    lines.push(format!("total sessions: {}", sessions.len()));
+    lines.push(String::new());
+    for (i, s) in sessions.iter().take(10).enumerate() {
+        lines.push(format!(
+            "#{} id={} events={} ended_at={:?} last_event_at={:?}",
+            i, &s.id[..s.id.len().min(16)], s.event_count, s.ended_at, s.last_event_at
+        ));
+    }
+    let output = lines.join("\n");
+
+    // Also write to file
+    if let Some(data_dir) = dirs::data_dir() {
+        let debug_path = data_dir.join("norbert").join("debug-sessions.txt");
+        let _ = std::fs::write(&debug_path, &output);
+    }
+
+    output
+}
+
 /// Initialize the SQLite event store from the platform data directory.
 fn initialize_event_store() -> Result<SqliteEventStore, String> {
     let db_path = adapters::db::resolve_database_path()?;
@@ -167,7 +194,7 @@ pub fn run() {
                 .build(app)?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet, get_status, get_latest_session, get_sessions, get_session_events])
+        .invoke_handler(tauri::generate_handler![greet, get_status, get_latest_session, get_sessions, get_session_events, debug_sessions])
         .run(tauri::generate_context!())
         .expect("error while running Norbert");
 }
