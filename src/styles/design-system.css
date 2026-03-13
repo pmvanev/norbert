@@ -606,7 +606,7 @@ code, pre, .mono,
 
 .gauge-cluster-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 8px;
 }
 
@@ -614,6 +614,7 @@ code, pre, .mono,
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 4px;
   padding: 12px 8px;
   background: var(--bg-card);
@@ -641,6 +642,14 @@ code, pre, .mono,
   font-weight: 700;
   line-height: 1;
   color: var(--text-p);
+}
+
+.gauge-value-lg {
+  font-size: 28px;
+}
+
+.gauge-value-sm {
+  font-size: 14px;
 }
 
 .gauge-unit {
@@ -671,9 +680,111 @@ code, pre, .mono,
   border-color: rgba(255, 69, 96, 0.25);
 }
 
-/* Warning cluster (hook health) spans full width */
+/* Arc gauge wrapper — positions SVG behind the value */
+.gauge-card-arc {
+  padding: 8px 8px 10px;
+}
+
+.gauge-arc-wrap {
+  position: relative;
+  width: 76px;
+  height: 76px;
+}
+
+.gauge-arc-svg {
+  display: block;
+  transform: rotate(135deg);
+}
+
+.gauge-arc-fill {
+  transition: stroke-dasharray 0.3s ease;
+}
+
+.gauge-arc-inner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+}
+
+.gauge-arc-inner .gauge-value {
+  font-size: 18px;
+}
+
+.gauge-arc-inner .gauge-unit {
+  font-size: 7px;
+}
+
+/* RPM agent dots */
+.gauge-rpm-dots {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.gauge-rpm-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.gauge-rpm-dot.live {
+  background: var(--brand);
+  box-shadow: 0 0 6px var(--brand);
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+.gauge-rpm-dot.done {
+  background: var(--text-m);
+  opacity: 0.3;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+
+/* Hook health status dot */
+.gauge-health-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-bottom: 4px;
+}
+
+.gauge-health-dot.live {
+  background: var(--brand);
+  box-shadow: 0 0 6px var(--brand);
+}
+
+.gauge-health-dot.warn {
+  background: var(--amber);
+  box-shadow: 0 0 6px var(--amber);
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+/* Odometer + RPM + warning span layout */
+.gauge-card.odometer,
+.gauge-card.rpm-counter {
+  padding: 16px 8px;
+}
+
 .gauge-card.warning-cluster {
   grid-column: 1 / -1;
+  flex-direction: row;
+  gap: 8px;
+  padding: 8px 16px;
+}
+
+.gauge-card.warning-cluster .gauge-label {
+  margin: 0;
+}
+
+.gauge-card.warning-cluster .gauge-value {
+  font-size: 12px;
 }
 
 /* ═══ OSCILLOSCOPE ═══ */

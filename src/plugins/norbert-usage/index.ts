@@ -12,6 +12,8 @@ import { NORBERT_USAGE_MANIFEST } from "./manifest";
 import { createHookProcessor } from "./hookProcessor";
 import { createMetricsStore } from "./adapters/metricsStore";
 import { DEFAULT_PRICING_TABLE } from "./domain/pricingModel";
+import { appendSample } from "./domain/timeSeriesSampler";
+import type { RateSample } from "./domain/types";
 
 // ---------------------------------------------------------------------------
 // Shared metrics store -- module-level so App.tsx and the hook processor
@@ -30,7 +32,7 @@ const GAUGE_CLUSTER_VIEW_ICON = "⧉"; // grid symbol matching mockup
 
 const OSCILLOSCOPE_VIEW_ID = "oscilloscope";
 const OSCILLOSCOPE_VIEW_LABEL = "Oscilloscope";
-const OSCILLOSCOPE_VIEW_ICON = "⚡"; // lightning bolt matching mockup
+const OSCILLOSCOPE_VIEW_ICON = "∿"; // sine wave — oscilloscope trace
 
 const USAGE_DASHBOARD_VIEW_ID = "usage-dashboard";
 const USAGE_DASHBOARD_VIEW_LABEL = "Usage Dashboard";
@@ -124,11 +126,23 @@ const onLoad = (api: NorbertAPI): void => {
     );
   }
 
-  // Wire hook processor to the shared module-level store
+  // Wire hook processor to the shared module-level store.
+  // On each event: reduce metrics, compute burn rate, push a time series sample.
   const processor = createHookProcessor({
     updateMetrics: (reducer) => {
-      const nextMetrics = reducer(usageMetricsStore.getMetrics());
-      usageMetricsStore.update(nextMetrics, usageMetricsStore.getTimeSeries());
+      const reduced = reducer(usageMetricsStore.getMetrics());
+      const now = Date.now();
+      const startTime = reduced.sessionStartedAt
+        ? new Date(reduced.sessionStartedAt).getTime()
+        : now;
+      const elapsedSec = Math.max(1, (now - startTime) / 1000);
+      const burnRate = reduced.totalTokens / elapsedSec;
+      const costRate = reduced.sessionCost / elapsedSec;
+
+      const nextMetrics = { ...reduced, burnRate };
+      const sample: RateSample = { timestamp: now, tokenRate: burnRate, costRate };
+      const nextTimeSeries = appendSample(usageMetricsStore.getTimeSeries(), sample);
+      usageMetricsStore.update(nextMetrics, nextTimeSeries);
     },
     pricingTable: DEFAULT_PRICING_TABLE,
   });
