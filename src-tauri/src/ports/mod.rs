@@ -167,6 +167,7 @@ mod tests {
             started_at: "2026-03-08T10:00:00Z".to_string(),
             ended_at: None,
             event_count: 3,
+            last_event_at: Some("2026-03-08T10:05:00Z".to_string()),
         }];
         let store = StubEventStore::with_sessions(sessions);
         assert_eq!(store.get_sessions().unwrap().len(), 1);

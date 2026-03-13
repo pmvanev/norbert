@@ -17,6 +17,7 @@ export interface SessionInfo {
   readonly started_at: string;
   readonly ended_at: string | null;
   readonly event_count: number;
+  readonly last_event_at: string | null;
 }
 
 /// Format the application header from name and version.
@@ -116,11 +117,25 @@ export function deriveConnectionStatus(
   return deriveStatus(latestSession);
 }
 
-/// Determine whether a session is currently active (no ended_at timestamp).
+/// Maximum age in milliseconds before a session without an ended_at
+/// is considered stale. Sessions that stop sending events (e.g., terminal
+/// closed without a Stop hook) will fade out after this threshold.
+const STALE_SESSION_MS = 2 * 60 * 1000; // 2 minutes
+
+/// Determine whether a session is currently active.
 ///
-/// Pure function: returns true when the session has not ended.
-export function isSessionActive(session: SessionInfo): boolean {
-  return session.ended_at === null;
+/// Pure function: returns true when the session has not ended AND has
+/// received an event within the staleness threshold. This prevents
+/// sessions that never received a SessionEnd event from glowing forever.
+export function isSessionActive(
+  session: SessionInfo,
+  now: number = Date.now(),
+): boolean {
+  if (session.ended_at !== null) return false;
+  if (session.last_event_at === null) return false;
+
+  const lastEventTime = new Date(session.last_event_at).getTime();
+  return now - lastEventTime < STALE_SESSION_MS;
 }
 
 /// Sort sessions by started_at timestamp, most recent first.

@@ -134,6 +134,7 @@ describe("deriveStatus", () => {
       started_at: "2026-03-08T10:00:00Z",
       ended_at: "2026-03-08T10:08:12Z",
       event_count: 30,
+      last_event_at: "2026-03-08T10:08:12Z",
     };
     expect(deriveStatus(session)).toBe("Listening");
   });
@@ -144,6 +145,7 @@ describe("deriveStatus", () => {
       started_at: "2026-03-08T10:00:00Z",
       ended_at: null,
       event_count: 5,
+      last_event_at: "2026-03-08T10:05:00Z",
     };
     expect(deriveStatus(session)).toBe("Active session");
   });
@@ -160,6 +162,7 @@ describe("deriveConnectionStatus", () => {
       started_at: "2026-03-08T10:00:00Z",
       ended_at: "2026-03-08T10:30:00Z",
       event_count: 30,
+      last_event_at: "2026-03-08T10:30:00Z",
     };
     expect(deriveConnectionStatus(1, 30, endedSession)).toBe("Listening");
   });
@@ -170,6 +173,7 @@ describe("deriveConnectionStatus", () => {
       started_at: "2026-03-08T10:00:00Z",
       ended_at: null,
       event_count: 5,
+      last_event_at: "2026-03-08T10:05:00Z",
     };
     expect(deriveConnectionStatus(1, 5, activeSession)).toBe("Active session");
   });

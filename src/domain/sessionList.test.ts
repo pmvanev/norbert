@@ -13,18 +13,37 @@ function buildSession(overrides: Partial<SessionInfo> = {}): SessionInfo {
     started_at: "2026-03-12T10:00:00Z",
     ended_at: "2026-03-12T10:08:12Z",
     event_count: 30,
+    last_event_at: "2026-03-12T10:08:12Z",
     ...overrides,
   };
 }
 
 describe("isSessionActive", () => {
-  it("returns true when ended_at is null", () => {
-    const session = buildSession({ ended_at: null });
-    expect(isSessionActive(session)).toBe(true);
+  it("returns true when ended_at is null and last event is recent", () => {
+    const now = new Date("2026-03-12T10:01:00Z").getTime();
+    const session = buildSession({
+      ended_at: null,
+      last_event_at: "2026-03-12T10:00:30Z",
+    });
+    expect(isSessionActive(session, now)).toBe(true);
   });
 
   it("returns false when ended_at is a timestamp", () => {
     const session = buildSession({ ended_at: "2026-03-12T10:08:12Z" });
+    expect(isSessionActive(session)).toBe(false);
+  });
+
+  it("returns false when ended_at is null but last event is stale (>2 min)", () => {
+    const now = new Date("2026-03-12T10:10:00Z").getTime();
+    const session = buildSession({
+      ended_at: null,
+      last_event_at: "2026-03-12T10:00:00Z",
+    });
+    expect(isSessionActive(session, now)).toBe(false);
+  });
+
+  it("returns false when last_event_at is null", () => {
+    const session = buildSession({ ended_at: null, last_event_at: null });
     expect(isSessionActive(session)).toBe(false);
   });
 });

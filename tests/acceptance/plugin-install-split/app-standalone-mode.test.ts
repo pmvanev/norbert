@@ -87,6 +87,7 @@ describe("App transitions to active when plugin sends first event", () => {
       started_at: "2026-03-09T10:00:00Z",
       ended_at: null,
       event_count: 1,
+      last_event_at: "2026-03-09T10:00:00Z",
     };
     expect(deriveStatus(activeSession)).toBe("Active session");
     expect(isEmptyState(1)).toBe(false);
@@ -95,13 +96,6 @@ describe("App transitions to active when plugin sends first event", () => {
 
 describe("Status derivation rules", () => {
   it("status is 'No plugin connected' when 0 sessions and 0 events", () => {
-    // This tests the NEW derive_status behavior that will be added.
-    // Current deriveStatus returns "Listening" for null session.
-    // After implementation, it should return "No plugin connected"
-    // when session_count=0 AND event_count=0.
-    //
-    // The driving port will be an updated deriveStatus or a new
-    // deriveConnectionStatus(sessionCount, eventCount, latestSession) function.
     const status = buildNoPluginStatus();
     expect(status.session_count).toBe(0);
     expect(status.event_count).toBe(0);
@@ -114,6 +108,7 @@ describe("Status derivation rules", () => {
       started_at: "2026-03-09T10:00:00Z",
       ended_at: "2026-03-09T10:30:00Z",
       event_count: 45,
+      last_event_at: "2026-03-09T10:30:00Z",
     };
     expect(deriveStatus(endedSession)).toBe("Listening");
   });
@@ -124,6 +119,7 @@ describe("Status derivation rules", () => {
       started_at: "2026-03-09T10:00:00Z",
       ended_at: null,
       event_count: 30,
+      last_event_at: "2026-03-09T10:05:00Z",
     };
     expect(deriveStatus(activeSession)).toBe("Active session");
   });
@@ -181,6 +177,7 @@ describe("App handles zero-to-one session transition correctly", () => {
       started_at: "2026-03-09T10:00:00Z",
       ended_at: null,
       event_count: 2,
+      last_event_at: "2026-03-09T10:00:05Z",
     };
     expect(deriveStatus(firstSession)).toBe("Active session");
     expect(isEmptyState(1)).toBe(false);

@@ -215,6 +215,10 @@ pub struct Session {
     pub ended_at: Option<String>,
     /// Number of events received in this session.
     pub event_count: u32,
+    /// ISO 8601 timestamp of the most recent event in this session.
+    /// Used by the frontend to detect stale sessions that never received
+    /// a SessionEnd event.
+    pub last_event_at: Option<String>,
 }
 
 /// Calculate the duration in seconds between two ISO 8601 timestamps.
@@ -251,13 +255,13 @@ mod tests {
     #[test]
     fn version_constant_matches_cargo_version() {
         // VERSION is pulled from Cargo.toml via env!("CARGO_PKG_VERSION")
-        assert_eq!(VERSION, "0.4.3");
+        assert_eq!(VERSION, "0.4.4");
     }
 
     #[test]
     fn tooltip_for_current_app_matches_expected() {
         let tooltip = format_tooltip(APP_NAME, VERSION);
-        assert_eq!(tooltip, "Norbert v0.4.2");
+        assert_eq!(tooltip, "Norbert v0.4.4");
     }
 
     #[test]
@@ -387,17 +391,20 @@ mod tests {
             started_at: "2026-03-08T10:00:00Z".to_string(),
             ended_at: Some("2026-03-08T11:00:00Z".to_string()),
             event_count: 5,
+            last_event_at: Some("2026-03-08T10:59:00Z".to_string()),
         };
         assert_eq!(session.id, "sess-abc");
         assert_eq!(session.started_at, "2026-03-08T10:00:00Z");
         assert_eq!(session.ended_at, Some("2026-03-08T11:00:00Z".to_string()));
         assert_eq!(session.event_count, 5);
+        assert_eq!(session.last_event_at, Some("2026-03-08T10:59:00Z".to_string()));
 
         let json = serde_json::to_value(&session).unwrap();
         assert!(json.get("id").is_some());
         assert!(json.get("started_at").is_some());
         assert!(json.get("ended_at").is_some());
         assert!(json.get("event_count").is_some());
+        assert!(json.get("last_event_at").is_some());
     }
 
     // --- Hook URL tests ---
@@ -470,6 +477,7 @@ mod tests {
             started_at: "2026-03-08T10:00:00Z".to_string(),
             ended_at: Some("2026-03-08T10:08:12Z".to_string()),
             event_count: 30,
+            last_event_at: Some("2026-03-08T10:08:12Z".to_string()),
         };
         assert_eq!(derive_status(Some(&ended_session)), "Listening");
 
@@ -478,6 +486,7 @@ mod tests {
             started_at: "2026-03-08T10:00:00Z".to_string(),
             ended_at: None,
             event_count: 5,
+            last_event_at: Some("2026-03-08T10:05:00Z".to_string()),
         };
         assert_eq!(derive_status(Some(&active_session)), "Active session");
     }
@@ -492,6 +501,7 @@ mod tests {
             started_at: "2026-03-08T10:00:00Z".to_string(),
             ended_at: None,
             event_count: 5,
+            last_event_at: Some("2026-03-08T10:05:00Z".to_string()),
         };
         let status = build_status_with_session(1, 5, Some(&active));
         assert_eq!(status.status, "Active session");
@@ -507,6 +517,7 @@ mod tests {
             started_at: "2026-03-08T10:00:00Z".to_string(),
             ended_at: Some("2026-03-08T10:30:00Z".to_string()),
             event_count: 30,
+            last_event_at: Some("2026-03-08T10:30:00Z".to_string()),
         };
         assert_eq!(build_status_with_session(1, 30, Some(&ended)).status, "Listening");
     }
@@ -524,6 +535,7 @@ mod tests {
             started_at: "2026-03-08T10:00:00Z".to_string(),
             ended_at: None,
             event_count: 5,
+            last_event_at: Some("2026-03-08T10:05:00Z".to_string()),
         };
         assert_eq!(
             derive_connection_status(1, 5, Some(&active_session)),

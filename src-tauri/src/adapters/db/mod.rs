@@ -123,13 +123,14 @@ impl SqliteEventStore {
 
 /// Map a SQLite row to a Session domain type.
 ///
-/// Expects columns in order: id, started_at, ended_at, event_count.
+/// Expects columns in order: id, started_at, ended_at, event_count, last_event_at.
 fn map_row_to_session(row: &rusqlite::Row) -> rusqlite::Result<Session> {
     Ok(Session {
         id: row.get(0)?,
         started_at: row.get(1)?,
         ended_at: row.get(2)?,
         event_count: row.get(3)?,
+        last_event_at: row.get(4)?,
     })
 }
 
@@ -213,7 +214,7 @@ impl EventStore for SqliteEventStore {
     fn get_sessions(&self) -> Result<Vec<Session>, String> {
         let mut stmt = self
             .connection
-            .prepare("SELECT id, started_at, ended_at, event_count FROM sessions ORDER BY started_at DESC")
+            .prepare("SELECT s.id, s.started_at, s.ended_at, s.event_count, (SELECT MAX(e.received_at) FROM events e WHERE e.session_id = s.id) as last_event_at FROM sessions s ORDER BY s.started_at DESC")
             .map_err(|e| format!("Failed to prepare sessions query: {}", e))?;
 
         let sessions = stmt
@@ -281,7 +282,7 @@ impl EventStore for SqliteEventStore {
         let mut stmt = self
             .connection
             .prepare(
-                "SELECT id, started_at, ended_at, event_count FROM sessions ORDER BY started_at DESC LIMIT 1",
+                "SELECT s.id, s.started_at, s.ended_at, s.event_count, (SELECT MAX(e.received_at) FROM events e WHERE e.session_id = s.id) as last_event_at FROM sessions s ORDER BY s.started_at DESC LIMIT 1",
             )
             .map_err(|e| format!("Failed to prepare latest session query: {}", e))?;
 
