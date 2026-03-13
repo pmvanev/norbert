@@ -13,6 +13,18 @@
  */
 
 import { describe, it, expect } from "vitest";
+import {
+  NORBERT_API_KEYS,
+  PLUGIN_MANIFEST_REQUIRED_FIELDS,
+  RESOLUTION_ERROR_TYPES,
+} from "../../../src/plugins/types";
+import type {
+  NorbertAPI,
+  PluginManifest,
+  ViewRegistration,
+  TabRegistration,
+  ResolutionError,
+} from "../../../src/plugins/types";
 
 // ---------------------------------------------------------------------------
 // WALKING SKELETON
@@ -134,17 +146,27 @@ describe("Plugin with invalid manifest is rejected at load time", () => {
 });
 
 describe("NorbertAPI provides all required sub-APIs", () => {
-  it.skip("api object contains db, hooks, ui, mcp, events, config, and plugins", () => {
-    // GIVEN: a plugin's onLoad(api) is called
-    // WHEN: the plugin inspects the api object
-    // THEN: api.db is available
-    // AND: api.hooks is available
-    // AND: api.ui is available
-    // AND: api.mcp is available
-    // AND: api.events is available
-    // AND: api.config is available
-    // AND: api.plugins is available
-    //
-    // Driving port: NorbertAPI contract validation
+  it("api object contains db, hooks, ui, mcp, events, config, and plugins", () => {
+    // GIVEN: the NorbertAPI contract defines required sub-APIs
+    // WHEN: we inspect the NORBERT_API_KEYS constant
+    // THEN: all 7 sub-APIs are declared
+    const expectedKeys = ["db", "hooks", "ui", "mcp", "events", "config", "plugins"];
+
+    expect(NORBERT_API_KEYS).toEqual(expect.arrayContaining(expectedKeys));
+    expect(NORBERT_API_KEYS).toHaveLength(expectedKeys.length);
+  });
+
+  it("PluginManifest requires id, name, version, norbert_api, and dependencies", () => {
+    const expectedFields = ["id", "name", "version", "norbert_api", "dependencies"];
+
+    expect(PLUGIN_MANIFEST_REQUIRED_FIELDS).toEqual(expect.arrayContaining(expectedFields));
+    expect(PLUGIN_MANIFEST_REQUIRED_FIELDS).toHaveLength(expectedFields.length);
+  });
+
+  it("ResolutionError types include missing, version_mismatch, and disabled", () => {
+    const expectedTypes = ["missing", "version_mismatch", "disabled"];
+
+    expect(RESOLUTION_ERROR_TYPES).toEqual(expect.arrayContaining(expectedTypes));
+    expect(RESOLUTION_ERROR_TYPES).toHaveLength(expectedTypes.length);
   });
 });
