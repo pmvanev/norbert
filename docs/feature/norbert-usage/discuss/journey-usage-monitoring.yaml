@@ -1,0 +1,294 @@
+journey:
+  name: "Usage Monitoring"
+  goal: "Monitor Claude Code session cost and token consumption in real time with ambient awareness"
+  persona: "Claude Code power user running multi-agent sessions"
+  feature_id: "norbert-usage"
+
+  emotional_arc:
+    start: "Anxious/Curious -- what is this session costing me?"
+    middle: "Oriented/Informed -- I see the numbers and patterns"
+    end: "Confident/Empowered -- I can monitor without losing focus"
+    pattern: "Confidence Building"
+
+  job_stories:
+    - id: "JS-1"
+      ref: "Cost Awareness During Active Sessions"
+    - id: "JS-2"
+      ref: "Understanding Token Consumption Patterns"
+    - id: "JS-3"
+      ref: "Detecting Anomalous Session Behavior in Real Time"
+    - id: "JS-4"
+      ref: "Ambient Monitoring Without Context Switching"
+
+steps:
+  - id: 1
+    name: "Broadcast Bar Orientation"
+    action: "User opens Norbert during active Claude Code session"
+    view: "Context Broadcast Bar (always visible)"
+
+    ui_mockup: |
+      +==========================================================================================+
+      | [# Context: cc:opus-4 -- refactor-auth v]  [* live]          [$1.47  | 87k tokens]      |
+      +==========================================================================================+
+
+    shared_artifacts:
+      - name: "session_id"
+        source: "Context Broadcast Bar session picker"
+        displayed_as: "${session_id}"
+        consumers:
+          - "Broadcast bar session label"
+          - "Gauge Cluster (scopes all instruments)"
+          - "Oscilloscope (scopes waveform)"
+          - "Default Dashboard (scopes all metrics)"
+
+      - name: "session_cost"
+        source: "Aggregated from session_events token counts via pricing model"
+        displayed_as: "${session_cost}"
+        consumers:
+          - "Broadcast bar cost ticker"
+          - "Gauge Cluster odometer"
+          - "Default Dashboard running cost card"
+          - "Floating panel minimized pill"
+          - "Tray popover cost line"
+
+      - name: "total_tokens"
+        source: "Sum of input_tokens + output_tokens from session_events"
+        displayed_as: "${total_tokens}"
+        consumers:
+          - "Broadcast bar token count"
+          - "Default Dashboard token count card"
+
+    emotional_state:
+      entry: "Anxious/Curious -- session is running, what does it cost?"
+      exit: "Oriented -- I see the session, cost, and live status immediately"
+
+    integration_checkpoint: |
+      Broadcast bar shows the correct active session.
+      Cost ticker matches sum of token costs from session_events for that session.
+      Live indicator reflects actual hook event recency.
+
+  - id: 2
+    name: "Gauge Cluster At-a-Glance"
+    action: "User views Gauge Cluster (floating panel or zone view)"
+    view: "Gauge Cluster"
+
+    ui_mockup: |
+      +-------------------+-------------------+-----------------+
+      |   TACHOMETER      |   FUEL GAUGE      |   ODOMETER      |
+      |   327 tok/s       |   43%             |   $1.47         |
+      |   redline @500    |   amber @70%      |   rolling digits|
+      +-------------------+-------------------+-----------------+
+      |   RPM COUNTER     |  WARNING CLUSTER  |   CLOCK         |
+      |   2 agents        |  Hook OK / DES OK |   00:23:47      |
+      +-------------------+-------------------+-----------------+
+
+    shared_artifacts:
+      - name: "token_burn_rate"
+        source: "Derived: tokens per second over rolling window from session_events"
+        displayed_as: "${token_burn_rate}"
+        consumers:
+          - "Gauge Cluster tachometer"
+          - "Oscilloscope current rate overlay"
+
+      - name: "context_window_pct"
+        source: "Derived: current context tokens / model context limit"
+        displayed_as: "${context_window_pct}"
+        consumers:
+          - "Gauge Cluster fuel gauge"
+          - "Default Dashboard context window card"
+
+      - name: "active_agent_count"
+        source: "Derived: agents with session_start but no agent_complete event"
+        displayed_as: "${active_agent_count}"
+        consumers:
+          - "Gauge Cluster RPM counter"
+          - "Default Dashboard active agents card"
+
+      - name: "hook_health"
+        source: "Derived: hook event latency and error rate from recent events"
+        displayed_as: "${hook_health}"
+        consumers:
+          - "Gauge Cluster warning cluster"
+          - "Default Dashboard hook health card"
+          - "Status bar hook health indicator"
+
+      - name: "session_duration"
+        source: "Derived: now - session_start timestamp"
+        displayed_as: "${session_duration}"
+        consumers:
+          - "Gauge Cluster clock"
+
+    emotional_state:
+      entry: "Oriented -- I know which session and its cost"
+      exit: "Informed -- I see 6 metrics at once, urgency is clear from gauge forms"
+
+    integration_checkpoint: |
+      All 6 instruments display data for the broadcast session.
+      Urgency zones (amber/red) activate at correct thresholds.
+      Odometer matches broadcast bar cost ticker exactly.
+
+  - id: 3
+    name: "Oscilloscope Waveform"
+    action: "User views Oscilloscope in Secondary zone or floating panel"
+    view: "Token Burn Oscilloscope"
+
+    ui_mockup: |
+      +====================================================================+
+      |  TOKEN BURN OSCILLOSCOPE                    [Live *]  327 tok/s    |
+      +--------------------------------------------------------------------+
+      |  Two traces scrolling right-to-left at ~10Hz:                      |
+      |  - Token rate (cyan/brand): waveform height = tokens per second    |
+      |  - Cost rate (amber): waveform height = dollars per second         |
+      |  Grid lines at time intervals (10s, 20s, 30s, 40s, 50s, 60s)      |
+      +--------------------------------------------------------------------+
+      |  [-] tokens (cyan)   [-] cost (amber)                              |
+      +--------------------------------------------------------------------+
+      | PEAK: 512 tok/s | AVG: 327 tok/s | TOTAL: 87,241 | WINDOW: 60s   |
+      +--------------------------------------------------------------------+
+
+    shared_artifacts:
+      - name: "token_rate_timeseries"
+        source: "Rolling 60s window of per-second token rate samples from session_events"
+        displayed_as: "${token_rate_timeseries}"
+        consumers:
+          - "Oscilloscope token trace"
+
+      - name: "cost_rate_timeseries"
+        source: "Rolling 60s window of per-second cost rate samples derived from token rates + pricing"
+        displayed_as: "${cost_rate_timeseries}"
+        consumers:
+          - "Oscilloscope cost trace"
+
+      - name: "peak_rate"
+        source: "Max value in token_rate_timeseries"
+        displayed_as: "${peak_rate}"
+        consumers:
+          - "Oscilloscope stats bar"
+
+      - name: "avg_rate"
+        source: "Mean value in token_rate_timeseries"
+        displayed_as: "${avg_rate}"
+        consumers:
+          - "Oscilloscope stats bar"
+
+    emotional_state:
+      entry: "Informed -- I know the numbers"
+      exit: "Aware -- I can read the texture of activity, anomalies are obvious"
+
+    integration_checkpoint: |
+      Oscilloscope traces update at ~10Hz with smooth scrolling.
+      Token trace and cost trace share same time axis.
+      Stats bar (peak, avg, total) are consistent with Gauge Cluster and Dashboard.
+      Waveform responds to broadcast session context changes.
+
+  - id: 4
+    name: "Default Dashboard Full View"
+    action: "User navigates to Usage Dashboard in Main zone"
+    view: "Default Dashboard (norbert-usage)"
+
+    ui_mockup: |
+      +====================================================================+
+      |  // USAGE DASHBOARD                                                |
+      +--------------------------------------------------------------------+
+      |  [Running Cost: $1.47] [Tokens: 87,241] [Active Agents: 2]        |
+      |  [Tool Calls: 143]    [Context: 43%]    [Hook Health: OK]         |
+      |                                                                    |
+      |  [7-Day Burn Chart: daily cost bars for last 7 days]               |
+      +====================================================================+
+
+    shared_artifacts:
+      - name: "tool_call_count"
+        source: "Count of tool_call_start events in session_events for current session"
+        displayed_as: "${tool_call_count}"
+        consumers:
+          - "Default Dashboard tool calls card"
+
+      - name: "daily_cost_history"
+        source: "Aggregated daily cost from session_events over last 7 days"
+        displayed_as: "${daily_cost_history}"
+        consumers:
+          - "Default Dashboard 7-day burn chart"
+
+    emotional_state:
+      entry: "Aware -- I understand the live activity pattern"
+      exit: "Empowered -- I have complete picture including historical context"
+
+    integration_checkpoint: |
+      All 6 metric cards consistent with Gauge Cluster instruments.
+      7-day chart aggregates correctly across sessions.
+      Dashboard registers as primary view via api.ui.registerView().
+
+  - id: 5
+    name: "Floating Panel Ambient Mode"
+    action: "User drags Gauge Cluster to screen corner, returns to primary work"
+    view: "Gauge Cluster (floating panel, optionally minimized)"
+
+    ui_mockup: |
+      Floating panel (compact):
+      +---+---+---+---+---+---+
+      |TCH|FUL|ODO|RPM|WRN|CLK|
+      |327| 43|1.4| 2 | * |23m|
+      +---+---+---+---+---+---+
+
+      Minimized pill:
+      +----------+
+      | $1.47    |
+      +----------+
+
+    shared_artifacts: []
+
+    emotional_state:
+      entry: "Empowered -- I have all the information"
+      exit: "Confident -- I can focus on work, trusting peripheral monitoring"
+
+    integration_checkpoint: |
+      Floating panel persists across view changes in main zones.
+      Minimized pill shows session cost, matching other displays.
+      Urgency changes (amber/red) visible in peripheral vision.
+
+error_paths:
+  - id: "E1"
+    name: "No Active Session"
+    trigger: "User opens Norbert with no Claude Code session running"
+    behavior: "Broadcast bar shows 'No active session'. Gauges zeroed/dim. Dashboard shows historical data + onboarding prompt."
+    recovery: "Start a Claude Code session; Norbert auto-detects via hook events."
+
+  - id: "E2"
+    name: "Hook Events Stop Arriving"
+    trigger: "Hooks configured but events stop arriving mid-session"
+    behavior: "Warning cluster turns amber after 30s silence, red after 60s. Oscilloscope flatlines. Status bar shows stale indicator."
+    recovery: "Check Claude Code session is still active. Verify hook configuration."
+
+  - id: "E3"
+    name: "Token Data Missing from Events"
+    trigger: "Hook events arrive but lack token count fields"
+    behavior: "Metrics show '--' for unavailable values. No false zeros. Dashboard explains which data is unavailable."
+    recovery: "Graceful degradation. Metrics populate when complete events arrive."
+
+  - id: "E4"
+    name: "Session Context Mismatch"
+    trigger: "User selects ended session in broadcast bar"
+    behavior: "Views switch to playback mode. Oscilloscope shows historical waveform. Gauge Cluster shows final values."
+    recovery: "Select active session to return to live mode."
+
+integration_validation:
+  shared_artifact_consistency:
+    - artifact: "session_cost"
+      must_match_across: [1, 2, 4, 5]
+      failure_message: "Cost displayed in broadcast bar, Gauge Cluster odometer, Dashboard card, and floating pill must all show the same value"
+
+    - artifact: "active_agent_count"
+      must_match_across: [2, 4]
+      failure_message: "Agent count in Gauge Cluster RPM and Dashboard card must match"
+
+    - artifact: "token_burn_rate"
+      must_match_across: [2, 3]
+      failure_message: "Token rate in Gauge Cluster tachometer and Oscilloscope current rate must match"
+
+    - artifact: "context_window_pct"
+      must_match_across: [2, 4]
+      failure_message: "Context utilization in Gauge Cluster fuel gauge and Dashboard card must match"
+
+    - artifact: "session_id"
+      must_match_across: [1, 2, 3, 4]
+      failure_message: "All views must display data for the same broadcast session"
