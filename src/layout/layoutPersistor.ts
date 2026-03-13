@@ -10,6 +10,7 @@
  */
 
 import type { LayoutState, ZoneState, FloatingPanelState } from "./types";
+import type { MultiWindowState } from "../multiWindow/windowStateManager";
 
 // ---------------------------------------------------------------------------
 // Serialization DTO -- flat JSON-friendly shape
@@ -79,6 +80,40 @@ const validateZoneEntry = (
  * Zones referencing uninstalled/unavailable views get null viewId and pluginId.
  * Does not modify divider position, active preset, or floating panels.
  */
+// ---------------------------------------------------------------------------
+// Window set serialization -- windows.json for restart restore
+// ---------------------------------------------------------------------------
+
+/// DTO for a window entry in the persisted window set.
+type WindowEntryDto = {
+  readonly windowId: string;
+  readonly label: string;
+};
+
+/**
+ * Serializes the current window set to a JSON string (windows.json).
+ * Captures window IDs and labels for restart restore.
+ * Layout data is persisted separately as layout-{windowId}.json.
+ */
+export const serializeWindowSet = (state: MultiWindowState): string =>
+  JSON.stringify(
+    state.windows.map((w) => ({
+      windowId: w.windowId,
+      label: w.label,
+    }))
+  );
+
+/**
+ * Deserializes a JSON string to an array of window entries.
+ * Returns the window IDs and labels needed to restore windows on restart.
+ */
+export const deserializeWindowSet = (json: string): readonly WindowEntryDto[] =>
+  JSON.parse(json) as readonly WindowEntryDto[];
+
+// ---------------------------------------------------------------------------
+// validateViewIds — replace invalid view IDs with graceful empty state
+// ---------------------------------------------------------------------------
+
 export const validateViewIds = (
   layout: LayoutState,
   availableViewIds: ReadonlySet<string>
