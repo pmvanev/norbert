@@ -8,6 +8,7 @@
 import type {
   NorbertPlugin,
   NorbertAPI,
+  PluginPublicAPI,
   PluginRegistry,
 } from "./types";
 import type { RegistrationCollector } from "./apiFactory";
@@ -17,19 +18,26 @@ import {
   addHookRegistration,
   addStatusItem,
   markPluginLoaded,
+  registerPublicAPI,
 } from "./pluginRegistry";
 import { validateManifest } from "./pluginLoader";
 
 /// Type for the API factory function — a driven port injected as a parameter.
 type CreateNorbertAPI = (
   pluginId: string,
-  collector: RegistrationCollector
+  collector: RegistrationCollector,
+  declaredDependencies?: Readonly<Record<string, string>>,
+  publicApiLookup?: ReadonlyMap<string, PluginPublicAPI>
 ) => NorbertAPI;
 
 /// Loads all plugins by calling onLoad on each, collecting registrations,
 /// and folding them into the provided registry.
 ///
-/// Returns a new PluginRegistry containing all views, tabs, and loaded plugin ids.
+/// Plugins are loaded in order. Each plugin receives access to the public APIs
+/// of previously loaded plugins (if declared as dependencies).
+///
+/// Returns a new PluginRegistry containing all views, tabs, loaded plugin ids,
+/// and public APIs.
 export const loadPlugins = (
   plugins: readonly NorbertPlugin[],
   initialRegistry: PluginRegistry,
@@ -48,7 +56,12 @@ export const loadPlugins = (
       hookRegistrations: [],
       statusItems: [],
     };
-    const api = createApi(plugin.manifest.id, collector);
+    const api = createApi(
+      plugin.manifest.id,
+      collector,
+      plugin.manifest.dependencies,
+      registry.publicApis
+    );
 
     // Call plugin's onLoad — this is the effects boundary.
     // Walking skeleton only supports synchronous onLoad.
@@ -72,5 +85,16 @@ export const loadPlugins = (
       withHooks
     );
 
-    return markPluginLoaded(withStatusItems, plugin.manifest.id);
+    const withPluginLoaded = markPluginLoaded(withStatusItems, plugin.manifest.id);
+
+    // Register the plugin's public API if it exposes one.
+    if (plugin.publicAPI !== undefined) {
+      return registerPublicAPI(
+        withPluginLoaded,
+        plugin.manifest.id,
+        plugin.publicAPI
+      );
+    }
+
+    return withPluginLoaded;
   }, initialRegistry);

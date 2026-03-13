@@ -22,6 +22,7 @@ import type {
   NorbertAPI,
   NorbertPlugin,
   PluginManifest,
+  PluginsAPI,
   ViewRegistration,
   TabRegistration,
   ResolutionError,
@@ -266,14 +267,58 @@ describe("Plugin registers status bar item via api.ui", () => {
 });
 
 describe("Plugin accesses dependency public API via api.plugins", () => {
-  it.skip("declared dependency's public API is accessible", () => {
-    // GIVEN: plugin "team-monitor" declares norbert-session as a dependency
-    // AND: norbert-session exposes a public API with getSessionById()
-    // WHEN: team-monitor calls api.plugins.get("norbert-session")
-    // THEN: it receives norbert-session's public API object
-    // AND: can call getSessionById() without accessing internal database tables
-    //
-    // Driving port: NorbertAPI.plugins.get()
+  it("declared dependency's public API is accessible", () => {
+    // GIVEN: plugin "norbert-session" exposes a public API with getSessionById()
+    const sessionPlugin: NorbertPlugin = {
+      manifest: {
+        id: "norbert-session",
+        name: "Norbert Session",
+        version: "1.0.0",
+        norbert_api: "^1.0.0",
+        dependencies: {},
+      },
+      publicAPI: {
+        getSessionById: (id: string) => ({ id, name: "Test Session" }),
+      },
+      onLoad: () => {},
+      onUnload: () => {},
+    };
+
+    // AND: plugin "team-monitor" declares norbert-session as a dependency
+    let capturedPluginsApi: PluginsAPI | null = null;
+    const teamMonitorPlugin: NorbertPlugin = {
+      manifest: {
+        id: "team-monitor",
+        name: "Team Monitor",
+        version: "1.0.0",
+        norbert_api: "^1.0.0",
+        dependencies: { "norbert-session": "^1.0.0" },
+      },
+      onLoad: (api) => {
+        capturedPluginsApi = api.plugins;
+      },
+      onUnload: () => {},
+    };
+
+    // WHEN: both plugins are loaded (norbert-session first as dependency)
+    const registry = loadPlugins(
+      [sessionPlugin, teamMonitorPlugin],
+      createPluginRegistry(),
+      createNorbertAPI
+    );
+
+    // THEN: team-monitor can call api.plugins.get("norbert-session")
+    expect(capturedPluginsApi).not.toBeNull();
+    const result = capturedPluginsApi!.get("norbert-session");
+
+    // AND: it receives norbert-session's public API object
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toHaveProperty("getSessionById");
+      // AND: can call getSessionById() without accessing internal database tables
+      const session = result.value.getSessionById("s1");
+      expect(session).toEqual({ id: "s1", name: "Test Session" });
+    }
   });
 });
 
@@ -353,12 +398,40 @@ describe("Plugin can only write to its own namespaced tables", () => {
 });
 
 describe("Plugin cannot access undeclared dependency API", () => {
-  it.skip("api.plugins.get() for undeclared dependency returns error", () => {
+  it("api.plugins.get() for undeclared dependency returns error", () => {
     // GIVEN: plugin "team-monitor" does NOT declare "norbert-usage" as a dependency
+    let capturedPluginsApi: PluginsAPI | null = null;
+    const teamMonitorPlugin: NorbertPlugin = {
+      manifest: {
+        id: "team-monitor",
+        name: "Team Monitor",
+        version: "1.0.0",
+        norbert_api: "^1.0.0",
+        dependencies: {},
+      },
+      onLoad: (api) => {
+        capturedPluginsApi = api.plugins;
+      },
+      onUnload: () => {},
+    };
+
+    // Load the plugin
+    loadPlugins(
+      [teamMonitorPlugin],
+      createPluginRegistry(),
+      createNorbertAPI
+    );
+
     // WHEN: the plugin calls api.plugins.get("norbert-usage")
+    expect(capturedPluginsApi).not.toBeNull();
+    const result = capturedPluginsApi!.get("norbert-usage");
+
     // THEN: the call fails with an error indicating the dependency is not declared
-    //
-    // Driving port: NorbertAPI.plugins.get()
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("norbert-usage");
+      expect(result.error).toContain("not declared");
+    }
   });
 });
 

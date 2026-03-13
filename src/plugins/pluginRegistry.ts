@@ -5,6 +5,7 @@
 
 import type {
   PluginRegistry,
+  PluginPublicAPI,
   ViewRegistration,
   TabRegistration,
   HookRegistration,
@@ -18,6 +19,7 @@ export const createPluginRegistry = (): PluginRegistry => ({
   hookRegistrations: [],
   statusItems: [],
   loadedPluginIds: [],
+  publicApis: new Map(),
 });
 
 /// Returns a new registry with the given view appended.
@@ -102,3 +104,19 @@ export const getStatusItemsByPlugin = (
   pluginId: string
 ): readonly StatusItemRegistration[] =>
   registry.statusItems.filter((si) => si.pluginId === pluginId);
+
+/// Returns a new registry with the plugin's public API stored.
+export const registerPublicAPI = (
+  registry: PluginRegistry,
+  pluginId: string,
+  publicAPI: PluginPublicAPI
+): PluginRegistry => ({
+  ...registry,
+  publicApis: new Map([...registry.publicApis, [pluginId, publicAPI]]),
+});
+
+/// Returns the public API for a plugin, or undefined if not registered.
+export const getPublicAPI = (
+  registry: PluginRegistry,
+  pluginId: string
+): PluginPublicAPI | undefined => registry.publicApis.get(pluginId);

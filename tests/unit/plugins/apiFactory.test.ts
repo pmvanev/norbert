@@ -11,6 +11,7 @@ import { createNorbertAPI } from "../../../src/plugins/apiFactory";
 import { NORBERT_API_KEYS } from "../../../src/plugins/types";
 import type {
   NorbertAPI,
+  PluginPublicAPI,
   ViewRegistration,
   TabRegistration,
 } from "../../../src/plugins/types";
@@ -95,5 +96,104 @@ describe("createNorbertAPI", () => {
 
     expect(collectedA.views).toHaveLength(1);
     expect(collectedB.views).toHaveLength(0);
+  });
+
+  it("plugins.get returns declared dependency's public API", () => {
+    const sessionPublicAPI: PluginPublicAPI = {
+      getSessionById: (id: string) => ({ id, name: "Session " + id }),
+    };
+    const declaredDependencies: Record<string, string> = {
+      "norbert-session": "^1.0.0",
+    };
+    const publicApiLookup: ReadonlyMap<string, PluginPublicAPI> = new Map([
+      ["norbert-session", sessionPublicAPI],
+    ]);
+
+    const collected: { views: ViewRegistration[]; tabs: TabRegistration[] } = {
+      views: [],
+      tabs: [],
+    };
+    const api = createNorbertAPI(
+      "team-monitor",
+      collected,
+      declaredDependencies,
+      publicApiLookup
+    );
+
+    const result = api.plugins.get("norbert-session");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toBe(sessionPublicAPI);
+    }
+  });
+
+  it("plugins.get returns error for undeclared dependency", () => {
+    const declaredDependencies: Record<string, string> = {};
+    const publicApiLookup: ReadonlyMap<string, PluginPublicAPI> = new Map();
+
+    const collected: { views: ViewRegistration[]; tabs: TabRegistration[] } = {
+      views: [],
+      tabs: [],
+    };
+    const api = createNorbertAPI(
+      "team-monitor",
+      collected,
+      declaredDependencies,
+      publicApiLookup
+    );
+
+    const result = api.plugins.get("norbert-usage");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("norbert-usage");
+      expect(result.error).toContain("not declared");
+    }
+  });
+
+  it("plugins.get returns error when dependency is declared but not loaded", () => {
+    const declaredDependencies: Record<string, string> = {
+      "norbert-session": "^1.0.0",
+    };
+    const publicApiLookup: ReadonlyMap<string, PluginPublicAPI> = new Map();
+
+    const collected: { views: ViewRegistration[]; tabs: TabRegistration[] } = {
+      views: [],
+      tabs: [],
+    };
+    const api = createNorbertAPI(
+      "team-monitor",
+      collected,
+      declaredDependencies,
+      publicApiLookup
+    );
+
+    const result = api.plugins.get("norbert-session");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("norbert-session");
+      expect(result.error).toContain("not loaded");
+    }
+  });
+
+  it("plugins.get returns error when dependency has no public API", () => {
+    const declaredDependencies: Record<string, string> = {
+      "norbert-session": "^1.0.0",
+    };
+    // Dependency is loaded but has no public API (undefined in map)
+    const publicApiLookup: ReadonlyMap<string, PluginPublicAPI> = new Map();
+
+    const collected: { views: ViewRegistration[]; tabs: TabRegistration[] } = {
+      views: [],
+      tabs: [],
+    };
+    const api = createNorbertAPI(
+      "team-monitor",
+      collected,
+      declaredDependencies,
+      publicApiLookup
+    );
+
+    const result = api.plugins.get("norbert-session");
+    expect(result.ok).toBe(false);
   });
 });
