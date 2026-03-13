@@ -1,0 +1,211 @@
+journey:
+  name: "Plugin Architecture and Layout Engine"
+  goal: "Establish plugin-first architecture with flexible layout engine so every subsequent feature ships as a plugin with user-customizable placement"
+  persona_primary: "Kai Nakamura — daily Claude Code observer, single monitor"
+  persona_secondary: "Reina Vasquez — multi-session power user, dual monitors"
+  persona_tertiary: "Tomasz Kowalski — future plugin developer"
+
+  emotional_arc:
+    start: "Confident — plugins load cleanly, dependencies resolve, no silent failures"
+    middle: "In Control — workspace adapts to user's workflow via drag, right-click, keyboard"
+    end: "Prepared — layout persists, presets saved, ready for next session"
+
+steps:
+  - id: 1
+    name: "Plugin Load and Registration"
+    action: "Norbert starts, scans for installed plugins, resolves dependencies, registers views"
+
+    shared_artifacts:
+      - name: "plugin_registry"
+        source: "NorbertAPI plugin loader scan results"
+        displayed_as: "${plugin_count} plugins, ${view_count} views registered"
+        consumers:
+          - "startup log"
+          - "sidebar icon registration"
+          - "view picker plugin grouping"
+          - "status bar plugin names"
+
+      - name: "dependency_graph"
+        source: "plugin manifest.dependencies declarations"
+        displayed_as: "dependency resolution status per plugin"
+        consumers:
+          - "startup dependency warning notifications"
+          - "plugin settings page"
+          - "greyed-out placeholder for suppressed features"
+
+    emotional_state:
+      entry: "Anticipation — will everything load?"
+      exit: "Confident — all loaded, or informed about what failed and why"
+
+    integration_checkpoint: |
+      Every registered view must appear in the view picker.
+      Every registered sidebar tab must appear in the sidebar.
+      Dependency warnings must name the specific disabled plugin and affected feature.
+      Version mismatch must be a hard failure with actionable error message.
+
+  - id: 2
+    name: "Layout Restore"
+    action: "Restore saved layout from ~/.norbert/layout.json (or show empty state on first launch)"
+
+    shared_artifacts:
+      - name: "layout_state"
+        source: "~/.norbert/layout.json"
+        displayed_as: "zone assignments, divider positions, floating panel positions"
+        consumers:
+          - "Main zone view assignment"
+          - "Secondary zone view assignment"
+          - "floating panel positions and sizes"
+          - "divider percentage"
+
+      - name: "sidebar_state"
+        source: "~/.norbert/sidebar.json"
+        displayed_as: "sidebar icon order and visibility"
+        consumers:
+          - "sidebar icon rendering"
+          - "right-click context menu checkmarks"
+
+    emotional_state:
+      entry: "Expectation — will my layout be there?"
+      exit: "Recognized — Norbert remembers me, or Guided — clear first-launch empty state"
+
+    integration_checkpoint: |
+      layout.json must reference only currently-registered view IDs.
+      If a saved view ID is no longer registered (plugin uninstalled), zone shows empty state with explanation.
+      sidebar.json icon order must include newly-installed plugins appended at end.
+      Divider position percentage must map correctly to current window size.
+
+  - id: 3
+    name: "Workspace Arrangement"
+    action: "User assigns views to zones via right-click, drag-and-drop, view picker, or preset"
+
+    shared_artifacts:
+      - name: "zone_assignments"
+        source: "layout engine state (in-memory, auto-saved to layout.json)"
+        displayed_as: "which view occupies which zone"
+        consumers:
+          - "Main zone renderer"
+          - "Secondary zone renderer"
+          - "floating panel renderer"
+          - "zone header labels"
+          - "layout.json persistence"
+
+      - name: "divider_position"
+        source: "layout engine state"
+        displayed_as: "percentage split between Main and Secondary"
+        consumers:
+          - "zone width calculation"
+          - "layout.json persistence"
+          - "window resize recalculation"
+
+    emotional_state:
+      entry: "Purposeful — I know what I want to see"
+      exit: "In Control — workspace fits my task"
+
+    integration_checkpoint: |
+      All four assignment mechanisms (right-click, drag, picker, preset) must produce identical zone state.
+      Assigning a view to a zone replaces the current occupant — no stacking or queuing.
+      Secondary zone toggle (Ctrl+Shift+\) must work regardless of assignment method.
+      Minimum zone width 280px enforced during drag.
+      Floating panel snaps to edges within 20px proximity.
+
+  - id: 4
+    name: "Multi-Window"
+    action: "User opens additional windows with independent layouts"
+
+    shared_artifacts:
+      - name: "window_layout"
+        source: "~/.norbert/layout-{window-id}.json"
+        displayed_as: "per-window zone assignments and positions"
+        consumers:
+          - "window-specific zone rendering"
+          - "window restore on next launch"
+
+      - name: "window_label"
+        source: "user input via title bar right-click or command palette"
+        displayed_as: "${window_label} in title bar and status bar"
+        consumers:
+          - "window title bar"
+          - "status bar right-aligned items"
+
+    emotional_state:
+      entry: "Expanding — need more screen real estate"
+      exit: "Powerful — each monitor shows exactly what I need"
+
+    integration_checkpoint: |
+      Backend process count must remain 1 regardless of window count.
+      Each window must receive live event updates via IPC independently.
+      Closing one window must not affect other windows.
+      Last window closing while tray icon active must keep backend alive.
+      All previously open windows must reopen with saved layouts on next launch.
+
+  - id: 5
+    name: "Sidebar Customization"
+    action: "User right-clicks sidebar to toggle icon visibility and drag-reorders icons"
+
+    shared_artifacts:
+      - name: "sidebar_config"
+        source: "~/.norbert/sidebar.json"
+        displayed_as: "icon order, visibility flags"
+        consumers:
+          - "sidebar icon rendering order"
+          - "right-click context menu checkmarks"
+          - "command palette (hidden sections still accessible)"
+
+    emotional_state:
+      entry: "Opinionated — I want my most-used sections first"
+      exit: "Curated — sidebar reflects my priorities"
+
+    integration_checkpoint: |
+      Hidden sidebar icons must still be accessible via Ctrl+Shift+P command palette.
+      "Reset Sidebar" must restore default order and visibility.
+      Newly installed plugins must appear at end of sidebar, not displace existing order.
+      Drag reorder must work for both core sections and plugin sections.
+
+  - id: 6
+    name: "Layout Persistence and Presets"
+    action: "User saves named layout presets and switches between them"
+
+    shared_artifacts:
+      - name: "preset_registry"
+        source: "~/.norbert/layout.json presets section"
+        displayed_as: "named presets with zone assignment summaries"
+        consumers:
+          - "Layout Picker (Ctrl+Shift+L)"
+          - "command palette preset commands"
+
+    emotional_state:
+      entry: "Satisfied — this layout works well for this task"
+      exit: "Prepared — saved, named, ready for tomorrow"
+
+    integration_checkpoint: |
+      Built-in presets must not be deletable (but "Save Copy As..." works).
+      "Reset to Default" must restore single-zone Main with first available primaryView.
+      Preset must store zone assignments as map keyed by zone name (future-proof for N zones).
+      Preset thumbnails in Layout Picker must reflect actual zone assignments.
+
+integration_validation:
+  shared_artifact_consistency:
+    - artifact: "plugin_registry"
+      must_match_across: [1, 2, 3]
+      failure_message: "Registered views in step 1 must be the same views available in step 2 layout restore and step 3 view picker"
+
+    - artifact: "layout_state"
+      must_match_across: [2, 3, 6]
+      failure_message: "Layout state restored in step 2 must be the same format saved in step 3 and stored in presets in step 6"
+
+    - artifact: "sidebar_config"
+      must_match_across: [2, 5]
+      failure_message: "Sidebar state restored in step 2 must use the same format written in step 5 customization"
+
+    - artifact: "zone_assignments"
+      must_match_across: [3, 4]
+      failure_message: "Zone assignment model in step 3 single-window must be identical to step 4 per-window assignments — zones are zone-count-agnostic"
+
+  zone_abstraction_validation:
+    description: "The zone abstraction must be count-agnostic. Nothing in the plugin API, layout persistence, or view assignment model assumes exactly two zones."
+    checks:
+      - "layout.json stores zone assignments as a map keyed by zone name, not as 'main' and 'secondary' fields"
+      - "api.ui.registerView() does not reference zone names or zone count"
+      - "right-click context menu items are generated from zone registry, not hardcoded"
+      - "presets store zones as key-value pairs, not positional"
+      - "adding a hypothetical 'bottom' zone requires only layout engine changes, not plugin API changes"
