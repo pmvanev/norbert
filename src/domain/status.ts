@@ -120,7 +120,7 @@ export function deriveConnectionStatus(
 /// Maximum age in milliseconds before a session without an ended_at
 /// is considered stale. Sessions that stop sending events (e.g., terminal
 /// closed without a Stop hook) will fade out after this threshold.
-const STALE_SESSION_MS = 2 * 60 * 1000; // 2 minutes
+const STALE_SESSION_MS = 5 * 60 * 1000; // 5 minutes
 
 /// Determine whether a session is currently active.
 ///
