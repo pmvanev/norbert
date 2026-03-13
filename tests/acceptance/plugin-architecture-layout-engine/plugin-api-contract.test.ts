@@ -12,7 +12,7 @@
  * a plugin can load, register a view, and the user can see it.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import {
   NORBERT_API_KEYS,
   PLUGIN_MANIFEST_REQUIRED_FIELDS,
@@ -25,6 +25,7 @@ import type {
   ViewRegistration,
   TabRegistration,
   ResolutionError,
+  StatusItemHandle,
 } from "../../../src/plugins/types";
 import { scanPlugins, validateManifest } from "../../../src/plugins/pluginLoader";
 import { createNorbertAPI } from "../../../src/plugins/apiFactory";
@@ -33,8 +34,20 @@ import {
   getViewsByPlugin,
   getTabsByPlugin,
   getAllViews,
+  getHookRegistrationsByPlugin,
+  getStatusItemsByPlugin,
 } from "../../../src/plugins/pluginRegistry";
 import { loadPlugins } from "../../../src/plugins/lifecycleManager";
+import {
+  deliverHookEvent,
+  getStatusItem,
+  resetHookBridge,
+} from "../../../src/plugins/hookBridge";
+
+// Reset hook bridge state before each test for isolation.
+beforeEach(() => {
+  resetHookBridge();
+});
 
 // ---------------------------------------------------------------------------
 // WALKING SKELETON
@@ -157,24 +170,98 @@ describe("Plugin registers view via api.ui.registerView()", () => {
 });
 
 describe("Plugin registers hook processor via api.hooks", () => {
-  it.skip("hook processor receives hook events after registration", () => {
+  it("hook processor receives hook events after registration", () => {
     // GIVEN: a plugin calls api.hooks.register("team-events", handleTeamEvent)
+    const receivedPayloads: readonly unknown[] = [];
+    const capturedPayloads: unknown[] = [];
+
+    const testPlugin: NorbertPlugin = {
+      manifest: {
+        id: "team-monitor",
+        name: "Team Monitor",
+        version: "1.0.0",
+        norbert_api: "^1.0.0",
+        dependencies: {},
+      },
+      onLoad: (api) => {
+        api.hooks.register("team-events", (payload: unknown) => {
+          capturedPayloads.push(payload);
+        });
+      },
+      onUnload: () => {},
+    };
+
+    // Load the plugin through the lifecycle manager
+    const registry = loadPlugins(
+      [testPlugin],
+      createPluginRegistry(),
+      createNorbertAPI
+    );
+
     // WHEN: a hook event arrives at the receiver
+    const hookPayload = { type: "team-update", data: { member: "alice" } };
+    deliverHookEvent("team-events", hookPayload);
+
     // THEN: handleTeamEvent receives the raw hook payload
-    // AND: the plugin can write derived data to its namespaced tables via api.db
-    //
-    // Driving port: NorbertAPI.hooks.register()
+    expect(capturedPayloads).toHaveLength(1);
+    expect(capturedPayloads[0]).toEqual(hookPayload);
+
+    // AND: the hook registration is tracked in the registry
+    const hookRegistrations = getHookRegistrationsByPlugin(registry, "team-monitor");
+    expect(hookRegistrations).toHaveLength(1);
+    expect(hookRegistrations[0].hookName).toBe("team-events");
+    expect(hookRegistrations[0].pluginId).toBe("team-monitor");
   });
 });
 
 describe("Plugin registers status bar item via api.ui", () => {
-  it.skip("status bar item appears and can be updated dynamically", () => {
+  it("status bar item appears and can be updated dynamically", () => {
     // GIVEN: a plugin calls api.ui.registerStatusItem() with position "left"
-    // WHEN: the status bar renders
-    // THEN: the plugin's status item appears after core Norbert items
-    // AND: the plugin can update it dynamically via api.ui.setStatusItem()
-    //
-    // Driving port: NorbertAPI.ui.registerStatusItem()
+    let statusItemHandle: StatusItemHandle | null = null;
+
+    const testPlugin: NorbertPlugin = {
+      manifest: {
+        id: "team-monitor",
+        name: "Team Monitor",
+        version: "1.0.0",
+        norbert_api: "^1.0.0",
+        dependencies: {},
+      },
+      onLoad: (api) => {
+        statusItemHandle = api.ui.registerStatusItem({
+          id: "team-status",
+          label: "Team: 0 online",
+          icon: "users",
+          position: "left",
+          order: 10,
+        });
+      },
+      onUnload: () => {},
+    };
+
+    // WHEN: the plugin is loaded
+    const registry = loadPlugins(
+      [testPlugin],
+      createPluginRegistry(),
+      createNorbertAPI
+    );
+
+    // THEN: the plugin's status item appears in the registry
+    const statusItems = getStatusItemsByPlugin(registry, "team-monitor");
+    expect(statusItems).toHaveLength(1);
+    expect(statusItems[0].id).toBe("team-status");
+    expect(statusItems[0].pluginId).toBe("team-monitor");
+    expect(statusItems[0].label).toBe("Team: 0 online");
+    expect(statusItems[0].position).toBe("left");
+
+    // AND: the plugin can update it dynamically via the handle
+    expect(statusItemHandle).not.toBeNull();
+    statusItemHandle!.update({ label: "Team: 3 online" });
+
+    // Verify the update is reflected in the status item store
+    const updatedItem = getStatusItem("team-monitor", "team-status");
+    expect(updatedItem).toBeDefined();
+    expect(updatedItem!.label).toBe("Team: 3 online");
   });
 });
 

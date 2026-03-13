@@ -44,9 +44,19 @@ export interface DbAPI {
   readonly execute: (sql: string) => DbResult;
 }
 
+/// Callback type for hook event processors.
+export type HookProcessor = (payload: unknown) => void;
+
+/// A registered hook processor binding a plugin to a hook name.
+export interface HookRegistration {
+  readonly pluginId: string;
+  readonly hookName: string;
+}
+
 /// Hook processor registration API.
 export interface HooksAPI {
   readonly _brand: "HooksAPI";
+  readonly register: (hookName: string, processor: HookProcessor) => void;
 }
 
 /// Input for registering a view from within a plugin's onLoad callback.
@@ -70,11 +80,46 @@ export interface RegisterTabInput {
   readonly order: number;
 }
 
+/// Allowed positions for status bar items.
+export const STATUS_ITEM_POSITIONS = ["left", "right"] as const;
+export type StatusItemPosition = (typeof STATUS_ITEM_POSITIONS)[number];
+
+/// Input for registering a status bar item from a plugin.
+export interface RegisterStatusItemInput {
+  readonly id: string;
+  readonly label: string;
+  readonly icon: string;
+  readonly position: StatusItemPosition;
+  readonly order: number;
+}
+
+/// A registered status bar item with plugin ownership.
+export interface StatusItemRegistration {
+  readonly id: string;
+  readonly pluginId: string;
+  readonly label: string;
+  readonly icon: string;
+  readonly position: StatusItemPosition;
+  readonly order: number;
+}
+
+/// Partial update for a status item (only specified fields change).
+export interface StatusItemUpdate {
+  readonly label?: string;
+  readonly icon?: string;
+}
+
+/// Handle returned to plugin for dynamic updates to a status item.
+export interface StatusItemHandle {
+  readonly update: (changes: StatusItemUpdate) => void;
+}
+
 /// UI registration API (views, tabs, status items).
 export interface UiAPI {
   readonly _brand: "UiAPI";
   readonly registerView: (input: RegisterViewInput) => void;
   readonly registerTab: (input: RegisterTabInput) => void;
+  readonly registerStatusItem: (input: RegisterStatusItemInput) => StatusItemHandle;
 }
 
 /// MCP tool registration API.
@@ -206,6 +251,8 @@ export const isValidResolutionErrorType = (
 export interface PluginRegistry {
   readonly views: readonly ViewRegistration[];
   readonly tabs: readonly TabRegistration[];
+  readonly hookRegistrations: readonly HookRegistration[];
+  readonly statusItems: readonly StatusItemRegistration[];
   readonly loadedPluginIds: readonly string[];
 }
 

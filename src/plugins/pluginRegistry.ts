@@ -7,12 +7,16 @@ import type {
   PluginRegistry,
   ViewRegistration,
   TabRegistration,
+  HookRegistration,
+  StatusItemRegistration,
 } from "./types";
 
 /// Creates an empty plugin registry with no views, tabs, or loaded plugins.
 export const createPluginRegistry = (): PluginRegistry => ({
   views: [],
   tabs: [],
+  hookRegistrations: [],
+  statusItems: [],
   loadedPluginIds: [],
 });
 
@@ -66,3 +70,35 @@ export const getAllViews = (
 export const getAllTabs = (
   registry: PluginRegistry
 ): readonly TabRegistration[] => registry.tabs;
+
+/// Returns a new registry with the given hook registration appended.
+export const addHookRegistration = (
+  registry: PluginRegistry,
+  hookRegistration: HookRegistration
+): PluginRegistry => ({
+  ...registry,
+  hookRegistrations: [...registry.hookRegistrations, hookRegistration],
+});
+
+/// Returns all hook registrations for the specified plugin.
+export const getHookRegistrationsByPlugin = (
+  registry: PluginRegistry,
+  pluginId: string
+): readonly HookRegistration[] =>
+  registry.hookRegistrations.filter((hr) => hr.pluginId === pluginId);
+
+/// Returns a new registry with the given status item appended.
+export const addStatusItem = (
+  registry: PluginRegistry,
+  statusItem: StatusItemRegistration
+): PluginRegistry => ({
+  ...registry,
+  statusItems: [...registry.statusItems, statusItem],
+});
+
+/// Returns all status items registered by the specified plugin.
+export const getStatusItemsByPlugin = (
+  registry: PluginRegistry,
+  pluginId: string
+): readonly StatusItemRegistration[] =>
+  registry.statusItems.filter((si) => si.pluginId === pluginId);
