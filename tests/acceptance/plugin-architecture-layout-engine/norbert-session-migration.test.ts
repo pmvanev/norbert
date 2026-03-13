@@ -11,6 +11,14 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { loadPlugins } from "../../../src/plugins/lifecycleManager";
+import { createNorbertAPI } from "../../../src/plugins/apiFactory";
+import { createPluginRegistry } from "../../../src/plugins/pluginRegistry";
+import { scanPlugins } from "../../../src/plugins/pluginLoader";
+import { resetHookBridge, deliverHookEvent } from "../../../src/plugins/hookBridge";
+import { norbertSessionPlugin } from "../../../src/plugins/norbert-session/index";
+import * as fs from "fs";
+import * as path from "path";
 
 // ---------------------------------------------------------------------------
 // WALKING SKELETON
@@ -41,25 +49,75 @@ describe("norbert-session works across all placement targets", () => {
 // ---------------------------------------------------------------------------
 
 describe("norbert-session registers views via plugin API", () => {
-  it.skip("Session List and sidebar icon appear after registration", () => {
+  it("Session List and sidebar icon appear after registration", () => {
     // GIVEN: norbert-session implements NorbertPlugin interface
+    resetHookBridge();
+    const registry = loadPlugins(
+      [norbertSessionPlugin],
+      createPluginRegistry(),
+      createNorbertAPI
+    );
+
     // WHEN: norbert-session calls api.ui.registerView() with "session-list" as primaryView
+    const sessionListView = registry.views.find((v) => v.id === "session-list");
+    const sessionDetailView = registry.views.find((v) => v.id === "session-detail");
+
     // THEN: the view appears in the layout engine's view picker
+    expect(sessionListView).toBeDefined();
+    expect(sessionListView!.pluginId).toBe("norbert-session");
+    expect(sessionListView!.label).toBe("Sessions");
+    expect(sessionListView!.icon).toBe("sessions");
+    expect(sessionListView!.primaryView).toBe(true);
+
+    // AND: session-detail view is also registered
+    expect(sessionDetailView).toBeDefined();
+    expect(sessionDetailView!.pluginId).toBe("norbert-session");
+    expect(sessionDetailView!.label).toBe("Session Detail");
+
     // AND: the sidebar shows the Sessions icon
-    // AND: clicking the Sessions sidebar icon assigns Session List to Main zone
-    //
-    // Driving port: NorbertPlugin.onLoad() -> NorbertAPI.ui.registerView()
+    const sessionsTab = registry.tabs.find((t) => t.id === "sessions");
+    expect(sessionsTab).toBeDefined();
+    expect(sessionsTab!.pluginId).toBe("norbert-session");
+    expect(sessionsTab!.icon).toBe("sessions");
+
+    // AND: a hook processor is registered
+    expect(registry.hookRegistrations.length).toBeGreaterThanOrEqual(1);
+    const sessionHook = registry.hookRegistrations.find(
+      (h) => h.pluginId === "norbert-session"
+    );
+    expect(sessionHook).toBeDefined();
   });
 });
 
 describe("norbert-session is a standalone plugin using only public API", () => {
-  it.skip("plugin uses zero internal Norbert APIs", () => {
+  it("plugin uses zero internal Norbert APIs", () => {
     // GIVEN: norbert-session source code
+    const pluginDir = path.resolve(__dirname, "../../../src/plugins/norbert-session");
+    const pluginFiles = fs.readdirSync(pluginDir).filter(
+      (f) => f.endsWith(".ts") || f.endsWith(".tsx")
+    );
+
     // WHEN: inspecting its imports and dependencies
-    // THEN: it imports only from the public NorbertPlugin/NorbertAPI interface
-    // AND: no internal Norbert modules are referenced
-    //
-    // Driving port: NorbertPlugin interface (API boundary validation)
+    for (const file of pluginFiles) {
+      const content = fs.readFileSync(path.join(pluginDir, file), "utf-8");
+
+      // THEN: it imports only from the public NorbertPlugin/NorbertAPI interface
+      // AND: no internal Norbert modules are referenced
+      // Allowed imports: ../types (plugin types), React, domain modules re-exported through plugin API
+      // Forbidden: @tauri-apps, direct ../pluginLoader, ../lifecycleManager, ../apiFactory, etc.
+      const importLines = content.match(/^import .+ from .+$/gm) ?? [];
+      for (const importLine of importLines) {
+        // Extract the import path
+        const importPathMatch = importLine.match(/from\s+["'](.+?)["']/);
+        if (importPathMatch) {
+          const importPath = importPathMatch[1];
+          // Allow: relative ../types, react, domain modules within the plugin itself
+          // Forbid: @tauri-apps, internal plugin infra modules
+          expect(importPath).not.toContain("@tauri-apps");
+          expect(importPath).not.toMatch(/\.\.\/(pluginLoader|lifecycleManager|apiFactory|sandboxEnforcer|hookBridge|pluginRegistry|dependencyResolver)/);
+        }
+      }
+    }
   });
 });
 
@@ -118,13 +176,28 @@ describe("All Phase 2 session list functionality preserved", () => {
 });
 
 describe("norbert-session loads via plugin loader like any plugin", () => {
-  it.skip("first-party plugin goes through standard load path", () => {
+  it("first-party plugin goes through standard load path", () => {
     // GIVEN: norbert-session is bundled with Norbert core
+    resetHookBridge();
+
     // WHEN: the plugin loader scans for installed plugins
-    // THEN: norbert-session is loaded via the standard plugin loader
+    const scannedPlugins = scanPlugins([norbertSessionPlugin]);
+
+    // THEN: norbert-session is discovered via standard scan
+    expect(scannedPlugins).toContainEqual(
+      expect.objectContaining({ manifest: expect.objectContaining({ id: "norbert-session" }) })
+    );
+
+    // AND: it loads via the standard plugin loader
+    const registry = loadPlugins(
+      scannedPlugins,
+      createPluginRegistry(),
+      createNorbertAPI
+    );
+
     // AND: it receives the same sandboxed NorbertAPI as third-party plugins
-    //
-    // Driving port: PluginLoader port
+    expect(registry.loadedPluginIds).toContain("norbert-session");
+    expect(registry.views.length).toBeGreaterThanOrEqual(2);
   });
 });
 
