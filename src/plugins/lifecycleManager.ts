@@ -11,7 +11,13 @@ import type {
   PluginRegistry,
 } from "./types";
 import type { RegistrationCollector } from "./apiFactory";
-import { addView, addTab, markPluginLoaded } from "./pluginRegistry";
+import {
+  addView,
+  addTab,
+  addHookRegistration,
+  addStatusItem,
+  markPluginLoaded,
+} from "./pluginRegistry";
 
 /// Type for the API factory function — a driven port injected as a parameter.
 type CreateNorbertAPI = (
@@ -29,7 +35,12 @@ export const loadPlugins = (
   createApi: CreateNorbertAPI
 ): PluginRegistry =>
   plugins.reduce((registry, plugin) => {
-    const collector: RegistrationCollector = { views: [], tabs: [] };
+    const collector: RegistrationCollector = {
+      views: [],
+      tabs: [],
+      hookRegistrations: [],
+      statusItems: [],
+    };
     const api = createApi(plugin.manifest.id, collector);
 
     // Call plugin's onLoad — this is the effects boundary.
@@ -45,6 +56,14 @@ export const loadPlugins = (
       (reg, tab) => addTab(reg, tab),
       withViews
     );
+    const withHooks = collector.hookRegistrations.reduce(
+      (reg, hookReg) => addHookRegistration(reg, hookReg),
+      withTabs
+    );
+    const withStatusItems = collector.statusItems.reduce(
+      (reg, statusItem) => addStatusItem(reg, statusItem),
+      withHooks
+    );
 
-    return markPluginLoaded(withTabs, plugin.manifest.id);
+    return markPluginLoaded(withStatusItems, plugin.manifest.id);
   }, initialRegistry);

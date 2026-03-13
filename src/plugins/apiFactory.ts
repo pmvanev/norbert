@@ -15,9 +15,19 @@ import type {
   PluginsAPI,
   ViewRegistration,
   TabRegistration,
+  HookRegistration,
+  StatusItemRegistration,
+  StatusItemHandle,
   RegisterViewInput,
   RegisterTabInput,
+  RegisterStatusItemInput,
+  HookProcessor,
 } from "./types";
+import {
+  registerHookProcessor,
+  registerStatusItem as registerStatusItemInBridge,
+  updateStatusItem,
+} from "./hookBridge";
 
 /// Mutable collector for registrations during plugin onLoad.
 /// This is the effects boundary — the collected data is folded
@@ -25,6 +35,8 @@ import type {
 export interface RegistrationCollector {
   views: ViewRegistration[];
   tabs: TabRegistration[];
+  hookRegistrations: HookRegistration[];
+  statusItems: StatusItemRegistration[];
 }
 
 /// Creates a scoped NorbertAPI instance for a specific plugin.
@@ -48,12 +60,25 @@ export const createNorbertAPI = (
         pluginId,
       });
     },
+    registerStatusItem: (input: RegisterStatusItemInput): StatusItemHandle => {
+      const registration = registerStatusItemInBridge(pluginId, input);
+      collector.statusItems.push(registration);
+      return {
+        update: (changes) => updateStatusItem(pluginId, input.id, changes),
+      };
+    },
   };
 
   /// Placeholder sub-APIs for the walking skeleton.
   /// These will be replaced with real implementations in later steps.
   const db: DbAPI = { _brand: "DbAPI" as const };
-  const hooks: HooksAPI = { _brand: "HooksAPI" as const };
+  const hooks: HooksAPI = {
+    _brand: "HooksAPI" as const,
+    register: (hookName: string, processor: HookProcessor): void => {
+      const registration = registerHookProcessor(pluginId, hookName, processor);
+      collector.hookRegistrations.push(registration);
+    },
+  };
   const mcp: McpAPI = { _brand: "McpAPI" as const };
   const events: EventsAPI = { _brand: "EventsAPI" as const };
   const config: ConfigAPI = { _brand: "ConfigAPI" as const };
