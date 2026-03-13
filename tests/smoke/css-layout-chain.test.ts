@@ -115,4 +115,48 @@ describe("CSS layout chain smoke test", () => {
       expect(hasDeclaration(block, "flex", "1")).toBe(true);
     });
   });
+
+  describe("app-body fills space between menu and status bar", () => {
+    const block = extractRules(css, ".app-body");
+
+    it("sets display: flex", () => {
+      expect(hasDeclaration(block, "display", "flex")).toBe(true);
+    });
+
+    it("sets flex: 1", () => {
+      expect(hasDeclaration(block, "flex", "1")).toBe(true);
+    });
+
+    it("sets overflow: hidden", () => {
+      expect(hasDeclaration(block, "overflow", "hidden")).toBe(true);
+    });
+  });
+
+  describe("sidebar is a flex column with fixed width", () => {
+    const block = extractRules(css, ".sidebar");
+
+    it("sets display: flex", () => {
+      expect(hasDeclaration(block, "display", "flex")).toBe(true);
+    });
+
+    it("sets flex-direction: column", () => {
+      expect(hasDeclaration(block, "flex-direction", "column")).toBe(true);
+    });
+
+    it("sets flex-shrink: 0", () => {
+      expect(hasDeclaration(block, "flex-shrink", "0")).toBe(true);
+    });
+  });
+
+  describe("zone-container fills remaining width", () => {
+    const block = extractRules(css, ".zone-container");
+
+    it("sets flex: 1", () => {
+      expect(hasDeclaration(block, "flex", "1")).toBe(true);
+    });
+
+    it("sets overflow: hidden", () => {
+      expect(hasDeclaration(block, "overflow", "hidden")).toBe(true);
+    });
+  });
 });

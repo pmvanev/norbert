@@ -10,4 +10,4 @@
 /// Rendering is handled by the layout engine based on view registration.
 export const SESSION_LIST_VIEW_ID = "session-list" as const;
 export const SESSION_LIST_VIEW_LABEL = "Sessions" as const;
-export const SESSION_LIST_VIEW_ICON = "sessions" as const;
+export const SESSION_LIST_VIEW_ICON = "\u{1F4CB}" as const;

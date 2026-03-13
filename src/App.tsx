@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, type FC } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, type FC } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   type AppStatus,
@@ -17,7 +17,7 @@ import { buildMenuBar } from "./domain/menu";
 import { MenuBar } from "./components/MenuBar";
 import { loadPlugins } from "./plugins/lifecycleManager";
 import { createNorbertAPI } from "./plugins/apiFactory";
-import { createPluginRegistry } from "./plugins/pluginRegistry";
+import { createPluginRegistry, getAllViews } from "./plugins/pluginRegistry";
 import { norbertSessionPlugin } from "./plugins/norbert-session/index";
 import { resetHookBridge } from "./plugins/hookBridge";
 import { createDefaultLayoutState } from "./layout/zoneToggle";
@@ -25,6 +25,7 @@ import { assignView } from "./layout/assignmentEngine";
 import { ZoneRenderer, type ViewRegistry } from "./layout/zoneRenderer";
 import { SessionListView } from "./views/SessionListView";
 import { EventDetailView } from "./views/EventDetailView";
+import { createDefaultSidebarState, getVisibleItems } from "./sidebar/sidebarManager";
 import type { LayoutState } from "./layout/types";
 
 /// Polling interval in milliseconds for live UI updates.
@@ -75,7 +76,17 @@ function App() {
   const [layout, setLayout] = useState<LayoutState>(createInitialLayout);
 
   /// Initialize plugin system once on mount.
-  const [_pluginRegistry] = useState(initializePluginSystem);
+  const [pluginRegistry] = useState(initializePluginSystem);
+
+  /// Initialize sidebar from plugin registry views.
+  const sidebarState = useMemo(
+    () => createDefaultSidebarState(getAllViews(pluginRegistry), []),
+    [pluginRegistry]
+  );
+  const visibleSidebarItems = useMemo(
+    () => getVisibleItems(sidebarState),
+    [sidebarState]
+  );
 
   /// Apply theme class to document on mount and theme change.
   useEffect(() => {
@@ -134,25 +145,35 @@ function App() {
     return () => clearInterval(intervalId);
   }, []);
 
-  /// Build the view registry that maps viewIds to React components.
-  /// Components are closures capturing the current sessions and navigation state.
+  /// Use refs so wrapper components stay referentially stable across re-renders.
+  /// This prevents ZoneRenderer from unmounting/remounting views every poll cycle.
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
+  const selectedSessionIdRef = useRef(selectedSessionId);
+  selectedSessionIdRef.current = selectedSessionId;
+  const handleSessionSelectRef = useRef(handleSessionSelect);
+  handleSessionSelectRef.current = handleSessionSelect;
+  const handleBackToSessionsRef = useRef(handleBackToSessions);
+  handleBackToSessionsRef.current = handleBackToSessions;
+
+  /// Build the view registry once — wrapper components read from refs,
+  /// so they always render current data without changing identity.
   const viewRegistry: ViewRegistry = useMemo(() => {
     const registry = new Map<string, FC>();
 
-    /// Session list view: renders the session list with current sessions data.
     const SessionListWrapper: FC = () => (
       <SessionListView
-        sessions={sessions}
-        onSessionSelect={handleSessionSelect}
+        sessions={sessionsRef.current}
+        onSessionSelect={handleSessionSelectRef.current}
       />
     );
     SessionListWrapper.displayName = "SessionListWrapper";
 
-    /// Session detail view: renders the event detail for the selected session.
     const SessionDetailWrapper: FC = () => {
+      const sid = selectedSessionIdRef.current;
       const selectedSession =
-        selectedSessionId !== null
-          ? sessions.find((s) => s.id === selectedSessionId) ?? null
+        sid !== null
+          ? sessionsRef.current.find((s) => s.id === sid) ?? null
           : null;
 
       if (selectedSession === null) {
@@ -162,7 +183,7 @@ function App() {
       return (
         <EventDetailView
           session={selectedSession}
-          onBack={handleBackToSessions}
+          onBack={handleBackToSessionsRef.current}
         />
       );
     };
@@ -172,7 +193,15 @@ function App() {
     registry.set("session-detail", SessionDetailWrapper);
 
     return registry;
-  }, [sessions, selectedSessionId, handleSessionSelect, handleBackToSessions]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /// Handle sidebar icon click — assign the view to the main zone.
+  const handleSidebarClick = useCallback((viewId: string, pluginId: string) => {
+    setSelectedSessionId(null);
+    setLayout((currentLayout) =>
+      assignView(currentLayout, "main", viewId, pluginId)
+    );
+  }, []);
 
   if (error) {
     return (
@@ -202,13 +231,27 @@ function App() {
   return (
     <main>
       <MenuBar entries={menuEntries} />
-      <ZoneRenderer
-        layout={layout}
-        viewRegistry={viewRegistry}
-        containerWidth={DEFAULT_CONTAINER_WIDTH}
-        minZoneWidth={MIN_ZONE_WIDTH}
-        onDividerPositionChange={handleDividerPositionChange}
-      />
+      <div className="app-body">
+        <nav className="sidebar" data-testid="sidebar">
+          {visibleSidebarItems.map((item) => (
+            <button
+              key={item.id}
+              className={`sidebar-icon${layout.zones.get("main")?.viewId === item.id ? " active" : ""}`}
+              title={item.label}
+              onClick={() => handleSidebarClick(item.id, item.pluginId)}
+            >
+              <span className="sidebar-icon-emoji">{item.icon}</span>
+            </button>
+          ))}
+        </nav>
+        <ZoneRenderer
+          layout={layout}
+          viewRegistry={viewRegistry}
+          containerWidth={DEFAULT_CONTAINER_WIDTH}
+          minZoneWidth={MIN_ZONE_WIDTH}
+          onDividerPositionChange={handleDividerPositionChange}
+        />
+      </div>
       <footer className="status-bar">
         <span>{formatField("Status", derivedStatus)}</span>
         <span>{formatField("Port", status.port)}</span>

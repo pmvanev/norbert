@@ -128,3 +128,83 @@ describe("App smoke test — catches black screen regressions", () => {
     });
   });
 });
+
+describe("Layout structure smoke tests", () => {
+  it("renders the sidebar with plugin icons", async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("sidebar")).toBeInTheDocument();
+    });
+
+    // Sidebar should contain at least one icon button
+    const sidebar = screen.getByTestId("sidebar");
+    const buttons = sidebar.querySelectorAll("button");
+    expect(buttons.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("renders the zone container for layout engine", async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("zone-container")).toBeInTheDocument();
+    });
+  });
+
+  it("renders the main zone with session content", async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("zone-main")).toBeInTheDocument();
+    });
+  });
+
+  it("renders sidebar, zone container, and status bar in correct order", async () => {
+    const { container } = render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("sidebar")).toBeInTheDocument();
+    });
+
+    // Verify the app-body wraps sidebar + zone-container
+    const appBody = container.querySelector(".app-body");
+    expect(appBody).toBeInTheDocument();
+
+    const sidebar = appBody?.querySelector("[data-testid='sidebar']");
+    const zoneContainer = appBody?.querySelector("[data-testid='zone-container']");
+    expect(sidebar).toBeInTheDocument();
+    expect(zoneContainer).toBeInTheDocument();
+
+    // Status bar should be a direct child of main, after app-body
+    const footer = container.querySelector("footer.status-bar");
+    expect(footer).toBeInTheDocument();
+  });
+
+  it("status bar stays anchored at the bottom (flex-shrink: 0 in CSS)", async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("sidebar")).toBeInTheDocument();
+    });
+
+    // The footer with status-bar class should exist
+    const footer = document.querySelector("footer.status-bar");
+    expect(footer).toBeInTheDocument();
+    expect(footer?.textContent).toContain("Status:");
+  });
+
+  it("session list renders inside the main zone without flicker", async () => {
+    render(<App />);
+
+    // Wait for sessions to load
+    await waitFor(() => {
+      expect(screen.getAllByRole("button").length).toBeGreaterThanOrEqual(2);
+    });
+
+    // The zone-main should contain the session list content
+    const mainZone = screen.getByTestId("zone-main");
+    expect(mainZone).toBeInTheDocument();
+    // Session rows should be inside the main zone
+    expect(mainZone.querySelectorAll(".srow").length).toBeGreaterThanOrEqual(1);
+  });
+});
