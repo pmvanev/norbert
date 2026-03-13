@@ -182,3 +182,42 @@ export const formatStatsBar = (stats: OscilloscopeStats): StatsBarDisplay => ({
   totalTokens: formatTokenCount(stats.totalTokens),
   windowDuration: formatWindowDuration(stats.windowDuration),
 });
+
+// ---------------------------------------------------------------------------
+// computeCanvasDimensions -- responsive canvas sizing from container
+// ---------------------------------------------------------------------------
+
+const DEFAULT_ASPECT_RATIO = 3; // width:height = 3:1
+const DEFAULT_PADDING = 10;
+
+/**
+ * Compute canvas dimensions to fit within a container.
+ *
+ * Given a container's width and height, calculates the canvas size
+ * that fills the available width while respecting the aspect ratio.
+ * If the computed height exceeds the container height, the canvas
+ * is constrained to the container height and width is adjusted.
+ *
+ * Returns a CanvasDimensions value suitable for all rendering functions.
+ */
+export const computeCanvasDimensions = (
+  containerWidth: number,
+  containerHeight: number,
+  aspectRatio: number = DEFAULT_ASPECT_RATIO,
+): CanvasDimensions => {
+  const targetHeight = containerWidth / aspectRatio;
+
+  if (targetHeight <= containerHeight) {
+    return {
+      width: containerWidth,
+      height: Math.round(targetHeight),
+      padding: DEFAULT_PADDING,
+    };
+  }
+
+  return {
+    width: Math.round(containerHeight * aspectRatio),
+    height: containerHeight,
+    padding: DEFAULT_PADDING,
+  };
+};
