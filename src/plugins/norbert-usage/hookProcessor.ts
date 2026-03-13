@@ -35,13 +35,27 @@ const extractEventType = (payload: unknown): string => {
   return typeof eventType === "string" ? eventType : "unknown";
 };
 
+/** Extract the inner payload from a DB event wrapper.
+ *
+ * Events from get_session_events arrive as:
+ *   { session_id, event_type, payload: { ...claude code fields... }, received_at, provider }
+ *
+ * The token extractor needs the inner payload (where usage lives),
+ * not the outer wrapper.
+ */
+const extractInnerPayload = (wrapper: unknown): unknown => {
+  if (!isRecord(wrapper)) return wrapper;
+  const inner = wrapper["payload"];
+  return inner !== undefined ? inner : wrapper;
+};
+
 /** Build an AggregatorEvent from a raw payload and extracted event type. */
 const buildAggregatorEvent = (
   eventType: string,
   payload: unknown,
 ): AggregatorEvent => ({
   eventType,
-  payload,
+  payload: extractInnerPayload(payload),
   receivedAt: new Date().toISOString(),
 });
 

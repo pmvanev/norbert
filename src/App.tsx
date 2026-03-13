@@ -197,9 +197,12 @@ function App() {
       if (target.id !== polledSessionIdRef.current) {
         processedCountRef.current = 0;
         polledSessionIdRef.current = target.id;
+        transcriptPathRef.current = null;
+        lastTranscriptInputRef.current = 0;
+        lastTranscriptOutputRef.current = 0;
       }
 
-      invoke<Array<{ session_id: string; event_type: string; payload: unknown; received_at: string; provider: string }>>(
+      invoke<Array<{ session_id: string; event_type: string; payload: Record<string, unknown>; received_at: string; provider: string }>>(
         "get_session_events",
         { sessionId: target.id }
       )
@@ -207,6 +210,13 @@ function App() {
           const newEvents = events.slice(processedCountRef.current);
           for (const event of newEvents) {
             deliverHookEvent("session-event", event);
+            // Extract transcript_path from the inner payload for the transcript poller
+            if (transcriptPathRef.current === null && event.payload) {
+              const tp = (event.payload as Record<string, unknown>)["transcript_path"];
+              if (typeof tp === "string") {
+                transcriptPathRef.current = tp;
+              }
+            }
           }
           processedCountRef.current = events.length;
         })
@@ -217,6 +227,63 @@ function App() {
 
     return () => clearInterval(intervalId);
   }, [sessions]);
+
+  /// Transcript usage poller: reads token data from Claude Code transcript files.
+  ///
+  /// Claude Code hook payloads do NOT include token usage data (input_tokens,
+  /// output_tokens, model). That data lives in the session transcript JSONL files.
+  /// Every hook event includes a `transcript_path` field pointing to the file.
+  ///
+  /// This poller extracts the transcript path from the first event of the active
+  /// session, calls get_transcript_usage to read the JSONL, and feeds a synthetic
+  /// event with the cumulative usage into the hook bridge for metrics processing.
+  const transcriptPathRef = useRef<string | null>(null);
+  const lastTranscriptInputRef = useRef(0);
+  const lastTranscriptOutputRef = useRef(0);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      const path = transcriptPathRef.current;
+      if (path === null) return;
+
+      invoke<{ input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_creation_tokens: number; model: string; message_count: number }>(
+        "get_transcript_usage",
+        { transcriptPath: path }
+      )
+        .then((usage) => {
+          const deltaInput = usage.input_tokens - lastTranscriptInputRef.current;
+          const deltaOutput = usage.output_tokens - lastTranscriptOutputRef.current;
+
+          // Only deliver if token count changed since last poll
+          if (deltaInput <= 0 && deltaOutput <= 0) return;
+
+          lastTranscriptInputRef.current = usage.input_tokens;
+          lastTranscriptOutputRef.current = usage.output_tokens;
+
+          // Feed as a wrapped event matching the DB event format
+          deliverHookEvent("session-event", {
+            session_id: polledSessionIdRef.current ?? "",
+            event_type: "tool_call_end",
+            payload: {
+              usage: {
+                input_tokens: deltaInput,
+                output_tokens: deltaOutput,
+                cache_read_input_tokens: 0,
+                cache_creation_input_tokens: 0,
+                model: usage.model || "claude-sonnet-4-20250514",
+              },
+            },
+            received_at: new Date().toISOString(),
+            provider: "transcript",
+          });
+        })
+        .catch(() => {
+          // Silently ignore — transcript may not be accessible yet
+        });
+    }, POLL_INTERVAL_MS * 3); // Poll transcript less frequently than events
+
+    return () => clearInterval(intervalId);
+  }, []);
 
   /// Use refs so wrapper components stay referentially stable across re-renders.
   /// This prevents ZoneRenderer from unmounting/remounting views every poll cycle.

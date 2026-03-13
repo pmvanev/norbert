@@ -185,6 +185,71 @@ describe("hookProcessor with non-token events", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Wrapped payload from get_session_events (production format)
+// ---------------------------------------------------------------------------
+
+describe("hookProcessor with DB event wrapper", () => {
+  it("extracts tokens from nested payload field (production event format)", () => {
+    const store = createSpyStore();
+    const processor = createHookProcessor({
+      updateMetrics: store.updateMetrics,
+      pricingTable: DEFAULT_PRICING_TABLE,
+    });
+
+    // This matches the structure returned by Tauri IPC get_session_events:
+    // { session_id, event_type, payload: { ...raw claude code fields... }, received_at, provider }
+    const wrappedEvent = {
+      session_id: "sess-123",
+      event_type: "tool_call_end",
+      payload: {
+        session_id: "sess-123",
+        tool: "Read",
+        usage: {
+          input_tokens: 800,
+          output_tokens: 200,
+          cache_read_input_tokens: 0,
+          cache_creation_input_tokens: 0,
+          model: "claude-sonnet-4-20250514",
+        },
+      },
+      received_at: "2026-03-13T22:00:00Z",
+      provider: "claude_code",
+    };
+
+    processor(wrappedEvent);
+
+    const metrics = store.getMetrics();
+    expect(metrics.totalTokens).toBe(1000);
+    expect(metrics.inputTokens).toBe(800);
+    expect(metrics.outputTokens).toBe(200);
+    expect(metrics.sessionCost).toBeGreaterThan(0);
+    expect(metrics.hookEventCount).toBe(1);
+  });
+
+  it("session_start wrapped event increments activeAgentCount", () => {
+    const store = createSpyStore();
+    const processor = createHookProcessor({
+      updateMetrics: store.updateMetrics,
+      pricingTable: DEFAULT_PRICING_TABLE,
+    });
+
+    const wrappedEvent = {
+      session_id: "sess-123",
+      event_type: "session_start",
+      payload: { session_id: "sess-123" },
+      received_at: "2026-03-13T22:00:00Z",
+      provider: "claude_code",
+    };
+
+    processor(wrappedEvent);
+
+    const metrics = store.getMetrics();
+    expect(metrics.activeAgentCount).toBe(1);
+    expect(metrics.hookEventCount).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Edge cases: malformed and missing payloads
 // ---------------------------------------------------------------------------
 

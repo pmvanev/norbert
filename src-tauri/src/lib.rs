@@ -67,31 +67,92 @@ fn get_session_events(state: tauri::State<AppState>, session_id: String) -> Vec<
     store.get_events_for_session(&session_id).unwrap_or_default()
 }
 
-/// DEBUG: dump top sessions to a file for diagnosing active-session detection.
-/// Writes to %APPDATA%/norbert/debug-sessions.txt.
+/// Aggregated token usage from a Claude Code transcript file.
+///
+/// Returned by get_transcript_usage to provide token/cost data
+/// that Claude Code hooks do not include in their payloads.
+#[derive(Debug, Clone, serde::Serialize)]
+struct TranscriptUsage {
+    input_tokens: u64,
+    output_tokens: u64,
+    cache_read_tokens: u64,
+    cache_creation_tokens: u64,
+    model: String,
+    message_count: u32,
+}
+
+/// Read a Claude Code transcript JSONL file and return aggregated usage.
+///
+/// Claude Code hook payloads do NOT include token usage data.
+/// The usage data lives in the transcript JSONL files referenced by
+/// the `transcript_path` field in every hook payload.
+///
+/// This command reads the JSONL, finds assistant messages with usage,
+/// and returns cumulative token counts.
 #[tauri::command]
-fn debug_sessions(state: tauri::State<AppState>) -> String {
-    let store = state.event_store.lock().unwrap();
-    let sessions = store.get_sessions().unwrap_or_default();
-    let mut lines = Vec::new();
-    lines.push(format!("timestamp: {}", chrono::Utc::now().to_rfc3339()));
-    lines.push(format!("total sessions: {}", sessions.len()));
-    lines.push(String::new());
-    for (i, s) in sessions.iter().take(10).enumerate() {
-        lines.push(format!(
-            "#{} id={} events={} ended_at={:?} last_event_at={:?}",
-            i, &s.id[..s.id.len().min(16)], s.event_count, s.ended_at, s.last_event_at
-        ));
-    }
-    let output = lines.join("\n");
+fn get_transcript_usage(transcript_path: String) -> Result<TranscriptUsage, String> {
+    use std::io::BufRead;
 
-    // Also write to file
-    if let Some(data_dir) = dirs::data_dir() {
-        let debug_path = data_dir.join("norbert").join("debug-sessions.txt");
-        let _ = std::fs::write(&debug_path, &output);
+    let file = std::fs::File::open(&transcript_path)
+        .map_err(|e| format!("Failed to open transcript: {}", e))?;
+    let reader = std::io::BufReader::new(file);
+
+    let mut total = TranscriptUsage {
+        input_tokens: 0,
+        output_tokens: 0,
+        cache_read_tokens: 0,
+        cache_creation_tokens: 0,
+        model: String::new(),
+        message_count: 0,
+    };
+
+    for line in reader.lines() {
+        let line = match line {
+            Ok(l) => l,
+            Err(_) => continue,
+        };
+        let value: serde_json::Value = match serde_json::from_str(&line) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+
+        // Only process assistant messages
+        if value.get("type").and_then(|t| t.as_str()) != Some("assistant") {
+            continue;
+        }
+
+        let msg = match value.get("message") {
+            Some(m) => m,
+            None => continue,
+        };
+
+        let usage = match msg.get("usage") {
+            Some(u) => u,
+            None => continue,
+        };
+
+        let input = usage.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+        let output = usage.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+
+        if input == 0 && output == 0 {
+            continue;
+        }
+
+        total.input_tokens += input;
+        total.output_tokens += output;
+        total.cache_read_tokens += usage.get("cache_read_input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+        total.cache_creation_tokens += usage.get("cache_creation_input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+        total.message_count += 1;
+
+        // Track the model from the message (use last seen)
+        if let Some(model) = msg.get("model").and_then(|m| m.as_str()) {
+            if model != "<synthetic>" {
+                total.model = model.to_string();
+            }
+        }
     }
 
-    output
+    Ok(total)
 }
 
 /// Initialize the SQLite event store from the platform data directory.
@@ -194,7 +255,7 @@ pub fn run() {
                 .build(app)?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet, get_status, get_latest_session, get_sessions, get_session_events, debug_sessions])
+        .invoke_handler(tauri::generate_handler![greet, get_status, get_latest_session, get_sessions, get_session_events, get_transcript_usage])
         .run(tauri::generate_context!())
         .expect("error while running Norbert");
 }
