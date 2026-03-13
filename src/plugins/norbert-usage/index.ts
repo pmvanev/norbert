@@ -98,14 +98,22 @@ const onLoad = (api: NorbertAPI): void => {
     order: USAGE_TAB_ORDER,
   });
 
-  // Register cost ticker status bar item
-  api.ui.registerStatusItem({
-    id: COST_TICKER_ID,
-    label: COST_TICKER_LABEL,
-    icon: COST_TICKER_ICON,
-    position: COST_TICKER_POSITION,
-    order: COST_TICKER_ORDER,
-  });
+  // Register cost ticker status bar item (degraded mode if unavailable)
+  try {
+    api.ui.registerStatusItem({
+      id: COST_TICKER_ID,
+      label: COST_TICKER_LABEL,
+      icon: COST_TICKER_ICON,
+      position: COST_TICKER_POSITION,
+      order: COST_TICKER_ORDER,
+    });
+  } catch {
+    // Status item API unavailable -- plugin continues with views and tab.
+    // This supports degraded functionality when the status bar is not present.
+    console.warn(
+      "norbert-usage: registerStatusItem unavailable, continuing in degraded mode",
+    );
+  }
 
   // Register hook processor for session events
   const processor = createUsageHookProcessor();
