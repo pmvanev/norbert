@@ -75,15 +75,3 @@ export const createHookProcessor = (deps: HookProcessorDeps): HookProcessor => {
   };
 };
 
-/**
- * Creates a usage event hook processor (legacy skeleton API).
- *
- * Returns a no-op processor for backward compatibility with the plugin
- * entry point. Will be replaced once the plugin entry point is wired
- * to use createHookProcessor with real dependencies.
- */
-export const createUsageHookProcessor = (): HookProcessor => {
-  return (_payload: unknown): void => {
-    // No-op until plugin entry point is wired with dependencies.
-  };
-};

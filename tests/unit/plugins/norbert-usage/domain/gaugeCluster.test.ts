@@ -176,13 +176,13 @@ describe("Gauge values are passed through from metrics", () => {
 // ---------------------------------------------------------------------------
 
 describe("Warning cluster hook health", () => {
-  it("reports normal when hookEventCount > 0", () => {
+  it("reports normal when hookEventCount > 0 (events flowing)", () => {
     const result = computeGaugeClusterData(createSnapshot({ hookEventCount: 50 }));
     expect(result.warningCluster.hookHealth).toBe("normal");
   });
 
-  it("reports normal for zero hookEventCount (idle session)", () => {
+  it("reports degraded when hookEventCount is 0 (no events received)", () => {
     const result = computeGaugeClusterData(createSnapshot({ hookEventCount: 0 }));
-    expect(result.warningCluster.hookHealth).toBe("normal");
+    expect(result.warningCluster.hookHealth).toBe("degraded");
   });
 });

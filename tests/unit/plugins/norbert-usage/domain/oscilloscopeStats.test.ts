@@ -71,7 +71,7 @@ describe("Stats bar composition from OscilloscopeStats", () => {
     const zeroStats: OscilloscopeStats = {
       peakRate: 0,
       avgRate: 0,
-      totalTokens: 0,
+      totalRateSum: 0,
       windowDuration: 0,
     };
 
@@ -79,7 +79,7 @@ describe("Stats bar composition from OscilloscopeStats", () => {
 
     expect(display.peakRate).toBe("0 tok/s");
     expect(display.avgRate).toBe("0 tok/s");
-    expect(display.totalTokens).toBe("0");
+    expect(display.totalRateSum).toBe("0");
     expect(display.windowDuration).toBe("0s");
   });
 
@@ -87,7 +87,7 @@ describe("Stats bar composition from OscilloscopeStats", () => {
     const stats: OscilloscopeStats = {
       peakRate: 512,
       avgRate: 327,
-      totalTokens: 87241,
+      totalRateSum: 87241,
       windowDuration: 60000,
     };
 
@@ -95,7 +95,7 @@ describe("Stats bar composition from OscilloscopeStats", () => {
 
     expect(display.peakRate).toBe("512 tok/s");
     expect(display.avgRate).toBe("327 tok/s");
-    expect(display.totalTokens).toBe("87,241");
+    expect(display.totalRateSum).toBe("87,241");
     expect(display.windowDuration).toBe("60s");
   });
 });

@@ -9,7 +9,9 @@
 
 import type { NorbertPlugin, NorbertAPI } from "../types";
 import { NORBERT_USAGE_MANIFEST } from "./manifest";
-import { createUsageHookProcessor } from "./hookProcessor";
+import { createHookProcessor } from "./hookProcessor";
+import { createMetricsStore } from "./adapters/metricsStore";
+import { DEFAULT_PRICING_TABLE } from "./domain/pricingModel";
 
 // ---------------------------------------------------------------------------
 // View constants
@@ -115,8 +117,15 @@ const onLoad = (api: NorbertAPI): void => {
     );
   }
 
-  // Register hook processor for session events
-  const processor = createUsageHookProcessor();
+  // Wire real hook processor with metricsStore and pricing table
+  const metricsStore = createMetricsStore();
+  const processor = createHookProcessor({
+    updateMetrics: (reducer) => {
+      const nextMetrics = reducer(metricsStore.getMetrics());
+      metricsStore.update(nextMetrics, metricsStore.getTimeSeries());
+    },
+    pricingTable: DEFAULT_PRICING_TABLE,
+  });
   api.hooks.register("session-event", processor);
 };
 

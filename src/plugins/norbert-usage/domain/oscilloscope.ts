@@ -150,7 +150,7 @@ export const formatRateOverlay = (rate: number): string => {
 export interface StatsBarDisplay {
   readonly peakRate: string;
   readonly avgRate: string;
-  readonly totalTokens: string;
+  readonly totalRateSum: string;
   readonly windowDuration: string;
 }
 
@@ -179,7 +179,7 @@ export const formatWindowDuration = (durationMs: number): string =>
 export const formatStatsBar = (stats: OscilloscopeStats): StatsBarDisplay => ({
   peakRate: formatRateOverlay(stats.peakRate),
   avgRate: formatRateOverlay(stats.avgRate),
-  totalTokens: formatTokenCount(stats.totalTokens),
+  totalRateSum: formatTokenCount(stats.totalRateSum),
   windowDuration: formatWindowDuration(stats.windowDuration),
 });
 

@@ -13,7 +13,7 @@
  * - appendSample is pure (original buffer unchanged)
  * - computeStats.peakRate >= computeStats.avgRate
  * - computeStats values are always non-negative
- * - totalTokens equals sum of all tokenRates in buffer
+ * - totalRateSum equals sum of all tokenRates in buffer
  */
 
 import { describe, it, expect } from "vitest";
@@ -155,7 +155,7 @@ describe("computeStats with empty buffer", () => {
     const stats = computeStats(buffer);
     expect(stats.peakRate).toBe(0);
     expect(stats.avgRate).toBe(0);
-    expect(stats.totalTokens).toBe(0);
+    expect(stats.totalRateSum).toBe(0);
     expect(stats.windowDuration).toBe(0);
   });
 });
@@ -199,7 +199,7 @@ describe("computeStats values are non-negative", () => {
           const stats = computeStats(buffer);
           expect(stats.peakRate).toBeGreaterThanOrEqual(0);
           expect(stats.avgRate).toBeGreaterThanOrEqual(0);
-          expect(stats.totalTokens).toBeGreaterThanOrEqual(0);
+          expect(stats.totalRateSum).toBeGreaterThanOrEqual(0);
           expect(stats.windowDuration).toBeGreaterThanOrEqual(0);
         },
       ),
@@ -208,11 +208,11 @@ describe("computeStats values are non-negative", () => {
 });
 
 // ---------------------------------------------------------------------------
-// computeStats — totalTokens equals sum of tokenRates
+// computeStats — totalRateSum equals sum of tokenRates
 // ---------------------------------------------------------------------------
 
-describe("computeStats totalTokens", () => {
-  it("totalTokens equals sum of all tokenRates in buffer", () => {
+describe("computeStats totalRateSum", () => {
+  it("totalRateSum equals sum of all tokenRates in buffer", () => {
     fc.assert(
       fc.property(
         fc.array(rateSampleArb, { minLength: 1, maxLength: 50 }),
@@ -224,7 +224,7 @@ describe("computeStats totalTokens", () => {
           const result = getSamples(buffer);
           const expectedTotal = result.reduce((acc, s) => acc + s.tokenRate, 0);
           const stats = computeStats(buffer);
-          expect(stats.totalTokens).toBe(expectedTotal);
+          expect(stats.totalRateSum).toBe(expectedTotal);
         },
       ),
     );

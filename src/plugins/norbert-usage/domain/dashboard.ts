@@ -3,7 +3,7 @@
 /// No side effects, no IO imports. Produces formatted metric card data
 /// and onboarding state from raw session metrics.
 
-import type { SessionMetrics, MetricCardData, Urgency, DailyCostEntry } from "./types";
+import type { SessionMetrics, MetricCardData, Urgency } from "./types";
 
 // Re-export DailyCostEntry for consumer convenience
 export type { DailyCostEntry } from "./types";
@@ -130,11 +130,3 @@ export const computeDashboardData = (metrics: SessionMetrics): DashboardData => 
   isOnboarding: isOnboardingSession(metrics),
 });
 
-/**
- * Pass-through for pre-aggregated daily cost entries.
- *
- * Accepts an array of DailyCostEntry and returns it unchanged.
- * Exists as a named domain function for the dashboard burn chart pipeline.
- */
-export const computeDailyCosts = (entries: ReadonlyArray<DailyCostEntry>): ReadonlyArray<DailyCostEntry> =>
-  entries;

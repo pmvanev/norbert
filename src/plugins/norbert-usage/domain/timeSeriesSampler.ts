@@ -5,7 +5,7 @@
  * - createBuffer: creates empty buffer with given capacity
  * - appendSample: returns new buffer with sample appended, evicts oldest if full
  * - getSamples: returns samples in insertion order
- * - computeStats: computes peak rate, average rate, total tokens, window duration
+ * - computeStats: computes peak rate, average rate, total rate sum, window duration
  *
  * All functions are pure. No mutation, no IO.
  */
@@ -71,7 +71,7 @@ export const computeStats = (
     return {
       peakRate: 0,
       avgRate: 0,
-      totalTokens: 0,
+      totalRateSum: 0,
       windowDuration: 0,
     };
   }
@@ -81,12 +81,12 @@ export const computeStats = (
     0,
   );
 
-  const totalTokens = samples.reduce(
+  const totalRateSum = samples.reduce(
     (sum, s) => sum + s.tokenRate,
     0,
   );
 
-  const avgRate = totalTokens / samples.length;
+  const avgRate = totalRateSum / samples.length;
 
   const firstTimestamp = samples[0].timestamp;
   const lastTimestamp = samples[samples.length - 1].timestamp;
@@ -95,7 +95,7 @@ export const computeStats = (
   return {
     peakRate,
     avgRate,
-    totalTokens,
+    totalRateSum,
     windowDuration,
   };
 };

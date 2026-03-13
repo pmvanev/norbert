@@ -9,7 +9,7 @@
  * store subscription for live updates, and responsive canvas resize.
  */
 
-import { useRef, useEffect, useCallback, useMemo, useState } from "react";
+import { useRef, useEffect, useCallback, useState } from "react";
 import type { TimeSeriesBuffer } from "../domain/types";
 import {
   prepareWaveformPoints,
@@ -129,6 +129,10 @@ export const OscilloscopeView = ({ store }: OscilloscopeViewProps) => {
     padding: CANVAS_PADDING,
   });
 
+  const [statsDisplay, setStatsDisplay] = useState(() =>
+    formatStatsBar(computeStats(bufferRef.current)),
+  );
+
   // Subscribe to store for live buffer updates
   useEffect(() => {
     const unsubscribe = store.subscribe((_metrics, timeSeries) => {
@@ -159,12 +163,6 @@ export const OscilloscopeView = ({ store }: OscilloscopeViewProps) => {
     };
   }, []);
 
-  const stats = useMemo(
-    () => computeStats(bufferRef.current),
-    [canvasDimensions],
-  );
-  const statsDisplay = useMemo(() => formatStatsBar(stats), [stats]);
-
   const renderFrame = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -192,6 +190,8 @@ export const OscilloscopeView = ({ store }: OscilloscopeViewProps) => {
     );
 
     const currentStats = computeStats(buffer);
+    setStatsDisplay(formatStatsBar(currentStats));
+
     const rateLabel = formatRateOverlay(
       currentStats.peakRate > 0
         ? samples[samples.length - 1]?.tokenRate ?? 0
@@ -242,7 +242,7 @@ export const OscilloscopeView = ({ store }: OscilloscopeViewProps) => {
           Avg: {statsDisplay.avgRate}
         </span>
         <span className="oscilloscope-stat" data-stat="total">
-          Total: {statsDisplay.totalTokens}
+          Total: {statsDisplay.totalRateSum}
         </span>
         <span className="oscilloscope-stat" data-stat="window">
           Window: {statsDisplay.windowDuration}

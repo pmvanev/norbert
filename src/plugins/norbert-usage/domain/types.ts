@@ -104,7 +104,7 @@ export interface TimeSeriesBuffer {
 export interface OscilloscopeStats {
   readonly peakRate: number;
   readonly avgRate: number;
-  readonly totalTokens: number;
+  readonly totalRateSum: number;
   readonly windowDuration: number;
 }
 

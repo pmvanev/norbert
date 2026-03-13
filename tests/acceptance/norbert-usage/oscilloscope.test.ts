@@ -76,7 +76,7 @@ describe("Oscilloscope stats show peak, average, and total", () => {
     // And average rate is 300 tok/s
     expect(stats.avgRate).toBe(300);
     // And total tokens reflects sum over the window
-    expect(stats.totalTokens).toBe(1500);
+    expect(stats.totalRateSum).toBe(1500);
   });
 });
 
@@ -102,7 +102,7 @@ describe("Flat baseline visible during idle period", () => {
     const stats = computeStats(buffer);
     expect(stats.peakRate).toBe(0);
     expect(stats.avgRate).toBe(0);
-    expect(stats.totalTokens).toBe(0);
+    expect(stats.totalRateSum).toBe(0);
   });
 });
 

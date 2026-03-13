@@ -225,6 +225,11 @@ function App() {
     );
     OscilloscopeWrapper.displayName = "OscilloscopeWrapper";
 
+    // TODO: Daily cost aggregation requires querying historical events from
+    // SQLite via the EventsAPI, which the plugin doesn't support yet.
+    // Passing empty array triggers the onboarding state in the dashboard
+    // when all session metrics are zero, so users see a helpful message
+    // instead of a silently empty burn chart.
     const UsageDashboardWrapper: FC = () => {
       const metrics = metricsStore.getMetrics();
       const dashboard = computeDashboardData(metrics);

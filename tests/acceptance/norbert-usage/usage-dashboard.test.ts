@@ -17,7 +17,6 @@ import {
 } from "../../../src/plugins/norbert-usage/domain/metricsAggregator";
 import {
   computeDashboardData,
-  computeDailyCosts,
   type DashboardData,
   type DailyCostEntry,
 } from "../../../src/plugins/norbert-usage/domain/dashboard";

@@ -1,5 +1,5 @@
 /**
- * Unit tests for computeDashboardData and computeDailyCosts.
+ * Unit tests for computeDashboardData.
  *
  * Pure domain function: SessionMetrics => DashboardData
  * Tests cover formatting, urgency thresholds, onboarding detection,
@@ -9,9 +9,7 @@
 import { describe, it, expect } from "vitest";
 import {
   computeDashboardData,
-  computeDailyCosts,
   type DashboardData,
-  type DailyCostEntry,
 } from "../../../../../src/plugins/norbert-usage/domain/dashboard";
 import {
   createInitialMetrics,
@@ -164,20 +162,3 @@ describe("Onboarding detection", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// computeDailyCosts
-// ---------------------------------------------------------------------------
-
-describe("computeDailyCosts", () => {
-  it("returns entries with date, totalCost, and sessionCount", () => {
-    const entries: DailyCostEntry[] = [
-      { date: "2025-03-07", totalCost: 4.2, sessionCount: 2 },
-      { date: "2025-03-08", totalCost: 6.1, sessionCount: 3 },
-    ];
-    // computeDailyCosts is a pass-through / identity for pre-aggregated data
-    const result = computeDailyCosts(entries);
-    expect(result).toHaveLength(2);
-    expect(result[0].date).toBe("2025-03-07");
-    expect(result[1].totalCost).toBeCloseTo(6.1);
-  });
-});
