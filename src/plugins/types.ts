@@ -33,9 +33,15 @@ export const isValidNorbertApiKey = (value: unknown): value is NorbertApiKey =>
 // Sub-API type placeholders
 // ---------------------------------------------------------------------------
 
+/// Result of a sandboxed database operation.
+export type DbResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly error: string };
+
 /// Database access API scoped to plugin namespace.
 export interface DbAPI {
   readonly _brand: "DbAPI";
+  readonly execute: (sql: string) => DbResult;
 }
 
 /// Hook processor registration API.

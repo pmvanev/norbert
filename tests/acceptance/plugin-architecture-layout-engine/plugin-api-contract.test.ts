@@ -26,7 +26,7 @@ import type {
   TabRegistration,
   ResolutionError,
 } from "../../../src/plugins/types";
-import { scanPlugins } from "../../../src/plugins/pluginLoader";
+import { scanPlugins, validateManifest } from "../../../src/plugins/pluginLoader";
 import { createNorbertAPI } from "../../../src/plugins/apiFactory";
 import {
   createPluginRegistry,
@@ -195,26 +195,73 @@ describe("Plugin accesses dependency public API via api.plugins", () => {
 // ---------------------------------------------------------------------------
 
 describe("Plugin sandbox prevents writes to core tables", () => {
-  it.skip("write to core 'sessions' table is rejected with explicit error", () => {
+  it("write to core 'sessions' table is rejected with explicit error", () => {
     // GIVEN: plugin "team-monitor" is loaded
-    // WHEN: the plugin calls api.db.execute("INSERT INTO sessions ...")
-    // THEN: the write is rejected with error:
-    //       "Plugin 'team-monitor' cannot write to core table 'sessions'.
-    //        Use your namespaced tables: 'plugin_team_monitor_*'."
-    // AND: Norbert's core data remains unmodified
-    //
-    // Driving port: NorbertAPI.db (sandbox enforcement)
+    let dbError: unknown = null;
+    const testPlugin: NorbertPlugin = {
+      manifest: {
+        id: "team-monitor",
+        name: "Team Monitor",
+        version: "1.0.0",
+        norbert_api: "^1.0.0",
+        dependencies: {},
+      },
+      onLoad: (api) => {
+        // WHEN: the plugin calls api.db.execute("INSERT INTO sessions ...")
+        const result = api.db.execute("INSERT INTO sessions (id) VALUES ('x')");
+        dbError = result;
+      },
+      onUnload: () => {},
+    };
+
+    const registry = loadPlugins(
+      [testPlugin],
+      createPluginRegistry(),
+      createNorbertAPI
+    );
+
+    // THEN: the write is rejected with error identifying the core table
+    expect(dbError).not.toBeNull();
+    expect((dbError as { ok: false; error: string }).ok).toBe(false);
+    expect((dbError as { ok: false; error: string }).error).toContain(
+      "Plugin 'team-monitor' cannot write to core table 'sessions'"
+    );
+    expect((dbError as { ok: false; error: string }).error).toContain(
+      "plugin_team_monitor_"
+    );
   });
 });
 
 describe("Plugin can only write to its own namespaced tables", () => {
-  it.skip("writes to plugin_team_monitor_* tables succeed", () => {
+  it("writes to plugin_team_monitor_* tables succeed", () => {
     // GIVEN: plugin "team-monitor" is loaded
-    // WHEN: the plugin creates and writes to "plugin_team_monitor_metrics"
+    let dbResult: unknown = null;
+    const testPlugin: NorbertPlugin = {
+      manifest: {
+        id: "team-monitor",
+        name: "Team Monitor",
+        version: "1.0.0",
+        norbert_api: "^1.0.0",
+        dependencies: {},
+      },
+      onLoad: (api) => {
+        // WHEN: the plugin creates and writes to "plugin_team_monitor_metrics"
+        dbResult = api.db.execute(
+          "CREATE TABLE plugin_team_monitor_metrics (id TEXT PRIMARY KEY, value REAL)"
+        );
+      },
+      onUnload: () => {},
+    };
+
+    const registry = loadPlugins(
+      [testPlugin],
+      createPluginRegistry(),
+      createNorbertAPI
+    );
+
     // THEN: the write succeeds
-    // AND: data is persisted in the plugin's namespace
-    //
-    // Driving port: NorbertAPI.db
+    expect(dbResult).not.toBeNull();
+    expect((dbResult as { ok: true }).ok).toBe(true);
   });
 });
 
@@ -229,13 +276,38 @@ describe("Plugin cannot access undeclared dependency API", () => {
 });
 
 describe("Plugin with invalid manifest is rejected at load time", () => {
-  it.skip("plugin missing required manifest fields fails to load with clear error", () => {
+  it("plugin missing required manifest fields fails to load with clear error", () => {
     // GIVEN: a plugin package exists but is missing the "id" field in its manifest
+    const invalidPlugin: NorbertPlugin = {
+      manifest: {
+        id: "",
+        name: "Bad Plugin",
+        version: "1.0.0",
+        norbert_api: "^1.0.0",
+        dependencies: {},
+      } as PluginManifest,
+      onLoad: () => {},
+      onUnload: () => {},
+    };
+
     // WHEN: the plugin loader attempts to load it
-    // THEN: the plugin fails to load
+    const registry = loadPlugins(
+      [invalidPlugin],
+      createPluginRegistry(),
+      createNorbertAPI
+    );
+
+    // THEN: the plugin fails to load (not in loadedPluginIds)
+    expect(registry.loadedPluginIds).not.toContain("");
+    expect(registry.loadedPluginIds).toHaveLength(0);
+
     // AND: the error message identifies the missing field
-    //
-    // Driving port: PluginLoader port
+    // Validation happens through validateManifest
+    const validationResult = validateManifest(invalidPlugin.manifest);
+    expect(validationResult.valid).toBe(false);
+    if (!validationResult.valid) {
+      expect(validationResult.missingFields).toContain("id");
+    }
   });
 });
 

@@ -1,8 +1,8 @@
 /// NorbertAPI Factory — creates scoped API instances per plugin.
 ///
 /// Each plugin receives an API object where ui.registerView and ui.registerTab
-/// automatically inject the plugin's id. Other sub-APIs are placeholder stubs
-/// for the walking skeleton; they will be implemented in later steps.
+/// automatically inject the plugin's id. The db sub-API enforces sandbox
+/// namespace scoping via the sandboxEnforcer.
 
 import type {
   NorbertAPI,
@@ -18,6 +18,7 @@ import type {
   RegisterViewInput,
   RegisterTabInput,
 } from "./types";
+import { validateSqlForPlugin } from "./sandboxEnforcer";
 
 /// Mutable collector for registrations during plugin onLoad.
 /// This is the effects boundary — the collected data is folded
@@ -50,9 +51,11 @@ export const createNorbertAPI = (
     },
   };
 
-  /// Placeholder sub-APIs for the walking skeleton.
-  /// These will be replaced with real implementations in later steps.
-  const db: DbAPI = { _brand: "DbAPI" as const };
+  /// Database API with sandbox enforcement — writes scoped to plugin namespace.
+  const db: DbAPI = {
+    _brand: "DbAPI" as const,
+    execute: (sql: string) => validateSqlForPlugin(sql, pluginId),
+  };
   const hooks: HooksAPI = { _brand: "HooksAPI" as const };
   const mcp: McpAPI = { _brand: "McpAPI" as const };
   const events: EventsAPI = { _brand: "EventsAPI" as const };

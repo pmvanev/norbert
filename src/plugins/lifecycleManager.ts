@@ -12,6 +12,7 @@ import type {
 } from "./types";
 import type { RegistrationCollector } from "./apiFactory";
 import { addView, addTab, markPluginLoaded } from "./pluginRegistry";
+import { validateManifest } from "./pluginLoader";
 
 /// Type for the API factory function — a driven port injected as a parameter.
 type CreateNorbertAPI = (
@@ -29,6 +30,12 @@ export const loadPlugins = (
   createApi: CreateNorbertAPI
 ): PluginRegistry =>
   plugins.reduce((registry, plugin) => {
+    // Validate manifest before loading — reject invalid plugins.
+    const validation = validateManifest(plugin.manifest);
+    if (!validation.valid) {
+      return registry;
+    }
+
     const collector: RegistrationCollector = { views: [], tabs: [] };
     const api = createApi(plugin.manifest.id, collector);
 
