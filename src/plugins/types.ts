@@ -86,9 +86,34 @@ export interface ConfigAPI {
   readonly _brand: "ConfigAPI";
 }
 
+// ---------------------------------------------------------------------------
+// Result type — railway-oriented error handling
+// ---------------------------------------------------------------------------
+
+/// A discriminated union for success/failure results.
+/// Used for plugin API operations that can fail with an error message.
+export type Result<T> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly error: string };
+
+/// Creates a success result.
+export const ok = <T>(value: T): Result<T> => ({ ok: true, value });
+
+/// Creates a failure result.
+export const err = <T>(error: string): Result<T> => ({ ok: false, error });
+
+// ---------------------------------------------------------------------------
+// PluginPublicAPI — the API a plugin exposes to declared dependents
+// ---------------------------------------------------------------------------
+
+/// A record of functions and values that a plugin exposes to other plugins
+/// that declare it as a dependency.
+export type PluginPublicAPI = Readonly<Record<string, unknown>>;
+
 /// Inter-plugin dependency access API.
 export interface PluginsAPI {
   readonly _brand: "PluginsAPI";
+  readonly get: (pluginId: string) => Result<PluginPublicAPI>;
 }
 
 // ---------------------------------------------------------------------------
@@ -137,8 +162,10 @@ export interface PluginManifest {
 
 /// The interface every plugin package must export.
 /// onLoad receives the sandboxed NorbertAPI; onUnload is called on shutdown.
+/// publicAPI is an optional record of functions/values exposed to declared dependents.
 export interface NorbertPlugin {
   readonly manifest: PluginManifest;
+  readonly publicAPI?: PluginPublicAPI;
   readonly onLoad: (api: NorbertAPI) => void | Promise<void>;
   readonly onUnload: () => void | Promise<void>;
 }
@@ -201,6 +228,7 @@ export interface PluginRegistry {
   readonly views: readonly ViewRegistration[];
   readonly tabs: readonly TabRegistration[];
   readonly loadedPluginIds: readonly string[];
+  readonly publicApis: ReadonlyMap<string, PluginPublicAPI>;
 }
 
 /// A dependency resolution error for a specific plugin.

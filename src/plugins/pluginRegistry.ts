@@ -5,6 +5,7 @@
 
 import type {
   PluginRegistry,
+  PluginPublicAPI,
   ViewRegistration,
   TabRegistration,
 } from "./types";
@@ -14,6 +15,7 @@ export const createPluginRegistry = (): PluginRegistry => ({
   views: [],
   tabs: [],
   loadedPluginIds: [],
+  publicApis: new Map(),
 });
 
 /// Returns a new registry with the given view appended.
@@ -66,3 +68,19 @@ export const getAllViews = (
 export const getAllTabs = (
   registry: PluginRegistry
 ): readonly TabRegistration[] => registry.tabs;
+
+/// Returns a new registry with the plugin's public API stored.
+export const registerPublicAPI = (
+  registry: PluginRegistry,
+  pluginId: string,
+  publicAPI: PluginPublicAPI
+): PluginRegistry => ({
+  ...registry,
+  publicApis: new Map([...registry.publicApis, [pluginId, publicAPI]]),
+});
+
+/// Returns the public API for a plugin, or undefined if not registered.
+export const getPublicAPI = (
+  registry: PluginRegistry,
+  pluginId: string
+): PluginPublicAPI | undefined => registry.publicApis.get(pluginId);

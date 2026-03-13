@@ -11,6 +11,8 @@ import {
   addView,
   addTab,
   markPluginLoaded,
+  registerPublicAPI,
+  getPublicAPI,
   getViewsByPlugin,
   getTabsByPlugin,
   getAllViews,
@@ -19,6 +21,7 @@ import {
 import type {
   ViewRegistration,
   TabRegistration,
+  PluginPublicAPI,
   PluginRegistry,
 } from "../../../src/plugins/types";
 
@@ -215,5 +218,35 @@ describe("getAllTabs", () => {
     });
 
     expect(getAllTabs(registry)).toHaveLength(2);
+  });
+});
+
+describe("registerPublicAPI", () => {
+  it("returns a new registry with the plugin's public API stored", () => {
+    const registry = createPluginRegistry();
+    const publicAPI: PluginPublicAPI = {
+      getSessionById: (id: string) => ({ id }),
+    };
+
+    const updated = registerPublicAPI(registry, "norbert-session", publicAPI);
+
+    expect(getPublicAPI(updated, "norbert-session")).toBe(publicAPI);
+  });
+
+  it("does not mutate the original registry", () => {
+    const registry = createPluginRegistry();
+    const publicAPI: PluginPublicAPI = { getValue: () => 42 };
+
+    registerPublicAPI(registry, "test-plugin", publicAPI);
+
+    expect(getPublicAPI(registry, "test-plugin")).toBeUndefined();
+  });
+});
+
+describe("getPublicAPI", () => {
+  it("returns undefined for a plugin with no registered public API", () => {
+    const registry = createPluginRegistry();
+
+    expect(getPublicAPI(registry, "nonexistent")).toBeUndefined();
   });
 });
