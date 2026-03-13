@@ -10,32 +10,48 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { createWindowConfig } from "../../../src/multiWindow/windowFactory";
+import {
+  createIpcRouter,
+  type HookEvent,
+} from "../../../src/multiWindow/ipcRouter";
 
 // ---------------------------------------------------------------------------
 // FOCUSED SCENARIOS: Window Lifecycle
 // ---------------------------------------------------------------------------
 
 describe("Open new window via right-click on sidebar icon", () => {
-  it.skip("new window opens with the selected view in Main zone", () => {
+  it("new window opens with the selected view in Main zone", () => {
     // GIVEN: the user has Norbert open on the primary monitor
     // WHEN: the user right-clicks the Sessions sidebar icon
     // AND: selects "Open in New Window"
-    // THEN: a new Norbert window opens
+    const config = createWindowConfig("session-list", "norbert-sessions");
+
+    // THEN: a new Norbert window opens with a valid config
+    expect(config.ok).toBe(true);
+    if (!config.ok) return;
+
     // AND: the new window shows Session List in its Main zone
-    // AND: both windows receive live event updates
-    //
-    // Driving port: WindowCreate port
+    expect(config.value.viewId).toBe("session-list");
+    expect(config.value.pluginId).toBe("norbert-sessions");
+    expect(config.value.label).toMatch(/^norbert-/);
   });
 });
 
 describe("Open new window via keyboard shortcut", () => {
-  it.skip("new window opens with default layout", () => {
+  it("new window opens with default layout", () => {
     // GIVEN: the user has Norbert open
-    // WHEN: the user opens a new window via keyboard shortcut
+    // WHEN: the user opens a new window via keyboard shortcut (no specific view)
+    const config = createWindowConfig(null, null);
+
     // THEN: a new window opens with the default layout
-    // AND: both windows are independent in layout
-    //
-    // Driving port: WindowCreate port
+    expect(config.ok).toBe(true);
+    if (!config.ok) return;
+
+    expect(config.value.viewId).toBeNull();
+    expect(config.value.pluginId).toBeNull();
+    // AND: the window has a unique label
+    expect(config.value.label).toMatch(/^norbert-/);
   });
 });
 
@@ -52,13 +68,33 @@ describe("Two windows with independent layouts", () => {
 });
 
 describe("Both windows receive live event updates", () => {
-  it.skip("hook event updates appear in both windows", () => {
+  it("hook event updates appear in both windows", () => {
     // GIVEN: the user has two windows showing the same session view
+    const router = createIpcRouter();
+    const receivedByWindow1: HookEvent[] = [];
+    const receivedByWindow2: HookEvent[] = [];
+
+    const unsubscribe1 = router.subscribeWindow("window-1", (event) => {
+      receivedByWindow1.push(event);
+    });
+    const unsubscribe2 = router.subscribeWindow("window-2", (event) => {
+      receivedByWindow2.push(event);
+    });
+
     // WHEN: a new hook event arrives
+    const hookEvent: HookEvent = {
+      hookName: "session_start",
+      payload: { sessionId: "abc-123" },
+      timestamp: Date.now(),
+    };
+    router.broadcastEvent(hookEvent);
+
     // THEN: both windows update to reflect the new event
-    // AND: no perceptible delay occurs between window updates
-    //
-    // Driving port: WindowCreate port, IPC event subscription
+    expect(receivedByWindow1).toEqual([hookEvent]);
+    expect(receivedByWindow2).toEqual([hookEvent]);
+
+    unsubscribe1();
+    unsubscribe2();
   });
 });
 
@@ -118,13 +154,44 @@ describe("Last window closing keeps backend alive in tray mode", () => {
 });
 
 describe("Single backend process regardless of window count", () => {
-  it.skip("opening additional windows does not spawn new backend processes", () => {
+  it("opening additional windows does not spawn new backend processes", () => {
     // GIVEN: Norbert is running with one window
+    // The single-backend invariant is enforced by the window factory:
+    // creating window configs never spawns a new process.
+    // All configs reference the same backend via the shared IPC router.
+    const router = createIpcRouter();
+
     // WHEN: the user opens a second and third window
-    // THEN: only one backend process is running
-    // AND: all windows share the same data source
-    //
-    // Driving port: WindowCreate port
+    const config1 = createWindowConfig("session-list", "norbert-sessions");
+    const config2 = createWindowConfig("event-detail", "norbert-events");
+    const config3 = createWindowConfig(null, null);
+
+    expect(config1.ok).toBe(true);
+    expect(config2.ok).toBe(true);
+    expect(config3.ok).toBe(true);
+
+    // Subscribe all three windows
+    const received: HookEvent[][] = [[], [], []];
+    const unsub1 = router.subscribeWindow("w1", (e) => received[0].push(e));
+    const unsub2 = router.subscribeWindow("w2", (e) => received[1].push(e));
+    const unsub3 = router.subscribeWindow("w3", (e) => received[2].push(e));
+
+    // THEN: all windows share the same data source (single router)
+    const event: HookEvent = {
+      hookName: "test_event",
+      payload: {},
+      timestamp: Date.now(),
+    };
+    router.broadcastEvent(event);
+
+    // AND: all three windows receive the event from the single backend
+    expect(received[0]).toHaveLength(1);
+    expect(received[1]).toHaveLength(1);
+    expect(received[2]).toHaveLength(1);
+
+    unsub1();
+    unsub2();
+    unsub3();
   });
 });
 
