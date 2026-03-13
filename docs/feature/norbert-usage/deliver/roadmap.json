@@ -1,0 +1,142 @@
+{
+  "roadmap": {
+    "project_id": "norbert-usage",
+    "created_at": "2026-03-13T15:14:43Z",
+    "total_steps": 15,
+    "phases": 6
+  },
+  "phases": [
+    {
+      "id": "01",
+      "name": "Domain Types and Token Extraction",
+      "steps": [
+        {
+          "id": "01-01",
+          "name": "Domain algebraic types",
+          "criteria": "TokenUsage, CostResult, SessionMetrics, RateSample, TimeSeriesBuffer, and PricingTable types importable from domain/types. All types express discriminated unions or branded types where domain requires it. No runtime side effects in type module."
+        },
+        {
+          "id": "01-02",
+          "name": "Token extractor",
+          "criteria": "Given event payload with usage.input_tokens, usage.output_tokens, and usage.model, extraction returns 'found' with correct token counts and model. Given payload with cache_read_input_tokens and cache_creation_input_tokens, extraction includes cache token counts. Given payload without usage field, extraction returns 'absent' tag. Zero tokens never fabricated from missing data."
+        },
+        {
+          "id": "01-03",
+          "name": "Pricing model",
+          "criteria": "Given Opus 4 usage of 1200 input and 3400 output tokens, total cost is $0.273. Given Sonnet 4 usage of 800 input and 2000 output, total cost is $0.0324 at Sonnet rates. Cache read and creation tokens priced at model-specific cache rates. Unknown model falls back to most expensive (Opus) rates as safety margin."
+        }
+      ]
+    },
+    {
+      "id": "02",
+      "name": "Metrics Pipeline",
+      "steps": [
+        {
+          "id": "02-01",
+          "name": "Metrics aggregator and burn rate calculator",
+          "criteria": "Given initial metrics and a prompt_submit event with token usage, aggregated metrics reflect updated session cost and token counts. tool_call_start increments tool count without affecting cost. session_start increments and agent_complete decrements active agent count. Session cost is never negative regardless of event sequence. Burn rate calculation returns tokens per second from events within rolling window; zero when no events."
+        },
+        {
+          "id": "02-02",
+          "name": "Time-series sampler",
+          "criteria": "Ring buffer with capacity 600 holds exactly 600 samples, evicting oldest on overflow. getSamples returns samples in insertion order. computeStats returns correct peak rate, average rate, and total tokens. Zero-rate samples produce zero stats. Alternating spike pattern produces correct peak and average."
+        }
+      ]
+    },
+    {
+      "id": "03",
+      "name": "Plugin Registration and Adapters",
+      "steps": [
+        {
+          "id": "03-01",
+          "name": "Plugin manifest and entry point",
+          "criteria": "Plugin manifest declares id 'norbert-usage' with no plugin dependencies. Plugin registers 3 views (gauge-cluster, oscilloscope, usage-dashboard), 1 tab (usage), 1 status item (cost-ticker on right), and at least 1 hook processor for session-event. usage-dashboard is primaryView. gauge-cluster has floatMetric 'session_cost' and is not primary."
+        },
+        {
+          "id": "03-02",
+          "name": "Hook processor",
+          "criteria": "Hook processor dispatches session-event payloads through extraction, pricing, and aggregation pipeline. Events with token data update metrics store. Events without token data update non-cost counters only. Plugin imports only from plugin types and its own domain modules -- no internal Norbert module imports."
+        },
+        {
+          "id": "03-03",
+          "name": "Event source adapter and metrics state store",
+          "criteria": "Event source adapter subscribes to hook events and forwards to processor. Metrics store holds current SessionMetrics and notifies subscribers on state change. Plugin operates with degraded functionality when status item API unavailable -- views and tab still register."
+        }
+      ]
+    },
+    {
+      "id": "04",
+      "name": "Gauge Cluster and Cost Ticker",
+      "steps": [
+        {
+          "id": "04-01",
+          "name": "Gauge Cluster view",
+          "criteria": "Given active session metrics, gauge cluster computes tachometer (burn rate tok/s), fuel gauge (context %), odometer (session cost), RPM counter (active agents), and warning cluster (hook health). Fuel gauge urgency transitions: normal below 70%, amber at 70%, red at 90%. Tachometer enters redline at sustained high burn rate. Clock instrument shows session elapsed time derived from sessionStartedAt. Floating panel collapses to pill showing current session cost when minimized. All instruments update when broadcast context session changes. Zero metrics produce safe default values for all instruments."
+        },
+        {
+          "id": "04-02",
+          "name": "Cost Ticker status bar item",
+          "criteria": "Ticker formats session cost as '$X.XX'. Color zone is 'brand' when below session average, 'amber' at average, 'red' when 50% above average. Zero cost with zero average shows '$0.00' in 'dim' state. Active cost with no history stays 'brand'. Ticker persists at bottom of window when user switches between views. Value change triggers visible digit roll animation on updated columns."
+        }
+      ]
+    },
+    {
+      "id": "05",
+      "name": "Oscilloscope",
+      "steps": [
+        {
+          "id": "05-01",
+          "name": "Canvas waveform renderer",
+          "criteria": "Dual-trace canvas renders token rate and cost rate waveforms from time-series buffer samples. Rendering targets approximately 10Hz refresh. Idle periods display flat baseline. Rapid tool calls display visible spike pattern. Streaming responses display sustained plateau. Current token rate displayed as text overlay on the waveform canvas. Background grid lines at regular time intervals rendered on the canvas."
+        },
+        {
+          "id": "05-02",
+          "name": "Stats bar display",
+          "criteria": "Stats bar shows peak rate, average rate, total tokens, and current time window derived from buffer computeStats. Values update as new samples arrive. Zero-state shows all-zero stats."
+        },
+        {
+          "id": "05-03",
+          "name": "Broadcast integration and lifecycle",
+          "criteria": "Oscilloscope subscribes to metrics store broadcast for live sample updates. Canvas resizes correctly on container resize. Animation frame loop starts on mount and cleans up on unmount."
+        }
+      ]
+    },
+    {
+      "id": "06",
+      "name": "Usage Dashboard",
+      "steps": [
+        {
+          "id": "06-01",
+          "name": "Metric cards",
+          "criteria": "Dashboard computes 6 metric cards: Running Cost ('$X.XX'), Token Count (formatted with comma separator and 'Xk in / Xk out' subtitle), Active Agents, Tool Calls, Context Window ('X%'), Hook Health ('OK'). New user with no data sees zero/placeholder values and isOnboarding is true. Context window card shows red urgency at 90% utilization. Cards update when new events change session metrics."
+        },
+        {
+          "id": "06-02",
+          "name": "7-day burn chart and App.tsx integration",
+          "criteria": "Daily cost entries aggregated per day with totalCost and sessionCount. Chart displays 7 entries with proportional bar values. Dashboard view registered as primary view in App.tsx tab content. Onboarding state shown when no historical cost data exists. Plugin exposes current SessionMetrics via api.data for downstream plugin consumption."
+        }
+      ]
+    }
+  ],
+  "implementation_scope": {
+    "source_directories": [
+      "src/plugins/norbert-usage/",
+      "src/plugins/norbert-usage/domain/",
+      "src/plugins/norbert-usage/adapters/",
+      "src/plugins/norbert-usage/views/"
+    ],
+    "test_directories": [
+      "tests/unit/plugins/norbert-usage/",
+      "tests/acceptance/norbert-usage/"
+    ],
+    "excluded_patterns": [
+      "node_modules/**",
+      "dist/**"
+    ]
+  },
+  "validation": {
+    "status": "approved",
+    "reviewer": "nw-software-crafter-reviewer",
+    "approved_at": "2026-03-13T15:30:00Z"
+  }
+}
