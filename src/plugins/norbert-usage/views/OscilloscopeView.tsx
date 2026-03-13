@@ -36,12 +36,25 @@ const GRID_INTERVAL_MS = 10_000;
 const REFRESH_INTERVAL_MS = 100; // ~10Hz
 const ASPECT_RATIO = 3; // width:height
 
-const TOKEN_RATE_COLOR = "#6366f1"; // brand indigo
-const COST_RATE_COLOR = "#f59e0b"; // amber
-const GRID_COLOR = "rgba(255, 255, 255, 0.1)";
+// Use CSS custom properties at runtime for theme-aware colors.
+// Fallbacks are the Norbert default theme values.
+const getThemeColor = (prop: string, fallback: string): string => {
+  if (typeof document === "undefined") return fallback;
+  const value = getComputedStyle(document.documentElement).getPropertyValue(prop).trim();
+  return value || fallback;
+};
+
+const TOKEN_RATE_COLOR_PROP = "--brand";
+const TOKEN_RATE_COLOR_FALLBACK = "#00e5cc";
+const COST_RATE_COLOR_PROP = "--amber";
+const COST_RATE_COLOR_FALLBACK = "#f0920a";
+const GRID_COLOR_PROP = "--osc-grid";
+const GRID_COLOR_FALLBACK = "rgba(0, 229, 204, 0.08)";
 const GRID_LABEL_COLOR = "rgba(255, 255, 255, 0.4)";
-const OVERLAY_COLOR = "#e2e8f0";
-const BACKGROUND_COLOR = "#1e1e2e";
+const OVERLAY_COLOR_PROP = "--text-p";
+const OVERLAY_COLOR_FALLBACK = "#c8f0e8";
+const BACKGROUND_COLOR_PROP = "--osc-bg";
+const BACKGROUND_COLOR_FALLBACK = "rgba(0, 8, 6, 0.85)";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -59,7 +72,7 @@ const clearCanvas = (
   ctx: CanvasRenderingContext2D,
   dimensions: CanvasDimensions,
 ): void => {
-  ctx.fillStyle = BACKGROUND_COLOR;
+  ctx.fillStyle = getThemeColor(BACKGROUND_COLOR_PROP, BACKGROUND_COLOR_FALLBACK);
   ctx.fillRect(0, 0, dimensions.width, dimensions.height);
 };
 
@@ -68,7 +81,7 @@ const drawGridLines = (
   gridLines: ReadonlyArray<GridLine>,
   dimensions: CanvasDimensions,
 ): void => {
-  ctx.strokeStyle = GRID_COLOR;
+  ctx.strokeStyle = getThemeColor(GRID_COLOR_PROP, GRID_COLOR_FALLBACK);
   ctx.lineWidth = 1;
   ctx.font = "10px monospace";
   ctx.fillStyle = GRID_LABEL_COLOR;
@@ -109,7 +122,7 @@ const drawRateOverlay = (
   dimensions: CanvasDimensions,
 ): void => {
   ctx.font = "bold 14px monospace";
-  ctx.fillStyle = OVERLAY_COLOR;
+  ctx.fillStyle = getThemeColor(OVERLAY_COLOR_PROP, OVERLAY_COLOR_FALLBACK);
   ctx.fillText(label, dimensions.padding + 4, dimensions.padding + 16);
 };
 
@@ -198,10 +211,13 @@ export const OscilloscopeView = ({ store }: OscilloscopeViewProps) => {
         : 0,
     );
 
+    const tokenColor = getThemeColor(TOKEN_RATE_COLOR_PROP, TOKEN_RATE_COLOR_FALLBACK);
+    const costColor = getThemeColor(COST_RATE_COLOR_PROP, COST_RATE_COLOR_FALLBACK);
+
     clearCanvas(ctx, canvasDimensions);
     drawGridLines(ctx, gridLines, canvasDimensions);
-    drawTrace(ctx, tokenRatePoints, TOKEN_RATE_COLOR);
-    drawTrace(ctx, costRatePoints, COST_RATE_COLOR);
+    drawTrace(ctx, tokenRatePoints, tokenColor);
+    drawTrace(ctx, costRatePoints, costColor);
     drawRateOverlay(ctx, rateLabel, canvasDimensions);
   }, [canvasDimensions]);
 
@@ -218,35 +234,50 @@ export const OscilloscopeView = ({ store }: OscilloscopeViewProps) => {
   }, [renderFrame]);
 
   return (
-    <div
-      ref={containerRef}
-      className="oscilloscope"
-      role="img"
-      aria-label="Token burn oscilloscope"
-    >
-      <canvas
-        ref={canvasRef}
-        width={canvasDimensions.width}
-        height={canvasDimensions.height}
-        className="oscilloscope-canvas"
-      />
-      <div
-        className="oscilloscope-stats-bar"
-        role="status"
-        aria-label="Oscilloscope statistics"
-      >
-        <span className="oscilloscope-stat" data-stat="peak">
-          Peak: {statsDisplay.peakRate}
-        </span>
-        <span className="oscilloscope-stat" data-stat="avg">
-          Avg: {statsDisplay.avgRate}
-        </span>
-        <span className="oscilloscope-stat" data-stat="total">
-          Total: {statsDisplay.totalRateSum}
-        </span>
-        <span className="oscilloscope-stat" data-stat="window">
-          Window: {statsDisplay.windowDuration}
-        </span>
+    <div className="oscilloscope" role="img" aria-label="Token burn oscilloscope">
+      <div className="sec-hdr">
+        <span className="sec-t">// token burn rate</span>
+        <span className="sec-a">60s · 10Hz</span>
+      </div>
+      <div ref={containerRef} className="osc-main">
+        <canvas
+          ref={canvasRef}
+          width={canvasDimensions.width}
+          height={canvasDimensions.height}
+          className="oscilloscope-canvas"
+        />
+        <div className="osc-bottom">
+          <div className="osc-legend">
+            <div className="osc-legend-dot" style={{ background: "var(--brand)" }} />
+            Token rate
+          </div>
+          <div className="osc-legend">
+            <div className="osc-legend-dot" style={{ background: "var(--amber)" }} />
+            Cost rate
+          </div>
+        </div>
+      </div>
+      <div className="osc-stats" role="status" aria-label="Oscilloscope statistics">
+        <div className="osc-stat">
+          <div className="osc-stat-l">Peak</div>
+          <div className="osc-stat-v" data-mono="" style={{ color: "var(--brand)" }}>
+            {statsDisplay.peakRate}
+          </div>
+        </div>
+        <div className="osc-stat">
+          <div className="osc-stat-l">Avg</div>
+          <div className="osc-stat-v" data-mono="">{statsDisplay.avgRate}</div>
+        </div>
+        <div className="osc-stat">
+          <div className="osc-stat-l">Total</div>
+          <div className="osc-stat-v" data-mono="" style={{ color: "var(--amber)" }}>
+            {statsDisplay.totalRateSum}
+          </div>
+        </div>
+        <div className="osc-stat">
+          <div className="osc-stat-l">Window</div>
+          <div className="osc-stat-v" data-mono="">{statsDisplay.windowDuration}</div>
+        </div>
       </div>
     </div>
   );

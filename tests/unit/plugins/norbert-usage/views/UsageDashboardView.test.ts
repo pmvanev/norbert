@@ -130,7 +130,7 @@ describe("UsageDashboardView renders 7-day burn chart", () => {
     expect(minBar).toBeDefined();
   });
 
-  it("renders empty burn chart when no daily costs exist", () => {
+  it("hides burn chart section when no daily costs exist", () => {
     const metrics = createMetrics({ sessionCost: 1.0, totalTokens: 100 });
     const dashboard = computeDashboardData(metrics);
 
@@ -139,9 +139,8 @@ describe("UsageDashboardView renders 7-day burn chart", () => {
       dailyCosts: [],
     }));
 
-    const chart = screen.getByRole("img", { name: /burn chart/i });
-    const bars = within(chart).queryAllByRole("meter");
-    expect(bars).toHaveLength(0);
+    const chart = screen.queryByRole("img", { name: /burn chart/i });
+    expect(chart).toBeNull();
   });
 });
 

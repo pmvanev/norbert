@@ -35,7 +35,7 @@ const urgencyClass = (urgency: string): string =>
 const MetricCard = ({ card }: { readonly card: MetricCardData }) => (
   <div className={`metric-card ${urgencyClass(card.urgency)}`}>
     <span className="metric-card-label">{card.label}</span>
-    <span className="metric-card-value">{card.value}</span>
+    <span className="metric-card-value" data-mono="">{card.value}</span>
     {card.subtitle !== "" && (
       <span className="metric-card-subtitle">{card.subtitle}</span>
     )}
@@ -104,6 +104,10 @@ export const UsageDashboardView = ({
   dailyCosts,
 }: UsageDashboardViewProps) => (
   <div className="usage-dashboard" role="region" aria-label="Usage Dashboard">
+    <div className="sec-hdr">
+      <span className="sec-t">// session metrics</span>
+    </div>
+
     {dashboard.isOnboarding && dailyCosts.length === 0 && <OnboardingMessage />}
 
     <div className="usage-dashboard-cards">
@@ -115,6 +119,13 @@ export const UsageDashboardView = ({
       <MetricCard card={dashboard.hookHealth} />
     </div>
 
-    <BurnChart dailyCosts={dailyCosts} />
+    {dailyCosts.length > 0 && (
+      <>
+        <div className="sec-hdr" style={{ marginTop: 11 }}>
+          <span className="sec-t">// 7-day burn</span>
+        </div>
+        <BurnChart dailyCosts={dailyCosts} />
+      </>
+    )}
   </div>
 );

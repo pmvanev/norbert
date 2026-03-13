@@ -1,6 +1,6 @@
 [package]
 name = "norbert"
-version = "0.4.1"
+version = "0.4.2"
 description = "Local-first observability and configuration management for Claude Code"
 authors = ["pmvanev"]
 edition = "2021"

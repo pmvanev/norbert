@@ -48,6 +48,7 @@ export const CostTicker = ({ data }: CostTickerProps) => (
     role="status"
     aria-label={`Session cost: ${data.label}`}
   >
-    <span className="cost-ticker-value">{renderDigits(data.label)}</span>
+    <span className="cost-ticker-label">Burn</span>
+    <span className="cost-ticker-value" data-mono="">{renderDigits(data.label)}</span>
   </div>
 );

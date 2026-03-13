@@ -19,15 +19,15 @@ import { DEFAULT_PRICING_TABLE } from "./domain/pricingModel";
 
 const GAUGE_CLUSTER_VIEW_ID = "gauge-cluster";
 const GAUGE_CLUSTER_VIEW_LABEL = "Gauge Cluster";
-const GAUGE_CLUSTER_VIEW_ICON = "\u{1F4CA}"; // bar chart
+const GAUGE_CLUSTER_VIEW_ICON = "⧉"; // grid symbol matching mockup
 
 const OSCILLOSCOPE_VIEW_ID = "oscilloscope";
 const OSCILLOSCOPE_VIEW_LABEL = "Oscilloscope";
-const OSCILLOSCOPE_VIEW_ICON = "\u{1F4C8}"; // chart increasing
+const OSCILLOSCOPE_VIEW_ICON = "⚡"; // lightning bolt matching mockup
 
 const USAGE_DASHBOARD_VIEW_ID = "usage-dashboard";
 const USAGE_DASHBOARD_VIEW_LABEL = "Usage Dashboard";
-const USAGE_DASHBOARD_VIEW_ICON = "\u{1F4B0}"; // money bag
+const USAGE_DASHBOARD_VIEW_ICON = "⬡"; // hexagon matching mockup
 
 // ---------------------------------------------------------------------------
 // Tab constants
@@ -35,7 +35,7 @@ const USAGE_DASHBOARD_VIEW_ICON = "\u{1F4B0}"; // money bag
 
 const USAGE_TAB_ID = "usage";
 const USAGE_TAB_LABEL = "Usage";
-const USAGE_TAB_ICON = "\u{1F4B2}"; // heavy dollar sign
+const USAGE_TAB_ICON = "⚡"; // lightning bolt matching mockup
 const USAGE_TAB_ORDER = 1;
 
 // ---------------------------------------------------------------------------
@@ -44,7 +44,7 @@ const USAGE_TAB_ORDER = 1;
 
 const COST_TICKER_ID = "cost-ticker";
 const COST_TICKER_LABEL = "Cost";
-const COST_TICKER_ICON = "\u{1F4B5}"; // dollar banknote
+const COST_TICKER_ICON = "◎"; // target circle matching mockup
 const COST_TICKER_POSITION = "right" as const;
 const COST_TICKER_ORDER = 0;
 

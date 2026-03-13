@@ -551,3 +551,357 @@ code, pre, .mono,
   display: flex;
   gap: 14px;
 }
+
+/* ═══ SECTION HEADERS (mockup pattern) ═══ */
+
+.sec-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  padding: 0 11px;
+}
+
+.sec-t {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: var(--sec-ls);
+  text-transform: uppercase;
+  color: var(--text-m);
+  font-family: var(--font-mono);
+}
+
+.sec-a {
+  font-size: 9px;
+  color: var(--brand);
+  cursor: pointer;
+  opacity: 0.7;
+  font-family: var(--font-mono);
+}
+
+/* ═══ NOTIFICATION BADGE (amber) ═══ */
+
+.sidebar-icon .ab-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 13px;
+  height: 13px;
+  background: var(--badge-bg);
+  border-radius: 7px;
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--badge-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 2px;
+  font-family: var(--font-mono);
+}
+
+/* ═══ GAUGE CLUSTER ═══ */
+
+.gauge-cluster {
+  padding: 10px;
+}
+
+.gauge-cluster-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.gauge-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--card-r);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.gauge-card:hover {
+  border-color: var(--border-card-h);
+  background: var(--bg-card-h);
+}
+
+.gauge-label {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-m);
+  font-family: var(--font-mono);
+}
+
+.gauge-value {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-p);
+}
+
+.gauge-unit {
+  font-size: 8px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-m);
+  font-family: var(--font-mono);
+}
+
+.gauge-urgency-normal .gauge-value {
+  color: var(--brand);
+}
+
+.gauge-urgency-amber .gauge-value {
+  color: var(--amber);
+}
+
+.gauge-urgency-amber {
+  border-color: rgba(var(--amber-rgb), 0.25);
+}
+
+.gauge-urgency-red .gauge-value {
+  color: var(--error);
+}
+
+.gauge-urgency-red {
+  border-color: rgba(255, 69, 96, 0.25);
+}
+
+/* Warning cluster (hook health) spans full width */
+.gauge-card.warning-cluster {
+  grid-column: 1 / -1;
+}
+
+/* ═══ OSCILLOSCOPE ═══ */
+
+.oscilloscope {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.osc-main {
+  flex: 1;
+  position: relative;
+  background: var(--osc-bg);
+  overflow: hidden;
+  min-height: 120px;
+}
+
+.oscilloscope-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.osc-bottom {
+  position: absolute;
+  bottom: 8px;
+  left: 14px;
+  display: flex;
+  gap: 16px;
+  pointer-events: none;
+}
+
+.osc-legend {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 9px;
+  font-family: var(--font-mono);
+  color: var(--text-m);
+}
+
+.osc-legend-dot {
+  width: 8px;
+  height: 2px;
+  border-radius: 1px;
+}
+
+.osc-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  border: 1px solid var(--border-card);
+  border-radius: var(--card-r);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.osc-stat {
+  padding: 8px 12px;
+  border-right: 1px solid var(--border-card);
+}
+
+.osc-stat:last-child {
+  border-right: none;
+}
+
+.osc-stat-l {
+  font-size: 8px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-m);
+  font-family: var(--font-mono);
+  margin-bottom: 3px;
+}
+
+.osc-stat-v {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-p);
+}
+
+/* ═══ USAGE DASHBOARD ═══ */
+
+.usage-dashboard {
+  padding: 10px;
+  overflow-y: auto;
+}
+
+.usage-dashboard-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.metric-card {
+  padding: 12px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--card-r);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.metric-card:hover {
+  border-color: var(--border-card-h);
+  background: var(--bg-card-h);
+}
+
+.metric-card-label {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-m);
+  font-family: var(--font-mono);
+}
+
+.metric-card-value {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--brand);
+}
+
+.metric-card-subtitle {
+  font-size: 9px;
+  color: var(--text-s);
+  font-family: var(--font-mono);
+}
+
+.metric-card-urgency-normal .metric-card-value {
+  color: var(--brand);
+}
+
+.metric-card-urgency-amber .metric-card-value {
+  color: var(--amber);
+}
+
+.metric-card-urgency-amber {
+  border-color: rgba(var(--amber-rgb), 0.25);
+}
+
+.metric-card-urgency-red .metric-card-value {
+  color: var(--error);
+}
+
+.metric-card-urgency-red {
+  border-color: rgba(255, 69, 96, 0.25);
+}
+
+/* Onboarding state */
+.usage-dashboard-onboarding {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--text-m);
+  font-size: 12px;
+}
+
+/* Burn chart */
+.burn-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 80px;
+  padding: 8px 11px;
+}
+
+.burn-chart-bar {
+  flex: 1;
+  background: rgba(var(--brand-rgb), 0.2);
+  border-radius: 2px 2px 0 0;
+  position: relative;
+  min-height: 2px;
+  transition: height 0.3s;
+}
+
+.burn-chart-bar-label {
+  position: absolute;
+  bottom: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 8px;
+  color: var(--text-m);
+  font-family: var(--font-mono);
+}
+
+/* ═══ COST TICKER (status bar item) ═══ */
+
+.cost-ticker {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.cost-ticker-label {
+  color: var(--text-m);
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.cost-ticker-value {
+  display: flex;
+  color: var(--text-s);
+}
+
+.cost-ticker-digit {
+  display: inline-block;
+}
+
+.cost-ticker-brand .cost-ticker-value {
+  color: var(--brand);
+}
+
+.cost-ticker-amber .cost-ticker-value {
+  color: var(--amber);
+}
+
+.cost-ticker-red .cost-ticker-value {
+  color: var(--error);
+}
+
+.cost-ticker-dim .cost-ticker-value {
+  color: var(--text-m);
+}
