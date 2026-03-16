@@ -176,6 +176,7 @@ struct ReadError {
 /// Returned by read_claude_config to provide the frontend with agents,
 /// commands, settings, and CLAUDE.md files from ~/.claude/ and/or ./.claude/.
 #[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 struct ClaudeConfig {
     agents: Vec<FileEntry>,
     commands: Vec<FileEntry>,
