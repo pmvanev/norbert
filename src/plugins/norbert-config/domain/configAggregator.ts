@@ -87,10 +87,10 @@ function parseAgentEntry(entry: FileEntry): AgentParseResult {
 // ---------------------------------------------------------------------------
 
 function aggregateSkills(commandFiles: readonly FileEntry[]): readonly SkillDefinition[] {
-  return commandFiles.map(parseCommandEntry);
+  return commandFiles.map(parseSkillEntry);
 }
 
-function parseCommandEntry(entry: FileEntry): SkillDefinition {
+function parseSkillEntry(entry: FileEntry): SkillDefinition {
   const filename = extractFilename(entry.path);
   const partial = parseSkillFile(filename, entry.content);
 
