@@ -118,6 +118,41 @@ describe("Tachometer enters redline at sustained high burn rate", () => {
   });
 });
 
+describe("Fuel gauge displays both percentage and token count for active session", () => {
+  it("shows token label when context window token counts are known", () => {
+    // Given a session with known context usage in tokens
+    const metrics = createMetricsSnapshot({
+      contextWindowPct: 45,
+      contextWindowTokens: 90000,
+      contextWindowMaxTokens: 200000,
+    });
+
+    // When gauge cluster data is computed
+    const gaugeData = computeGaugeClusterData(metrics);
+
+    // Then the fuel gauge shows percentage
+    expect(gaugeData.fuelGauge.value).toBe(45);
+
+    // And the token label shows current/max
+    expect(gaugeData.fuelGauge.tokenLabel).toBe("90k / 200k tokens");
+  });
+
+  it("omits token label when max is unknown", () => {
+    // Given a session where context token counts are unavailable
+    const metrics = createMetricsSnapshot({
+      contextWindowPct: 45,
+      contextWindowTokens: 0,
+      contextWindowMaxTokens: 0,
+    });
+
+    // When gauge cluster data is computed
+    const gaugeData = computeGaugeClusterData(metrics);
+
+    // Then no token label is shown
+    expect(gaugeData.fuelGauge.tokenLabel).toBe("");
+  });
+});
+
 describe("Gauge Cluster handles zero metrics for idle session", () => {
   it("all instruments show zero or default values when no events received", () => {
     // Given a newly started session with no events yet

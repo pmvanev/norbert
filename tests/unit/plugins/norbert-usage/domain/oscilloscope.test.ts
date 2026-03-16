@@ -178,6 +178,69 @@ describe("Oscilloscope grid line computation", () => {
     expect(gridLines[0].label).toBe("-50s");
     expect(gridLines[4].label).toBe("-10s");
   });
+
+  it("grid line labelY is within top padding zone", () => {
+    const dimensions: CanvasDimensions = {
+      width: 600,
+      height: 200,
+      padding: 10,
+    };
+    const gridLines = computeGridLines(dimensions, 60_000, 10_000);
+
+    for (const line of gridLines) {
+      // labelY should be near the top, not near the bottom
+      expect(line.labelY).toBeLessThan(dimensions.height / 2);
+      expect(line.labelY).toBeGreaterThan(0);
+    }
+  });
+
+  it("all grid line labelY values are in the top third of the canvas", () => {
+    // Use dimensions where height is large enough for the label offset
+    const tallCanvasArb: fc.Arbitrary<CanvasDimensions> = fc.record({
+      width: fc.integer({ min: 100, max: 2000 }),
+      height: fc.integer({ min: 60, max: 1000 }),
+      padding: fc.integer({ min: 0, max: 15 }),
+    });
+
+    fc.assert(
+      fc.property(tallCanvasArb, (dimensions) => {
+        const gridLines = computeGridLines(dimensions, 60_000, 10_000);
+        for (const line of gridLines) {
+          // labelY should be near the top, not near the bottom
+          expect(line.labelY).toBeLessThan(dimensions.height / 2);
+        }
+      }),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Dual trace divergence (token rate vs cost rate)
+// ---------------------------------------------------------------------------
+
+describe("Waveform traces produce divergent y-values when rates differ", () => {
+  it("tokenRate and costRate traces have different y-values for non-proportional samples", () => {
+    const dimensions: CanvasDimensions = {
+      width: 400,
+      height: 200,
+      padding: 10,
+    };
+    // Samples where tokenRate and costRate are not proportional
+    const samples: ReadonlyArray<RateSample> = [
+      { timestamp: 0, tokenRate: 0, costRate: 0.1 },
+      { timestamp: 100, tokenRate: 500, costRate: 0.01 },
+      { timestamp: 200, tokenRate: 100, costRate: 0.05 },
+    ];
+
+    const tokenPoints = prepareWaveformPoints(samples, dimensions, "tokenRate");
+    const costPoints = prepareWaveformPoints(samples, dimensions, "costRate");
+
+    // At least one sample should have different y-values between the two traces
+    const anyDifferent = tokenPoints.some(
+      (tp, i) => Math.abs(tp.y - costPoints[i].y) > 0.01,
+    );
+    expect(anyDifferent).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------

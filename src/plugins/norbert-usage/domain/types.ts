@@ -70,6 +70,8 @@ export interface SessionMetrics {
   readonly toolCallCount: number;
   readonly activeAgentCount: number;
   readonly contextWindowPct: number;
+  readonly contextWindowTokens: number;
+  readonly contextWindowMaxTokens: number;
   readonly contextWindowModel: string;
   readonly hookEventCount: number;
   readonly sessionStartedAt: string;

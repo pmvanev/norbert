@@ -159,4 +159,16 @@ describe("CSS layout chain smoke test", () => {
       expect(hasDeclaration(block, "overflow", "hidden")).toBe(true);
     });
   });
+
+  describe("oscilloscope uses glassmorphic card background", () => {
+    const block = extractRules(css, ".osc-main");
+
+    it("uses var(--bg-card) background", () => {
+      expect(hasDeclaration(block, "background", "var(--bg-card)")).toBe(true);
+    });
+
+    it("has card border", () => {
+      expect(hasDeclaration(block, "border", "1px solid var(--border-card)")).toBe(true);
+    });
+  });
 });

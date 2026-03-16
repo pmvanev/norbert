@@ -31,6 +31,7 @@ export interface CanvasDimensions {
 export interface GridLine {
   readonly x: number;
   readonly label: string;
+  readonly labelY: number;
 }
 
 /** Which rate field to extract from a RateSample. */
@@ -118,6 +119,7 @@ export const computeGridLines = (
     lines.push({
       x,
       label: `-${secondsFromEnd}s`,
+      labelY: padding + 10,
     });
   }
 

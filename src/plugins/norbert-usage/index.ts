@@ -13,6 +13,7 @@ import { createHookProcessor } from "./hookProcessor";
 import { createMetricsStore } from "./adapters/metricsStore";
 import { DEFAULT_PRICING_TABLE } from "./domain/pricingModel";
 import { appendSample } from "./domain/timeSeriesSampler";
+import { computeInstantaneousRates, type MetricsSnapshot } from "./domain/instantaneousRate";
 import type { RateSample } from "./domain/types";
 
 // ---------------------------------------------------------------------------
@@ -21,6 +22,10 @@ import type { RateSample } from "./domain/types";
 // ---------------------------------------------------------------------------
 
 export const usageMetricsStore = createMetricsStore();
+
+// Mutable snapshot for instantaneous rate computation.
+// Module-level singleton alongside the metrics store.
+let previousSnapshot: MetricsSnapshot = { totalTokens: 0, sessionCost: 0, timestamp: Date.now() };
 
 // ---------------------------------------------------------------------------
 // View constants
@@ -132,15 +137,17 @@ const onLoad = (api: NorbertAPI): void => {
     updateMetrics: (reducer) => {
       const reduced = reducer(usageMetricsStore.getMetrics());
       const now = Date.now();
-      const startTime = reduced.sessionStartedAt
-        ? new Date(reduced.sessionStartedAt).getTime()
-        : now;
-      const elapsedSec = Math.max(1, (now - startTime) / 1000);
-      const burnRate = reduced.totalTokens / elapsedSec;
-      const costRate = reduced.sessionCost / elapsedSec;
 
-      const nextMetrics = { ...reduced, burnRate };
-      const sample: RateSample = { timestamp: now, tokenRate: burnRate, costRate };
+      const currentSnapshot: MetricsSnapshot = {
+        totalTokens: reduced.totalTokens,
+        sessionCost: reduced.sessionCost,
+        timestamp: now,
+      };
+      const { tokenRate, costRate } = computeInstantaneousRates(currentSnapshot, previousSnapshot);
+      previousSnapshot = currentSnapshot;
+
+      const nextMetrics = { ...reduced, burnRate: tokenRate };
+      const sample: RateSample = { timestamp: now, tokenRate, costRate };
       const nextTimeSeries = appendSample(usageMetricsStore.getTimeSeries(), sample);
       usageMetricsStore.update(nextMetrics, nextTimeSeries);
     },

@@ -9,6 +9,7 @@
 import { describe, it, expect } from "vitest";
 import {
   computeDashboardData,
+  deriveSessionLabel,
   type DashboardData,
 } from "../../../../../src/plugins/norbert-usage/domain/dashboard";
 import {
@@ -136,11 +137,19 @@ describe("Context Window card urgency", () => {
 // ---------------------------------------------------------------------------
 
 describe("Hook Health card", () => {
-  it("shows OK with normal urgency", () => {
+  it("shows OK with normal urgency when events are flowing", () => {
     const dashboard = computeDashboardData(createMetrics({ hookEventCount: 200 }));
     expect(dashboard.hookHealth.label).toBe("Hook Health");
     expect(dashboard.hookHealth.value).toBe("OK");
     expect(dashboard.hookHealth.urgency).toBe("normal");
+    expect(dashboard.hookHealth.subtitle).toBe("200 events");
+  });
+
+  it("shows 'No Events' with amber urgency when hookEventCount is 0", () => {
+    const dashboard = computeDashboardData(createMetrics({ hookEventCount: 0 }));
+    expect(dashboard.hookHealth.value).toBe("No Events");
+    expect(dashboard.hookHealth.urgency).toBe("amber");
+    expect(dashboard.hookHealth.subtitle).toBe("");
   });
 });
 
@@ -159,6 +168,39 @@ describe("Onboarding detection", () => {
       createMetrics({ sessionId: "active", sessionCost: 1, totalTokens: 100 }),
     );
     expect(dashboard.isOnboarding).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Session label
+// ---------------------------------------------------------------------------
+
+describe("Session label", () => {
+  it("contains session ID when non-default", () => {
+    const dashboard = computeDashboardData(createMetrics({ sessionId: "refactor-auth" }));
+    expect(dashboard.sessionLabel).toBe("refactor-auth");
+  });
+
+  it("is empty for 'default' session ID", () => {
+    const dashboard = computeDashboardData(createMetrics({ sessionId: "default" }));
+    expect(dashboard.sessionLabel).toBe("");
+  });
+
+  it("is empty for empty session ID", () => {
+    const dashboard = computeDashboardData(createMetrics({ sessionId: "" }));
+    expect(dashboard.sessionLabel).toBe("");
+  });
+
+  it("truncates long IDs with ellipsis", () => {
+    const longId = "this-is-a-very-long-session-identifier-that-should-be-truncated";
+    const label = deriveSessionLabel(longId);
+    expect(label).toHaveLength(20);
+    expect(label).toMatch(/\.\.\.$/);
+  });
+
+  it("passes through IDs of 20 chars or less", () => {
+    const label = deriveSessionLabel("exactly-20-chars!!!!"); // 20 chars
+    expect(label).toBe("exactly-20-chars!!!!");
   });
 });
 

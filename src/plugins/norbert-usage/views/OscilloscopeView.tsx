@@ -10,7 +10,7 @@
  */
 
 import { useRef, useEffect, useCallback, useState } from "react";
-import type { TimeSeriesBuffer } from "../domain/types";
+import type { TimeSeriesBuffer, RateSample } from "../domain/types";
 import {
   prepareWaveformPoints,
   computeGridLines,
@@ -21,7 +21,7 @@ import {
   type WaveformPoint,
   type GridLine,
 } from "../domain/oscilloscope";
-import { getSamples, computeStats } from "../domain/timeSeriesSampler";
+import { getSamples, appendSample, computeStats } from "../domain/timeSeriesSampler";
 import type { MetricsStore } from "../adapters/metricsStore";
 
 // ---------------------------------------------------------------------------
@@ -53,9 +53,6 @@ const GRID_COLOR_FALLBACK = "rgba(0, 229, 204, 0.08)";
 const GRID_LABEL_COLOR = "rgba(255, 255, 255, 0.4)";
 const OVERLAY_COLOR_PROP = "--text-p";
 const OVERLAY_COLOR_FALLBACK = "#c8f0e8";
-const BACKGROUND_COLOR_PROP = "--osc-bg";
-const BACKGROUND_COLOR_FALLBACK = "rgb(0, 8, 6)";
-
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
@@ -72,7 +69,10 @@ const clearCanvas = (
   ctx: CanvasRenderingContext2D,
   dimensions: CanvasDimensions,
 ): void => {
-  ctx.fillStyle = getThemeColor(BACKGROUND_COLOR_PROP, BACKGROUND_COLOR_FALLBACK);
+  ctx.clearRect(0, 0, dimensions.width, dimensions.height);
+  // Semi-transparent overlay for trace contrast while allowing
+  // CSS glassmorphic background to show through.
+  ctx.fillStyle = "rgba(0, 8, 6, 0.6)";
   ctx.fillRect(0, 0, dimensions.width, dimensions.height);
 };
 
@@ -83,7 +83,7 @@ const drawGridLines = (
 ): void => {
   ctx.strokeStyle = getThemeColor(GRID_COLOR_PROP, GRID_COLOR_FALLBACK);
   ctx.lineWidth = 1;
-  ctx.font = "10px monospace";
+  ctx.font = "9px monospace";
   ctx.fillStyle = GRID_LABEL_COLOR;
 
   for (const line of gridLines) {
@@ -92,7 +92,7 @@ const drawGridLines = (
     ctx.lineTo(line.x, dimensions.height - dimensions.padding);
     ctx.stroke();
 
-    ctx.fillText(line.label, line.x + 3, dimensions.height - 2);
+    ctx.fillText(line.label, line.x + 3, line.labelY);
   }
 };
 
@@ -182,6 +182,19 @@ export const OscilloscopeView = ({ store }: OscilloscopeViewProps) => {
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+
+    // Inject zero-rate heartbeat when no new sample has arrived,
+    // keeping the waveform scrolling continuously during idle.
+    const now = Date.now();
+    const currentSamples = getSamples(bufferRef.current);
+    const lastSampleTime = currentSamples.length > 0
+      ? currentSamples[currentSamples.length - 1].timestamp
+      : 0;
+
+    if (now - lastSampleTime >= REFRESH_INTERVAL_MS) {
+      const heartbeat: RateSample = { timestamp: now, tokenRate: 0, costRate: 0 };
+      bufferRef.current = appendSample(bufferRef.current, heartbeat);
+    }
 
     const buffer = bufferRef.current;
     const samples = getSamples(buffer);

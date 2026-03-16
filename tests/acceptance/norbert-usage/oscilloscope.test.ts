@@ -24,6 +24,10 @@ import {
 import {
   calculateBurnRate,
 } from "../../../src/plugins/norbert-usage/domain/burnRate";
+import {
+  computeInstantaneousRates,
+  type MetricsSnapshot,
+} from "../../../src/plugins/norbert-usage/domain/instantaneousRate";
 
 // ---------------------------------------------------------------------------
 // Helper: create a sample at a given time
@@ -181,5 +185,70 @@ describe("Token burn rate computed from rolling time window", () => {
 
     // Then the burn rate is zero
     expect(rate).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FOCUSED SCENARIOS: Instantaneous Rate Computation
+// ---------------------------------------------------------------------------
+
+describe("Instantaneous rate reflects recent activity burst, not session-long average", () => {
+  it("rate spikes during a burst then drops to zero when idle", () => {
+    // Given a session that has been running for 60 seconds with 60k total tokens
+    const baseSnapshot: MetricsSnapshot = {
+      totalTokens: 60000,
+      sessionCost: 1.0,
+      timestamp: 60000,
+    };
+
+    // When a burst of 2000 tokens arrives in 1 second
+    const burstSnapshot: MetricsSnapshot = {
+      totalTokens: 62000,
+      sessionCost: 1.03,
+      timestamp: 61000,
+    };
+
+    const burstRates = computeInstantaneousRates(burstSnapshot, baseSnapshot);
+
+    // Then the instantaneous rate is ~2000 tok/s (not ~1033 from cumulative average)
+    expect(burstRates.tokenRate).toBeCloseTo(2000, 0);
+
+    // When no new tokens arrive for the next second
+    const idleSnapshot: MetricsSnapshot = {
+      totalTokens: 62000,
+      sessionCost: 1.03,
+      timestamp: 62000,
+    };
+
+    const idleRates = computeInstantaneousRates(idleSnapshot, burstSnapshot);
+
+    // Then the rate drops to zero
+    expect(idleRates.tokenRate).toBe(0);
+  });
+});
+
+describe("Idle gaps fill with zero-rate heartbeat samples", () => {
+  it("buffer grows with zero-rate samples during idle period", () => {
+    // Given a buffer with one real sample
+    let buffer = createBuffer(600);
+    buffer = appendSample(buffer, sample(1000, 200, 0.02));
+
+    // When 5 heartbeat intervals pass with no new events
+    for (let i = 1; i <= 5; i++) {
+      buffer = appendSample(buffer, sample(1000 + i * 100, 0, 0));
+    }
+
+    // Then the buffer contains 6 samples (1 real + 5 heartbeats)
+    const samples = getSamples(buffer);
+    expect(samples).toHaveLength(6);
+
+    // And the first is the real sample
+    expect(samples[0].tokenRate).toBe(200);
+
+    // And the rest are zero-rate heartbeats
+    for (let i = 1; i < 6; i++) {
+      expect(samples[i].tokenRate).toBe(0);
+      expect(samples[i].costRate).toBe(0);
+    }
   });
 });

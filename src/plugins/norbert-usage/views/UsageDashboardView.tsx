@@ -105,7 +105,9 @@ export const UsageDashboardView = ({
 }: UsageDashboardViewProps) => (
   <div className="usage-dashboard" role="region" aria-label="Usage Dashboard">
     <div className="sec-hdr">
-      <span className="sec-t">Session Usage</span>
+      <span className="sec-t">
+        Session Usage{dashboard.sessionLabel !== "" ? ` \u2014 ${dashboard.sessionLabel}` : ""}
+      </span>
     </div>
 
     {dashboard.isOnboarding && dailyCosts.length === 0 && <OnboardingMessage />}

@@ -21,6 +21,7 @@ export interface FuelGaugeData {
   readonly value: number;
   readonly unit: "%";
   readonly urgency: Urgency;
+  readonly tokenLabel: string;
 }
 
 export interface OdometerData {
@@ -98,13 +99,24 @@ const buildTachometer = (
   urgency: classifyTachoUrgency(burnRate, thresholds),
 });
 
+/** Format context token usage as "Xk / Yk tokens", or "" when unknown. */
+export const formatContextTokenLabel = (current: number, max: number): string => {
+  if (max === 0) return "";
+  const currentK = Math.round(current / 1000);
+  const maxK = Math.round(max / 1000);
+  return `${currentK}k / ${maxK}k tokens`;
+};
+
 const buildFuelGauge = (
   contextWindowPct: number,
+  contextWindowTokens: number,
+  contextWindowMaxTokens: number,
   thresholds: ThresholdConfig,
 ): FuelGaugeData => ({
   value: contextWindowPct,
   unit: "%",
   urgency: classifyFuelUrgency(contextWindowPct, thresholds),
+  tokenLabel: formatContextTokenLabel(contextWindowTokens, contextWindowMaxTokens),
 });
 
 const buildOdometer = (sessionCost: number): OdometerData => ({
@@ -139,7 +151,7 @@ export const computeGaugeClusterData = (
   thresholds: ThresholdConfig = DEFAULT_THRESHOLDS,
 ): GaugeClusterData => ({
   tachometer: buildTachometer(metrics.burnRate, thresholds),
-  fuelGauge: buildFuelGauge(metrics.contextWindowPct, thresholds),
+  fuelGauge: buildFuelGauge(metrics.contextWindowPct, metrics.contextWindowTokens, metrics.contextWindowMaxTokens, thresholds),
   odometer: buildOdometer(metrics.sessionCost),
   rpmCounter: buildRpmCounter(metrics.activeAgentCount),
   warningCluster: buildWarningCluster(metrics.hookEventCount),

@@ -17,6 +17,7 @@ import {
   norbertUsagePlugin,
   usageMetricsStore,
 } from "../../src/plugins/norbert-usage/index";
+import { createDefaultLayoutState, isSecondaryVisible } from "../../src/layout/zoneToggle";
 
 describe("Event-to-view pipeline", () => {
   beforeEach(() => {
@@ -68,5 +69,12 @@ describe("Event-to-view pipeline", () => {
     });
 
     expect(usageMetricsStore.getMetrics().toolCallCount).toBe(1);
+  });
+});
+
+describe("Initial layout state", () => {
+  it("has no secondary zone on startup", () => {
+    const layout = createDefaultLayoutState();
+    expect(isSecondaryVisible(layout)).toBe(false);
   });
 });

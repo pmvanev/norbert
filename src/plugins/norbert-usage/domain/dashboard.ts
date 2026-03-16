@@ -20,6 +20,7 @@ export interface DashboardData {
   readonly contextWindow: MetricCardData;
   readonly hookHealth: MetricCardData;
   readonly isOnboarding: boolean;
+  readonly sessionLabel: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -53,6 +54,12 @@ const contextWindowUrgency = (pct: number): Urgency => {
 // ---------------------------------------------------------------------------
 // Onboarding detection (pure)
 // ---------------------------------------------------------------------------
+
+/** Derive a display label from the session ID. */
+export const deriveSessionLabel = (sessionId: string): string => {
+  if (sessionId === "" || sessionId === "default") return "";
+  return sessionId.length > 20 ? sessionId.slice(0, 17) + "..." : sessionId;
+};
 
 /** A session is onboarding when all activity metrics are zero. */
 const isOnboardingSession = (metrics: SessionMetrics): boolean =>
@@ -103,11 +110,11 @@ const buildContextWindowCard = (metrics: SessionMetrics): MetricCardData => ({
   urgency: contextWindowUrgency(metrics.contextWindowPct),
 });
 
-const buildHookHealthCard = (_metrics: SessionMetrics): MetricCardData => ({
+const buildHookHealthCard = (metrics: SessionMetrics): MetricCardData => ({
   label: "Hook Health",
-  value: "OK",
-  subtitle: "",
-  urgency: "normal",
+  value: metrics.hookEventCount > 0 ? "OK" : "No Events",
+  subtitle: metrics.hookEventCount > 0 ? `${metrics.hookEventCount} events` : "",
+  urgency: metrics.hookEventCount > 0 ? "normal" : "amber",
 });
 
 // ---------------------------------------------------------------------------
@@ -128,5 +135,6 @@ export const computeDashboardData = (metrics: SessionMetrics): DashboardData => 
   contextWindow: buildContextWindowCard(metrics),
   hookHealth: buildHookHealthCard(metrics),
   isOnboarding: isOnboardingSession(metrics),
+  sessionLabel: deriveSessionLabel(metrics.sessionId),
 });
 

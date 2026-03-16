@@ -70,8 +70,9 @@ describe("User opens Usage Dashboard and sees session health at a glance", () =>
     // And the context window card shows "56%"
     expect(dashboard.contextWindow.value).toBe("56%");
 
-    // And the hook health card shows "OK"
+    // And the hook health card shows "OK" (events are flowing)
     expect(dashboard.hookHealth.value).toBe("OK");
+    expect(dashboard.hookHealth.urgency).toBe("normal");
   });
 });
 
@@ -141,6 +142,44 @@ describe("Dashboard shows onboarding state for new user", () => {
 
     // And the dashboard indicates onboarding state
     expect(dashboard.isOnboarding).toBe(true);
+  });
+});
+
+describe("Hook health card shows amber for newly started session", () => {
+  it("zero hook events produce 'No Events' with amber urgency", () => {
+    // Given a newly started session with no hook events
+    const metrics = createMetricsSnapshot({ hookEventCount: 0 });
+
+    // When dashboard data is computed
+    const dashboard = computeDashboardData(metrics);
+
+    // Then hook health shows 'No Events' in amber
+    expect(dashboard.hookHealth.value).toBe("No Events");
+    expect(dashboard.hookHealth.urgency).toBe("amber");
+  });
+});
+
+describe("Dashboard title includes session identifier", () => {
+  it("sessionLabel contains the session ID for an active session", () => {
+    // Given an active session with a known ID
+    const metrics = createMetricsSnapshot({ sessionId: "refactor-auth" });
+
+    // When dashboard data is computed
+    const dashboard = computeDashboardData(metrics);
+
+    // Then the session label identifies the session
+    expect(dashboard.sessionLabel).toBe("refactor-auth");
+  });
+
+  it("sessionLabel is empty for the default session", () => {
+    // Given metrics from the default session
+    const metrics = createMetricsSnapshot({ sessionId: "default" });
+
+    // When dashboard data is computed
+    const dashboard = computeDashboardData(metrics);
+
+    // Then no session label is shown
+    expect(dashboard.sessionLabel).toBe("");
   });
 });
 

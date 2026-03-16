@@ -21,6 +21,7 @@ import { createInitialMetrics } from "../../../../../src/plugins/norbert-usage/d
 import type { SessionMetrics } from "../../../../../src/plugins/norbert-usage/domain/types";
 import {
   computeGaugeClusterData,
+  formatContextTokenLabel,
 } from "../../../../../src/plugins/norbert-usage/domain/gaugeCluster";
 
 // ---------------------------------------------------------------------------
@@ -36,6 +37,8 @@ const sessionMetricsArb = fc.record({
   toolCallCount: fc.nat({ max: 10_000 }),
   activeAgentCount: fc.nat({ max: 20 }),
   contextWindowPct: fc.integer({ min: 0, max: 100 }),
+  contextWindowTokens: fc.nat({ max: 1_000_000 }),
+  contextWindowMaxTokens: fc.nat({ max: 1_000_000 }),
   contextWindowModel: fc.string(),
   hookEventCount: fc.nat({ max: 100_000 }),
   sessionStartedAt: fc.constant("2025-01-01T00:00:00Z"),
@@ -168,6 +171,49 @@ describe("Gauge values are passed through from metrics", () => {
   it("passes activeAgentCount to rpmCounter value", () => {
     const result = computeGaugeClusterData(createSnapshot({ activeAgentCount: 3 }));
     expect(result.rpmCounter.value).toBe(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Warning cluster
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Fuel gauge token label
+// ---------------------------------------------------------------------------
+
+describe("Fuel gauge token label", () => {
+  it("shows 'Xk / Yk tokens' when maxTokens > 0", () => {
+    const label = formatContextTokenLabel(50000, 200000);
+    expect(label).toBe("50k / 200k tokens");
+  });
+
+  it("is empty when maxTokens is 0", () => {
+    const label = formatContextTokenLabel(50000, 0);
+    expect(label).toBe("");
+  });
+
+  it("rounds to nearest thousand", () => {
+    const label = formatContextTokenLabel(50500, 199500);
+    expect(label).toBe("51k / 200k tokens");
+  });
+
+  it("fuel gauge data includes tokenLabel from metrics", () => {
+    const result = computeGaugeClusterData(createSnapshot({
+      contextWindowPct: 45,
+      contextWindowTokens: 90000,
+      contextWindowMaxTokens: 200000,
+    }));
+    expect(result.fuelGauge.tokenLabel).toBe("90k / 200k tokens");
+  });
+
+  it("fuel gauge tokenLabel is empty when max is unknown", () => {
+    const result = computeGaugeClusterData(createSnapshot({
+      contextWindowPct: 45,
+      contextWindowTokens: 0,
+      contextWindowMaxTokens: 0,
+    }));
+    expect(result.fuelGauge.tokenLabel).toBe("");
   });
 });
 

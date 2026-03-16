@@ -33,6 +33,8 @@ export const createInitialMetrics = (sessionId: string): SessionMetrics => ({
   toolCallCount: 0,
   activeAgentCount: 0,
   contextWindowPct: 0,
+  contextWindowTokens: 0,
+  contextWindowMaxTokens: 0,
   contextWindowModel: "",
   hookEventCount: 0,
   sessionStartedAt: "",

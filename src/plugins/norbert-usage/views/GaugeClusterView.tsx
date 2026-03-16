@@ -135,6 +135,9 @@ const FuelGaugeComponent = ({ data }: { readonly data: FuelGaugeData }) => {
         </div>
       </div>
       <span className="gauge-label">Context</span>
+      {data.tokenLabel !== "" && (
+        <span className="gauge-sublabel">{data.tokenLabel}</span>
+      )}
     </div>
   );
 };
