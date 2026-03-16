@@ -1,0 +1,288 @@
+journey:
+  name: "Browse Configuration"
+  goal: "User sees their full Claude Code configuration in one organized place"
+  persona: "Claude Code user who wants to understand or verify their setup"
+
+  emotional_arc:
+    start: "Curious, slightly uncertain -- what do I have configured?"
+    middle: "Oriented and exploring -- tabs are clear, each category makes sense"
+    end: "Confident and informed -- I know my full setup, nothing is hidden"
+
+steps:
+  - id: 1
+    name: "Navigate to Configuration Tab"
+    action: "User clicks Config tab in Norbert sidebar"
+
+    ui_mockup: |
+      +-- Norbert Sidebar --+
+      |  [Sessions]         |
+      |  [Usage]            |
+      |  [Config] <-- click |
+      +---------------------+
+
+    shared_artifacts:
+      - name: "config_tab_id"
+        source: "norbert-config plugin manifest / tab registration"
+        displayed_as: "Config tab icon and label in sidebar"
+        consumers: ["sidebar", "tab bar"]
+
+    emotional_state:
+      entry: "Curious -- what do I have set up?"
+      exit: "Oriented -- I see a tab structure that makes sense"
+
+    integration_checkpoint: |
+      Config tab appears in sidebar alongside Sessions and Usage tabs.
+      Tab loads without requiring an active Claude Code session.
+      Tab loads without network access (local filesystem only).
+
+    gherkin: |
+      Scenario: User navigates to Configuration tab
+        Given Ravi Patel has Norbert open with the norbert-config plugin loaded
+        When Ravi clicks the Config tab in the sidebar
+        Then the Configuration Viewer appears in the main content area
+        And 7 sub-tabs are visible: Agents, Hooks, Skills, Rules, MCP, Plugins, Docs
+
+  - id: 2
+    name: "Browse Agents Tab"
+    action: "User views list of configured agents"
+
+    ui_mockup: |
+      +-- Agents Tab -----------------------------------+
+      | Your configured agents from .claude/agents/     |
+      |                                                 |
+      | +-- nw-functional-software-crafter --------+    |
+      | |  Model: opus-4  Tools: 12                |    |
+      | |  "Functional programming specialist..."   |    |
+      | +------------------------------------------+    |
+      |                                                 |
+      | +-- nw-product-owner ----------------------+    |
+      | |  Model: opus-4  Tools: 8                 |    |
+      | |  "Experience-driven requirements..."      |    |
+      | +------------------------------------------+    |
+      +--------------------------------------------------+
+
+    shared_artifacts:
+      - name: "agent_definitions"
+        source: ".claude/agents/*.md files"
+        displayed_as: "${agent_name}, ${agent_description}, ${agent_model}"
+        consumers: ["agents tab card list"]
+      - name: "agent_source_path"
+        source: "filesystem path to .claude/agents/"
+        displayed_as: "Source annotation on each agent card"
+        consumers: ["agents tab header", "agent detail view"]
+
+    emotional_state:
+      entry: "Oriented -- I know where to look"
+      exit: "Informed -- I can see all my agents and their key properties"
+
+    integration_checkpoint: |
+      Agent list populated from filesystem scan of .claude/agents/.
+      Each card shows name, model, tool count, and description preview.
+      Cards are clickable for drill-down to full detail.
+
+    gherkin: |
+      Scenario: Agents tab lists all configured agents
+        Given Ravi Patel has 3 agent definitions in .claude/agents/
+        And the agents are "nw-functional-software-crafter", "nw-product-owner", "nw-solution-architect"
+        When Ravi views the Agents tab
+        Then 3 agent cards appear
+        And each card shows the agent name, model, tool count, and description preview
+
+  - id: 3
+    name: "Browse Hooks Tab"
+    action: "User views hook configurations"
+
+    ui_mockup: |
+      +-- Hooks Tab ------------------------------------+
+      | Hook configurations from .claude/settings.json  |
+      |                                                 |
+      | +-- PreToolUse ----------------------------+    |
+      | |  Event: PreToolUse                       |    |
+      | |  Command: /path/to/hook-receiver         |    |
+      | |  Matchers: Bash, Write, Edit, MultiEdit  |    |
+      | +------------------------------------------+    |
+      +--------------------------------------------------+
+
+    shared_artifacts:
+      - name: "hook_configurations"
+        source: ".claude/settings.json hooks section"
+        displayed_as: "${hook_event_type}, ${hook_command}, ${hook_matchers}"
+        consumers: ["hooks tab card list"]
+
+    emotional_state:
+      entry: "Slightly uncertain -- are my hooks correct?"
+      exit: "Relieved -- I can see what is wired and verify it looks right"
+
+    integration_checkpoint: |
+      Hooks parsed from settings.json hooks array.
+      Each hook displays event type, command, and matchers.
+      Structural parsing errors surfaced as inline warnings.
+
+    gherkin: |
+      Scenario: Hooks tab shows hook event bindings
+        Given Ravi Patel has 3 hooks configured in .claude/settings.json
+        When Ravi views the Hooks tab
+        Then 3 hook cards appear
+        And each card shows the event type, command path, and matcher patterns
+
+  - id: 4
+    name: "Browse MCP Servers Tab"
+    action: "User views MCP server configurations"
+
+    ui_mockup: |
+      +-- MCP Servers Tab ------------------------------+
+      | MCP server configs from .claude/settings.json   |
+      |                                                 |
+      | +-- filesystem-server ---------------------+    |
+      | |  Type: stdio                             |    |
+      | |  Command: npx @anthropic/mcp-filesystem  |    |
+      | |  Args: ["/home/user/projects"]           |    |
+      | |  Env: (none)                             |    |
+      | +------------------------------------------+    |
+      +--------------------------------------------------+
+
+    shared_artifacts:
+      - name: "mcp_server_configurations"
+        source: ".claude/settings.json mcpServers section"
+        displayed_as: "${mcp_server_name}, ${mcp_server_type}, ${mcp_command}"
+        consumers: ["MCP tab card list"]
+
+    emotional_state:
+      entry: "Wanting to verify server setup"
+      exit: "Confident -- servers are configured as expected"
+
+    integration_checkpoint: |
+      MCP servers parsed from settings.json mcpServers object.
+      Each server shows name, type, command, args, and env vars.
+      Environment variable values are masked by default (show on click).
+
+    gherkin: |
+      Scenario: MCP tab shows server connection details
+        Given Ravi Patel has 2 MCP servers configured in .claude/settings.json
+        When Ravi views the MCP Servers tab
+        Then 2 server cards appear
+        And each card shows the server name, type, command, args, and env vars
+
+  - id: 5
+    name: "Browse Remaining Tabs"
+    action: "User views Skills, Rules, Plugins, and Docs tabs"
+
+    shared_artifacts:
+      - name: "skill_definitions"
+        source: ".claude/commands/*.md files"
+        displayed_as: "${skill_name}, ${skill_description}"
+        consumers: ["skills tab list"]
+      - name: "rule_entries"
+        source: ".claude/settings.json rules + CLAUDE.md rule blocks"
+        displayed_as: "${rule_text}, ${rule_source}"
+        consumers: ["rules tab list"]
+      - name: "claude_md_files"
+        source: "./CLAUDE.md, .claude/CLAUDE.md, .claude/settings.json"
+        displayed_as: "${claude_md_content} rendered with formatting"
+        consumers: ["docs tab content panels"]
+
+    emotional_state:
+      entry: "Exploring -- what else is there?"
+      exit: "Satisfied -- I have seen everything"
+
+    integration_checkpoint: |
+      Skills read from .claude/commands/ directory.
+      Rules aggregated from settings.json and CLAUDE.md files.
+      Docs tab renders Markdown with syntax highlighting.
+      Empty tabs show helpful empty state with explanation.
+
+    gherkin: |
+      Scenario: Skills tab lists available commands
+        Given Ravi Patel has 5 skill files in .claude/commands/
+        When Ravi views the Skills tab
+        Then 5 skill entries appear with name and description
+
+      Scenario: Rules tab aggregates rules from multiple sources
+        Given Ravi Patel has rules in .claude/settings.json and in CLAUDE.md
+        When Ravi views the Rules tab
+        Then rules from both sources appear
+        And each rule shows its source file
+
+      Scenario: Docs tab renders CLAUDE.md with formatting
+        Given a CLAUDE.md file exists in the project root
+        When Ravi views the Docs tab
+        Then the CLAUDE.md content renders with Markdown formatting
+        And the source path is shown above the content
+
+  - id: 6
+    name: "Inspect Entity Detail"
+    action: "User clicks an entity to expand full details"
+
+    ui_mockup: |
+      +-- Agent Detail (expanded) ---------------------+
+      | Name: nw-functional-software-crafter           |
+      | Model: opus-4                                  |
+      | Tools (12): Read, Write, Edit, Glob, ...       |
+      |                                                |
+      | System Prompt Preview:                         |
+      | +--------------------------------------------+ |
+      | | You are a functional software crafter...   | |
+      | |                                  [Show All]| |
+      | +--------------------------------------------+ |
+      |                                                |
+      | Source: .claude/agents/nw-func...crafter.md     |
+      +------------------------------------------------+
+
+    shared_artifacts:
+      - name: "entity_detail"
+        source: "Same source file as the list entry"
+        displayed_as: "Full field breakdown with expandable sections"
+        consumers: ["entity detail panel"]
+
+    emotional_state:
+      entry: "Wanting to verify a specific entity"
+      exit: "Confident -- I see exactly what is configured"
+
+    integration_checkpoint: |
+      Detail view shows all fields from the source file.
+      Long content (system prompts) uses progressive disclosure.
+      Source file path shown for traceability.
+
+    gherkin: |
+      Scenario: User expands agent to see full details
+        Given Ravi Patel sees the agent card for "nw-functional-software-crafter"
+        When Ravi clicks the agent card
+        Then the card expands to show full details
+        And the system prompt is shown with a preview and "Show All" button
+        And the source file path is displayed
+
+integration_validation:
+  shared_artifact_consistency:
+    - artifact: "agent_definitions"
+      must_match_across: [2, 6]
+      failure_message: "Agent card in list must show same data as expanded detail"
+    - artifact: "config_source_path"
+      must_match_across: [2, 3, 4, 5, 6]
+      failure_message: "Source path annotation must match actual filesystem path"
+    - artifact: "hook_configurations"
+      must_match_across: [3]
+      failure_message: "Hook display must exactly reflect settings.json content"
+    - artifact: "mcp_server_configurations"
+      must_match_across: [4]
+      failure_message: "MCP server display must exactly reflect settings.json content"
+
+error_paths:
+  - id: "no-claude-dir"
+    trigger: ".claude/ directory does not exist"
+    display: "Empty state with explanation and link to Claude Code docs"
+    recovery: "User creates .claude/ directory and configuration files"
+
+  - id: "empty-tab"
+    trigger: "No entities of a type (e.g., no agents configured)"
+    display: "Tab-specific empty state explaining what the category is and where to add items"
+    recovery: "User creates configuration files in the correct location"
+
+  - id: "malformed-settings"
+    trigger: "settings.json contains invalid JSON or unexpected structure"
+    display: "Parse error shown inline with the problematic section highlighted"
+    recovery: "User fixes the JSON in their editor"
+
+  - id: "unreadable-file"
+    trigger: "File exists but cannot be read (permissions, encoding)"
+    display: "Individual file error shown; other files in the same tab still load"
+    recovery: "User fixes file permissions"
