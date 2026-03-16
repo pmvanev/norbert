@@ -1,0 +1,254 @@
+{
+  "roadmap": {
+    "project_id": "norbert-config",
+    "created_at": "2026-03-16T10:00:00Z",
+    "total_steps": 37,
+    "phases": 6
+  },
+  "phases": [
+    {
+      "id": "01",
+      "name": "Domain Types",
+      "steps": [
+        {
+          "id": "01-01",
+          "name": "Algebraic data types for all config entities",
+          "type": "infrastructure",
+          "criteria": "ConfigScope, AgentDefinition, HookConfig, McpServerConfig, EnvVar, SkillDefinition, RuleEntry, PluginInfo, DocFile, ReadErrorInfo, AggregatedConfig importable from domain/types. Discriminated unions ConfigReadResult, SettingsParseResult, AgentParseResult use tag-based variants. CONFIG_SUB_TABS const array and derived ConfigSubTab type defined. All interfaces readonly."
+        }
+      ]
+    },
+    {
+      "id": "02",
+      "name": "Rust Backend and Plugin Skeleton",
+      "steps": [
+        {
+          "id": "02-01",
+          "name": "Rust read_claude_config IPC command",
+          "type": "infrastructure",
+          "criteria": "read_claude_config command registered in generate_handler. Given scope 'user', reads ~/.claude/ agents, commands, settings, and CLAUDE.md. Given scope 'project', reads ./.claude/ equivalents. Missing directories return empty lists. Per-file read failures populate errors array without blocking other files. Returns ClaudeConfig struct with FileEntry and ReadError vectors."
+        },
+        {
+          "id": "02-02",
+          "name": "WS: Plugin manifest, entry point, and viewer shell",
+          "type": "infrastructure",
+          "criteria": "Manifest declares id 'norbert-config' with no plugin dependencies. onLoad registers 1 primary view 'config-viewer' and 1 sidebar tab 'config' at order 2. onUnload removes all registrations. ConfigViewerView renders 7 sub-tab navigation with Agents selected by default. Plugin loads and functions without active Claude Code session."
+        }
+      ]
+    },
+    {
+      "id": "03",
+      "name": "Agent Parser and Agents Tab",
+      "steps": [
+        {
+          "id": "03-01",
+          "name": "WS: Agent definition parsed with key metadata",
+          "criteria": "Given agent Markdown with YAML frontmatter containing model and tools, parser returns 'parsed' tag with correct name, model, tool count, tools list, description, and system prompt. Source file path and scope carried through."
+        },
+        {
+          "id": "03-02",
+          "name": "Agent name derived from filename",
+          "criteria": "Given file path ending in 'nw-product-owner.md', parsed agent name is 'nw-product-owner'. Extension stripped, path components excluded."
+        },
+        {
+          "id": "03-03",
+          "name": "Agent with minimal metadata shows defaults",
+          "criteria": "Given agent file with no model declaration and no tools list, parser returns model 'default' and empty tools array with tool count 0."
+        },
+        {
+          "id": "03-04",
+          "name": "Agent with declared tools shows count and names",
+          "criteria": "Given agent frontmatter declaring 5 tools, parsed result contains all 5 tool names and toolCount of 5."
+        },
+        {
+          "id": "03-05",
+          "name": "Empty agent file produces parse error",
+          "criteria": "Given empty string input, parser returns 'error' tag with descriptive message and file path."
+        },
+        {
+          "id": "03-06",
+          "name": "Agent with no frontmatter but valid content parses",
+          "criteria": "Given Markdown with no YAML frontmatter but valid body content, parser returns 'parsed' tag with defaults for model/tools and body as system prompt."
+        },
+        {
+          "id": "03-07",
+          "name": "AgentsTab view integration",
+          "criteria": "AgentsTab renders cards with name, model, tool count, description preview; expand reveals full system prompt and source path. Empty state shown when no agents exist. Error indicator shown for unreadable files. Covered by smoke tests and manual UAT (stateless renderer, no acceptance-level domain tests)."
+        }
+      ]
+    },
+    {
+      "id": "04",
+      "name": "Settings Parser, Hooks Tab, and MCP Tab",
+      "steps": [
+        {
+          "id": "04-01",
+          "name": "WS: Hook bindings parsed from settings JSON",
+          "criteria": "Given valid settings JSON with hooks array, parser returns 'parsed' tag with HookConfig entries containing event type, command, matchers, rawConfig, filePath, and scope."
+        },
+        {
+          "id": "04-02",
+          "name": "Hook with no matchers",
+          "criteria": "Given hook entry with no matchers property, parsed HookConfig has empty matchers array."
+        },
+        {
+          "id": "04-03",
+          "name": "MCP server parsed with full details",
+          "criteria": "Given settings JSON with mcpServers object, parser extracts name (from key), type, command, args, and env vars as EnvVar array. Scope carried through."
+        },
+        {
+          "id": "04-04",
+          "name": "MCP server with missing command shows warning",
+          "criteria": "Given MCP server entry missing 'command' field, parsed McpServerConfig includes warning about missing required field. Card still displays available fields."
+        },
+        {
+          "id": "04-05",
+          "name": "Rules extracted with source annotation",
+          "criteria": "Given settings JSON with rules array, parser extracts RuleEntry items with text, source 'settings.json', filePath, and scope."
+        },
+        {
+          "id": "04-06",
+          "name": "Plugins extracted from settings",
+          "criteria": "Given settings JSON with plugins section, parser extracts PluginInfo items with name, version, filePath, and scope."
+        },
+        {
+          "id": "04-07",
+          "name": "Malformed JSON returns parse error",
+          "criteria": "Given invalid JSON string, parser returns 'error' tag with descriptive message. Error does not propagate to callers of other parsers."
+        },
+        {
+          "id": "04-08",
+          "name": "Missing hooks section returns empty list",
+          "criteria": "Given valid settings JSON with no hooks property, parser returns 'parsed' tag with empty hooks array."
+        },
+        {
+          "id": "04-09",
+          "name": "Missing mcpServers section returns empty list",
+          "criteria": "Given valid settings JSON with no mcpServers property, parser returns 'parsed' tag with empty mcpServers array."
+        },
+        {
+          "id": "04-10",
+          "name": "HooksTab view integration",
+          "criteria": "HooksTab renders cards with event type, command, matcher tags; empty state when no hooks. Covered by smoke tests and manual UAT (stateless renderer, no acceptance-level domain tests)."
+        },
+        {
+          "id": "04-11",
+          "name": "McpTab view integration",
+          "criteria": "McpTab renders server cards with masked env vars (click-to-reveal toggle); env values never logged to console; empty state when no servers. Covered by smoke tests and manual UAT (stateless renderer, no acceptance-level domain tests)."
+        }
+      ]
+    },
+    {
+      "id": "05",
+      "name": "Skill Parser and Skills/Rules/Plugins Tabs",
+      "steps": [
+        {
+          "id": "05-01",
+          "name": "Skill parsed with name and description from content",
+          "criteria": "Given skill Markdown file and filename, parser returns SkillDefinition with name from filename and description from content."
+        },
+        {
+          "id": "05-02",
+          "name": "Skill with heading-based description",
+          "criteria": "Given skill file where first content element is a Markdown heading, description extracted from that heading text."
+        },
+        {
+          "id": "05-03",
+          "name": "Skill with paragraph-based description",
+          "criteria": "Given skill file where first content element is a paragraph (no heading), description extracted from first paragraph text."
+        },
+        {
+          "id": "05-04",
+          "name": "Empty skill file produces error",
+          "criteria": "Given empty string input, parser returns error result with descriptive message."
+        },
+        {
+          "id": "05-05",
+          "name": "Skill name strips extension",
+          "criteria": "Given filename 'deploy.md', parsed skill name is 'deploy' with .md extension removed."
+        },
+        {
+          "id": "05-06",
+          "name": "SkillsTab, RulesTab, and PluginsTab view integration",
+          "criteria": "SkillsTab renders entries with name, description, and source path; empty state when no skills. RulesTab renders entries with rule text and source annotation; empty state when no rules. PluginsTab renders entries with name and version; empty state when no plugins. Covered by smoke tests and manual UAT (stateless renderers, no acceptance-level domain tests)."
+        }
+      ]
+    },
+    {
+      "id": "06",
+      "name": "Config Aggregator, Docs Tab, and Shared Components",
+      "steps": [
+        {
+          "id": "06-01",
+          "name": "WS: All config categories aggregated from .claude/ directory",
+          "criteria": "Given raw config with agents, commands, settings, and CLAUDE.md files, aggregator produces AggregatedConfig with populated agents, hooks, mcpServers, skills, rules, plugins, and docs arrays."
+        },
+        {
+          "id": "06-02",
+          "name": "Missing subdirectories produce empty lists",
+          "criteria": "Given raw config with no agents and no commands entries, aggregated result has empty agents and skills arrays without errors."
+        },
+        {
+          "id": "06-03",
+          "name": "Per-file read errors isolated from successful reads",
+          "criteria": "Given raw config with 3 agent files where 1 has a read error, aggregated result contains 2 parsed agents and 1 error entry."
+        },
+        {
+          "id": "06-04",
+          "name": "Both scopes aggregated with source annotations",
+          "criteria": "Given user-scope and project-scope raw configs, aggregated result contains entities from both scopes with correct ConfigScope annotation on each."
+        },
+        {
+          "id": "06-05",
+          "name": "Doc files passed through with scope and path",
+          "criteria": "Given CLAUDE.md files in raw config, aggregated docs array contains DocFile entries with correct filePath, content, and scope."
+        },
+        {
+          "id": "06-06",
+          "name": "Settings parse error does not break other lists",
+          "criteria": "Given malformed settings JSON alongside valid agent files, aggregated result contains parsed agents and a settings parse error. Agent and skill lists unaffected."
+        },
+        {
+          "id": "06-07",
+          "name": "Completely empty config produces all-empty result",
+          "criteria": "Given raw config with no files and no errors, aggregated result has empty arrays for all categories and empty errors array."
+        },
+        {
+          "id": "06-08",
+          "name": "Agents from both scopes combined",
+          "criteria": "Given 2 user-scope agents and 1 project-scope agent, aggregated agents array contains all 3 with correct scope annotations."
+        },
+        {
+          "id": "06-09",
+          "name": "Read errors carry scope annotation",
+          "criteria": "Given read error from project scope, aggregated error entry carries scope 'project'."
+        },
+        {
+          "id": "06-10",
+          "name": "DocsTab, EmptyState, and ErrorIndicator shared components",
+          "criteria": "DocsTab renders each CLAUDE.md in its own panel with source path header and Markdown formatting. EmptyState component shows category name and guidance for empty tabs. ErrorIndicator shows file path and error description inline. Covered by smoke tests and manual UAT (stateless renderers, no acceptance-level domain tests)."
+        }
+      ]
+    }
+  ],
+  "implementation_scope": {
+    "source_directories": [
+      "src/plugins/norbert-config/",
+      "src/plugins/norbert-config/domain/",
+      "src/plugins/norbert-config/views/",
+      "src-tauri/src/"
+    ],
+    "test_directories": [
+      "tests/acceptance/norbert-config/"
+    ],
+    "excluded_patterns": [
+      "node_modules/**",
+      "dist/**"
+    ]
+  },
+  "validation": {
+    "status": "approved",
+    "reviewer": "nw-software-crafter-reviewer",
+    "approved_at": "2026-03-16"
+  }
+}
