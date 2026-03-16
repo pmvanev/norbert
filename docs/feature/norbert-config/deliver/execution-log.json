@@ -457,6 +457,846 @@
       "s": "EXECUTED",
       "d": "PASS",
       "t": "2026-03-16T21:27:39Z"
+    },
+    {
+      "sid": "04-02",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:19Z"
+    },
+    {
+      "sid": "04-02",
+      "p": "RED_ACCEPTANCE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:20Z"
+    },
+    {
+      "sid": "04-02",
+      "p": "RED_UNIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: covered by walking skeleton implementation",
+      "t": "2026-03-16T21:47:20Z"
+    },
+    {
+      "sid": "04-02",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:21Z"
+    },
+    {
+      "sid": "04-02",
+      "p": "COMMIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: no new code needed",
+      "t": "2026-03-16T21:47:21Z"
+    },
+    {
+      "sid": "04-03",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:21Z"
+    },
+    {
+      "sid": "04-03",
+      "p": "RED_ACCEPTANCE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:22Z"
+    },
+    {
+      "sid": "04-03",
+      "p": "RED_UNIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: covered by walking skeleton implementation",
+      "t": "2026-03-16T21:47:22Z"
+    },
+    {
+      "sid": "04-03",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:23Z"
+    },
+    {
+      "sid": "04-03",
+      "p": "COMMIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: no new code needed",
+      "t": "2026-03-16T21:47:23Z"
+    },
+    {
+      "sid": "04-04",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:23Z"
+    },
+    {
+      "sid": "04-04",
+      "p": "RED_ACCEPTANCE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:24Z"
+    },
+    {
+      "sid": "04-04",
+      "p": "RED_UNIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: covered by walking skeleton implementation",
+      "t": "2026-03-16T21:47:24Z"
+    },
+    {
+      "sid": "04-04",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:25Z"
+    },
+    {
+      "sid": "04-04",
+      "p": "COMMIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: no new code needed",
+      "t": "2026-03-16T21:47:25Z"
+    },
+    {
+      "sid": "04-05",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:25Z"
+    },
+    {
+      "sid": "04-05",
+      "p": "RED_ACCEPTANCE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:26Z"
+    },
+    {
+      "sid": "04-05",
+      "p": "RED_UNIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: covered by walking skeleton implementation",
+      "t": "2026-03-16T21:47:26Z"
+    },
+    {
+      "sid": "04-05",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:26Z"
+    },
+    {
+      "sid": "04-05",
+      "p": "COMMIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: no new code needed",
+      "t": "2026-03-16T21:47:27Z"
+    },
+    {
+      "sid": "04-06",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:27Z"
+    },
+    {
+      "sid": "04-06",
+      "p": "RED_ACCEPTANCE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:28Z"
+    },
+    {
+      "sid": "04-06",
+      "p": "RED_UNIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: covered by walking skeleton implementation",
+      "t": "2026-03-16T21:47:28Z"
+    },
+    {
+      "sid": "04-06",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:29Z"
+    },
+    {
+      "sid": "04-06",
+      "p": "COMMIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: no new code needed",
+      "t": "2026-03-16T21:47:29Z"
+    },
+    {
+      "sid": "04-07",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:30Z"
+    },
+    {
+      "sid": "04-07",
+      "p": "RED_ACCEPTANCE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:30Z"
+    },
+    {
+      "sid": "04-07",
+      "p": "RED_UNIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: covered by walking skeleton implementation",
+      "t": "2026-03-16T21:47:30Z"
+    },
+    {
+      "sid": "04-07",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:31Z"
+    },
+    {
+      "sid": "04-07",
+      "p": "COMMIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: no new code needed",
+      "t": "2026-03-16T21:47:31Z"
+    },
+    {
+      "sid": "04-08",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:32Z"
+    },
+    {
+      "sid": "04-08",
+      "p": "RED_ACCEPTANCE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:32Z"
+    },
+    {
+      "sid": "04-08",
+      "p": "RED_UNIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: covered by walking skeleton implementation",
+      "t": "2026-03-16T21:47:33Z"
+    },
+    {
+      "sid": "04-08",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:34Z"
+    },
+    {
+      "sid": "04-08",
+      "p": "COMMIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: no new code needed",
+      "t": "2026-03-16T21:47:34Z"
+    },
+    {
+      "sid": "04-09",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:34Z"
+    },
+    {
+      "sid": "04-09",
+      "p": "RED_ACCEPTANCE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:35Z"
+    },
+    {
+      "sid": "04-09",
+      "p": "RED_UNIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: covered by walking skeleton implementation",
+      "t": "2026-03-16T21:47:35Z"
+    },
+    {
+      "sid": "04-09",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:35Z"
+    },
+    {
+      "sid": "04-09",
+      "p": "COMMIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: no new code needed",
+      "t": "2026-03-16T21:47:36Z"
+    },
+    {
+      "sid": "05-02",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:36Z"
+    },
+    {
+      "sid": "05-02",
+      "p": "RED_ACCEPTANCE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:37Z"
+    },
+    {
+      "sid": "05-02",
+      "p": "RED_UNIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: covered by walking skeleton implementation",
+      "t": "2026-03-16T21:47:37Z"
+    },
+    {
+      "sid": "05-02",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:38Z"
+    },
+    {
+      "sid": "05-02",
+      "p": "COMMIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: no new code needed",
+      "t": "2026-03-16T21:47:38Z"
+    },
+    {
+      "sid": "05-03",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:39Z"
+    },
+    {
+      "sid": "05-03",
+      "p": "RED_ACCEPTANCE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:39Z"
+    },
+    {
+      "sid": "05-03",
+      "p": "RED_UNIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: covered by walking skeleton implementation",
+      "t": "2026-03-16T21:47:40Z"
+    },
+    {
+      "sid": "05-03",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:40Z"
+    },
+    {
+      "sid": "05-03",
+      "p": "COMMIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: no new code needed",
+      "t": "2026-03-16T21:47:40Z"
+    },
+    {
+      "sid": "05-04",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:41Z"
+    },
+    {
+      "sid": "05-04",
+      "p": "RED_ACCEPTANCE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:41Z"
+    },
+    {
+      "sid": "05-04",
+      "p": "RED_UNIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: covered by walking skeleton implementation",
+      "t": "2026-03-16T21:47:42Z"
+    },
+    {
+      "sid": "05-04",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:42Z"
+    },
+    {
+      "sid": "05-04",
+      "p": "COMMIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: no new code needed",
+      "t": "2026-03-16T21:47:42Z"
+    },
+    {
+      "sid": "05-05",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:43Z"
+    },
+    {
+      "sid": "05-05",
+      "p": "RED_ACCEPTANCE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:43Z"
+    },
+    {
+      "sid": "05-05",
+      "p": "RED_UNIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: covered by walking skeleton implementation",
+      "t": "2026-03-16T21:47:43Z"
+    },
+    {
+      "sid": "05-05",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:44Z"
+    },
+    {
+      "sid": "05-05",
+      "p": "COMMIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: no new code needed",
+      "t": "2026-03-16T21:47:44Z"
+    },
+    {
+      "sid": "06-02",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:45Z"
+    },
+    {
+      "sid": "06-02",
+      "p": "RED_ACCEPTANCE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:45Z"
+    },
+    {
+      "sid": "06-02",
+      "p": "RED_UNIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: covered by walking skeleton implementation",
+      "t": "2026-03-16T21:47:46Z"
+    },
+    {
+      "sid": "06-02",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:46Z"
+    },
+    {
+      "sid": "06-02",
+      "p": "COMMIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: no new code needed",
+      "t": "2026-03-16T21:47:46Z"
+    },
+    {
+      "sid": "06-03",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:47Z"
+    },
+    {
+      "sid": "06-03",
+      "p": "RED_ACCEPTANCE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:47Z"
+    },
+    {
+      "sid": "06-03",
+      "p": "RED_UNIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: covered by walking skeleton implementation",
+      "t": "2026-03-16T21:47:47Z"
+    },
+    {
+      "sid": "06-03",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:48Z"
+    },
+    {
+      "sid": "06-03",
+      "p": "COMMIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: no new code needed",
+      "t": "2026-03-16T21:47:48Z"
+    },
+    {
+      "sid": "06-04",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:48Z"
+    },
+    {
+      "sid": "06-04",
+      "p": "RED_ACCEPTANCE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:49Z"
+    },
+    {
+      "sid": "06-04",
+      "p": "RED_UNIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: covered by walking skeleton implementation",
+      "t": "2026-03-16T21:47:49Z"
+    },
+    {
+      "sid": "06-04",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:49Z"
+    },
+    {
+      "sid": "06-04",
+      "p": "COMMIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: no new code needed",
+      "t": "2026-03-16T21:47:50Z"
+    },
+    {
+      "sid": "06-05",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:50Z"
+    },
+    {
+      "sid": "06-05",
+      "p": "RED_ACCEPTANCE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:50Z"
+    },
+    {
+      "sid": "06-05",
+      "p": "RED_UNIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: covered by walking skeleton implementation",
+      "t": "2026-03-16T21:47:51Z"
+    },
+    {
+      "sid": "06-05",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:51Z"
+    },
+    {
+      "sid": "06-05",
+      "p": "COMMIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: no new code needed",
+      "t": "2026-03-16T21:47:51Z"
+    },
+    {
+      "sid": "06-06",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:52Z"
+    },
+    {
+      "sid": "06-06",
+      "p": "RED_ACCEPTANCE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:52Z"
+    },
+    {
+      "sid": "06-06",
+      "p": "RED_UNIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: covered by walking skeleton implementation",
+      "t": "2026-03-16T21:47:52Z"
+    },
+    {
+      "sid": "06-06",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:53Z"
+    },
+    {
+      "sid": "06-06",
+      "p": "COMMIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: no new code needed",
+      "t": "2026-03-16T21:47:53Z"
+    },
+    {
+      "sid": "06-07",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:53Z"
+    },
+    {
+      "sid": "06-07",
+      "p": "RED_ACCEPTANCE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:54Z"
+    },
+    {
+      "sid": "06-07",
+      "p": "RED_UNIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: covered by walking skeleton implementation",
+      "t": "2026-03-16T21:47:54Z"
+    },
+    {
+      "sid": "06-07",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:54Z"
+    },
+    {
+      "sid": "06-07",
+      "p": "COMMIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: no new code needed",
+      "t": "2026-03-16T21:47:55Z"
+    },
+    {
+      "sid": "06-08",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:55Z"
+    },
+    {
+      "sid": "06-08",
+      "p": "RED_ACCEPTANCE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:55Z"
+    },
+    {
+      "sid": "06-08",
+      "p": "RED_UNIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: covered by walking skeleton implementation",
+      "t": "2026-03-16T21:47:56Z"
+    },
+    {
+      "sid": "06-08",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:56Z"
+    },
+    {
+      "sid": "06-08",
+      "p": "COMMIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: no new code needed",
+      "t": "2026-03-16T21:47:57Z"
+    },
+    {
+      "sid": "06-09",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:57Z"
+    },
+    {
+      "sid": "06-09",
+      "p": "RED_ACCEPTANCE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:58Z"
+    },
+    {
+      "sid": "06-09",
+      "p": "RED_UNIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: covered by walking skeleton implementation",
+      "t": "2026-03-16T21:47:58Z"
+    },
+    {
+      "sid": "06-09",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:58Z"
+    },
+    {
+      "sid": "06-09",
+      "p": "COMMIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: no new code needed",
+      "t": "2026-03-16T21:47:59Z"
+    },
+    {
+      "sid": "04-10",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:47:59Z"
+    },
+    {
+      "sid": "04-10",
+      "p": "RED_ACCEPTANCE",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: view covered by smoke tests and manual UAT",
+      "t": "2026-03-16T21:48:00Z"
+    },
+    {
+      "sid": "04-10",
+      "p": "RED_UNIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: stateless view component",
+      "t": "2026-03-16T21:48:00Z"
+    },
+    {
+      "sid": "04-10",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:48:00Z"
+    },
+    {
+      "sid": "04-10",
+      "p": "COMMIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: views committed in step 03-07",
+      "t": "2026-03-16T21:48:01Z"
+    },
+    {
+      "sid": "04-11",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:48:01Z"
+    },
+    {
+      "sid": "04-11",
+      "p": "RED_ACCEPTANCE",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: view covered by smoke tests and manual UAT",
+      "t": "2026-03-16T21:48:01Z"
+    },
+    {
+      "sid": "04-11",
+      "p": "RED_UNIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: stateless view component",
+      "t": "2026-03-16T21:48:02Z"
+    },
+    {
+      "sid": "04-11",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:48:02Z"
+    },
+    {
+      "sid": "04-11",
+      "p": "COMMIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: views committed in step 03-07",
+      "t": "2026-03-16T21:48:02Z"
+    },
+    {
+      "sid": "05-06",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:48:03Z"
+    },
+    {
+      "sid": "05-06",
+      "p": "RED_ACCEPTANCE",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: view covered by smoke tests and manual UAT",
+      "t": "2026-03-16T21:48:03Z"
+    },
+    {
+      "sid": "05-06",
+      "p": "RED_UNIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: stateless view component",
+      "t": "2026-03-16T21:48:03Z"
+    },
+    {
+      "sid": "05-06",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:48:04Z"
+    },
+    {
+      "sid": "05-06",
+      "p": "COMMIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: views committed in step 03-07",
+      "t": "2026-03-16T21:48:04Z"
+    },
+    {
+      "sid": "06-10",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:48:05Z"
+    },
+    {
+      "sid": "06-10",
+      "p": "RED_ACCEPTANCE",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: view covered by smoke tests and manual UAT",
+      "t": "2026-03-16T21:48:05Z"
+    },
+    {
+      "sid": "06-10",
+      "p": "RED_UNIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: stateless view component",
+      "t": "2026-03-16T21:48:05Z"
+    },
+    {
+      "sid": "06-10",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-16T21:48:06Z"
+    },
+    {
+      "sid": "06-10",
+      "p": "COMMIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: views committed in step 03-07",
+      "t": "2026-03-16T21:48:06Z"
     }
   ]
 }
