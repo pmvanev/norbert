@@ -155,6 +155,221 @@ fn get_transcript_usage(transcript_path: String) -> Result<TranscriptUsage, Stri
     Ok(total)
 }
 
+/// A single file's path and content, tagged with its scope origin.
+#[derive(Debug, Clone, serde::Serialize)]
+struct FileEntry {
+    path: String,
+    content: String,
+    scope: String,
+}
+
+/// A file that could not be read, with the error message and scope origin.
+#[derive(Debug, Clone, serde::Serialize)]
+struct ReadError {
+    path: String,
+    error: String,
+    scope: String,
+}
+
+/// Claude configuration files collected from user and/or project scope.
+///
+/// Returned by read_claude_config to provide the frontend with agents,
+/// commands, settings, and CLAUDE.md files from ~/.claude/ and/or ./.claude/.
+#[derive(Debug, Clone, serde::Serialize)]
+struct ClaudeConfig {
+    agents: Vec<FileEntry>,
+    commands: Vec<FileEntry>,
+    settings: Option<FileEntry>,
+    claude_md_files: Vec<FileEntry>,
+    errors: Vec<ReadError>,
+}
+
+/// Read markdown files from a subdirectory, returning entries and errors.
+///
+/// Missing directory produces empty results (not an error).
+/// Individual file read failures are captured in the errors vector.
+fn read_md_files_from_directory(
+    directory: &std::path::Path,
+    scope: &str,
+) -> (Vec<FileEntry>, Vec<ReadError>) {
+    let mut entries = Vec::new();
+    let mut errors = Vec::new();
+
+    let read_dir = match std::fs::read_dir(directory) {
+        Ok(rd) => rd,
+        Err(_) => return (entries, errors), // Missing directory = empty, not error
+    };
+
+    for dir_entry in read_dir {
+        let dir_entry = match dir_entry {
+            Ok(de) => de,
+            Err(e) => {
+                errors.push(ReadError {
+                    path: directory.display().to_string(),
+                    error: format!("Failed to read directory entry: {}", e),
+                    scope: scope.to_string(),
+                });
+                continue;
+            }
+        };
+
+        let path = dir_entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("md") {
+            continue;
+        }
+
+        let path_str = path.display().to_string();
+        match std::fs::read_to_string(&path) {
+            Ok(content) => {
+                entries.push(FileEntry {
+                    path: path_str,
+                    content,
+                    scope: scope.to_string(),
+                });
+            }
+            Err(e) => {
+                errors.push(ReadError {
+                    path: path_str,
+                    error: format!("Failed to read file: {}", e),
+                    scope: scope.to_string(),
+                });
+            }
+        }
+    }
+
+    (entries, errors)
+}
+
+/// Read a single optional file, returning it as an entry or recording the error.
+///
+/// Returns None when the file does not exist (not an error).
+/// Returns Some(FileEntry) on success, or pushes to errors on read failure.
+fn read_optional_file(
+    file_path: &std::path::Path,
+    scope: &str,
+    errors: &mut Vec<ReadError>,
+) -> Option<FileEntry> {
+    if !file_path.exists() {
+        return None;
+    }
+
+    let path_str = file_path.display().to_string();
+    match std::fs::read_to_string(file_path) {
+        Ok(content) => Some(FileEntry {
+            path: path_str,
+            content,
+            scope: scope.to_string(),
+        }),
+        Err(e) => {
+            errors.push(ReadError {
+                path: path_str,
+                error: format!("Failed to read file: {}", e),
+                scope: scope.to_string(),
+            });
+            None
+        }
+    }
+}
+
+/// Collect Claude configuration files from a single scope directory.
+///
+/// Reads agents/*.md, commands/*.md, settings.json, and CLAUDE.md
+/// from the given base directory. An optional project_root is used
+/// to also check for CLAUDE.md at the project root level.
+fn collect_scope_config(
+    base_dir: &std::path::Path,
+    scope: &str,
+    project_root: Option<&std::path::Path>,
+) -> ClaudeConfig {
+    let mut errors = Vec::new();
+
+    let (agents, agent_errors) = read_md_files_from_directory(&base_dir.join("agents"), scope);
+    errors.extend(agent_errors);
+
+    let (commands, command_errors) = read_md_files_from_directory(&base_dir.join("commands"), scope);
+    errors.extend(command_errors);
+
+    let settings = read_optional_file(&base_dir.join("settings.json"), scope, &mut errors);
+
+    let mut claude_md_files = Vec::new();
+
+    // CLAUDE.md inside the .claude/ directory
+    if let Some(entry) = read_optional_file(&base_dir.join("CLAUDE.md"), scope, &mut errors) {
+        claude_md_files.push(entry);
+    }
+
+    // CLAUDE.md at the project root (one level above .claude/)
+    if let Some(root) = project_root {
+        if let Some(entry) = read_optional_file(&root.join("CLAUDE.md"), scope, &mut errors) {
+            claude_md_files.push(entry);
+        }
+    }
+
+    ClaudeConfig {
+        agents,
+        commands,
+        settings,
+        claude_md_files,
+        errors,
+    }
+}
+
+/// Merge two ClaudeConfig structs by concatenating their vectors.
+fn merge_configs(a: ClaudeConfig, b: ClaudeConfig) -> ClaudeConfig {
+    let settings = a.settings.or(b.settings);
+    ClaudeConfig {
+        agents: [a.agents, b.agents].concat(),
+        commands: [a.commands, b.commands].concat(),
+        settings,
+        claude_md_files: [a.claude_md_files, b.claude_md_files].concat(),
+        errors: [a.errors, b.errors].concat(),
+    }
+}
+
+/// Read Claude Code configuration files from user and/or project scope.
+///
+/// Scope "user" reads from ~/.claude/ (agents, commands, settings, CLAUDE.md).
+/// Scope "project" reads from ./.claude/ relative to CWD, plus CLAUDE.md at CWD root.
+/// Scope "both" merges results from both scopes.
+///
+/// Missing directories produce empty lists. Per-file read failures are
+/// captured in the errors array without blocking other file reads.
+#[tauri::command]
+fn read_claude_config(scope: String) -> Result<ClaudeConfig, String> {
+    let empty_config = ClaudeConfig {
+        agents: Vec::new(),
+        commands: Vec::new(),
+        settings: None,
+        claude_md_files: Vec::new(),
+        errors: Vec::new(),
+    };
+
+    let user_config = if scope == "user" || scope == "both" {
+        let home = dirs::home_dir()
+            .ok_or_else(|| "Cannot determine home directory".to_string())?;
+        let user_claude_dir = home.join(".claude");
+        collect_scope_config(&user_claude_dir, "user", None)
+    } else {
+        empty_config.clone()
+    };
+
+    let project_config = if scope == "project" || scope == "both" {
+        let cwd = std::env::current_dir()
+            .map_err(|e| format!("Cannot determine current directory: {}", e))?;
+        let project_claude_dir = cwd.join(".claude");
+        collect_scope_config(&project_claude_dir, "project", Some(&cwd))
+    } else {
+        empty_config
+    };
+
+    match scope.as_str() {
+        "user" => Ok(user_config),
+        "project" => Ok(project_config),
+        "both" => Ok(merge_configs(user_config, project_config)),
+        _ => Err(format!("Invalid scope '{}': must be 'user', 'project', or 'both'", scope)),
+    }
+}
+
 /// Initialize the SQLite event store from the platform data directory.
 fn initialize_event_store() -> Result<SqliteEventStore, String> {
     let db_path = adapters::db::resolve_database_path()?;
@@ -255,7 +470,7 @@ pub fn run() {
                 .build(app)?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet, get_status, get_latest_session, get_sessions, get_session_events, get_transcript_usage])
+        .invoke_handler(tauri::generate_handler![greet, get_status, get_latest_session, get_sessions, get_session_events, get_transcript_usage, read_claude_config])
         .run(tauri::generate_context!())
         .expect("error while running Norbert");
 }
