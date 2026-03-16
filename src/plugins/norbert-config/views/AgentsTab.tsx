@@ -21,8 +21,8 @@ export interface AgentsTabProps {
 // Scope badge
 // ---------------------------------------------------------------------------
 
-const ScopeBadge: FC<{ readonly scope: string }> = ({ scope }) => (
-  <span className="config-scope-badge">{scope}</span>
+const SourceBadge: FC<{ readonly scope: string; readonly source: string }> = ({ scope, source }) => (
+  <span className="config-scope-badge">{scope === "plugin" ? source : scope}</span>
 );
 
 // ---------------------------------------------------------------------------
@@ -52,7 +52,7 @@ const AgentCard: FC<AgentCardProps> = ({ agent, isExpanded, onToggle }) => (
     >
       <span className="config-card-toggle">{isExpanded ? "\u25BC" : "\u25B6"}</span>
       <span className="config-card-title">{agent.name}</span>
-      <ScopeBadge scope={agent.scope} />
+      <SourceBadge scope={agent.scope} source={agent.source} />
       <span className="config-card-meta" data-mono="">
         {agent.model} {"\u00B7"} {agent.toolCount} tool{agent.toolCount !== 1 ? "s" : ""}
       </span>

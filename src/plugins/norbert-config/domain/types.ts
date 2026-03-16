@@ -12,7 +12,7 @@
 // ConfigScope -- source attribution for every config entity
 // ---------------------------------------------------------------------------
 
-export type ConfigScope = "user" | "project";
+export type ConfigScope = "user" | "project" | "plugin";
 
 // ---------------------------------------------------------------------------
 // EnvVar -- key-value pair for MCP server environment
@@ -36,6 +36,7 @@ export interface AgentDefinition {
   readonly systemPrompt: string;
   readonly filePath: string;
   readonly scope: ConfigScope;
+  readonly source: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -75,6 +76,7 @@ export interface SkillDefinition {
   readonly description: string;
   readonly filePath: string;
   readonly scope: ConfigScope;
+  readonly source: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -117,6 +119,7 @@ export interface ReadErrorInfo {
   readonly path: string;
   readonly error: string;
   readonly scope: ConfigScope;
+  readonly source: string;
 }
 
 // ---------------------------------------------------------------------------

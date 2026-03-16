@@ -32,6 +32,7 @@ export interface FileEntry {
   readonly path: string;
   readonly content: string;
   readonly scope: ConfigScope;
+  readonly source: string;
 }
 
 export interface RawClaudeConfig {
@@ -62,7 +63,7 @@ function aggregateAgents(agentFiles: readonly FileEntry[]): readonly AgentParseR
 
 function parseAgentEntry(entry: FileEntry): AgentParseResult {
   const filename = extractFilename(entry.path);
-  const result = parseAgentFile(filename, entry.content, entry.scope);
+  const result = parseAgentFile(filename, entry.content, entry.scope, entry.source);
 
   if (result.tag === "parsed") {
     return {
@@ -97,6 +98,7 @@ function parseSkillEntry(entry: FileEntry): SkillDefinition {
     ...partial,
     filePath: entry.path,
     scope: entry.scope,
+    source: entry.source,
   };
 }
 

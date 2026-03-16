@@ -97,6 +97,7 @@ export function parseAgentFile(
   filename: string,
   content: string,
   scope: ConfigScope = "user",
+  source: string = "user",
 ): AgentParseResult {
   if (content.trim().length === 0) {
     return {
@@ -120,6 +121,7 @@ export function parseAgentFile(
     systemPrompt,
     filePath: filename,
     scope,
+    source,
   };
 
   return { tag: "parsed", agent };

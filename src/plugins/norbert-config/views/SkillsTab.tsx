@@ -22,7 +22,7 @@ const SkillCard: FC<{ readonly skill: SkillDefinition }> = ({ skill }) => (
   <div className="config-card">
     <div className="config-card-header config-card-header-static">
       <span className="config-card-title">{skill.name}</span>
-      <span className="config-scope-badge">{skill.scope}</span>
+      <span className="config-scope-badge">{skill.scope === "plugin" ? skill.source : skill.scope}</span>
     </div>
     <div className="config-card-body">
       <p className="config-card-description">{skill.description}</p>
