@@ -8,6 +8,7 @@
  */
 
 import type {
+  ConfigScope,
   EnvVar,
   HookConfig,
   McpServerConfig,
@@ -39,7 +40,7 @@ function safeParseJson(
 // Hook extraction
 // ---------------------------------------------------------------------------
 
-function extractHooks(hooksRaw: unknown): readonly HookConfig[] {
+function extractHooks(hooksRaw: unknown, scope: ConfigScope): readonly HookConfig[] {
   if (typeof hooksRaw !== "object" || hooksRaw === null || Array.isArray(hooksRaw)) {
     return [];
   }
@@ -47,13 +48,14 @@ function extractHooks(hooksRaw: unknown): readonly HookConfig[] {
   const hooksObj = hooksRaw as Record<string, unknown>;
 
   return Object.entries(hooksObj).flatMap(([eventType, entries]) =>
-    extractHookEntries(eventType, entries),
+    extractHookEntries(eventType, entries, scope),
   );
 }
 
 function extractHookEntries(
   eventType: string,
   entries: unknown,
+  scope: ConfigScope,
 ): readonly HookConfig[] {
   if (!Array.isArray(entries)) return [];
 
@@ -61,12 +63,13 @@ function extractHookEntries(
     .filter((entry): entry is Record<string, unknown> =>
       typeof entry === "object" && entry !== null,
     )
-    .map((entry) => createHookConfig(eventType, entry));
+    .map((entry) => createHookConfig(eventType, entry, scope));
 }
 
 function createHookConfig(
   eventType: string,
   entry: Record<string, unknown>,
+  scope: ConfigScope,
 ): HookConfig {
   const command = typeof entry.command === "string" ? entry.command : "";
   const matchers = Array.isArray(entry.matchers)
@@ -79,7 +82,7 @@ function createHookConfig(
     matchers,
     rawConfig: entry,
     filePath: "",
-    scope: "user",
+    scope,
   };
 }
 
@@ -87,7 +90,7 @@ function createHookConfig(
 // MCP server extraction
 // ---------------------------------------------------------------------------
 
-function extractMcpServers(serversRaw: unknown): readonly McpServerConfig[] {
+function extractMcpServers(serversRaw: unknown, scope: ConfigScope): readonly McpServerConfig[] {
   if (typeof serversRaw !== "object" || serversRaw === null || Array.isArray(serversRaw)) {
     return [];
   }
@@ -95,16 +98,17 @@ function extractMcpServers(serversRaw: unknown): readonly McpServerConfig[] {
   const serversObj = serversRaw as Record<string, unknown>;
 
   return Object.entries(serversObj).map(([name, config]) =>
-    createMcpServerConfig(name, config),
+    createMcpServerConfig(name, config, scope),
   );
 }
 
 function createMcpServerConfig(
   name: string,
   config: unknown,
+  scope: ConfigScope,
 ): McpServerConfig {
   if (typeof config !== "object" || config === null || Array.isArray(config)) {
-    return emptyServerConfig(name, ["Invalid server configuration"]);
+    return emptyServerConfig(name, scope, ["Invalid server configuration"]);
   }
 
   const serverObj = config as Record<string, unknown>;
@@ -117,14 +121,15 @@ function createMcpServerConfig(
     : [];
   const env = extractEnvVars(serverObj.env);
 
-  return { name, type, command, args, env, filePath: "", scope: "user", warnings };
+  return { name, type, command, args, env, filePath: "", scope, warnings };
 }
 
 function emptyServerConfig(
   name: string,
+  scope: ConfigScope,
   warnings: readonly string[],
 ): McpServerConfig {
-  return { name, type: "", command: "", args: [], env: [], filePath: "", scope: "user", warnings };
+  return { name, type: "", command: "", args: [], env: [], filePath: "", scope, warnings };
 }
 
 function collectServerWarnings(serverObj: Record<string, unknown>): readonly string[] {
@@ -151,7 +156,7 @@ function extractEnvVars(envRaw: unknown): readonly EnvVar[] {
 // Rules extraction
 // ---------------------------------------------------------------------------
 
-function extractRules(rulesRaw: unknown): readonly RuleEntry[] {
+function extractRules(rulesRaw: unknown, scope: ConfigScope): readonly RuleEntry[] {
   if (!Array.isArray(rulesRaw)) return [];
 
   return rulesRaw
@@ -160,7 +165,7 @@ function extractRules(rulesRaw: unknown): readonly RuleEntry[] {
       text,
       source: "settings.json",
       filePath: "",
-      scope: "user" as const,
+      scope,
     }));
 }
 
@@ -168,7 +173,7 @@ function extractRules(rulesRaw: unknown): readonly RuleEntry[] {
 // Plugin extraction
 // ---------------------------------------------------------------------------
 
-function extractPlugins(pluginsRaw: unknown): readonly PluginInfo[] {
+function extractPlugins(pluginsRaw: unknown, scope: ConfigScope): readonly PluginInfo[] {
   if (!Array.isArray(pluginsRaw)) return [];
 
   return pluginsRaw
@@ -180,7 +185,7 @@ function extractPlugins(pluginsRaw: unknown): readonly PluginInfo[] {
       name: typeof entry.name === "string" ? entry.name : "",
       version: typeof entry.version === "string" ? entry.version : "",
       filePath: "",
-      scope: "user" as const,
+      scope,
     }));
 }
 
@@ -188,7 +193,7 @@ function extractPlugins(pluginsRaw: unknown): readonly PluginInfo[] {
 // Public API
 // ---------------------------------------------------------------------------
 
-export function parseSettings(content: string): SettingsParseResult {
+export function parseSettings(content: string, scope: ConfigScope = "user"): SettingsParseResult {
   const jsonResult = safeParseJson(content);
 
   if (jsonResult.tag === "error") {
@@ -199,10 +204,10 @@ export function parseSettings(content: string): SettingsParseResult {
 
   return {
     tag: "parsed",
-    hooks: extractHooks(settings.hooks),
-    mcpServers: extractMcpServers(settings.mcpServers),
-    rules: extractRules(settings.rules),
-    plugins: extractPlugins(settings.plugins),
+    hooks: extractHooks(settings.hooks, scope),
+    mcpServers: extractMcpServers(settings.mcpServers, scope),
+    rules: extractRules(settings.rules, scope),
+    plugins: extractPlugins(settings.plugins, scope),
   };
 }
 

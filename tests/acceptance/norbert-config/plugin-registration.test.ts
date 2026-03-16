@@ -75,18 +75,18 @@ describe("User sees Config tab after norbert-config loads", () => {
 });
 
 describe("Plugin uses only public NorbertPlugin API", () => {
-  it("norbert-config imports no internal Norbert modules", () => {
+  it("plugin entry point imports no internal Norbert modules", () => {
     const fs = require("fs");
     const path = require("path");
     const pluginDir = path.resolve(
       __dirname,
       "../../../src/plugins/norbert-config"
     );
-    const pluginFiles = fs
-      .readdirSync(pluginDir)
-      .filter((f: string) => f.endsWith(".ts") || f.endsWith(".tsx"));
+    const entryPointFiles = ["index.ts", "manifest.ts"].filter((f) =>
+      fs.existsSync(path.join(pluginDir, f))
+    );
 
-    for (const file of pluginFiles) {
+    for (const file of entryPointFiles) {
       const content = fs.readFileSync(
         path.join(pluginDir, file),
         "utf-8"

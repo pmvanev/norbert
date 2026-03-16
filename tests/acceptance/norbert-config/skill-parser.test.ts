@@ -88,7 +88,7 @@ describe("Skill with paragraph-based description", () => {
 // ERROR / BOUNDARY SCENARIOS
 // ---------------------------------------------------------------------------
 
-describe("Empty skill file produces error result", () => {
+describe("Empty skill file produces empty description", () => {
   it("returns a skill with empty description for empty content", () => {
     // Given a skill file with empty content
     const filename = "empty-command.md";

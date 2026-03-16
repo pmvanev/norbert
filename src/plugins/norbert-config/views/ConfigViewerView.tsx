@@ -69,7 +69,7 @@ const renderTabContent = (tab: ConfigSubTab, config: AggregatedConfig): JSX.Elem
     case "agents":
       return <AgentsTab agents={config.agents} />;
     case "hooks":
-      return <HooksTab hooks={[...config.hooks, ...config.projectHooks]} />;
+      return <HooksTab hooks={config.hooks} />;
     case "mcp":
       return <McpTab servers={config.mcpServers} />;
     case "skills":

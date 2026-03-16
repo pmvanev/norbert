@@ -115,7 +115,7 @@ describe("MCP server parsed with connection details and environment", () => {
           command: "npx",
           args: ["@anthropic/mcp-github"],
           env: {
-            GITHUB_TOKEN: "ghp_abc123def456",
+            GITHUB_TOKEN: "test-token-value",
           },
         },
       },
@@ -139,7 +139,7 @@ describe("MCP server parsed with connection details and environment", () => {
     // And github-server shows env var with key and value
     const ghServer = result.mcpServers.find((s) => s.name === "github-server");
     expect(ghServer).toBeDefined();
-    expect(ghServer!.env).toEqual([{ key: "GITHUB_TOKEN", value: "ghp_abc123def456" }]);
+    expect(ghServer!.env).toEqual([{ key: "GITHUB_TOKEN", value: "test-token-value" }]);
   });
 });
 

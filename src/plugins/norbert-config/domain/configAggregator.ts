@@ -62,7 +62,7 @@ function aggregateAgents(agentFiles: readonly FileEntry[]): readonly AgentParseR
 
 function parseAgentEntry(entry: FileEntry): AgentParseResult {
   const filename = extractFilename(entry.path);
-  const result = parseAgentFile(filename, entry.content);
+  const result = parseAgentFile(filename, entry.content, entry.scope);
 
   if (result.tag === "parsed") {
     return {
@@ -70,7 +70,6 @@ function parseAgentEntry(entry: FileEntry): AgentParseResult {
       agent: {
         ...result.agent,
         filePath: entry.path,
-        scope: entry.scope,
       },
     };
   }
@@ -124,28 +123,27 @@ function aggregateSettings(settingsEntry: FileEntry | null): ParsedSettings {
     return EMPTY_SETTINGS;
   }
 
-  const result: SettingsParseResult = parseSettings(settingsEntry.content);
+  const result: SettingsParseResult = parseSettings(settingsEntry.content, settingsEntry.scope);
 
   if (result.tag === "error") {
     return EMPTY_SETTINGS;
   }
 
   return {
-    hooks: annotateScope(result.hooks, settingsEntry),
-    mcpServers: annotateScope(result.mcpServers, settingsEntry),
-    rules: annotateScope(result.rules, settingsEntry),
-    plugins: annotateScope(result.plugins, settingsEntry),
+    hooks: annotateFilePath(result.hooks, settingsEntry),
+    mcpServers: annotateFilePath(result.mcpServers, settingsEntry),
+    rules: annotateFilePath(result.rules, settingsEntry),
+    plugins: annotateFilePath(result.plugins, settingsEntry),
   };
 }
 
-function annotateScope<T extends { readonly filePath: string; readonly scope: ConfigScope }>(
+function annotateFilePath<T extends { readonly filePath: string }>(
   items: readonly T[],
   entry: FileEntry,
 ): readonly T[] {
   return items.map((item) => ({
     ...item,
     filePath: entry.path,
-    scope: entry.scope,
   }));
 }
 
@@ -180,7 +178,6 @@ export function aggregateConfig(rawConfig: RawClaudeConfig): AggregatedConfig {
     agents,
     skills,
     hooks: settings.hooks,
-    projectHooks: [],
     mcpServers: settings.mcpServers,
     rules: settings.rules,
     plugins: settings.plugins,

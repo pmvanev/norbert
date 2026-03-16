@@ -148,7 +148,6 @@ export type SettingsParseResult =
 export interface AggregatedConfig {
   readonly agents: readonly AgentParseResult[];
   readonly hooks: readonly HookConfig[];
-  readonly projectHooks: readonly HookConfig[];
   readonly mcpServers: readonly McpServerConfig[];
   readonly skills: readonly SkillDefinition[];
   readonly rules: readonly RuleEntry[];

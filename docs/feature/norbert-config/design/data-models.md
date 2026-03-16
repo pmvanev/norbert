@@ -118,8 +118,7 @@ ConfigScope = "user" | "project"
 
 AggregatedConfig {
     agents: AgentParseResult[]
-    hooks: SettingsParseResult     -- for user scope
-    projectHooks: SettingsParseResult  -- for project scope (if exists)
+    hooks: HookConfig[]            -- all hooks, scope indicated per entry
     mcpServers: McpServerConfig[]
     skills: SkillDefinition[]
     rules: RuleEntry[]

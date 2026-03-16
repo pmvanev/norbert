@@ -68,7 +68,7 @@
 | 1 | Skill parsed with name from filename and description from content | Focused |
 | 2 | Skill with heading-based description | Focused |
 | 3 | Skill with paragraph-based description | Focused |
-| 4 | Empty skill file produces error result | Error |
+| 4 | Empty skill file produces empty description | Boundary |
 | 5 | Skill name strips .md extension from filename | Boundary |
 
 ### config-aggregator.test.ts (US-001, US-005, US-006, US-007)

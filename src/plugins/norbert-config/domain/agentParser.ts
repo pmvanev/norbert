@@ -7,7 +7,7 @@
  * Driving port: parseAgentFile(filename, content) -> AgentParseResult
  */
 
-import type { AgentDefinition, AgentParseResult } from "./types";
+import type { AgentDefinition, AgentParseResult, ConfigScope } from "./types";
 
 // ---------------------------------------------------------------------------
 // Frontmatter extraction
@@ -96,6 +96,7 @@ function extractDescription(body: string): string {
 export function parseAgentFile(
   filename: string,
   content: string,
+  scope: ConfigScope = "user",
 ): AgentParseResult {
   if (content.trim().length === 0) {
     return {
@@ -118,7 +119,7 @@ export function parseAgentFile(
     description,
     systemPrompt,
     filePath: filename,
-    scope: "user",
+    scope,
   };
 
   return { tag: "parsed", agent };
