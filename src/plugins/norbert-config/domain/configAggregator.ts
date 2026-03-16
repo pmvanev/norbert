@@ -39,9 +39,12 @@ export interface RawClaudeConfig {
   readonly agents: readonly FileEntry[];
   readonly commands: readonly FileEntry[];
   readonly settings: FileEntry | null;
+  readonly hooks: readonly FileEntry[];
+  readonly rules: readonly FileEntry[];
   readonly claudeMdFiles: readonly FileEntry[];
+  readonly installedPlugins: FileEntry | null;
   readonly errors: readonly ReadErrorInfo[];
-  readonly scope: ConfigScope | "both";
+  readonly scope?: ConfigScope | "both";
 }
 
 // ---------------------------------------------------------------------------
@@ -169,20 +172,118 @@ function toDocFile(entry: FileEntry): DocFile {
 // Public API
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Hook file aggregation (plugin hooks from hooks.json files)
+// ---------------------------------------------------------------------------
+
+function aggregateHookFiles(hookFiles: readonly FileEntry[]): readonly HookConfig[] {
+  const allHooks: HookConfig[] = [];
+
+  for (const entry of hookFiles) {
+    try {
+      const parsed = JSON.parse(entry.content);
+      const hooksObj = parsed.hooks ?? parsed;
+      for (const [event, handlers] of Object.entries(hooksObj)) {
+        if (!Array.isArray(handlers)) continue;
+        for (const handler of handlers) {
+          const h = handler as Record<string, unknown>;
+          // Plugin hooks can have nested { hooks: [...], matcher } or flat { type, command/url }
+          const hookItems = Array.isArray(h.hooks) ? h.hooks : [h];
+          for (const item of hookItems) {
+            const hi = item as Record<string, unknown>;
+            allHooks.push({
+              event,
+              command: String(hi.command ?? hi.url ?? ""),
+              matchers: h.matcher ? [String(h.matcher)] : [],
+              rawConfig: handler,
+              filePath: entry.path,
+              scope: entry.scope as ConfigScope,
+              source: entry.source,
+            });
+          }
+        }
+      }
+    } catch {
+      // Malformed JSON — skip silently
+    }
+  }
+
+  return allHooks;
+}
+
+// ---------------------------------------------------------------------------
+// Rule file aggregation (markdown rules from rules/*.md files)
+// ---------------------------------------------------------------------------
+
+function aggregateRuleFiles(ruleFiles: readonly FileEntry[]): readonly RuleEntry[] {
+  return ruleFiles.map((entry) => ({
+    text: entry.content,
+    source: entry.source,
+    filePath: entry.path,
+    scope: entry.scope as ConfigScope,
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Installed plugins aggregation
+// ---------------------------------------------------------------------------
+
+function aggregateInstalledPlugins(entry: FileEntry | null): readonly PluginInfo[] {
+  if (entry === null) return [];
+
+  try {
+    const parsed = JSON.parse(entry.content);
+    const plugins = parsed.plugins ?? {};
+    const result: PluginInfo[] = [];
+
+    for (const [name, entries] of Object.entries(plugins)) {
+      const arr = entries as Array<{ version?: string }>;
+      if (arr.length > 0) {
+        result.push({
+          name,
+          version: String(arr[0].version ?? "unknown"),
+          filePath: entry.path,
+          scope: entry.scope as ConfigScope,
+        });
+      }
+    }
+
+    return result;
+  } catch {
+    return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
 export function aggregateConfig(rawConfig: RawClaudeConfig): AggregatedConfig {
   const agents = aggregateAgents(rawConfig.agents);
   const skills = aggregateSkills(rawConfig.commands);
   const settings = aggregateSettings(rawConfig.settings);
   const docs = aggregateDocs(rawConfig.claudeMdFiles);
-  const errors = rawConfig.errors;
+  const errors = [...rawConfig.errors];
+
+  // Merge hooks from settings.json + plugin hooks.json files
+  const pluginHooks = aggregateHookFiles(rawConfig.hooks ?? []);
+  const allHooks = [...settings.hooks, ...pluginHooks];
+
+  // Merge rules from settings.json + plugin rules/*.md files
+  const pluginRules = aggregateRuleFiles(rawConfig.rules ?? []);
+  const allRules = [...settings.rules, ...pluginRules];
+
+  // Plugins from installed_plugins.json
+  const installedPlugins = aggregateInstalledPlugins(rawConfig.installedPlugins ?? null);
+  const allPlugins = [...settings.plugins, ...installedPlugins];
 
   return {
     agents,
     skills,
-    hooks: settings.hooks,
+    hooks: allHooks,
     mcpServers: settings.mcpServers,
-    rules: settings.rules,
-    plugins: settings.plugins,
+    rules: allRules,
+    plugins: allPlugins,
     docs,
     errors,
   };

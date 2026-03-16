@@ -23,7 +23,7 @@ const HookCard: FC<{ readonly hook: HookConfig }> = ({ hook }) => (
   <div className="config-card">
     <div className="config-card-header config-card-header-static">
       <span className="config-card-title">{hook.event}</span>
-      <span className="config-scope-badge">{hook.scope}</span>
+      <span className="config-scope-badge">{hook.scope === "plugin" ? hook.source : hook.scope}</span>
     </div>
     <div className="config-card-body">
       <div className="config-card-section">

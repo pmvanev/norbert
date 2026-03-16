@@ -178,14 +178,17 @@ struct ReadError {
 /// Claude configuration files collected from user and/or project scope.
 ///
 /// Returned by read_claude_config to provide the frontend with agents,
-/// commands, settings, and CLAUDE.md files from ~/.claude/ and/or ./.claude/.
+/// commands, settings, hooks, rules, and CLAUDE.md files.
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ClaudeConfig {
     agents: Vec<FileEntry>,
     commands: Vec<FileEntry>,
     settings: Option<FileEntry>,
+    hooks: Vec<FileEntry>,
+    rules: Vec<FileEntry>,
     claude_md_files: Vec<FileEntry>,
+    installed_plugins: Option<FileEntry>,
     errors: Vec<ReadError>,
 }
 
@@ -285,14 +288,12 @@ fn read_optional_file(
 
 /// Collect Claude configuration files from a single scope directory.
 ///
-/// Reads agents/*.md, commands/*.md, settings.json, and CLAUDE.md
-/// from the given base directory. An optional project_root is used
-/// to also check for CLAUDE.md at the project root level.
+/// Reads agents/*.md, commands/*.md, rules/*.md, settings.json, and CLAUDE.md
+/// from the given base directory. Also reads installed_plugins.json if present.
 fn collect_scope_config(
     base_dir: &std::path::Path,
     scope: &str,
     source: &str,
-    project_root: Option<&std::path::Path>,
 ) -> ClaudeConfig {
     let mut errors = Vec::new();
 
@@ -302,27 +303,29 @@ fn collect_scope_config(
     let (commands, command_errors) = read_md_files_from_directory(&base_dir.join("commands"), scope, source);
     errors.extend(command_errors);
 
+    let (rules, rule_errors) = read_md_files_from_directory(&base_dir.join("rules"), scope, source);
+    errors.extend(rule_errors);
+
     let settings = read_optional_file(&base_dir.join("settings.json"), scope, source, &mut errors);
 
     let mut claude_md_files = Vec::new();
-
-    // CLAUDE.md inside the .claude/ directory
     if let Some(entry) = read_optional_file(&base_dir.join("CLAUDE.md"), scope, source, &mut errors) {
         claude_md_files.push(entry);
     }
 
-    // CLAUDE.md at the project root (one level above .claude/)
-    if let Some(root) = project_root {
-        if let Some(entry) = read_optional_file(&root.join("CLAUDE.md"), scope, source, &mut errors) {
-            claude_md_files.push(entry);
-        }
-    }
+    let installed_plugins = read_optional_file(
+        &base_dir.join("plugins").join("installed_plugins.json"),
+        scope, source, &mut errors,
+    );
 
     ClaudeConfig {
         agents,
         commands,
         settings,
+        hooks: Vec::new(),
+        rules,
         claude_md_files,
+        installed_plugins,
         errors,
     }
 }
@@ -342,39 +345,106 @@ struct InstalledPluginsFile {
     plugins: std::collections::HashMap<String, Vec<InstalledPluginEntry>>,
 }
 
-/// Scan installed plugins for agents, commands (skills), and hooks.
+/// Read markdown files recursively from a directory and its subdirectories.
+///
+/// Unlike read_md_files_from_directory, this descends into subdirectories
+/// to find .md files at any depth (e.g., skills/claude-md/skill.md).
+fn read_md_files_recursive(
+    directory: &std::path::Path,
+    scope: &str,
+    source: &str,
+) -> (Vec<FileEntry>, Vec<ReadError>) {
+    let mut entries = Vec::new();
+    let mut errors = Vec::new();
+    let mut stack = vec![directory.to_path_buf()];
+
+    while let Some(dir) = stack.pop() {
+        let read_dir = match std::fs::read_dir(&dir) {
+            Ok(rd) => rd,
+            Err(_) => continue,
+        };
+
+        for dir_entry in read_dir {
+            let dir_entry = match dir_entry {
+                Ok(de) => de,
+                Err(e) => {
+                    errors.push(ReadError {
+                        path: dir.display().to_string(),
+                        error: format!("Failed to read directory entry: {}", e),
+                        scope: scope.to_string(),
+                        source: source.to_string(),
+                    });
+                    continue;
+                }
+            };
+
+            let path = dir_entry.path();
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+
+            if path.extension().and_then(|e| e.to_str()) != Some("md") {
+                continue;
+            }
+
+            let path_str = path.display().to_string();
+            match std::fs::read_to_string(&path) {
+                Ok(content) => {
+                    entries.push(FileEntry {
+                        path: path_str,
+                        content,
+                        scope: scope.to_string(),
+                        source: source.to_string(),
+                    });
+                }
+                Err(e) => {
+                    errors.push(ReadError {
+                        path: path_str,
+                        error: format!("Failed to read file: {}", e),
+                        scope: scope.to_string(),
+                        source: source.to_string(),
+                    });
+                }
+            }
+        }
+    }
+
+    (entries, errors)
+}
+
+/// Scan installed plugins for agents, commands, skills, hooks, and rules.
 ///
 /// Reads ~/.claude/plugins/installed_plugins.json, then for each plugin
-/// scans its install path for agents/*.md, commands/*.md, and hooks/.
-/// Each entry is tagged with source = plugin name (e.g. "nw@nwave-marketplace").
+/// scans its install path. Each entry is tagged with source = plugin name.
 fn collect_plugin_configs(claude_dir: &std::path::Path) -> ClaudeConfig {
+    let empty = ClaudeConfig {
+        agents: Vec::new(),
+        commands: Vec::new(),
+        settings: None,
+        hooks: Vec::new(),
+        rules: Vec::new(),
+        claude_md_files: Vec::new(),
+        installed_plugins: None,
+        errors: Vec::new(),
+    };
+
     let plugins_file = claude_dir.join("plugins").join("installed_plugins.json");
     let content = match std::fs::read_to_string(&plugins_file) {
         Ok(c) => c,
-        Err(_) => return ClaudeConfig {
-            agents: Vec::new(),
-            commands: Vec::new(),
-            settings: None,
-            claude_md_files: Vec::new(),
-            errors: Vec::new(),
-        },
+        Err(_) => return empty,
     };
 
     let installed: InstalledPluginsFile = match serde_json::from_str(&content) {
         Ok(i) => i,
-        Err(_) => return ClaudeConfig {
-            agents: Vec::new(),
-            commands: Vec::new(),
-            settings: None,
-            claude_md_files: Vec::new(),
-            errors: Vec::new(),
-        },
+        Err(_) => return empty,
     };
 
     let mut all_agents = Vec::new();
     let mut all_commands = Vec::new();
+    let mut all_hooks = Vec::new();
+    let mut all_rules = Vec::new();
     let mut all_errors = Vec::new();
-    let mut all_claude_md = Vec::new();
 
     for (plugin_name, entries) in &installed.plugins {
         for entry in entries {
@@ -385,44 +455,41 @@ fn collect_plugin_configs(claude_dir: &std::path::Path) -> ClaudeConfig {
 
             let source = plugin_name.as_str();
 
-            let (agents, agent_errors) = read_md_files_from_directory(
+            // agents/*.md
+            let (agents, errs) = read_md_files_from_directory(
                 &install_path.join("agents"), "plugin", source,
             );
             all_agents.extend(agents);
-            all_errors.extend(agent_errors);
+            all_errors.extend(errs);
 
-            let (commands, cmd_errors) = read_md_files_from_directory(
+            // commands/*.md
+            let (commands, errs) = read_md_files_from_directory(
                 &install_path.join("commands"), "plugin", source,
             );
             all_commands.extend(commands);
-            all_errors.extend(cmd_errors);
+            all_errors.extend(errs);
 
-            // Also scan skills/ directory (some plugins put skills here)
-            let (skills, skill_errors) = read_md_files_from_directory(
+            // skills/ (recursive — skills can have subdirectories)
+            let (skills, errs) = read_md_files_recursive(
                 &install_path.join("skills"), "plugin", source,
             );
             all_commands.extend(skills);
-            all_errors.extend(skill_errors);
+            all_errors.extend(errs);
 
-            // Check for hooks configuration
-            let hooks_dir = install_path.join("hooks");
-            if hooks_dir.exists() {
-                // Read hooks as JSON files
-                if let Ok(rd) = std::fs::read_dir(&hooks_dir) {
-                    for dir_entry in rd.flatten() {
-                        let path = dir_entry.path();
-                        if path.extension().and_then(|e| e.to_str()) == Some("json") {
-                            if let Some(entry) = read_optional_file(
-                                &path, "plugin", source, &mut all_errors,
-                            ) {
-                                // Store hook configs as claude_md_files with a
-                                // distinguishable path so the frontend can identify them
-                                all_claude_md.push(entry);
-                            }
-                        }
-                    }
-                }
+            // hooks/hooks.json — read as a FileEntry for frontend parsing
+            if let Some(hook_entry) = read_optional_file(
+                &install_path.join("hooks").join("hooks.json"),
+                "plugin", source, &mut all_errors,
+            ) {
+                all_hooks.push(hook_entry);
             }
+
+            // rules/*.md
+            let (rules, errs) = read_md_files_from_directory(
+                &install_path.join("rules"), "plugin", source,
+            );
+            all_rules.extend(rules);
+            all_errors.extend(errs);
         }
     }
 
@@ -430,7 +497,10 @@ fn collect_plugin_configs(claude_dir: &std::path::Path) -> ClaudeConfig {
         agents: all_agents,
         commands: all_commands,
         settings: None,
-        claude_md_files: all_claude_md,
+        hooks: all_hooks,
+        rules: all_rules,
+        claude_md_files: Vec::new(),
+        installed_plugins: None,
         errors: all_errors,
     }
 }
@@ -438,11 +508,15 @@ fn collect_plugin_configs(claude_dir: &std::path::Path) -> ClaudeConfig {
 /// Merge two ClaudeConfig structs by concatenating their vectors.
 fn merge_configs(a: ClaudeConfig, b: ClaudeConfig) -> ClaudeConfig {
     let settings = a.settings.or(b.settings);
+    let installed_plugins = a.installed_plugins.or(b.installed_plugins);
     ClaudeConfig {
         agents: [a.agents, b.agents].concat(),
         commands: [a.commands, b.commands].concat(),
         settings,
+        hooks: [a.hooks, b.hooks].concat(),
+        rules: [a.rules, b.rules].concat(),
         claude_md_files: [a.claude_md_files, b.claude_md_files].concat(),
+        installed_plugins,
         errors: [a.errors, b.errors].concat(),
     }
 }
@@ -461,7 +535,10 @@ fn read_claude_config(scope: String) -> Result<ClaudeConfig, String> {
         agents: Vec::new(),
         commands: Vec::new(),
         settings: None,
+        hooks: Vec::new(),
+        rules: Vec::new(),
         claude_md_files: Vec::new(),
+        installed_plugins: None,
         errors: Vec::new(),
     };
 
@@ -469,7 +546,7 @@ fn read_claude_config(scope: String) -> Result<ClaudeConfig, String> {
         let home = dirs::home_dir()
             .ok_or_else(|| "Cannot determine home directory".to_string())?;
         let user_claude_dir = home.join(".claude");
-        let base = collect_scope_config(&user_claude_dir, "user", "user", None);
+        let base = collect_scope_config(&user_claude_dir, "user", "user");
         let plugins = collect_plugin_configs(&user_claude_dir);
         merge_configs(base, plugins)
     } else {
@@ -480,7 +557,7 @@ fn read_claude_config(scope: String) -> Result<ClaudeConfig, String> {
         let cwd = std::env::current_dir()
             .map_err(|e| format!("Cannot determine current directory: {}", e))?;
         let project_claude_dir = cwd.join(".claude");
-        collect_scope_config(&project_claude_dir, "project", "project", Some(&cwd))
+        collect_scope_config(&project_claude_dir, "project", "project")
     } else {
         empty_config
     };

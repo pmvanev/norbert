@@ -83,6 +83,7 @@ function createHookConfig(
     rawConfig: entry,
     filePath: "",
     scope,
+    source: scope === "plugin" ? "settings" : scope,
   };
 }
 

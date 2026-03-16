@@ -50,6 +50,7 @@ export interface HookConfig {
   readonly rawConfig: unknown;
   readonly filePath: string;
   readonly scope: ConfigScope;
+  readonly source: string;
 }
 
 // ---------------------------------------------------------------------------
