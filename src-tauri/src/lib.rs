@@ -415,81 +415,142 @@ fn read_md_files_recursive(
 
 /// Scan installed plugins for agents, commands, skills, hooks, and rules.
 ///
-/// Reads ~/.claude/plugins/installed_plugins.json, then for each plugin
-/// scans its install path. Each entry is tagged with source = plugin name.
+/// Scan a single plugin directory for agents, commands, skills, hooks, rules.
+fn scan_plugin_directory(
+    install_path: &std::path::Path,
+    source: &str,
+    all_agents: &mut Vec<FileEntry>,
+    all_commands: &mut Vec<FileEntry>,
+    all_hooks: &mut Vec<FileEntry>,
+    all_rules: &mut Vec<FileEntry>,
+    all_errors: &mut Vec<ReadError>,
+) {
+    // agents/*.md
+    let (agents, errs) = read_md_files_from_directory(
+        &install_path.join("agents"), "plugin", source,
+    );
+    all_agents.extend(agents);
+    all_errors.extend(errs);
+
+    // commands/*.md
+    let (commands, errs) = read_md_files_from_directory(
+        &install_path.join("commands"), "plugin", source,
+    );
+    all_commands.extend(commands);
+    all_errors.extend(errs);
+
+    // skills/ (recursive — skills can have subdirectories)
+    let (skills, errs) = read_md_files_recursive(
+        &install_path.join("skills"), "plugin", source,
+    );
+    all_commands.extend(skills);
+    all_errors.extend(errs);
+
+    // hooks/hooks.json — read as a FileEntry for frontend parsing
+    if let Some(hook_entry) = read_optional_file(
+        &install_path.join("hooks").join("hooks.json"),
+        "plugin", source, all_errors,
+    ) {
+        all_hooks.push(hook_entry);
+    }
+
+    // rules/*.md
+    let (rules, errs) = read_md_files_from_directory(
+        &install_path.join("rules"), "plugin", source,
+    );
+    all_rules.extend(rules);
+    all_errors.extend(errs);
+}
+
+/// Reads ~/.claude/plugins/installed_plugins.json AND scans the plugin cache
+/// directory for any plugins not in installed_plugins.json.
 fn collect_plugin_configs(claude_dir: &std::path::Path) -> ClaudeConfig {
-    let empty = ClaudeConfig {
-        agents: Vec::new(),
-        commands: Vec::new(),
-        settings: None,
-        hooks: Vec::new(),
-        rules: Vec::new(),
-        claude_md_files: Vec::new(),
-        installed_plugins: None,
-        errors: Vec::new(),
-    };
-
-    let plugins_file = claude_dir.join("plugins").join("installed_plugins.json");
-    let content = match std::fs::read_to_string(&plugins_file) {
-        Ok(c) => c,
-        Err(_) => return empty,
-    };
-
-    let installed: InstalledPluginsFile = match serde_json::from_str(&content) {
-        Ok(i) => i,
-        Err(_) => return empty,
-    };
-
     let mut all_agents = Vec::new();
     let mut all_commands = Vec::new();
     let mut all_hooks = Vec::new();
     let mut all_rules = Vec::new();
     let mut all_errors = Vec::new();
 
-    for (plugin_name, entries) in &installed.plugins {
-        for entry in entries {
-            let install_path = std::path::Path::new(&entry.install_path);
-            if !install_path.exists() {
-                continue;
+    // Track which install paths we've already scanned (from installed_plugins.json)
+    let mut scanned_paths: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    // 1. Scan plugins listed in installed_plugins.json
+    let plugins_file = claude_dir.join("plugins").join("installed_plugins.json");
+    if let Ok(content) = std::fs::read_to_string(&plugins_file) {
+        if let Ok(installed) = serde_json::from_str::<InstalledPluginsFile>(&content) {
+            for (plugin_name, entries) in &installed.plugins {
+                for entry in entries {
+                    let install_path = std::path::Path::new(&entry.install_path);
+                    if !install_path.exists() {
+                        continue;
+                    }
+                    scanned_paths.insert(install_path.to_string_lossy().to_string());
+                    scan_plugin_directory(
+                        install_path, plugin_name,
+                        &mut all_agents, &mut all_commands, &mut all_hooks,
+                        &mut all_rules, &mut all_errors,
+                    );
+                }
             }
+        }
+    }
 
-            let source = plugin_name.as_str();
+    // 2. Scan plugin cache directory for plugins not in installed_plugins.json
+    //    Structure: cache/{marketplace}/{plugin-name}/{version}/
+    let cache_dir = claude_dir.join("plugins").join("cache");
+    if let Ok(marketplaces) = std::fs::read_dir(&cache_dir) {
+        for marketplace_entry in marketplaces.flatten() {
+            let marketplace_path = marketplace_entry.path();
+            if !marketplace_path.is_dir() { continue; }
+            let marketplace_name = marketplace_path.file_name()
+                .unwrap_or_default().to_string_lossy().to_string();
 
-            // agents/*.md
-            let (agents, errs) = read_md_files_from_directory(
-                &install_path.join("agents"), "plugin", source,
-            );
-            all_agents.extend(agents);
-            all_errors.extend(errs);
+            if let Ok(plugins) = std::fs::read_dir(&marketplace_path) {
+                for plugin_entry in plugins.flatten() {
+                    let plugin_path = plugin_entry.path();
+                    if !plugin_path.is_dir() { continue; }
+                    let plugin_name = plugin_path.file_name()
+                        .unwrap_or_default().to_string_lossy().to_string();
 
-            // commands/*.md
-            let (commands, errs) = read_md_files_from_directory(
-                &install_path.join("commands"), "plugin", source,
-            );
-            all_commands.extend(commands);
-            all_errors.extend(errs);
+                    // Find the most recent version directory (by modification time)
+                    let mut best_version: Option<std::path::PathBuf> = None;
+                    let mut best_mtime: Option<std::time::SystemTime> = None;
 
-            // skills/ (recursive — skills can have subdirectories)
-            let (skills, errs) = read_md_files_recursive(
-                &install_path.join("skills"), "plugin", source,
-            );
-            all_commands.extend(skills);
-            all_errors.extend(errs);
+                    if let Ok(versions) = std::fs::read_dir(&plugin_path) {
+                        for version_entry in versions.flatten() {
+                            let version_path = version_entry.path();
+                            if !version_path.is_dir() { continue; }
+                            // Must have .claude-plugin/ marker to be a valid plugin
+                            if !version_path.join(".claude-plugin").exists() { continue; }
 
-            // hooks/hooks.json — read as a FileEntry for frontend parsing
-            if let Some(hook_entry) = read_optional_file(
-                &install_path.join("hooks").join("hooks.json"),
-                "plugin", source, &mut all_errors,
-            ) {
-                all_hooks.push(hook_entry);
+                            let mtime = version_path.metadata()
+                                .and_then(|m| m.modified()).ok();
+                            if best_mtime.is_none() || mtime > best_mtime {
+                                best_mtime = mtime;
+                                best_version = Some(version_path);
+                            }
+                        }
+                    }
+
+                    if let Some(version_path) = best_version {
+                        let canonical = version_path.to_string_lossy().to_string();
+                        // Skip if already scanned via installed_plugins.json
+                        // Normalize path separators for comparison
+                        let normalized = canonical.replace('\\', "/");
+                        let already_scanned = scanned_paths.iter().any(|p| {
+                            p.replace('\\', "/") == normalized
+                        });
+                        if already_scanned { continue; }
+
+                        let source = format!("{}@{}", plugin_name, marketplace_name);
+                        scan_plugin_directory(
+                            &version_path, &source,
+                            &mut all_agents, &mut all_commands, &mut all_hooks,
+                            &mut all_rules, &mut all_errors,
+                        );
+                    }
+                }
             }
-
-            // rules/*.md
-            let (rules, errs) = read_md_files_from_directory(
-                &install_path.join("rules"), "plugin", source,
-            );
-            all_rules.extend(rules);
-            all_errors.extend(errs);
         }
     }
 

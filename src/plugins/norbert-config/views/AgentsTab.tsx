@@ -5,6 +5,8 @@
 /// Uses ErrorIndicator inline for agents that failed to parse.
 
 import { useState, type FC } from "react";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { AgentDefinition, AgentParseResult } from "../domain/types";
 import { EmptyState } from "./EmptyState";
 import { ErrorIndicator } from "./ErrorIndicator";
@@ -67,7 +69,9 @@ const AgentCard: FC<AgentCardProps> = ({ agent, isExpanded, onToggle }) => (
         <p className="config-card-description">{agent.description}</p>
         <div className="config-card-section">
           <span className="config-card-section-label">System Prompt</span>
-          <pre className="config-card-code">{agent.systemPrompt}</pre>
+          <div className="config-doc-body">
+            <Markdown remarkPlugins={[remarkGfm]}>{agent.systemPrompt}</Markdown>
+          </div>
         </div>
         <div className="config-card-section">
           <span className="config-card-section-label">Source</span>
