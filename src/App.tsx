@@ -20,6 +20,8 @@ import { createNorbertAPI } from "./plugins/apiFactory";
 import { createPluginRegistry, getAllViews } from "./plugins/pluginRegistry";
 import { norbertSessionPlugin } from "./plugins/norbert-session/index";
 import { norbertUsagePlugin, usageMetricsStore } from "./plugins/norbert-usage/index";
+import { norbertConfigPlugin } from "./plugins/norbert-config/index";
+import { ConfigViewerView } from "./plugins/norbert-config/views/ConfigViewerView";
 import { GaugeClusterView } from "./plugins/norbert-usage/views/GaugeClusterView";
 import { OscilloscopeView } from "./plugins/norbert-usage/views/OscilloscopeView";
 import { UsageDashboardView } from "./plugins/norbert-usage/views/UsageDashboardView";
@@ -61,7 +63,7 @@ const applyThemeToDocument = (theme: ThemeName): void => {
 const initializePluginSystem = () => {
   resetHookBridge();
   return loadPlugins(
-    [norbertSessionPlugin, norbertUsagePlugin],
+    [norbertSessionPlugin, norbertUsagePlugin, norbertConfigPlugin],
     createPluginRegistry(),
     createNorbertAPI
   );
@@ -362,6 +364,11 @@ function App() {
     registry.set("oscilloscope", OscilloscopeWrapper);
     registry.set("usage-dashboard", UsageDashboardWrapper);
     registry.set("cost-ticker", CostTickerWrapper);
+
+    // norbert-config view: renders sub-tab navigation for config categories.
+    const ConfigViewerWrapper: FC = () => <ConfigViewerView />;
+    ConfigViewerWrapper.displayName = "ConfigViewerWrapper";
+    registry.set("config-viewer", ConfigViewerWrapper);
 
     return registry;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
