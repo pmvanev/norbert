@@ -131,52 +131,19 @@ function aggregateSettings(settingsEntry: FileEntry | null): ParsedSettings {
   }
 
   return {
-    hooks: annotateScopeOnHooks(result.hooks, settingsEntry),
-    mcpServers: annotateScopeOnMcpServers(result.mcpServers, settingsEntry),
-    rules: annotateScopeOnRules(result.rules, settingsEntry),
-    plugins: annotateScopeOnPlugins(result.plugins, settingsEntry),
+    hooks: annotateScope(result.hooks, settingsEntry),
+    mcpServers: annotateScope(result.mcpServers, settingsEntry),
+    rules: annotateScope(result.rules, settingsEntry),
+    plugins: annotateScope(result.plugins, settingsEntry),
   };
 }
 
-function annotateScopeOnHooks(
-  hooks: readonly HookConfig[],
+function annotateScope<T extends { readonly filePath: string; readonly scope: ConfigScope }>(
+  items: readonly T[],
   entry: FileEntry,
-): readonly HookConfig[] {
-  return hooks.map((hook) => ({
-    ...hook,
-    filePath: entry.path,
-    scope: entry.scope,
-  }));
-}
-
-function annotateScopeOnMcpServers(
-  servers: readonly McpServerConfig[],
-  entry: FileEntry,
-): readonly McpServerConfig[] {
-  return servers.map((server) => ({
-    ...server,
-    filePath: entry.path,
-    scope: entry.scope,
-  }));
-}
-
-function annotateScopeOnRules(
-  rules: readonly RuleEntry[],
-  entry: FileEntry,
-): readonly RuleEntry[] {
-  return rules.map((rule) => ({
-    ...rule,
-    filePath: entry.path,
-    scope: entry.scope,
-  }));
-}
-
-function annotateScopeOnPlugins(
-  plugins: readonly PluginInfo[],
-  entry: FileEntry,
-): readonly PluginInfo[] {
-  return plugins.map((plugin) => ({
-    ...plugin,
+): readonly T[] {
+  return items.map((item) => ({
+    ...item,
     filePath: entry.path,
     scope: entry.scope,
   }));
