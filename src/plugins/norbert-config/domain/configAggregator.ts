@@ -222,4 +222,4 @@ export function aggregateConfig(rawConfig: RawClaudeConfig): AggregatedConfig {
   };
 }
 
-export type { RawClaudeConfig, AggregatedConfig, FileEntry, ReadErrorInfo };
+export type { AggregatedConfig, ReadErrorInfo };

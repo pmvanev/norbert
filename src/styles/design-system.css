@@ -1034,3 +1034,467 @@ code, pre, .mono,
 .cost-ticker-dim .cost-ticker-value {
   color: var(--text-m);
 }
+
+/* ═══ CONFIG VIEWER ═══ */
+
+.config-viewer {
+  padding: 10px;
+  overflow-y: auto;
+  height: 100%;
+}
+
+/* Sub-tab navigation */
+.config-sub-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 12px 8px;
+  overflow-x: auto;
+}
+
+.config-sub-tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--font-ui);
+  color: var(--text-m);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--card-r);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.12s;
+}
+
+.config-sub-tab:hover {
+  color: var(--text-p);
+  background: var(--hover);
+}
+
+.config-sub-tab.active {
+  color: var(--brand);
+  background: var(--bg-card);
+  border-color: var(--border-card);
+}
+
+.config-sub-tab-icon {
+  font-size: 11px;
+  line-height: 1;
+}
+
+.config-sub-tab-label {
+  font-size: 10px;
+}
+
+/* Tab content area */
+.config-sub-tab-content {
+  padding: 0 12px;
+  overflow-y: auto;
+}
+
+.config-tab-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.config-placeholder {
+  color: var(--text-m);
+  font-size: 11px;
+  padding: 16px 0;
+  text-align: center;
+}
+
+/* Config cards */
+.config-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--card-r);
+  overflow: hidden;
+  transition: border-color 0.12s;
+}
+
+.config-card:hover {
+  border-color: var(--border-card-h);
+}
+
+.config-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-ui);
+  transition: background 0.08s;
+}
+
+.config-card-header:hover {
+  background: var(--bg-card-h);
+}
+
+.config-card-header-static {
+  cursor: default;
+}
+
+.config-card-header-static:hover {
+  background: none;
+}
+
+.config-card-toggle {
+  font-size: 8px;
+  color: var(--text-m);
+  flex-shrink: 0;
+  width: 10px;
+}
+
+.config-card-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-p);
+  font-family: var(--font-mono);
+}
+
+.config-card-meta {
+  font-size: 9px;
+  color: var(--text-m);
+  margin-left: auto;
+}
+
+.config-card-preview {
+  font-size: 10px;
+  color: var(--text-s);
+  padding: 0 10px 8px;
+  line-height: 1.4;
+}
+
+.config-card-body {
+  padding: 6px 10px 10px;
+  border-top: 1px solid var(--border-card);
+}
+
+.config-card-description {
+  font-size: 10px;
+  color: var(--text-s);
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+
+.config-card-section {
+  margin-top: 6px;
+}
+
+.config-card-section-label {
+  display: block;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-m);
+  font-family: var(--font-mono);
+  margin-bottom: 3px;
+}
+
+.config-card-section-label-warn {
+  color: var(--amber);
+}
+
+.config-card-code {
+  display: block;
+  font-size: 10px;
+  color: var(--text-s);
+  background: var(--bg-app);
+  border: 1px solid var(--border-card);
+  border-radius: var(--card-r);
+  padding: 8px 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+  line-height: 1.5;
+}
+
+.config-card-code-inline {
+  font-size: 10px;
+  color: var(--text-s);
+  background: var(--bg-app);
+  border: 1px solid var(--border-card);
+  border-radius: 3px;
+  padding: 2px 6px;
+  word-break: break-all;
+}
+
+.config-card-source {
+  font-size: 9px;
+  color: var(--text-m);
+  word-break: break-all;
+}
+
+.config-card-warning {
+  display: block;
+  font-size: 9px;
+  color: var(--amber);
+  margin-top: 2px;
+}
+
+.config-card-rule-text {
+  font-size: 11px;
+  color: var(--text-s);
+  line-height: 1.5;
+  padding: 8px 10px;
+}
+
+.config-card-rule-source {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 8px;
+}
+
+/* Scope badge */
+.config-scope-badge {
+  font-size: 8px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: var(--badge-r);
+  background: var(--badge-brand-bg);
+  color: var(--brand);
+  border: 1px solid var(--badge-brand-b);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+/* Tag list (matchers, tools) */
+.config-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.config-tag {
+  font-size: 9px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: var(--bg-app);
+  border: 1px solid var(--border-card);
+  color: var(--text-s);
+  font-family: var(--font-mono);
+}
+
+/* Env var rows (MCP tab) */
+.config-env-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.config-env-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.config-env-key {
+  font-size: 9px;
+  color: var(--text-p);
+  min-width: 80px;
+}
+
+.config-env-value-btn {
+  font-size: 9px;
+  color: var(--text-m);
+  background: var(--bg-app);
+  border: 1px solid var(--border-card);
+  border-radius: 3px;
+  padding: 2px 6px;
+  cursor: pointer;
+  transition: border-color 0.12s;
+}
+
+.config-env-value-btn:hover {
+  border-color: var(--brand);
+}
+
+/* Empty state */
+.config-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 16px;
+  color: var(--text-m);
+  text-align: center;
+}
+
+.config-empty-icon {
+  font-size: 24px;
+  opacity: 0.3;
+}
+
+.config-empty-category {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-s);
+}
+
+.config-empty-guidance {
+  font-size: 10px;
+  color: var(--text-m);
+  max-width: 300px;
+  line-height: 1.4;
+}
+
+/* Error indicator */
+.config-error-indicator {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  background: rgba(var(--amber-rgb), 0.05);
+  border: 1px solid rgba(var(--amber-rgb), 0.25);
+  border-radius: var(--card-r);
+}
+
+.config-error-icon {
+  color: var(--amber);
+  font-size: 14px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.config-error-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.config-error-path {
+  font-size: 9px;
+  color: var(--text-p);
+  word-break: break-all;
+}
+
+.config-error-message {
+  font-size: 9px;
+  color: var(--amber);
+}
+
+.config-error-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+/* Docs tab -- markdown rendering */
+.config-doc-section {
+  margin-bottom: 12px;
+}
+
+.config-doc-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--card-r) var(--card-r) 0 0;
+  border-bottom: none;
+}
+
+.config-doc-body {
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: 0 0 var(--card-r) var(--card-r);
+  padding: 12px 16px;
+  font-size: 11px;
+  color: var(--text-s);
+  line-height: 1.6;
+}
+
+.config-doc-body h1,
+.config-doc-body h2,
+.config-doc-body h3,
+.config-doc-body h4 {
+  color: var(--text-p);
+  margin-top: 12px;
+  margin-bottom: 6px;
+}
+
+.config-doc-body h1 { font-size: 16px; }
+.config-doc-body h2 { font-size: 14px; }
+.config-doc-body h3 { font-size: 12px; }
+
+.config-doc-body p {
+  margin-bottom: 8px;
+}
+
+.config-doc-body code {
+  font-size: 10px;
+  background: var(--bg-app);
+  border: 1px solid var(--border-card);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+
+.config-doc-body pre {
+  background: var(--bg-app);
+  border: 1px solid var(--border-card);
+  border-radius: var(--card-r);
+  padding: 8px 10px;
+  overflow-x: auto;
+  margin-bottom: 8px;
+}
+
+.config-doc-body pre code {
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.config-doc-body ul,
+.config-doc-body ol {
+  padding-left: 20px;
+  margin-bottom: 8px;
+}
+
+.config-doc-body li {
+  margin-bottom: 4px;
+}
+
+.config-doc-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 8px;
+  font-size: 10px;
+}
+
+.config-doc-body th,
+.config-doc-body td {
+  padding: 4px 8px;
+  border: 1px solid var(--border-card);
+  text-align: left;
+}
+
+.config-doc-body th {
+  background: var(--bg-app);
+  font-weight: 700;
+  color: var(--text-p);
+}
+
+.config-doc-body a {
+  color: var(--brand);
+  text-decoration: none;
+}
+
+.config-doc-body a:hover {
+  text-decoration: underline;
+}

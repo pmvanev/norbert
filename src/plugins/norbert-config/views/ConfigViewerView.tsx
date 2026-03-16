@@ -1,14 +1,24 @@
 /// ConfigViewerView -- primary view for the norbert-config plugin.
 ///
-/// Renders a row of 7 sub-tab buttons (from CONFIG_SUB_TABS) with
-/// Agents selected by default. Each sub-tab shows a placeholder
-/// with the tab name until content views are implemented.
+/// Calls read_claude_config IPC on mount, parses with aggregateConfig,
+/// and passes data to individual tab components. Each sub-tab shows
+/// real config data from user and project scopes.
 ///
 /// Uses sec-hdr pattern for the title and Unicode symbols (not emoji)
 /// for icons per project feedback.
 
-import { useState, type FC } from "react";
-import { CONFIG_SUB_TABS, type ConfigSubTab } from "../domain/types";
+import { useState, useEffect, type FC } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { CONFIG_SUB_TABS, type ConfigSubTab, type AggregatedConfig } from "../domain/types";
+import { aggregateConfig, type RawClaudeConfig } from "../domain/configAggregator";
+import { AgentsTab } from "./AgentsTab";
+import { HooksTab } from "./HooksTab";
+import { McpTab } from "./McpTab";
+import { SkillsTab } from "./SkillsTab";
+import { RulesTab } from "./RulesTab";
+import { PluginsTab } from "./PluginsTab";
+import { DocsTab } from "./DocsTab";
+import { ErrorIndicator } from "./ErrorIndicator";
 
 // ---------------------------------------------------------------------------
 // Sub-tab display labels -- maps domain ids to human-readable labels
@@ -41,18 +51,69 @@ const SUB_TAB_ICONS: Record<ConfigSubTab, string> = {
 /// Default active sub-tab on mount.
 const DEFAULT_SUB_TAB: ConfigSubTab = "agents";
 
-/// Props for ConfigViewerView -- currently none, will expand
-/// as data flows are connected.
+// ---------------------------------------------------------------------------
+// Loading state
+// ---------------------------------------------------------------------------
+
+type ConfigLoadState =
+  | { readonly tag: "loading" }
+  | { readonly tag: "loaded"; readonly config: AggregatedConfig }
+  | { readonly tag: "error"; readonly message: string };
+
+// ---------------------------------------------------------------------------
+// Tab content renderer
+// ---------------------------------------------------------------------------
+
+const renderTabContent = (tab: ConfigSubTab, config: AggregatedConfig): JSX.Element => {
+  switch (tab) {
+    case "agents":
+      return <AgentsTab agents={config.agents} />;
+    case "hooks":
+      return <HooksTab hooks={[...config.hooks, ...config.projectHooks]} />;
+    case "mcp":
+      return <McpTab servers={config.mcpServers} />;
+    case "skills":
+      return <SkillsTab skills={config.skills} />;
+    case "rules":
+      return <RulesTab rules={config.rules} />;
+    case "plugins":
+      return <PluginsTab plugins={config.plugins} />;
+    case "docs":
+      return <DocsTab docs={config.docs} />;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Props
+// ---------------------------------------------------------------------------
+
+/// Props for ConfigViewerView.
 export interface ConfigViewerViewProps {
   readonly className?: string;
 }
 
-/// ConfigViewerView renders the sub-tab navigation and placeholder
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+/// ConfigViewerView renders the sub-tab navigation and real config
 /// content for each configuration category.
 export const ConfigViewerView: FC<ConfigViewerViewProps> = ({
   className,
 }) => {
   const [activeTab, setActiveTab] = useState<ConfigSubTab>(DEFAULT_SUB_TAB);
+  const [loadState, setLoadState] = useState<ConfigLoadState>({ tag: "loading" });
+
+  useEffect(() => {
+    invoke<RawClaudeConfig>("read_claude_config", { scope: "both" })
+      .then((rawConfig) => {
+        const config = aggregateConfig(rawConfig);
+        setLoadState({ tag: "loaded", config });
+      })
+      .catch((err) => {
+        setLoadState({ tag: "error", message: String(err) });
+      });
+  }, []);
 
   return (
     <div
@@ -80,9 +141,30 @@ export const ConfigViewerView: FC<ConfigViewerViewProps> = ({
       </nav>
 
       <div className="config-sub-tab-content" role="tabpanel" aria-label={SUB_TAB_LABELS[activeTab]}>
-        <p className="config-placeholder">
-          {SUB_TAB_ICONS[activeTab]} {SUB_TAB_LABELS[activeTab]} -- content coming soon
-        </p>
+        {loadState.tag === "loading" && (
+          <p className="config-placeholder">Loading configuration...</p>
+        )}
+
+        {loadState.tag === "error" && (
+          <ErrorIndicator filePath="IPC" error={loadState.message} />
+        )}
+
+        {loadState.tag === "loaded" && (
+          <>
+            {loadState.config.errors.length > 0 && (
+              <div className="config-error-list">
+                {loadState.config.errors.map((err) => (
+                  <ErrorIndicator
+                    key={err.path}
+                    filePath={err.path}
+                    error={err.error}
+                  />
+                ))}
+              </div>
+            )}
+            {renderTabContent(activeTab, loadState.config)}
+          </>
+        )}
       </div>
     </div>
   );
