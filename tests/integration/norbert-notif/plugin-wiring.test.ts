@@ -32,12 +32,17 @@ describe("Plugin wiring connects hooks to dispatch via hookBridge", () => {
       createNorbertAPI
     );
 
-    // And the plugin registered hook processors for notification event sources
+    // Then the plugin is loaded and registered hook processors
     expect(registry.loadedPluginIds).toContain("norbert-notif");
     expect(registry.hookRegistrations.length).toBeGreaterThanOrEqual(1);
 
+    // And the hook registration confirms session-event wiring exists
+    const sessionHooks = registry.hookRegistrations.filter(
+      (hr) => hr.hookName === "session-event" && hr.pluginId === "norbert-notif"
+    );
+    expect(sessionHooks).toHaveLength(1);
+
     // When a hook event is delivered through the hookBridge
-    // (The walking skeleton processor is a no-op, so we verify it does not throw)
     const hookEvent = {
       hookName: "session-event",
       eventType: "session_response_completed",
@@ -48,13 +53,7 @@ describe("Plugin wiring connects hooks to dispatch via hookBridge", () => {
       },
     };
 
-    // Then delivering the event does not throw (processor is wired and invoked)
+    // Then delivering the event completes without error (processor is a no-op)
     expect(() => deliverHookEvent(hookEvent.hookName, hookEvent)).not.toThrow();
-
-    // And the hook registration in the registry confirms the wiring exists
-    const sessionHooks = registry.hookRegistrations.filter(
-      (hr) => hr.hookName === "session-event" && hr.pluginId === "norbert-notif"
-    );
-    expect(sessionHooks).toHaveLength(1);
   });
 });

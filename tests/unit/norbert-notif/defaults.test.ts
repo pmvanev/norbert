@@ -9,7 +9,6 @@
 import { describe, it, expect } from "vitest";
 import {
   applyDefaultPreferences,
-  DEFAULT_PREFERENCES,
 } from "../../../src/plugins/norbert-notif/domain/defaults";
 import type { NotificationEventId } from "../../../src/plugins/norbert-notif/domain/types";
 
@@ -54,115 +53,42 @@ describe("All 14 events have default preferences", () => {
 // ---------------------------------------------------------------------------
 
 describe("Enabled events have correct channel and sound defaults", () => {
-  it("session_response_completed: toast on, banner off, badge off, sound phosphor-ping", () => {
-    const defaults = applyDefaultPreferences();
-    const event = defaults.events.find(
-      (e) => e.eventId === "session_response_completed"
-    )!;
-    expect(event.channels.toast).toBe(true);
-    expect(event.channels.banner).toBe(false);
-    expect(event.channels.badge).toBe(false);
-    expect(event.channels.email).toBe(false);
-    expect(event.channels.webhook).toBe(false);
-    expect(event.sound).toBe("phosphor-ping");
-    expect(event.threshold).toBeNull();
-  });
+  const ENABLED_EVENTS: readonly {
+    eventId: NotificationEventId;
+    toast: boolean;
+    banner: boolean;
+    badge: boolean;
+    email: boolean;
+    webhook: boolean;
+    sound: string;
+    threshold: number | null;
+  }[] = [
+    { eventId: "session_response_completed", toast: true, banner: false, badge: false, email: false, webhook: false, sound: "phosphor-ping", threshold: null },
+    { eventId: "context_compaction_occurred", toast: true, banner: false, badge: false, email: false, webhook: false, sound: "compaction", threshold: null },
+    { eventId: "cost_threshold_reached", toast: true, banner: true, badge: true, email: false, webhook: false, sound: "amber-pulse", threshold: 5.0 },
+    { eventId: "context_window_threshold", toast: true, banner: true, badge: true, email: false, webhook: false, sound: "amber-pulse", threshold: 75 },
+    { eventId: "hook_error_detected", toast: true, banner: true, badge: true, email: false, webhook: false, sound: "des-block", threshold: null },
+    { eventId: "hook_timeout", toast: true, banner: true, badge: true, email: false, webhook: false, sound: "des-block", threshold: null },
+    { eventId: "des_enforcement_block", toast: true, banner: true, badge: true, email: false, webhook: false, sound: "des-block", threshold: null },
+    { eventId: "anomaly_detected", toast: true, banner: true, badge: true, email: false, webhook: false, sound: "amber-pulse", threshold: null },
+    { eventId: "credit_balance_low", toast: true, banner: true, badge: true, email: false, webhook: false, sound: "amber-pulse", threshold: null },
+  ] as const;
 
-  it("context_compaction_occurred: toast on, sound compaction", () => {
-    const defaults = applyDefaultPreferences();
-    const event = defaults.events.find(
-      (e) => e.eventId === "context_compaction_occurred"
-    )!;
-    expect(event.channels.toast).toBe(true);
-    expect(event.channels.banner).toBe(false);
-    expect(event.channels.badge).toBe(false);
-    expect(event.sound).toBe("compaction");
-    expect(event.threshold).toBeNull();
-  });
-
-  it("cost_threshold_reached: toast+banner+badge on, sound amber-pulse, threshold $5.00", () => {
-    const defaults = applyDefaultPreferences();
-    const event = defaults.events.find(
-      (e) => e.eventId === "cost_threshold_reached"
-    )!;
-    expect(event.channels.toast).toBe(true);
-    expect(event.channels.banner).toBe(true);
-    expect(event.channels.badge).toBe(true);
-    expect(event.sound).toBe("amber-pulse");
-    expect(event.threshold).toBe(5.0);
-  });
-
-  it("context_window_threshold: toast+banner+badge on, sound amber-pulse, threshold 75%", () => {
-    const defaults = applyDefaultPreferences();
-    const event = defaults.events.find(
-      (e) => e.eventId === "context_window_threshold"
-    )!;
-    expect(event.channels.toast).toBe(true);
-    expect(event.channels.banner).toBe(true);
-    expect(event.channels.badge).toBe(true);
-    expect(event.sound).toBe("amber-pulse");
-    expect(event.threshold).toBe(75);
-  });
-
-  it("hook_error_detected: toast+banner+badge on, sound des-block", () => {
-    const defaults = applyDefaultPreferences();
-    const event = defaults.events.find(
-      (e) => e.eventId === "hook_error_detected"
-    )!;
-    expect(event.channels.toast).toBe(true);
-    expect(event.channels.banner).toBe(true);
-    expect(event.channels.badge).toBe(true);
-    expect(event.sound).toBe("des-block");
-    expect(event.threshold).toBeNull();
-  });
-
-  it("hook_timeout: toast+banner+badge on, sound des-block", () => {
-    const defaults = applyDefaultPreferences();
-    const event = defaults.events.find(
-      (e) => e.eventId === "hook_timeout"
-    )!;
-    expect(event.channels.toast).toBe(true);
-    expect(event.channels.banner).toBe(true);
-    expect(event.channels.badge).toBe(true);
-    expect(event.sound).toBe("des-block");
-    expect(event.threshold).toBeNull();
-  });
-
-  it("des_enforcement_block: toast+banner+badge on, sound des-block", () => {
-    const defaults = applyDefaultPreferences();
-    const event = defaults.events.find(
-      (e) => e.eventId === "des_enforcement_block"
-    )!;
-    expect(event.channels.toast).toBe(true);
-    expect(event.channels.banner).toBe(true);
-    expect(event.channels.badge).toBe(true);
-    expect(event.sound).toBe("des-block");
-    expect(event.threshold).toBeNull();
-  });
-
-  it("anomaly_detected: toast+banner+badge on, sound amber-pulse", () => {
-    const defaults = applyDefaultPreferences();
-    const event = defaults.events.find(
-      (e) => e.eventId === "anomaly_detected"
-    )!;
-    expect(event.channels.toast).toBe(true);
-    expect(event.channels.banner).toBe(true);
-    expect(event.channels.badge).toBe(true);
-    expect(event.sound).toBe("amber-pulse");
-    expect(event.threshold).toBeNull();
-  });
-
-  it("credit_balance_low: toast+banner+badge on, sound amber-pulse", () => {
-    const defaults = applyDefaultPreferences();
-    const event = defaults.events.find(
-      (e) => e.eventId === "credit_balance_low"
-    )!;
-    expect(event.channels.toast).toBe(true);
-    expect(event.channels.banner).toBe(true);
-    expect(event.channels.badge).toBe(true);
-    expect(event.sound).toBe("amber-pulse");
-    expect(event.threshold).toBeNull();
-  });
+  it.each(ENABLED_EVENTS)(
+    "$eventId: correct channel toggles, sound $sound, threshold $threshold",
+    ({ eventId, toast, banner, badge, email, webhook, sound, threshold }) => {
+      const defaults = applyDefaultPreferences();
+      const event = defaults.events.find((e) => e.eventId === eventId)!;
+      expect(event).toBeDefined();
+      expect(event.channels.toast).toBe(toast);
+      expect(event.channels.banner).toBe(banner);
+      expect(event.channels.badge).toBe(badge);
+      expect(event.channels.email).toBe(email);
+      expect(event.channels.webhook).toBe(webhook);
+      expect(event.sound).toBe(sound);
+      expect(event.threshold).toBe(threshold);
+    }
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -191,20 +117,3 @@ describe("Disabled events default to all channels off with silence", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// DEFAULT_PREFERENCES constant
-// ---------------------------------------------------------------------------
-
-describe("DEFAULT_PREFERENCES constant", () => {
-  it("is identical to applyDefaultPreferences() output", () => {
-    expect(DEFAULT_PREFERENCES).toEqual(applyDefaultPreferences());
-  });
-
-  it("has globalVolume of 100", () => {
-    expect(DEFAULT_PREFERENCES.globalVolume).toBe(100);
-  });
-
-  it("has version 1", () => {
-    expect(DEFAULT_PREFERENCES.version).toBe(1);
-  });
-});

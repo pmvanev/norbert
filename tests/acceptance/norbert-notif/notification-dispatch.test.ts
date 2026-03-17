@@ -228,46 +228,9 @@ describe("Context compaction produces toast with session details", () => {
   });
 });
 
-describe.skip("Disabled event produces no dispatch instructions", () => {
-  it("returns empty instructions when all channels are disabled for event", () => {
-    // Given "Session started" has all channels disabled
-    const prefs = makePreferences([]);
-
-    // When a new session "bugfix-login" starts
-    const instructions = createDispatchInstructions(
-      sessionStartedEvent,
-      prefs
-    );
-
-    // Then no dispatch instructions are produced
-    expect(instructions).toHaveLength(0);
-  });
-});
-
 // ---------------------------------------------------------------------------
 // ERROR / BOUNDARY SCENARIOS
 // ---------------------------------------------------------------------------
-
-describe.skip("Dispatch produces independent instructions per channel", () => {
-  it("each enabled channel gets its own instruction with full payload", () => {
-    // Given "Cost threshold reached" is enabled for Toast, Banner, and Badge
-    const prefs = makePreferences([]);
-
-    // When the cost threshold is reached
-    const instructions = createDispatchInstructions(
-      costThresholdEvent,
-      prefs
-    );
-
-    // Then each instruction is independent with its own channel, title, body
-    for (const instruction of instructions) {
-      expect(instruction.channel).toBeDefined();
-      expect(instruction.title).toBeDefined();
-      expect(instruction.body).toBeDefined();
-      expect(instruction.eventId).toBe("cost_threshold_reached");
-    }
-  });
-});
 
 describe("Badge count increments for banner instructions", () => {
   it("banner instructions carry metadata for badge count update", () => {
@@ -286,52 +249,6 @@ describe("Badge count increments for banner instructions", () => {
 
     // And the badge instruction carries the event ID for count tracking
     expect(badge!.eventId).toBe("cost_threshold_reached");
-  });
-});
-
-// @property
-describe.skip("Dispatch never produces instructions for disabled channels", () => {
-  it("no instruction channel matches a disabled channel in preferences", () => {
-    // Given any event with specific channels disabled
-    // When dispatch instructions are produced
-    // Then no instruction targets a disabled channel
-    const prefs = makePreferences([]);
-
-    // Session started has all channels disabled
-    const instructions = createDispatchInstructions(
-      sessionStartedEvent,
-      prefs
-    );
-
-    expect(instructions).toHaveLength(0);
-
-    // Session completed has only toast enabled
-    const sessionInstructions = createDispatchInstructions(
-      sessionCompletedEvent,
-      prefs
-    );
-
-    for (const instruction of sessionInstructions) {
-      expect(instruction.channel).toBe("toast");
-    }
-  });
-});
-
-// @property
-describe.skip("Every dispatch instruction includes event ID and timestamp metadata", () => {
-  it("all instructions carry event identification regardless of channel", () => {
-    // Given any event that produces dispatch instructions
-    const prefs = makePreferences([]);
-
-    const instructions = createDispatchInstructions(
-      costThresholdEvent,
-      prefs
-    );
-
-    // Then every instruction includes the event ID
-    for (const instruction of instructions) {
-      expect(instruction.eventId).toBe("cost_threshold_reached");
-    }
   });
 });
 

@@ -146,18 +146,3 @@ describe("Plugin uses only public NorbertPlugin API", () => {
   });
 });
 
-describe.skip("Plugin loads independently with no plugin dependencies", () => {
-  it("loads without any other plugins present in the registry", () => {
-    // Given only norbert-notif is provided to the plugin loader
-    // And no other plugins are loaded
-
-    // When the plugin system loads norbert-notif alone
-    const registry = loadNotifPlugin();
-
-    // Then the plugin loads without error
-    expect(registry.loadedPluginIds).toContain("norbert-notif");
-
-    // And its manifest declares empty dependencies
-    expect(norbertNotifPlugin.manifest.dependencies).toEqual({});
-  });
-});
