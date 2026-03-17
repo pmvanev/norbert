@@ -7,6 +7,7 @@
 import { useState, useCallback, type FC } from "react";
 import type { DispatchInstruction, DndConfig } from "../domain/types";
 import { evaluateDndState } from "../domain/dndManager";
+import { Icon } from "../../../components/Icon";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -36,7 +37,7 @@ const DEFAULT_DND_CONFIG: DndConfig = {
 const NotificationRow: FC<{ readonly instruction: DispatchInstruction }> = ({ instruction }) => (
   <div className="notif-row">
     <div className="notif-row-header">
-      <span className="notif-row-channel">{channelIcon(instruction.channel)}</span>
+      <Icon name={CHANNEL_ICON_MAP[instruction.channel] ?? "circle"} size={12} className="notif-row-channel" />
       <span className="notif-row-title">{instruction.title}</span>
       <span className="notif-row-time">{formatTime(instruction.timestamp)}</span>
     </div>
@@ -44,15 +45,12 @@ const NotificationRow: FC<{ readonly instruction: DispatchInstruction }> = ({ in
   </div>
 );
 
-const channelIcon = (channel: string): string => {
-  switch (channel) {
-    case "toast": return "\u25A3";    // filled square -- OS notification
-    case "banner": return "\u2590";   // right half block -- banner
-    case "badge": return "\u25CF";    // filled circle -- badge
-    case "email": return "\u2709";    // envelope
-    case "webhook": return "\u21D2";  // rightwards double arrow
-    default: return "\u25CB";         // circle
-  }
+const CHANNEL_ICON_MAP: Readonly<Record<string, string>> = {
+  toast: "monitor",
+  banner: "layout",
+  badge: "circle",
+  email: "mail",
+  webhook: "webhook",
 };
 
 const formatTime = (iso: string): string => {
@@ -86,13 +84,13 @@ export const NotificationCenterView: FC<NotificationCenterViewProps> = ({
           title={dndState.active ? "Disable Do Not Disturb" : "Enable Do Not Disturb"}
           aria-label={dndState.active ? "Disable Do Not Disturb" : "Enable Do Not Disturb"}
         >
-          {dndState.active ? "\u2407\u0338" : "\u2407"}
+          <Icon name={dndState.active ? "bell-off" : "bell"} size={12} />
         </button>
       </div>
 
       {dndState.active && (
         <div className="notif-dnd-banner">
-          <span className="notif-dnd-icon">{"\u2407\u0338"}</span>
+          <span className="notif-dnd-icon"><Icon name="bell-off" size={14} /></span>
           <span className="notif-dnd-label">
             Do Not Disturb is on
             {dndState.source === "schedule" && dndState.endsAt ? ` (until ${dndState.endsAt})` : ""}
@@ -102,7 +100,7 @@ export const NotificationCenterView: FC<NotificationCenterViewProps> = ({
 
       {notifications.length === 0 ? (
         <div className="config-empty-state" role="status">
-          <span className="config-empty-icon">{"\u2407"}</span>
+          <span className="config-empty-icon"><Icon name="bell" size={24} /></span>
           <span className="config-empty-category">No notifications</span>
           <span className="config-empty-guidance">
             Notifications will appear here when events occur during your Claude Code sessions.

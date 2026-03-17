@@ -22,7 +22,7 @@ import {
 
 const NOTIF_TAB_ID = "notifications";
 const NOTIF_TAB_LABEL = "Notifications";
-const NOTIF_TAB_ICON = "\u2407"; // bell symbol (Unicode BEL)
+const NOTIF_TAB_ICON = "bell"; // bell icon
 const NOTIF_TAB_ORDER = 3;
 
 // ---------------------------------------------------------------------------
@@ -31,7 +31,7 @@ const NOTIF_TAB_ORDER = 3;
 
 const NOTIF_STATUS_ID = "notif-status";
 const NOTIF_STATUS_LABEL = "DND off \u00B7 0";
-const NOTIF_STATUS_ICON = "\u2407"; // bell symbol
+const NOTIF_STATUS_ICON = "bell"; // bell icon
 const NOTIF_STATUS_POSITION = "left" as const;
 const NOTIF_STATUS_ORDER = 0;
 

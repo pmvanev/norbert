@@ -40,6 +40,7 @@ import { ZoneRenderer, type ViewRegistry } from "./layout/zoneRenderer";
 import { SessionListView } from "./views/SessionListView";
 import { EventDetailView } from "./views/EventDetailView";
 import { createDefaultSidebarState, getVisibleItems } from "./sidebar/sidebarManager";
+import { Icon } from "./components/Icon";
 // LayoutState base type imported via TwoZoneLayoutState from zoneToggle
 
 /// Polling interval in milliseconds for live UI updates.
@@ -463,7 +464,7 @@ function App() {
               title={item.label}
               onClick={() => handleSidebarClick(item.id, item.pluginId)}
             >
-              <span className="sidebar-icon-symbol">{item.icon}</span>
+              <Icon name={item.icon} size={16} className="sidebar-icon-symbol" />
             </button>
           ))}
         </nav>

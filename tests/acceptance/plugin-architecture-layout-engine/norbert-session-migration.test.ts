@@ -158,7 +158,7 @@ describe("norbert-session registers views via plugin API", () => {
     expect(sessionListView).toBeDefined();
     expect(sessionListView!.pluginId).toBe("norbert-session");
     expect(sessionListView!.label).toBe("Sessions");
-    expect(sessionListView!.icon).toBe("\u229E");
+    expect(sessionListView!.icon).toBe("list-tree");
     expect(sessionListView!.primaryView).toBe(true);
 
     // AND: session-detail view is also registered
@@ -170,7 +170,7 @@ describe("norbert-session registers views via plugin API", () => {
     const sessionsTab = registry.tabs.find((t) => t.id === "sessions");
     expect(sessionsTab).toBeDefined();
     expect(sessionsTab!.pluginId).toBe("norbert-session");
-    expect(sessionsTab!.icon).toBe("\u229E");
+    expect(sessionsTab!.icon).toBe("list-tree");
 
     // AND: a hook processor is registered
     expect(registry.hookRegistrations.length).toBeGreaterThanOrEqual(1);

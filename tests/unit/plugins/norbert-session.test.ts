@@ -77,7 +77,7 @@ describe("norbert-session view registration", () => {
     expect(sessionList).toBeDefined();
     expect(sessionList!.pluginId).toBe("norbert-session");
     expect(sessionList!.label).toBe("Sessions");
-    expect(sessionList!.icon).toBe("\u229E");
+    expect(sessionList!.icon).toBe("list-tree");
     expect(sessionList!.primaryView).toBe(true);
     expect(sessionList!.floatMetric).toBe("active_session_count");
   });
@@ -101,7 +101,7 @@ describe("norbert-session tab registration", () => {
     const sessionsTab = registry.tabs.find((t) => t.id === "sessions");
     expect(sessionsTab).toBeDefined();
     expect(sessionsTab!.pluginId).toBe("norbert-session");
-    expect(sessionsTab!.icon).toBe("\u229E");
+    expect(sessionsTab!.icon).toBe("list-tree");
     expect(sessionsTab!.label).toBe("Sessions");
   });
 });

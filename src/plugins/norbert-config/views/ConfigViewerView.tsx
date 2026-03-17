@@ -13,6 +13,7 @@ import { CONFIG_SUB_TABS, type ConfigSubTab, type AggregatedConfig, type Selecte
 import { aggregateConfig, type RawClaudeConfig } from "../domain/configAggregator";
 import { ConfigListPanel } from "./ConfigListPanel";
 import { ErrorIndicator } from "./ErrorIndicator";
+import { Icon } from "../../../components/Icon";
 
 // ---------------------------------------------------------------------------
 // Sub-tab display labels -- maps domain ids to human-readable labels
@@ -29,17 +30,17 @@ const SUB_TAB_LABELS: Record<ConfigSubTab, string> = {
 };
 
 // ---------------------------------------------------------------------------
-// Sub-tab icons -- Unicode symbols (not emoji) per project feedback
+// Sub-tab icons -- lucide-react icon names
 // ---------------------------------------------------------------------------
 
 const SUB_TAB_ICONS: Record<ConfigSubTab, string> = {
-  agents: "\u25C8",   // diamond with dot -- agent identity
-  hooks: "\u2693",    // anchor -- hooks binding
-  mcp: "\u25A3",      // square with fill -- server
-  skills: "\u2726",   // four-pointed star -- skills
-  rules: "\u2261",    // triple bar -- rules/constraints
-  plugins: "\u29C9",  // two overlapping squares -- plugins
-  docs: "\u2637",     // trigram -- documentation
+  agents: "bot",
+  hooks: "anchor",
+  mcp: "server",
+  skills: "sparkles",
+  rules: "list",
+  plugins: "package",
+  docs: "file-text",
 };
 
 /// Default active sub-tab on mount.
@@ -126,7 +127,7 @@ export const ConfigViewerView: FC<ConfigViewerViewProps> = ({
           title="Reload configuration"
           aria-label="Reload configuration"
         >
-          {"\u21BB"}
+          <Icon name="refresh" size={12} />
         </button>
       </div>
 
@@ -139,7 +140,7 @@ export const ConfigViewerView: FC<ConfigViewerViewProps> = ({
             className={`config-sub-tab${tab === activeTab ? " active" : ""}`}
             onClick={() => handleTabChange(tab)}
           >
-            <span className="config-sub-tab-icon">{SUB_TAB_ICONS[tab]}</span>
+            <Icon name={SUB_TAB_ICONS[tab]} size={12} className="config-sub-tab-icon" />
             <span className="config-sub-tab-label">{SUB_TAB_LABELS[tab]}</span>
           </button>
         ))}

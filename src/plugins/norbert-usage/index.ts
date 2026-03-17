@@ -33,15 +33,15 @@ let previousSnapshot: MetricsSnapshot = { totalTokens: 0, sessionCost: 0, timest
 
 const GAUGE_CLUSTER_VIEW_ID = "gauge-cluster";
 const GAUGE_CLUSTER_VIEW_LABEL = "Gauge Cluster";
-const GAUGE_CLUSTER_VIEW_ICON = "⧉"; // grid symbol matching mockup
+const GAUGE_CLUSTER_VIEW_ICON = "gauge"; // gauge cluster
 
 const OSCILLOSCOPE_VIEW_ID = "oscilloscope";
 const OSCILLOSCOPE_VIEW_LABEL = "Oscilloscope";
-const OSCILLOSCOPE_VIEW_ICON = "∿"; // sine wave — oscilloscope trace
+const OSCILLOSCOPE_VIEW_ICON = "activity"; // oscilloscope trace
 
 const USAGE_DASHBOARD_VIEW_ID = "usage-dashboard";
 const USAGE_DASHBOARD_VIEW_LABEL = "Usage Dashboard";
-const USAGE_DASHBOARD_VIEW_ICON = "⬡"; // hexagon matching mockup
+const USAGE_DASHBOARD_VIEW_ICON = "bar-chart"; // usage dashboard
 
 // ---------------------------------------------------------------------------
 // Tab constants
@@ -49,7 +49,7 @@ const USAGE_DASHBOARD_VIEW_ICON = "⬡"; // hexagon matching mockup
 
 const USAGE_TAB_ID = "usage";
 const USAGE_TAB_LABEL = "Usage";
-const USAGE_TAB_ICON = "⚡"; // lightning bolt matching mockup
+const USAGE_TAB_ICON = "zap"; // lightning bolt
 const USAGE_TAB_ORDER = 1;
 
 // ---------------------------------------------------------------------------
@@ -58,7 +58,7 @@ const USAGE_TAB_ORDER = 1;
 
 const COST_TICKER_ID = "cost-ticker";
 const COST_TICKER_LABEL = "Cost";
-const COST_TICKER_ICON = "◎"; // target circle matching mockup
+const COST_TICKER_ICON = "dollar"; // cost ticker
 const COST_TICKER_POSITION = "right" as const;
 const COST_TICKER_ORDER = 0;
 

@@ -15,7 +15,7 @@ import { NORBERT_CONFIG_MANIFEST } from "./manifest";
 
 const CONFIG_VIEWER_VIEW_ID = "config-viewer";
 const CONFIG_VIEWER_VIEW_LABEL = "Configuration Viewer";
-const CONFIG_VIEWER_VIEW_ICON = "\u2699"; // gear symbol
+const CONFIG_VIEWER_VIEW_ICON = "settings"; // gear icon
 
 // ---------------------------------------------------------------------------
 // Tab constants
@@ -23,7 +23,7 @@ const CONFIG_VIEWER_VIEW_ICON = "\u2699"; // gear symbol
 
 const CONFIG_TAB_ID = "config";
 const CONFIG_TAB_LABEL = "Config";
-const CONFIG_TAB_ICON = "\u2699"; // gear symbol
+const CONFIG_TAB_ICON = "settings"; // gear icon
 const CONFIG_TAB_ORDER = 2;
 
 // ---------------------------------------------------------------------------
