@@ -1602,3 +1602,83 @@ code, pre, .mono,
 .config-doc-body a:hover {
   text-decoration: underline;
 }
+
+/* Notification center */
+.notif-dnd-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  margin: 0 12px 8px;
+  background: rgba(var(--amber-rgb), 0.08);
+  border: 1px solid rgba(var(--amber-rgb), 0.25);
+  border-radius: var(--card-r);
+  font-size: 10px;
+  color: var(--amber);
+}
+
+.notif-dnd-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.notif-dnd-label {
+  font-weight: 600;
+}
+
+.notif-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 12px;
+}
+
+.notif-row {
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--card-r);
+  padding: 8px 10px;
+  transition: border-color 0.12s;
+}
+
+.notif-row:hover {
+  border-color: var(--border-card-h);
+}
+
+.notif-row-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+
+.notif-row-channel {
+  font-size: 10px;
+  color: var(--text-m);
+  flex-shrink: 0;
+}
+
+.notif-row-title {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-p);
+  font-family: var(--font-mono);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notif-row-time {
+  font-size: 9px;
+  color: var(--text-m);
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+}
+
+.notif-row-body {
+  font-size: 10px;
+  color: var(--text-s);
+  line-height: 1.4;
+}

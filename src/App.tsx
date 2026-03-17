@@ -21,6 +21,8 @@ import { createPluginRegistry, getAllViews } from "./plugins/pluginRegistry";
 import { norbertSessionPlugin } from "./plugins/norbert-session/index";
 import { norbertUsagePlugin, usageMetricsStore } from "./plugins/norbert-usage/index";
 import { norbertConfigPlugin } from "./plugins/norbert-config/index";
+import { norbertNotifPlugin } from "./plugins/norbert-notif/index";
+import { NotificationCenterStandalone } from "./plugins/norbert-notif/views/NotificationCenterView";
 import { ConfigViewerView } from "./plugins/norbert-config/views/ConfigViewerView";
 import { ConfigDetailPanel } from "./plugins/norbert-config/views/ConfigDetailPanel";
 import type { SelectedConfigItem } from "./plugins/norbert-config/domain/types";
@@ -65,7 +67,7 @@ const applyThemeToDocument = (theme: ThemeName): void => {
 const initializePluginSystem = () => {
   resetHookBridge();
   return loadPlugins(
-    [norbertSessionPlugin, norbertUsagePlugin, norbertConfigPlugin],
+    [norbertSessionPlugin, norbertUsagePlugin, norbertConfigPlugin, norbertNotifPlugin],
     createPluginRegistry(),
     createNorbertAPI
   );
@@ -398,6 +400,11 @@ function App() {
 
     registry.set("config-viewer", ConfigViewerWrapper);
     registry.set("config-detail", ConfigDetailWrapper);
+
+    // norbert-notif view: notification center with DND toggle.
+    const NotifCenterWrapper: FC = () => <NotificationCenterStandalone />;
+    NotifCenterWrapper.displayName = "NotifCenterWrapper";
+    registry.set("notif-settings", NotifCenterWrapper);
 
     return registry;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps

@@ -208,3 +208,72 @@ describe("Layout structure smoke tests", () => {
     expect(mainZone.querySelectorAll(".srow").length).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe("Notification plugin smoke tests", () => {
+  it("renders a sidebar icon for the Notifications view", async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("sidebar")).toBeInTheDocument();
+    });
+
+    // The notification settings view should have a sidebar icon with the gear symbol
+    const sidebar = screen.getByTestId("sidebar");
+    const buttons = sidebar.querySelectorAll("button");
+    const titles = Array.from(buttons).map((b) => b.getAttribute("title"));
+    expect(titles).toContain("Notifications");
+  });
+
+  it("clicking the Notifications sidebar icon shows the Notification Center view", async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("sidebar")).toBeInTheDocument();
+    });
+
+    // Find and click the Notifications button
+    const sidebar = screen.getByTestId("sidebar");
+    const buttons = Array.from(sidebar.querySelectorAll("button"));
+    const notifButton = buttons.find((b) => b.getAttribute("title") === "Notifications");
+    expect(notifButton).toBeDefined();
+    notifButton!.click();
+
+    await waitFor(() => {
+      expect(screen.getByText("Notification Center")).toBeInTheDocument();
+    });
+  });
+
+  it("Notification Center shows empty state when no notifications", async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("sidebar")).toBeInTheDocument();
+    });
+
+    const sidebar = screen.getByTestId("sidebar");
+    const buttons = Array.from(sidebar.querySelectorAll("button"));
+    const notifButton = buttons.find((b) => b.getAttribute("title") === "Notifications");
+    notifButton!.click();
+
+    await waitFor(() => {
+      expect(screen.getByText("No notifications")).toBeInTheDocument();
+    });
+  });
+
+  it("Notification Center has a DND toggle button", async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("sidebar")).toBeInTheDocument();
+    });
+
+    const sidebar = screen.getByTestId("sidebar");
+    const buttons = Array.from(sidebar.querySelectorAll("button"));
+    const notifButton = buttons.find((b) => b.getAttribute("title") === "Notifications");
+    notifButton!.click();
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Enable Do Not Disturb")).toBeInTheDocument();
+    });
+  });
+});
