@@ -194,7 +194,7 @@ describe("Cost threshold triggers multi-channel dispatch", () => {
   });
 });
 
-describe.skip("Hook error dispatch includes context", () => {
+describe("Hook error dispatch includes context", () => {
   it("produces instructions with hook name and error message", () => {
     // Given "Hook error detected" is enabled for Toast and Banner
     const prefs = makePreferences([]);
@@ -217,7 +217,7 @@ describe.skip("Hook error dispatch includes context", () => {
   });
 });
 
-describe.skip("Context compaction produces toast with session details", () => {
+describe("Context compaction produces toast with session details", () => {
   it("includes session name in compaction notification", () => {
     // Given "Context compaction occurred" is enabled for Toast
     const prefs = makePreferences([]);
