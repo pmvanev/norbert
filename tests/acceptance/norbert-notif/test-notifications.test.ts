@@ -88,7 +88,7 @@ describe("Test notification for specific channel produces single instruction", (
 // ERROR / BOUNDARY SCENARIOS
 // ---------------------------------------------------------------------------
 
-describe.skip("Test notification with unconfigured channel still produces instruction", () => {
+describe("Test notification with unconfigured channel still produces instruction", () => {
   it("generates instruction even when channel has no configuration", () => {
     // Given the email channel is not configured
     const channel: ChannelId = "email";
@@ -105,7 +105,7 @@ describe.skip("Test notification with unconfigured channel still produces instru
   });
 });
 
-describe.skip("Test notification during DND still delivers (bypasses DND)", () => {
+describe("Test notification during DND still delivers (bypasses DND)", () => {
   it("test notifications are not suppressed by Do Not Disturb", () => {
     // Given DND is active
     // When a test notification is created
@@ -120,7 +120,7 @@ describe.skip("Test notification during DND still delivers (bypasses DND)", () =
   });
 });
 
-describe.skip("Test notification includes [TEST] in title for all channel types", () => {
+describe("Test notification includes [TEST] in title for all channel types", () => {
   it("every channel type gets [TEST] prefix in the instruction title", () => {
     // Given test notifications are created for each channel type
     const channels: ChannelId[] = ["toast", "banner", "badge", "email", "webhook"];
