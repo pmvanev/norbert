@@ -202,7 +202,7 @@ describe("DND with banner-only behavior produces only banner instructions", () =
 // ERROR / BOUNDARY SCENARIOS
 // ---------------------------------------------------------------------------
 
-describe.skip("Scheduled DND activates at configured time", () => {
+describe("Scheduled DND activates at configured time", () => {
   it("evaluates DND as active during scheduled window", () => {
     // Given DND is scheduled for Monday 09:00-10:00
     // And it is Monday at 09:30

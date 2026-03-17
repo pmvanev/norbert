@@ -9,6 +9,8 @@ import type {
   DndConfig,
   DndState,
   DndBehavior,
+  DndScheduleEntry,
+  DayOfWeek,
   DispatchInstruction,
 } from "./types";
 
@@ -38,12 +40,76 @@ const manualDndState: DndState = {
   queuedCount: 0,
 };
 
+/// Map JS Date.getDay() index (0=Sun) to DayOfWeek.
+const dayIndexToDay: readonly DayOfWeek[] = [
+  "sun",
+  "mon",
+  "tue",
+  "wed",
+  "thu",
+  "fri",
+  "sat",
+];
+
+/// Extract the DayOfWeek from a Date.
+const getDayOfWeek = (date: Date): DayOfWeek => dayIndexToDay[date.getDay()];
+
+/// Parse "HH:MM" time string into total minutes since midnight.
+const parseTimeToMinutes = (time: string): number => {
+  const [hours, minutes] = time.split(":").map(Number);
+  return hours * 60 + minutes;
+};
+
+/// Get the current time-of-day as minutes since midnight.
+const getMinutesSinceMidnight = (date: Date): number =>
+  date.getHours() * 60 + date.getMinutes();
+
+/// Check whether a time falls within a schedule entry's window.
+const isWithinScheduleWindow = (
+  entry: DndScheduleEntry,
+  currentMinutes: number
+): boolean => {
+  if (!entry.enabled || entry.startTime === null || entry.endTime === null) {
+    return false;
+  }
+  const startMinutes = parseTimeToMinutes(entry.startTime);
+  const endMinutes = parseTimeToMinutes(entry.endTime);
+  return currentMinutes >= startMinutes && currentMinutes < endMinutes;
+};
+
+/// Find the active schedule entry for the current time, if any.
+const findActiveScheduleEntry = (
+  schedule: readonly DndScheduleEntry[],
+  currentTime: Date
+): DndScheduleEntry | undefined => {
+  const currentDay = getDayOfWeek(currentTime);
+  const currentMinutes = getMinutesSinceMidnight(currentTime);
+  return schedule.find(
+    (entry) => entry.day === currentDay && isWithinScheduleWindow(entry, currentMinutes)
+  );
+};
+
+/// Build an active schedule DND state with end time.
+const scheduleDndState = (endTime: string): DndState => ({
+  active: true,
+  source: "schedule",
+  endsAt: endTime,
+  queuedCount: 0,
+});
+
 export const evaluateDndState = (
   config: DndConfig,
-  _currentTime: Date
+  currentTime: Date
 ): DndState => {
   if (config.manuallyEnabled) {
     return manualDndState;
+  }
+
+  if (config.scheduleEnabled) {
+    const activeEntry = findActiveScheduleEntry(config.schedule, currentTime);
+    if (activeEntry && activeEntry.endTime !== null) {
+      return scheduleDndState(activeEntry.endTime);
+    }
   }
 
   return inactiveDndState;
