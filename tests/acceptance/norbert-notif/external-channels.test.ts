@@ -92,7 +92,7 @@ const makeExternalPrefs = (
 // FOCUSED SCENARIOS: External Channel Instructions
 // ---------------------------------------------------------------------------
 
-describe.skip("Webhook dispatch instruction includes standard payload fields", () => {
+describe("Webhook dispatch instruction includes standard payload fields", () => {
   it("webhook instruction carries event type and event-specific data in metadata", () => {
     // Given "Cost threshold reached" is enabled for Webhook
     const prefs = makeExternalPrefs(true, false);
@@ -146,7 +146,7 @@ describe.skip("Email dispatch instruction includes subject and body with event d
 // ERROR / BOUNDARY SCENARIOS
 // ---------------------------------------------------------------------------
 
-describe.skip("Webhook timeout configuration reflected in instruction metadata", () => {
+describe("Webhook timeout configuration reflected in instruction metadata", () => {
   it("webhook instruction carries timeout value in metadata for adapter use", () => {
     // Given "Cost threshold reached" is enabled for Webhook
     const prefs = makeExternalPrefs(true, false);
