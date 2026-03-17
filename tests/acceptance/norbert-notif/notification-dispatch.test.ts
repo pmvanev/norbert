@@ -168,7 +168,7 @@ describe("User receives notification when session completes", () => {
 // FOCUSED SCENARIOS: Multi-Channel and Event Types
 // ---------------------------------------------------------------------------
 
-describe.skip("Cost threshold triggers multi-channel dispatch", () => {
+describe("Cost threshold triggers multi-channel dispatch", () => {
   it("produces instructions for toast, banner, and badge when all are enabled", () => {
     // Given "Cost threshold reached" is enabled for Toast, Banner, and Badge
     // And the cost threshold is set to $25.00
@@ -284,7 +284,7 @@ describe.skip("Dispatch produces independent instructions per channel", () => {
   });
 });
 
-describe.skip("Badge count increments for banner instructions", () => {
+describe("Badge count increments for banner instructions", () => {
   it("banner instructions carry metadata for badge count update", () => {
     // Given "Cost threshold reached" is enabled for Banner and Badge
     const prefs = makePreferences([]);
