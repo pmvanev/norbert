@@ -28,7 +28,7 @@ import {
 // FOCUSED SCENARIOS: Default Values
 // ---------------------------------------------------------------------------
 
-describe.skip("Default preferences match product specification", () => {
+describe("Default preferences match product specification", () => {
   it("first-launch defaults have correct channel toggles and sounds per event", () => {
     // Given a user opens Notification Events settings for the first time
     // When default preferences are generated
