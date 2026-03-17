@@ -247,6 +247,41 @@
       "s": "EXECUTED",
       "d": "PASS",
       "t": "2026-03-17T20:22:30Z"
+    },
+    {
+      "sid": "02-05",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-17T20:24:00Z"
+    },
+    {
+      "sid": "02-05",
+      "p": "RED_ACCEPTANCE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-17T20:24:15Z"
+    },
+    {
+      "sid": "02-05",
+      "p": "RED_UNIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: unknown event handling (findEventDisplay returns undefined -> empty array) and partial payload handling (formatOptionalField/formatSessionName with defaults) were already implemented in step 02-01; acceptance tests pass immediately upon unskip",
+      "t": "2026-03-17T20:24:20Z"
+    },
+    {
+      "sid": "02-05",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-17T20:24:30Z"
+    },
+    {
+      "sid": "02-05",
+      "p": "COMMIT",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-17T20:25:00Z"
     }
   ]
 }

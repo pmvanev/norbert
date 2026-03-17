@@ -354,7 +354,7 @@ describe.skip("Every dispatch instruction includes event ID and timestamp metada
   });
 });
 
-describe.skip("Unknown event type produces no dispatch instructions", () => {
+describe("Unknown event type produces no dispatch instructions", () => {
   it("gracefully handles events not in the registry", () => {
     // Given a hook event with an unrecognized event type
     const unknownEvent = {
@@ -376,7 +376,7 @@ describe.skip("Unknown event type produces no dispatch instructions", () => {
   });
 });
 
-describe.skip("Event with missing payload fields produces safe instructions", () => {
+describe("Event with missing payload fields produces safe instructions", () => {
   it("handles partial payload without crashing", () => {
     // Given a session completion event with missing cost field
     const incompleteEvent = {
