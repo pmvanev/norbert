@@ -35,6 +35,16 @@ export interface FileEntry {
   readonly source: string;
 }
 
+export interface RawPluginDetail {
+  readonly name: string;
+  readonly version: string;
+  readonly description: string;
+  readonly homepage: string;
+  readonly installPath: string;
+  readonly readme: string;
+  readonly installedAt: string;
+}
+
 export interface RawClaudeConfig {
   readonly agents: readonly FileEntry[];
   readonly commands: readonly FileEntry[];
@@ -43,6 +53,7 @@ export interface RawClaudeConfig {
   readonly rules: readonly FileEntry[];
   readonly claudeMdFiles: readonly FileEntry[];
   readonly installedPlugins: FileEntry | null;
+  readonly pluginDetails: readonly RawPluginDetail[];
   readonly errors: readonly ReadErrorInfo[];
   readonly scope?: ConfigScope | "both";
 }
@@ -228,8 +239,17 @@ function aggregateRuleFiles(ruleFiles: readonly FileEntry[]): readonly RuleEntry
 // Installed plugins aggregation
 // ---------------------------------------------------------------------------
 
-function aggregateInstalledPlugins(entry: FileEntry | null): readonly PluginInfo[] {
+function aggregateInstalledPlugins(
+  entry: FileEntry | null,
+  details: readonly RawPluginDetail[],
+): readonly PluginInfo[] {
   if (entry === null) return [];
+
+  // Build a lookup from plugin name to detail
+  const detailMap = new Map<string, RawPluginDetail>();
+  for (const d of details) {
+    detailMap.set(d.name, d);
+  }
 
   try {
     const parsed = JSON.parse(entry.content);
@@ -239,9 +259,15 @@ function aggregateInstalledPlugins(entry: FileEntry | null): readonly PluginInfo
     for (const [name, entries] of Object.entries(plugins)) {
       const arr = entries as Array<{ version?: string }>;
       if (arr.length > 0) {
+        const detail = detailMap.get(name);
         result.push({
           name,
           version: String(arr[0].version ?? "unknown"),
+          description: detail?.description ?? "",
+          homepage: detail?.homepage ?? "",
+          installPath: detail?.installPath ?? "",
+          readme: detail?.readme ?? "",
+          installedAt: detail?.installedAt ?? "",
           filePath: entry.path,
           scope: entry.scope as ConfigScope,
         });
@@ -273,8 +299,11 @@ export function aggregateConfig(rawConfig: RawClaudeConfig): AggregatedConfig {
   const pluginRules = aggregateRuleFiles(rawConfig.rules ?? []);
   const allRules = [...settings.rules, ...pluginRules];
 
-  // Plugins from installed_plugins.json
-  const installedPlugins = aggregateInstalledPlugins(rawConfig.installedPlugins ?? null);
+  // Plugins from installed_plugins.json, enriched with plugin details
+  const installedPlugins = aggregateInstalledPlugins(
+    rawConfig.installedPlugins ?? null,
+    rawConfig.pluginDetails ?? [],
+  );
   const allPlugins = [...settings.plugins, ...installedPlugins];
 
   return {

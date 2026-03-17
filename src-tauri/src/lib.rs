@@ -175,6 +175,19 @@ struct ReadError {
     source: String,
 }
 
+/// Enriched metadata for an installed plugin, read from its install directory.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PluginDetail {
+    name: String,
+    version: String,
+    description: String,
+    homepage: String,
+    install_path: String,
+    readme: String,
+    installed_at: String,
+}
+
 /// Claude configuration files collected from user and/or project scope.
 ///
 /// Returned by read_claude_config to provide the frontend with agents,
@@ -189,6 +202,7 @@ struct ClaudeConfig {
     rules: Vec<FileEntry>,
     claude_md_files: Vec<FileEntry>,
     installed_plugins: Option<FileEntry>,
+    plugin_details: Vec<PluginDetail>,
     errors: Vec<ReadError>,
 }
 
@@ -286,6 +300,59 @@ fn read_optional_file(
     }
 }
 
+/// Build enriched plugin details from installed_plugins.json content.
+///
+/// For each plugin, reads marketplace-manifest.json and README.md from the
+/// install path to provide description, homepage, and documentation.
+fn build_plugin_details(installed_plugins: &Option<FileEntry>) -> Vec<PluginDetail> {
+    let entry = match installed_plugins {
+        Some(e) => e,
+        None => return Vec::new(),
+    };
+
+    let installed: InstalledPluginsFile = match serde_json::from_str(&entry.content) {
+        Ok(f) => f,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut details = Vec::new();
+
+    for (name, entries) in &installed.plugins {
+        for plugin_entry in entries {
+            let install_path = std::path::Path::new(&plugin_entry.install_path);
+            if !install_path.exists() {
+                continue;
+            }
+
+            // Read marketplace-manifest.json for description and homepage
+            let manifest = install_path.join("marketplace-manifest.json");
+            let manifest_data = std::fs::read_to_string(&manifest)
+                .ok()
+                .and_then(|c| serde_json::from_str::<MarketplaceManifest>(&c).ok())
+                .unwrap_or(MarketplaceManifest {
+                    description: String::new(),
+                    homepage: String::new(),
+                });
+
+            // Read README.md if present
+            let readme = std::fs::read_to_string(install_path.join("README.md"))
+                .unwrap_or_default();
+
+            details.push(PluginDetail {
+                name: name.clone(),
+                version: plugin_entry.version.clone().unwrap_or_else(|| "unknown".into()),
+                description: manifest_data.description,
+                homepage: manifest_data.homepage,
+                install_path: plugin_entry.install_path.clone(),
+                readme,
+                installed_at: plugin_entry.installed_at.clone().unwrap_or_default(),
+            });
+        }
+    }
+
+    details
+}
+
 /// Collect Claude configuration files from a single scope directory.
 ///
 /// Reads agents/*.md, commands/*.md, rules/*.md, settings.json, and CLAUDE.md
@@ -318,6 +385,9 @@ fn collect_scope_config(
         scope, source, &mut errors,
     );
 
+    // Build plugin details from installed_plugins.json
+    let plugin_details = build_plugin_details(&installed_plugins);
+
     ClaudeConfig {
         agents,
         commands,
@@ -326,6 +396,7 @@ fn collect_scope_config(
         rules,
         claude_md_files,
         installed_plugins,
+        plugin_details,
         errors,
     }
 }
@@ -335,8 +406,17 @@ fn collect_scope_config(
 #[serde(rename_all = "camelCase")]
 struct InstalledPluginEntry {
     install_path: String,
-    #[allow(dead_code)]
     version: Option<String>,
+    installed_at: Option<String>,
+}
+
+/// Marketplace manifest from marketplace-manifest.json inside a plugin directory.
+#[derive(Debug, serde::Deserialize)]
+struct MarketplaceManifest {
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    homepage: String,
 }
 
 /// Top-level structure of installed_plugins.json.
@@ -562,6 +642,7 @@ fn collect_plugin_configs(claude_dir: &std::path::Path) -> ClaudeConfig {
         rules: all_rules,
         claude_md_files: Vec::new(),
         installed_plugins: None,
+        plugin_details: Vec::new(),
         errors: all_errors,
     }
 }
@@ -578,6 +659,7 @@ fn merge_configs(a: ClaudeConfig, b: ClaudeConfig) -> ClaudeConfig {
         rules: [a.rules, b.rules].concat(),
         claude_md_files: [a.claude_md_files, b.claude_md_files].concat(),
         installed_plugins,
+        plugin_details: [a.plugin_details, b.plugin_details].concat(),
         errors: [a.errors, b.errors].concat(),
     }
 }
@@ -600,6 +682,7 @@ fn read_claude_config(scope: String) -> Result<ClaudeConfig, String> {
         rules: Vec::new(),
         claude_md_files: Vec::new(),
         installed_plugins: None,
+        plugin_details: Vec::new(),
         errors: Vec::new(),
     };
 
@@ -618,7 +701,14 @@ fn read_claude_config(scope: String) -> Result<ClaudeConfig, String> {
         let cwd = std::env::current_dir()
             .map_err(|e| format!("Cannot determine current directory: {}", e))?;
         let project_claude_dir = cwd.join(".claude");
-        collect_scope_config(&project_claude_dir, "project", "project")
+        let mut config = collect_scope_config(&project_claude_dir, "project", "project");
+        // Also read CLAUDE.md from the project root (standard Claude Code convention)
+        if let Some(entry) = read_optional_file(
+            &cwd.join("CLAUDE.md"), "project", "project", &mut config.errors,
+        ) {
+            config.claude_md_files.push(entry);
+        }
+        config
     } else {
         empty_config
     };

@@ -22,6 +22,8 @@ import { norbertSessionPlugin } from "./plugins/norbert-session/index";
 import { norbertUsagePlugin, usageMetricsStore } from "./plugins/norbert-usage/index";
 import { norbertConfigPlugin } from "./plugins/norbert-config/index";
 import { ConfigViewerView } from "./plugins/norbert-config/views/ConfigViewerView";
+import { ConfigDetailPanel } from "./plugins/norbert-config/views/ConfigDetailPanel";
+import type { SelectedConfigItem } from "./plugins/norbert-config/domain/types";
 import { GaugeClusterView } from "./plugins/norbert-usage/views/GaugeClusterView";
 import { OscilloscopeView } from "./plugins/norbert-usage/views/OscilloscopeView";
 import { UsageDashboardView } from "./plugins/norbert-usage/views/UsageDashboardView";
@@ -81,6 +83,7 @@ function App() {
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [selectedConfigItem, setSelectedConfigItem] = useState<SelectedConfigItem | null>(null);
   const [theme, setTheme] = useState<ThemeName>(() =>
     readStoredTheme(localStorage)
   );
@@ -94,7 +97,7 @@ function App() {
   /// as a navigation target, not a standalone sidebar entry.
   const sidebarState = useMemo(
     () => createDefaultSidebarState(
-      getAllViews(pluginRegistry).filter((v) => v.id !== "session-detail"),
+      getAllViews(pluginRegistry).filter((v) => v.id !== "session-detail" && v.id !== "config-detail"),
       [],
     ),
     [pluginRegistry]
@@ -129,6 +132,19 @@ function App() {
         ? currentLayout
         : toggleSecondaryZone(currentLayout);
       const assigned = assignView(withSecondary, "secondary", "session-detail", "norbert-session");
+      return { ...withSecondary, ...assigned };
+    });
+  }, []);
+
+  /// Handler for selecting a config item to view its details.
+  /// Opens config-detail in the secondary zone (side-by-side layout).
+  const handleConfigItemSelect = useCallback((item: SelectedConfigItem) => {
+    setSelectedConfigItem(item);
+    setLayout((currentLayout) => {
+      const withSecondary = isSecondaryVisible(currentLayout)
+        ? currentLayout
+        : toggleSecondaryZone(currentLayout);
+      const assigned = assignView(withSecondary, "secondary", "config-detail", "norbert-config");
       return { ...withSecondary, ...assigned };
     });
   }, []);
@@ -297,6 +313,10 @@ function App() {
   handleSessionSelectRef.current = handleSessionSelect;
   const handleBackToSessionsRef = useRef(handleBackToSessions);
   handleBackToSessionsRef.current = handleBackToSessions;
+  const selectedConfigItemRef = useRef(selectedConfigItem);
+  selectedConfigItemRef.current = selectedConfigItem;
+  const handleConfigItemSelectRef = useRef(handleConfigItemSelect);
+  handleConfigItemSelectRef.current = handleConfigItemSelect;
   const metricsRef = useRef(metrics);
   metricsRef.current = metrics;
 
@@ -365,21 +385,38 @@ function App() {
     registry.set("usage-dashboard", UsageDashboardWrapper);
     registry.set("cost-ticker", CostTickerWrapper);
 
-    // norbert-config view: renders sub-tab navigation for config categories.
-    const ConfigViewerWrapper: FC = () => <ConfigViewerView />;
+    // norbert-config views: list view in main zone, detail view in secondary.
+    const ConfigViewerWrapper: FC = () => (
+      <ConfigViewerView onItemSelect={handleConfigItemSelectRef.current} />
+    );
     ConfigViewerWrapper.displayName = "ConfigViewerWrapper";
+
+    const ConfigDetailWrapper: FC = () => (
+      <ConfigDetailPanel selection={selectedConfigItemRef.current} />
+    );
+    ConfigDetailWrapper.displayName = "ConfigDetailWrapper";
+
     registry.set("config-viewer", ConfigViewerWrapper);
+    registry.set("config-detail", ConfigDetailWrapper);
 
     return registry;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /// Handle sidebar icon click — assign the view to the main zone.
+  /// Clears any drill-down selections and closes the secondary zone.
   const handleSidebarClick = useCallback((viewId: string, pluginId: string) => {
     setSelectedSessionId(null);
-    setLayout((currentLayout) => ({
-      ...currentLayout,
-      ...assignView(currentLayout, "main", viewId, pluginId),
-    }));
+    setSelectedConfigItem(null);
+    setLayout((currentLayout) => {
+      // Close secondary zone when switching views
+      const withoutSecondary = isSecondaryVisible(currentLayout)
+        ? toggleSecondaryZone(currentLayout)
+        : currentLayout;
+      return {
+        ...withoutSecondary,
+        ...assignView(withoutSecondary, "main", viewId, pluginId),
+      };
+    });
   }, []);
 
   if (error) {

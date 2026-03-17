@@ -1,23 +1,17 @@
 /// ConfigViewerView -- primary view for the norbert-config plugin.
 ///
-/// Calls read_claude_config IPC on mount, parses with aggregateConfig,
-/// and passes data to individual tab components. Each sub-tab shows
-/// real config data from user and project scopes.
+/// Renders sub-tab navigation and a list of items for the active tab.
+/// Selecting an item calls onItemSelect to open the detail in the
+/// app-level secondary zone (matching the session detail pattern).
 ///
 /// Uses sec-hdr pattern for the title and Unicode symbols (not emoji)
 /// for icons per project feedback.
 
-import { useState, useEffect, type FC } from "react";
+import { useState, useCallback, type FC } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { CONFIG_SUB_TABS, type ConfigSubTab, type AggregatedConfig } from "../domain/types";
+import { CONFIG_SUB_TABS, type ConfigSubTab, type AggregatedConfig, type SelectedConfigItem } from "../domain/types";
 import { aggregateConfig, type RawClaudeConfig } from "../domain/configAggregator";
-import { AgentsTab } from "./AgentsTab";
-import { HooksTab } from "./HooksTab";
-import { McpTab } from "./McpTab";
-import { SkillsTab } from "./SkillsTab";
-import { RulesTab } from "./RulesTab";
-import { PluginsTab } from "./PluginsTab";
-import { DocsTab } from "./DocsTab";
+import { ConfigListPanel } from "./ConfigListPanel";
 import { ErrorIndicator } from "./ErrorIndicator";
 
 // ---------------------------------------------------------------------------
@@ -56,32 +50,10 @@ const DEFAULT_SUB_TAB: ConfigSubTab = "agents";
 // ---------------------------------------------------------------------------
 
 type ConfigLoadState =
+  | { readonly tag: "idle" }
   | { readonly tag: "loading" }
   | { readonly tag: "loaded"; readonly config: AggregatedConfig }
   | { readonly tag: "error"; readonly message: string };
-
-// ---------------------------------------------------------------------------
-// Tab content renderer
-// ---------------------------------------------------------------------------
-
-const renderTabContent = (tab: ConfigSubTab, config: AggregatedConfig): JSX.Element => {
-  switch (tab) {
-    case "agents":
-      return <AgentsTab agents={config.agents} />;
-    case "hooks":
-      return <HooksTab hooks={config.hooks} />;
-    case "mcp":
-      return <McpTab servers={config.mcpServers} />;
-    case "skills":
-      return <SkillsTab skills={config.skills} />;
-    case "rules":
-      return <RulesTab rules={config.rules} />;
-    case "plugins":
-      return <PluginsTab plugins={config.plugins} />;
-    case "docs":
-      return <DocsTab docs={config.docs} />;
-  }
-};
 
 // ---------------------------------------------------------------------------
 // Props
@@ -90,21 +62,28 @@ const renderTabContent = (tab: ConfigSubTab, config: AggregatedConfig): JSX.Elem
 /// Props for ConfigViewerView.
 export interface ConfigViewerViewProps {
   readonly className?: string;
+  readonly onItemSelect?: (item: SelectedConfigItem) => void;
 }
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-/// ConfigViewerView renders the sub-tab navigation and real config
-/// content for each configuration category.
+/// ConfigViewerView renders sub-tab navigation and item list.
+/// Selecting an item delegates to onItemSelect which opens the
+/// app-level secondary zone with the detail view.
 export const ConfigViewerView: FC<ConfigViewerViewProps> = ({
   className,
+  onItemSelect,
 }) => {
   const [activeTab, setActiveTab] = useState<ConfigSubTab>(DEFAULT_SUB_TAB);
-  const [loadState, setLoadState] = useState<ConfigLoadState>({ tag: "loading" });
+  const [loadState, setLoadState] = useState<ConfigLoadState>({ tag: "idle" });
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
-  useEffect(() => {
+  /// Load (or reload) config from the backend.
+  const loadConfig = useCallback(() => {
+    setLoadState({ tag: "loading" });
+    setSelectedKey(null);
     invoke<RawClaudeConfig>("read_claude_config", { scope: "both" })
       .then((rawConfig) => {
         const config = aggregateConfig(rawConfig);
@@ -115,6 +94,23 @@ export const ConfigViewerView: FC<ConfigViewerViewProps> = ({
       });
   }, []);
 
+  /// Load on first render.
+  if (loadState.tag === "idle") {
+    loadConfig();
+  }
+
+  /// Clear selection when switching tabs.
+  const handleTabChange = useCallback((tab: ConfigSubTab) => {
+    setActiveTab(tab);
+    setSelectedKey(null);
+  }, []);
+
+  /// Handle item selection from the list panel.
+  const handleSelect = useCallback((item: SelectedConfigItem, key: string) => {
+    setSelectedKey(key);
+    onItemSelect?.(item);
+  }, [onItemSelect]);
+
   return (
     <div
       className={`config-viewer${className ? ` ${className}` : ""}`}
@@ -123,6 +119,15 @@ export const ConfigViewerView: FC<ConfigViewerViewProps> = ({
     >
       <div className="sec-hdr">
         <span className="sec-t">Configuration Viewer</span>
+        <button
+          className="config-reload-btn"
+          onClick={loadConfig}
+          type="button"
+          title="Reload configuration"
+          aria-label="Reload configuration"
+        >
+          {"\u21BB"}
+        </button>
       </div>
 
       <nav className="config-sub-tabs" role="tablist" aria-label="Configuration categories">
@@ -132,7 +137,7 @@ export const ConfigViewerView: FC<ConfigViewerViewProps> = ({
             role="tab"
             aria-selected={tab === activeTab}
             className={`config-sub-tab${tab === activeTab ? " active" : ""}`}
-            onClick={() => setActiveTab(tab)}
+            onClick={() => handleTabChange(tab)}
           >
             <span className="config-sub-tab-icon">{SUB_TAB_ICONS[tab]}</span>
             <span className="config-sub-tab-label">{SUB_TAB_LABELS[tab]}</span>
@@ -141,7 +146,7 @@ export const ConfigViewerView: FC<ConfigViewerViewProps> = ({
       </nav>
 
       <div className="config-sub-tab-content" role="tabpanel" aria-label={SUB_TAB_LABELS[activeTab]}>
-        {loadState.tag === "loading" && (
+        {(loadState.tag === "idle" || loadState.tag === "loading") && (
           <p className="config-placeholder">Loading configuration...</p>
         )}
 
@@ -162,7 +167,12 @@ export const ConfigViewerView: FC<ConfigViewerViewProps> = ({
                 ))}
               </div>
             )}
-            {renderTabContent(activeTab, loadState.config)}
+            <ConfigListPanel
+              tab={activeTab}
+              config={loadState.config}
+              selectedKey={selectedKey}
+              onSelect={handleSelect}
+            />
           </>
         )}
       </div>

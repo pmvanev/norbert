@@ -185,6 +185,11 @@ function extractPlugins(pluginsRaw: unknown, scope: ConfigScope): readonly Plugi
     .map((entry) => ({
       name: typeof entry.name === "string" ? entry.name : "",
       version: typeof entry.version === "string" ? entry.version : "",
+      description: "",
+      homepage: "",
+      installPath: "",
+      readme: "",
+      installedAt: "",
       filePath: "",
       scope,
     }));

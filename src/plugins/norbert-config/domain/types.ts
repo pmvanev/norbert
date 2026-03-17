@@ -75,6 +75,7 @@ export interface McpServerConfig {
 export interface SkillDefinition {
   readonly name: string;
   readonly description: string;
+  readonly content: string;
   readonly filePath: string;
   readonly scope: ConfigScope;
   readonly source: string;
@@ -98,6 +99,11 @@ export interface RuleEntry {
 export interface PluginInfo {
   readonly name: string;
   readonly version: string;
+  readonly description: string;
+  readonly homepage: string;
+  readonly installPath: string;
+  readonly readme: string;
+  readonly installedAt: string;
   readonly filePath: string;
   readonly scope: ConfigScope;
 }
@@ -167,6 +173,19 @@ export interface AggregatedConfig {
 export type ConfigReadResult =
   | { readonly tag: "loaded"; readonly config: AggregatedConfig }
   | { readonly tag: "error"; readonly message: string };
+
+// ---------------------------------------------------------------------------
+// SelectedConfigItem -- discriminated union for the detail panel selection
+// ---------------------------------------------------------------------------
+
+export type SelectedConfigItem =
+  | { readonly tag: "agent"; readonly agent: AgentDefinition }
+  | { readonly tag: "hook"; readonly hook: HookConfig }
+  | { readonly tag: "mcp"; readonly server: McpServerConfig }
+  | { readonly tag: "skill"; readonly skill: SkillDefinition }
+  | { readonly tag: "rule"; readonly rule: RuleEntry }
+  | { readonly tag: "plugin"; readonly plugin: PluginInfo }
+  | { readonly tag: "doc"; readonly doc: DocFile };
 
 // ---------------------------------------------------------------------------
 // CONFIG_SUB_TABS -- const array and derived union type for tab navigation

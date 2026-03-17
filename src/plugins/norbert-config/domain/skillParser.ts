@@ -42,15 +42,17 @@ function extractDescription(content: string): string {
  *
  * - Name is derived from the filename (without .md extension).
  * - Description is extracted from the first heading or first paragraph.
- * - Empty files produce an empty description.
+ * - Content is the full markdown body.
+ * - Empty files produce an empty description and content.
  */
 export function parseSkillFile(
   filename: string,
   content: string,
-): Pick<SkillDefinition, "name" | "description"> {
+): Pick<SkillDefinition, "name" | "description" | "content"> {
   return {
     name: extractSkillName(filename),
     description: extractDescription(content),
+    content,
   };
 }
 
