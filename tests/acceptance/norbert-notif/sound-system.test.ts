@@ -74,7 +74,7 @@ describe("User selects a sound and it resolves for playback", () => {
 // FOCUSED SCENARIOS: Sound Resolution
 // ---------------------------------------------------------------------------
 
-describe.skip("Built-in sound resolved by name from library", () => {
+describe("Built-in sound resolved by name from library", () => {
   it("each built-in sound name resolves to its file path", () => {
     // Given the full sound library is resolved
     const library = resolveSoundLibrary(builtInSounds, []);
@@ -90,7 +90,7 @@ describe.skip("Built-in sound resolved by name from library", () => {
   });
 });
 
-describe.skip("Custom sound discovered from user directory", () => {
+describe("Custom sound discovered from user directory", () => {
   it("custom sound appears in library alongside built-in sounds", () => {
     // Given "client-done.wav" is in the custom sounds directory
     const library = resolveSoundLibrary(builtInSounds, customSoundPaths);
