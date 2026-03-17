@@ -88,6 +88,24 @@ const applyDiscardBehavior = (): DndFilterResult => ({
   queuedCount: 0,
 });
 
+/// Suppress sound on a dispatch instruction.
+const suppressSound = (
+  instruction: DispatchInstruction
+): DispatchInstruction => ({
+  ...instruction,
+  sound: null,
+});
+
+/// Banner-only behavior: keep only banner channel instructions, suppress sound.
+const applyBannerOnlyBehavior = (
+  instructions: readonly DispatchInstruction[]
+): DndFilterResult => ({
+  deliverableInstructions: instructions
+    .filter((instruction) => instruction.channel === "banner")
+    .map(suppressSound),
+  queuedCount: 0,
+});
+
 /// Apply the appropriate DND behavior based on the behavior mode.
 const applyActiveDndBehavior = (
   instructions: readonly DispatchInstruction[],
@@ -99,8 +117,7 @@ const applyActiveDndBehavior = (
     case "discard_silently":
       return applyDiscardBehavior();
     case "banner_only":
-      // Stub for step 06-03
-      return { deliverableInstructions: [], queuedCount: 0 };
+      return applyBannerOnlyBehavior(instructions);
   }
 };
 

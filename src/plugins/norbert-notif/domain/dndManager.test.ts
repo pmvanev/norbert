@@ -115,4 +115,24 @@ describe("applyDndToInstructions", () => {
     expect(result.deliverableInstructions).toHaveLength(0);
     expect(result.queuedCount).toBe(0);
   });
+
+  it("banner-only behavior delivers only banner channel instructions", () => {
+    const instructions = [
+      makeInstruction({ channel: "toast", sound: "phosphor-ping" }),
+      makeInstruction({ channel: "banner", sound: null }),
+      makeInstruction({ channel: "badge", sound: null }),
+    ];
+    const result = applyDndToInstructions(instructions, activeDndState, "banner_only");
+    expect(result.deliverableInstructions).toHaveLength(1);
+    expect(result.deliverableInstructions[0].channel).toBe("banner");
+  });
+
+  it("banner-only behavior suppresses sound on delivered banners", () => {
+    const instructions = [
+      makeInstruction({ channel: "banner", sound: "amber-pulse" }),
+    ];
+    const result = applyDndToInstructions(instructions, activeDndState, "banner_only");
+    expect(result.deliverableInstructions).toHaveLength(1);
+    expect(result.deliverableInstructions[0].sound).toBeNull();
+  });
 });

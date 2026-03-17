@@ -171,7 +171,7 @@ describe("DND with discard behavior produces no instructions", () => {
   });
 });
 
-describe.skip("DND with banner-only behavior produces only banner instructions", () => {
+describe("DND with banner-only behavior produces only banner instructions", () => {
   it("filters to banner channel only, suppressing toast and sound", () => {
     // Given DND is active with "banner only" behavior
     const dndState: DndState = {
