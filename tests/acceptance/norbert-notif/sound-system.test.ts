@@ -105,7 +105,7 @@ describe("Custom sound discovered from user directory", () => {
   });
 });
 
-describe.skip("Silence option produces null file path", () => {
+describe("Silence option produces null file path", () => {
   it("selecting silence resolves to a sound entry with no file path", () => {
     // Given the sound library includes the silence option
     const library = resolveSoundLibrary(builtInSounds, []);
@@ -124,7 +124,7 @@ describe.skip("Silence option produces null file path", () => {
 // ERROR / BOUNDARY SCENARIOS
 // ---------------------------------------------------------------------------
 
-describe.skip("Missing custom sound falls back to default", () => {
+describe("Missing custom sound falls back to default", () => {
   it("returns default sound when requested custom sound is not in library", () => {
     // Given "client-done.wav" has been deleted from the custom sounds directory
     const library = resolveSoundLibrary(builtInSounds, []);
