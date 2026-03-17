@@ -111,7 +111,7 @@ describe("Settings section has sec-hdr title with sub-sections", () => {
 // ERROR / BOUNDARY SCENARIOS
 // ---------------------------------------------------------------------------
 
-describe.skip("Plugin uses only public NorbertPlugin API", () => {
+describe("Plugin uses only public NorbertPlugin API", () => {
   it("norbert-notif imports no internal Norbert modules", () => {
     // Given norbert-notif source code exists
     // When inspecting its entry point imports
