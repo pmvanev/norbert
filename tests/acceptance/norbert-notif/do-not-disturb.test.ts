@@ -121,7 +121,7 @@ describe("Manual DND toggle suppresses dispatch", () => {
   });
 });
 
-describe.skip("DND with queue behavior tags instructions for queuing", () => {
+describe("DND with queue behavior tags instructions for queuing", () => {
   it("returns empty instructions and increments queue count", () => {
     // Given DND is active with "Queue and show count badge" behavior
     const dndState: DndState = {
@@ -146,7 +146,7 @@ describe.skip("DND with queue behavior tags instructions for queuing", () => {
   });
 });
 
-describe.skip("DND with discard behavior produces no instructions", () => {
+describe("DND with discard behavior produces no instructions", () => {
   it("silently discards all instructions without queuing", () => {
     // Given DND is active with "discard silently" behavior
     const dndState: DndState = {

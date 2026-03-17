@@ -68,14 +68,52 @@ export interface DndFilterResult {
 /// - "queue_with_badge": suppress all, increment queue count
 /// - "discard_silently": suppress all, queue count stays zero
 /// - "banner_only": only banner instructions pass through, sound suppressed
-export const applyDndToInstructions = (
-  _instructions: readonly DispatchInstruction[],
-  _dndState: DndState,
-  _behavior: DndBehavior
+/// When DND is inactive, pass all instructions through unchanged.
+const passThrough = (
+  instructions: readonly DispatchInstruction[]
 ): DndFilterResult => ({
+  deliverableInstructions: instructions,
+  queuedCount: 0,
+});
+
+/// Queue behavior: suppress all instructions, count one queued notification event.
+const applyQueueBehavior = (): DndFilterResult => ({
+  deliverableInstructions: [],
+  queuedCount: 1,
+});
+
+/// Discard behavior: suppress all instructions, nothing queued.
+const applyDiscardBehavior = (): DndFilterResult => ({
   deliverableInstructions: [],
   queuedCount: 0,
 });
+
+/// Apply the appropriate DND behavior based on the behavior mode.
+const applyActiveDndBehavior = (
+  instructions: readonly DispatchInstruction[],
+  behavior: DndBehavior
+): DndFilterResult => {
+  switch (behavior) {
+    case "queue_with_badge":
+      return applyQueueBehavior();
+    case "discard_silently":
+      return applyDiscardBehavior();
+    case "banner_only":
+      // Stub for step 06-03
+      return { deliverableInstructions: [], queuedCount: 0 };
+  }
+};
+
+export const applyDndToInstructions = (
+  instructions: readonly DispatchInstruction[],
+  dndState: DndState,
+  behavior: DndBehavior
+): DndFilterResult => {
+  if (!dndState.active) {
+    return passThrough(instructions);
+  }
+  return applyActiveDndBehavior(instructions, behavior);
+};
 
 // ---------------------------------------------------------------------------
 // DND Queue Summary

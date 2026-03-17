@@ -71,3 +71,48 @@ describe("evaluateDndState", () => {
     expect(state.queuedCount).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// applyDndToInstructions
+// ---------------------------------------------------------------------------
+
+const activeDndState: DndState = {
+  active: true,
+  source: "manual",
+  endsAt: null,
+  queuedCount: 0,
+};
+
+const inactiveDndState: DndState = {
+  active: false,
+  source: "none",
+  endsAt: null,
+  queuedCount: 0,
+};
+
+describe("applyDndToInstructions", () => {
+  it("passes all instructions through when DND is inactive", () => {
+    const instructions = [makeInstruction(), makeInstruction({ channel: "banner" })];
+    const result = applyDndToInstructions(instructions, inactiveDndState, "queue_with_badge");
+    expect(result.deliverableInstructions).toHaveLength(2);
+    expect(result.queuedCount).toBe(0);
+  });
+
+  it("queue behavior suppresses all instructions and counts one queued event", () => {
+    const instructions = [
+      makeInstruction({ channel: "toast" }),
+      makeInstruction({ channel: "banner" }),
+      makeInstruction({ channel: "badge" }),
+    ];
+    const result = applyDndToInstructions(instructions, activeDndState, "queue_with_badge");
+    expect(result.deliverableInstructions).toHaveLength(0);
+    expect(result.queuedCount).toBe(1);
+  });
+
+  it("discard behavior suppresses all instructions with zero queue count", () => {
+    const instructions = [makeInstruction(), makeInstruction({ channel: "banner" })];
+    const result = applyDndToInstructions(instructions, activeDndState, "discard_silently");
+    expect(result.deliverableInstructions).toHaveLength(0);
+    expect(result.queuedCount).toBe(0);
+  });
+});
