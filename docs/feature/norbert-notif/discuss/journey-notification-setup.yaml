@@ -1,0 +1,358 @@
+journey:
+  name: "Notification Setup and Event Delivery"
+  goal: "Configure notification preferences and receive timely alerts for agent events"
+  personas:
+    - "Raj Patel (daily Claude Code user, wants awareness without polling)"
+    - "Keiko Tanaka (tech lead, wants cost governance and Slack routing)"
+    - "Marcus Chen (freelancer, wants custom sounds and credit alerts)"
+
+  emotional_arc:
+    start: "Curious or Anxious -- exploring new feature or frustrated by missed event"
+    middle: "In Control -- progressive configuration builds confidence"
+    end: "Confident -- notifications arrive reliably without effort"
+
+steps:
+  - id: 1
+    name: "Open Notification Settings"
+    action: "Navigate to Settings (Ctrl+,) then select Notifications section"
+
+    desktop_mockup: |
+      +-- Settings / Notifications / Events ---------------------------+
+      | sec-hdr                                                         |
+      | Notifications                                                   |
+      +-----------------------------------------------------------------+
+      | Event                      Toast  Banner  Badge  Sound          |
+      | ---------------------------------------------------------      |
+      | Session response completed  [x]   [ ]     [ ]    phosphor-ping |
+      | Context compaction occurred  [x]   [ ]     [ ]    compaction    |
+      | Cost threshold reached       [x]   [x]    [x]    amber-pulse   |
+      |   Threshold: [$___5.00____]                                     |
+      | Hook error detected          [x]   [x]    [x]    des-block     |
+      | ...                                                             |
+      +-----------------------------------------------------------------+
+
+    shared_artifacts:
+      - name: "event_registry"
+        source: "norbert-notif/domain/eventRegistry"
+        displayed_as: "${event_list}"
+        consumers:
+          - "Settings Events grid"
+          - "Hook bridge event matching"
+          - "Notification dispatch"
+
+      - name: "default_toggles"
+        source: "norbert-notif/domain/defaults"
+        displayed_as: "${event_defaults}"
+        consumers:
+          - "Settings Events grid initial state"
+          - "First-launch configuration"
+
+    emotional_state:
+      entry: "Curious or frustrated"
+      exit: "Oriented -- sees all options clearly"
+
+    integration_checkpoint: |
+      Settings section registered via NorbertAPI.ui
+      Event list matches product spec event registry
+      Default toggles match spec defaults (session-complete=On, session-started=Off, etc.)
+
+    gherkin: |
+      Scenario: Raj opens notification settings for the first time
+        Given Raj has Norbert open with norbert-notif plugin enabled
+        And no notification preferences have been configured yet
+        When Raj opens Settings with Ctrl+, and selects Notifications
+        Then the Events sub-section is displayed by default
+        And all 14 notification events are listed with their default toggle states
+        And "Session response completed" shows Toast enabled and Sound "phosphor-ping"
+        And "Session started" shows all channels disabled
+
+  - id: 2
+    name: "Configure Event Routing"
+    action: "Toggle channels per event and set thresholds"
+
+    desktop_mockup: |
+      +-- Events Grid (editing) ----------------------------------------+
+      | Cost threshold reached       [x]   [x]    [x]    amber-pulse   |
+      |   Threshold: [$__25.00____]                                     |
+      | Context window % threshold   [x]   [ ]    [ ]    amber-pulse   |
+      |   Threshold: [__80__]%                                          |
+      +----------------------------------------------------------------+
+
+    shared_artifacts:
+      - name: "user_preferences"
+        source: "norbert-notif/config/preferences.json"
+        displayed_as: "${preferences}"
+        consumers:
+          - "Settings Events grid"
+          - "Notification dispatch engine"
+          - "DND behavior"
+
+      - name: "threshold_values"
+        source: "norbert-notif/config/preferences.json"
+        displayed_as: "${thresholds}"
+        consumers:
+          - "Settings Events grid threshold inputs"
+          - "Threshold evaluation in dispatch"
+          - "Status bar summary"
+
+    emotional_state:
+      entry: "Oriented"
+      exit: "In control -- made deliberate choices"
+
+    integration_checkpoint: |
+      Preferences persisted immediately on toggle change
+      Threshold values validated (positive numbers, reasonable ranges)
+      Changes reflected in dispatch engine without restart
+
+    gherkin: |
+      Scenario: Keiko sets cost threshold to 25 dollars
+        Given Keiko is on the Notifications Events settings page
+        And the cost threshold is currently set to $5.00 (default)
+        When Keiko changes the cost threshold to $25.00
+        Then the threshold input shows $25.00
+        And the preference is saved immediately
+        And the notification dispatch engine uses $25.00 as the new trigger point
+
+  - id: 3
+    name: "Configure Channel"
+    action: "Set up SMTP credentials or webhook URL in Channels sub-section"
+
+    desktop_mockup: |
+      +-- Channels / Webhook -------------------------------------------+
+      | Webhook                                                         |
+      | URL: [https://hooks.slack.com/services/T01/B01/xxx____________] |
+      | Method: POST  Content-Type: application/json                    |
+      | Status: Configured                          [ Test ]            |
+      +----------------------------------------------------------------+
+
+    shared_artifacts:
+      - name: "channel_config"
+        source: "norbert-notif/config/channels.json"
+        displayed_as: "${channel_settings}"
+        consumers:
+          - "Settings Channels sub-section"
+          - "Notification dispatch engine"
+          - "Test notification sender"
+
+    emotional_state:
+      entry: "Focused -- setting up advanced channel"
+      exit: "Hopeful -- configuration looks right"
+
+    integration_checkpoint: |
+      Webhook URL validated for well-formed URL
+      SMTP credentials stored securely (not plaintext in JSON)
+      Channel status updates from "Not configured" to "Configured" on save
+
+    gherkin: |
+      Scenario: Keiko configures Slack webhook channel
+        Given Keiko is on the Notifications Channels settings page
+        And the Webhook channel shows "Not configured"
+        When Keiko enters the Slack webhook URL "https://hooks.slack.com/services/T01ABC/B02DEF/a1b2c3d4e5"
+        And saves the channel configuration
+        Then the Webhook status changes to "Configured"
+        And the Test button becomes active
+
+  - id: 4
+    name: "Test Channel"
+    action: "Click Test button to send a synthetic notification"
+
+    desktop_mockup: |
+      +-- Test Result ---------------------------------------------------+
+      | Sending test notification to Webhook...                          |
+      | [========================================] Done                   |
+      |                                                                   |
+      | Result: Delivered successfully                                    |
+      | Sent: "[TEST] Norbert notification test" at 2026-03-17 14:32:05  |
+      +------------------------------------------------------------------+
+
+    shared_artifacts:
+      - name: "test_payload"
+        source: "norbert-notif/domain/testNotification"
+        displayed_as: "${test_notification}"
+        consumers:
+          - "Test button handler"
+          - "Channel delivery pipeline"
+
+    emotional_state:
+      entry: "Hopeful -- expecting it to work"
+      exit: "Verified -- saw the test arrive in Slack"
+
+    integration_checkpoint: |
+      Test notification flows through same pipeline as real notifications
+      Test notification clearly labeled "[TEST]" in all channels
+      Result displayed inline with success/failure and timestamp
+      Failed test shows actionable error message (connection refused, 401, etc.)
+
+    gherkin: |
+      Scenario: Keiko tests the Slack webhook channel
+        Given Keiko has configured the Webhook channel with a valid Slack URL
+        When Keiko clicks the Test button for the Webhook channel
+        Then a test notification is sent to the Slack webhook
+        And the settings page shows "Result: Delivered successfully"
+        And the Slack channel receives a message labeled "[TEST] Norbert notification test"
+
+      Scenario: Marcus tests a webhook with an invalid URL
+        Given Marcus has configured the Webhook channel with URL "https://invalid.example.com/hook"
+        When Marcus clicks the Test button for the Webhook channel
+        Then the settings page shows "Result: Delivery failed"
+        And an error message displays "Connection refused: https://invalid.example.com/hook"
+        And the Webhook status remains "Configured" but shows a warning indicator
+
+  - id: 5
+    name: "Receive Real Notification"
+    action: "Agent event fires and notification is delivered through configured channels"
+
+    desktop_mockup: |
+      Dashboard Banner:
+      +-- Notification Banner ----------------------------------------+
+      | [!] Session response completed - project-alpha (14:47)    [x] |
+      +----------------------------------------------------------------+
+
+      Tray Icon: [N] with amber dot
+
+      OS Toast:
+      +------------------------------------------+
+      | Norbert                              14m  |
+      | Session Response Completed                |
+      | project-alpha finished. Cost: $5.12       |
+      +------------------------------------------+
+
+    shared_artifacts:
+      - name: "event_payload"
+        source: "hook bridge event delivery"
+        displayed_as: "${event_data}"
+        consumers:
+          - "Notification dispatch engine"
+          - "Dashboard banner component"
+          - "OS toast formatter"
+          - "Webhook payload builder"
+          - "Badge count tracker"
+
+      - name: "badge_count"
+        source: "norbert-notif/domain/badgeTracker"
+        displayed_as: "${unread_count}"
+        consumers:
+          - "Tray icon badge"
+          - "Status bar item"
+
+    emotional_state:
+      entry: "Unaware -- working in another window"
+      exit: "Informed and calm -- knows session finished"
+
+    integration_checkpoint: |
+      Event arrives via hookBridge.deliverHookEvent()
+      norbert-notif's hook processor receives the event
+      User preferences consulted for enabled channels
+      DND status checked before audible/visual delivery
+      Badge count incremented for banner notifications
+      Status bar updated with unread count
+
+    gherkin: |
+      Scenario: Raj receives session completion notification via OS toast
+        Given Raj has "Session response completed" enabled for Toast channel
+        And Raj has sound set to "phosphor-ping"
+        And Raj is working in VS Code (Norbert is not focused)
+        And DND is not active
+        When the Claude Code session "project-alpha" completes
+        Then a Windows toast notification appears with title "Session Response Completed"
+        And the toast body shows "project-alpha finished. Cost: $5.12"
+        And the "phosphor-ping" sound plays at the configured volume
+
+      Scenario: Cost threshold notification fires on multiple channels
+        Given Keiko has "Cost threshold reached" enabled for Toast, Banner, and Badge
+        And Keiko has set the cost threshold to $25.00
+        And Keiko has the Webhook channel configured for Slack
+        When the session cost for "api-refactor" reaches $25.12
+        Then a Windows toast notification shows "Cost Threshold Reached: $25.12 of $25.00"
+        And a dashboard banner appears with the same information
+        And the tray icon shows an amber badge dot
+        And the Slack webhook receives a JSON payload with cost details
+
+  - id: 6
+    name: "Manage Do Not Disturb"
+    action: "Toggle DND manually or configure schedule"
+
+    desktop_mockup: |
+      +-- DND Settings --------------------------------------------------+
+      | Do Not Disturb                                                    |
+      |                                                                   |
+      | Global Mute: [ ] Enable Do Not Disturb                            |
+      | Quick Toggle: Right-click tray icon or Ctrl+Shift+D               |
+      |                                                                   |
+      | Schedule: [x] Enable                                              |
+      | Mon-Fri 09:00-10:00 [x]                                          |
+      |                                                                   |
+      | When DND active:                                                  |
+      | (*) Queue and show count badge                                    |
+      | ( ) Discard silently                                              |
+      | ( ) Banner only (no sound/toast)                                  |
+      +------------------------------------------------------------------+
+
+    shared_artifacts:
+      - name: "dnd_state"
+        source: "norbert-notif/domain/dndManager"
+        displayed_as: "${dnd_active}"
+        consumers:
+          - "Notification dispatch engine (gate check)"
+          - "Tray icon overlay"
+          - "Status bar DND indicator"
+          - "Settings DND toggle"
+
+      - name: "dnd_schedule"
+        source: "norbert-notif/config/preferences.json"
+        displayed_as: "${dnd_schedule}"
+        consumers:
+          - "DND scheduler"
+          - "Settings DND schedule grid"
+
+    emotional_state:
+      entry: "Anticipating interruption-free time"
+      exit: "Safe -- notifications will not interrupt"
+
+    integration_checkpoint: |
+      DND state persisted and survives app restart
+      Schedule evaluated against system clock
+      Tray icon overlay updated on DND state change
+      Status bar shows "DND: On (until HH:MM)" or "DND: Off"
+      Queued notifications delivered when DND ends
+
+    gherkin: |
+      Scenario: Keiko enables DND before a meeting
+        Given Keiko has DND disabled
+        When Keiko right-clicks the Norbert tray icon and selects "Do Not Disturb"
+        Then DND activates immediately
+        And the tray icon shows a pause overlay
+        And the status bar shows "DND: On"
+        And no toast or sound notifications are delivered
+
+      Scenario: Scheduled DND activates automatically
+        Given Keiko has a DND schedule for Monday 09:00-10:00
+        And it is Monday at 08:59
+        When the clock reaches 09:00
+        Then DND activates automatically
+        And any notifications during 09:00-10:00 are queued
+        When the clock reaches 10:00
+        Then DND deactivates automatically
+        And queued notifications are delivered as a batch
+
+integration_validation:
+  shared_artifact_consistency:
+    - artifact: "event_registry"
+      must_match_across: [1, 5]
+      failure_message: "Events shown in settings must match events recognized by dispatch engine"
+
+    - artifact: "user_preferences"
+      must_match_across: [2, 5, 6]
+      failure_message: "Preferences in settings must be the same preferences consulted during dispatch and DND"
+
+    - artifact: "channel_config"
+      must_match_across: [3, 4, 5]
+      failure_message: "Channel config in settings must be used by test sender and real dispatch"
+
+    - artifact: "dnd_state"
+      must_match_across: [5, 6]
+      failure_message: "DND state shown in UI must be the same state checked by dispatch gate"
+
+    - artifact: "badge_count"
+      must_match_across: [5, 6]
+      failure_message: "Badge count in tray must match unread banner count in dashboard"
