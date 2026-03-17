@@ -18,9 +18,14 @@ import {
   createDndQueueSummary,
 } from "../../../src/plugins/norbert-notif/domain/dndManager";
 import {
+  createDispatchInstructions,
+} from "../../../src/plugins/norbert-notif/domain/dispatchEngine";
+import {
   type DndConfig,
   type DndState,
   type DispatchInstruction,
+  type EventPreference,
+  type NotificationPreferences,
 } from "../../../src/plugins/norbert-notif/domain/types";
 
 // ---------------------------------------------------------------------------
@@ -255,5 +260,59 @@ describe("DND state persists across evaluations", () => {
 
     // Then evaluation reflects the change
     expect(state3.active).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FULL PIPELINE: createDispatchInstructions -> applyDndToInstructions (D2)
+// ---------------------------------------------------------------------------
+
+describe("Full pipeline: dispatch + DND discard produces zero deliverable instructions", () => {
+  it("creates dispatch instructions then discards all when DND active with discard behavior", () => {
+    // Given an event with toast, banner, and badge enabled
+    const prefs: NotificationPreferences = {
+      version: 1,
+      events: [
+        {
+          eventId: "cost_threshold_reached",
+          channels: { toast: true, banner: true, badge: true, email: false, webhook: false },
+          sound: "amber-pulse",
+          threshold: 25.0,
+        } as EventPreference,
+      ],
+      globalVolume: 80,
+    };
+
+    const event = {
+      hookName: "usage-event",
+      eventType: "cost_threshold_reached",
+      payload: { sessionName: "pipeline-test", cost: 30.0, threshold: 25.0 },
+    };
+
+    // When dispatch instructions are created
+    const instructions = createDispatchInstructions(event, prefs);
+
+    // Then instructions are produced for the enabled channels
+    expect(instructions.length).toBeGreaterThan(0);
+
+    // And when DND is active with discard behavior
+    const activeDndState: DndState = {
+      active: true,
+      source: "manual",
+      endsAt: null,
+      queuedCount: 0,
+    };
+
+    const result = applyDndToInstructions(
+      instructions,
+      activeDndState,
+      "discard_silently"
+    );
+
+    // Then zero deliverable instructions remain
+    expect(result.deliverableInstructions).toHaveLength(0);
+
+    // And nothing is queued (discard behavior)
+    expect(result.queuedCount).toBe(0);
   });
 });

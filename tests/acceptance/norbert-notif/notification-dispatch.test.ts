@@ -20,19 +20,11 @@ import {
 import {
   type NotificationPreferences,
   type EventPreference,
-  type DndState,
 } from "../../../src/plugins/norbert-notif/domain/types";
 
 // ---------------------------------------------------------------------------
 // TEST FIXTURES
 // ---------------------------------------------------------------------------
-
-const dndOff: DndState = {
-  active: false,
-  source: "none",
-  endsAt: null,
-  queuedCount: 0,
-};
 
 const sessionCompletedEvent = {
   hookName: "session-event",
@@ -139,8 +131,7 @@ describe("User receives notification when session completes", () => {
     // When the session "project-alpha" completes after 4 minutes 32 seconds with cost $5.12
     const instructions = createDispatchInstructions(
       sessionCompletedEvent,
-      prefs,
-      dndOff
+      prefs
     );
 
     // Then a dispatch instruction is produced for the toast channel
@@ -176,8 +167,7 @@ describe("Cost threshold triggers multi-channel dispatch", () => {
     // When session "api-refactor" cost reaches $25.12
     const instructions = createDispatchInstructions(
       costThresholdEvent,
-      prefs,
-      dndOff
+      prefs
     );
 
     // Then dispatch instructions are produced for toast, banner, and badge
@@ -201,8 +191,7 @@ describe("Hook error dispatch includes context", () => {
     // When hook "lint-check" returns error "ESLint process exited with code 1" in session "secure-api"
     const instructions = createDispatchInstructions(
       hookErrorEvent,
-      prefs,
-      dndOff
+      prefs
     );
 
     // Then the toast instruction title contains "Hook Error"
@@ -224,8 +213,7 @@ describe("Context compaction produces toast with session details", () => {
     // When context compaction occurs in session "client-dashboard"
     const instructions = createDispatchInstructions(
       contextCompactionEvent,
-      prefs,
-      dndOff
+      prefs
     );
 
     // Then a toast instruction is produced
@@ -248,8 +236,7 @@ describe.skip("Disabled event produces no dispatch instructions", () => {
     // When a new session "bugfix-login" starts
     const instructions = createDispatchInstructions(
       sessionStartedEvent,
-      prefs,
-      dndOff
+      prefs
     );
 
     // Then no dispatch instructions are produced
@@ -269,8 +256,7 @@ describe.skip("Dispatch produces independent instructions per channel", () => {
     // When the cost threshold is reached
     const instructions = createDispatchInstructions(
       costThresholdEvent,
-      prefs,
-      dndOff
+      prefs
     );
 
     // Then each instruction is independent with its own channel, title, body
@@ -291,8 +277,7 @@ describe("Badge count increments for banner instructions", () => {
     // When the cost threshold is reached
     const instructions = createDispatchInstructions(
       costThresholdEvent,
-      prefs,
-      dndOff
+      prefs
     );
 
     // Then a badge instruction is produced
@@ -315,8 +300,7 @@ describe.skip("Dispatch never produces instructions for disabled channels", () =
     // Session started has all channels disabled
     const instructions = createDispatchInstructions(
       sessionStartedEvent,
-      prefs,
-      dndOff
+      prefs
     );
 
     expect(instructions).toHaveLength(0);
@@ -324,8 +308,7 @@ describe.skip("Dispatch never produces instructions for disabled channels", () =
     // Session completed has only toast enabled
     const sessionInstructions = createDispatchInstructions(
       sessionCompletedEvent,
-      prefs,
-      dndOff
+      prefs
     );
 
     for (const instruction of sessionInstructions) {
@@ -342,8 +325,7 @@ describe.skip("Every dispatch instruction includes event ID and timestamp metada
 
     const instructions = createDispatchInstructions(
       costThresholdEvent,
-      prefs,
-      dndOff
+      prefs
     );
 
     // Then every instruction includes the event ID
@@ -366,8 +348,7 @@ describe("Unknown event type produces no dispatch instructions", () => {
     // When dispatch instructions are produced
     const instructions = createDispatchInstructions(
       unknownEvent,
-      prefs,
-      dndOff
+      prefs
     );
 
     // Then no instructions are produced (event is silently ignored)
@@ -391,8 +372,7 @@ describe("Event with missing payload fields produces safe instructions", () => {
     // When dispatch instructions are produced
     const instructions = createDispatchInstructions(
       incompleteEvent,
-      prefs,
-      dndOff
+      prefs
     );
 
     // Then instructions are still produced for enabled channels

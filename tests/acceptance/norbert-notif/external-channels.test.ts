@@ -21,19 +21,11 @@ import {
 import {
   type NotificationPreferences,
   type EventPreference,
-  type DndState,
 } from "../../../src/plugins/norbert-notif/domain/types";
 
 // ---------------------------------------------------------------------------
 // TEST FIXTURES
 // ---------------------------------------------------------------------------
-
-const dndOff: DndState = {
-  active: false,
-  source: "none",
-  endsAt: null,
-  queuedCount: 0,
-};
 
 const costThresholdEvent = {
   hookName: "usage-event",
@@ -100,8 +92,7 @@ describe("Webhook dispatch instruction includes standard payload fields", () => 
     // When the cost threshold is reached for session "api-refactor"
     const instructions = createDispatchInstructions(
       costThresholdEvent,
-      prefs,
-      dndOff
+      prefs
     );
 
     // Then a webhook instruction is produced
@@ -126,8 +117,7 @@ describe("Email dispatch instruction includes subject and body with event detail
     // When an anomaly is detected for session "batch-process"
     const instructions = createDispatchInstructions(
       anomalyEvent,
-      prefs,
-      dndOff
+      prefs
     );
 
     // Then an email instruction is produced
@@ -146,25 +136,33 @@ describe("Email dispatch instruction includes subject and body with event detail
 // ERROR / BOUNDARY SCENARIOS
 // ---------------------------------------------------------------------------
 
-describe("Webhook timeout configuration reflected in instruction metadata", () => {
-  it("webhook instruction carries timeout value in metadata for adapter use", () => {
-    // Given "Cost threshold reached" is enabled for Webhook
-    const prefs = makeExternalPrefs(true, false);
+describe("Modifying one channel config does not affect another channel's instructions", () => {
+  it("webhook-only and email-only prefs produce independent instructions", () => {
+    // Given "Cost threshold reached" is enabled for Webhook but not Email
+    const webhookOnlyPrefs = makeExternalPrefs(true, false);
 
-    // When the cost threshold is reached
-    const instructions = createDispatchInstructions(
+    // And a separate config enables Email but not Webhook
+    const emailOnlyPrefs = makeExternalPrefs(false, true);
+
+    // When dispatch instructions are produced for each config
+    const webhookInstructions = createDispatchInstructions(
       costThresholdEvent,
-      prefs,
-      dndOff
+      webhookOnlyPrefs
+    );
+    const emailInstructions = createDispatchInstructions(
+      costThresholdEvent,
+      emailOnlyPrefs
     );
 
-    // Then the webhook instruction exists
-    const webhook = instructions.find((i) => i.channel === "webhook");
-    expect(webhook).toBeDefined();
+    // Then webhook-only config produces webhook but not email
+    const webhookChannels = webhookInstructions.map((i) => i.channel);
+    expect(webhookChannels).toContain("webhook");
+    expect(webhookChannels).not.toContain("email");
 
-    // And it is independent from other channel instructions
-    // (each instruction is self-contained with its own channel, title, body)
-    expect(webhook!.channel).toBe("webhook");
+    // And email-only config produces email but not webhook
+    const emailChannels = emailInstructions.map((i) => i.channel);
+    expect(emailChannels).toContain("email");
+    expect(emailChannels).not.toContain("webhook");
   });
 });
 
@@ -176,8 +174,7 @@ describe("Webhook failure does not appear in other channel instructions", () => 
     // When the cost threshold is reached
     const instructions = createDispatchInstructions(
       costThresholdEvent,
-      prefs,
-      dndOff
+      prefs
     );
 
     // Then toast, banner, badge, and webhook instructions all exist independently

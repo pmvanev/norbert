@@ -15,20 +15,12 @@ import {
 } from "../../../../../src/plugins/norbert-notif/domain/dispatchEngine";
 import type {
   NotificationPreferences,
-  DndState,
   HookEvent,
 } from "../../../../../src/plugins/norbert-notif/domain/types";
 
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
-
-const dndOff: DndState = {
-  active: false,
-  source: "none",
-  endsAt: null,
-  queuedCount: 0,
-};
 
 const makeCostThresholdEvent = (cost: number, threshold: number): HookEvent => ({
   hookName: "usage-event",
@@ -64,7 +56,7 @@ describe("Cost threshold dispatch produces instructions for each enabled channel
     const event = makeCostThresholdEvent(25.12, 25.0);
     const prefs = makeCostThresholdPrefs({ toast: true, banner: true, badge: true });
 
-    const instructions = createDispatchInstructions(event, prefs, dndOff);
+    const instructions = createDispatchInstructions(event, prefs);
 
     const channels = instructions.map((i) => i.channel);
     expect(channels).toEqual(["toast", "banner", "badge"]);
@@ -74,7 +66,7 @@ describe("Cost threshold dispatch produces instructions for each enabled channel
     const event = makeCostThresholdEvent(30.0, 25.0);
     const prefs = makeCostThresholdPrefs({ toast: true, banner: false, badge: false });
 
-    const instructions = createDispatchInstructions(event, prefs, dndOff);
+    const instructions = createDispatchInstructions(event, prefs);
 
     expect(instructions).toHaveLength(1);
     expect(instructions[0].channel).toBe("toast");
@@ -86,7 +78,7 @@ describe("Cost threshold toast body includes cost and threshold amounts", () => 
     const event = makeCostThresholdEvent(25.12, 25.0);
     const prefs = makeCostThresholdPrefs({ toast: true, banner: false, badge: false });
 
-    const instructions = createDispatchInstructions(event, prefs, dndOff);
+    const instructions = createDispatchInstructions(event, prefs);
     const toast = instructions[0];
 
     expect(toast.body).toContain("25.12");
@@ -97,7 +89,7 @@ describe("Cost threshold toast body includes cost and threshold amounts", () => 
     const event = makeCostThresholdEvent(50.0, 40.0);
     const prefs = makeCostThresholdPrefs({ toast: true, banner: false, badge: false });
 
-    const instructions = createDispatchInstructions(event, prefs, dndOff);
+    const instructions = createDispatchInstructions(event, prefs);
 
     expect(instructions[0].body).toContain("test-session");
   });
@@ -108,7 +100,7 @@ describe("Badge instruction carries event ID for count tracking", () => {
     const event = makeCostThresholdEvent(25.12, 25.0);
     const prefs = makeCostThresholdPrefs({ toast: false, banner: false, badge: true });
 
-    const instructions = createDispatchInstructions(event, prefs, dndOff);
+    const instructions = createDispatchInstructions(event, prefs);
     const badge = instructions.find((i) => i.channel === "badge");
 
     expect(badge).toBeDefined();
@@ -119,7 +111,7 @@ describe("Badge instruction carries event ID for count tracking", () => {
     const event = makeCostThresholdEvent(25.12, 25.0);
     const prefs = makeCostThresholdPrefs({ toast: false, banner: false, badge: true });
 
-    const instructions = createDispatchInstructions(event, prefs, dndOff);
+    const instructions = createDispatchInstructions(event, prefs);
     const badge = instructions[0];
 
     expect(badge.sound).toBeNull();
@@ -150,7 +142,7 @@ describe("Every dispatch instruction volume equals global volume from preference
             globalVolume: volume,
           };
 
-          const instructions = createDispatchInstructions(event, prefs, dndOff);
+          const instructions = createDispatchInstructions(event, prefs);
 
           expect(instructions.length).toBeGreaterThan(0);
           for (const instruction of instructions) {
@@ -176,7 +168,7 @@ describe("Every dispatch instruction volume equals global volume from preference
       globalVolume: 0,
     };
 
-    const instructions = createDispatchInstructions(event, prefs, dndOff);
+    const instructions = createDispatchInstructions(event, prefs);
 
     expect(instructions).toHaveLength(1);
     expect(instructions[0].volume).toBe(0);

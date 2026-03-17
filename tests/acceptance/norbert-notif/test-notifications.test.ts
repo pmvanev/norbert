@@ -16,7 +16,11 @@ import {
   createTestNotification,
 } from "../../../src/plugins/norbert-notif/domain/dispatchEngine";
 import {
+  applyDndToInstructions,
+} from "../../../src/plugins/norbert-notif/domain/dndManager";
+import {
   type ChannelId,
+  type DndState,
   type NotificationPreferences,
 } from "../../../src/plugins/norbert-notif/domain/types";
 
@@ -91,17 +95,34 @@ describe("Test notification with unconfigured channel still produces instruction
 });
 
 describe("Test notification during DND still delivers (bypasses DND)", () => {
-  it("test notifications are not suppressed by Do Not Disturb", () => {
-    // Given DND is active
-    // When a test notification is created
+  it("test notifications survive applyDndToInstructions with active DND", () => {
+    // Given DND is active with discard behavior
+    const activeDndState: DndState = {
+      active: true,
+      source: "manual",
+      endsAt: null,
+      queuedCount: 0,
+    };
+
+    // And a test notification instruction exists
     const channel: ChannelId = "toast";
     const instruction = createTestNotification(channel, defaultPrefs);
 
-    // Then the instruction is produced regardless of DND state
-    // (Test notifications bypass DND because the user explicitly requested the test)
-    expect(instruction.isTest).toBe(true);
-    expect(instruction.channel).toBe("toast");
-    expect(instruction.title).toContain("[TEST]");
+    // When the instruction is filtered through DND with discard behavior
+    const result = applyDndToInstructions(
+      [instruction],
+      activeDndState,
+      "discard_silently"
+    );
+
+    // Then the test instruction survives DND filtering
+    expect(result.deliverableInstructions).toHaveLength(1);
+    expect(result.deliverableInstructions[0].isTest).toBe(true);
+    expect(result.deliverableInstructions[0].channel).toBe("toast");
+    expect(result.deliverableInstructions[0].title).toContain("[TEST]");
+
+    // And nothing is queued (test notifications don't count as queued)
+    expect(result.queuedCount).toBe(0);
   });
 });
 

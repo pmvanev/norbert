@@ -55,9 +55,11 @@ const dayIndexToDay: readonly DayOfWeek[] = [
 const getDayOfWeek = (date: Date): DayOfWeek => dayIndexToDay[date.getDay()];
 
 /// Parse "HH:MM" time string into total minutes since midnight.
-const parseTimeToMinutes = (time: string): number => {
+/// Returns NaN-safe value: malformed strings produce -1 (never matches any window).
+export const parseTimeToMinutes = (time: string): number => {
   const [hours, minutes] = time.split(":").map(Number);
-  return hours * 60 + minutes;
+  const result = hours * 60 + minutes;
+  return Number.isNaN(result) ? -1 : result;
 };
 
 /// Get the current time-of-day as minutes since midnight.
@@ -187,6 +189,18 @@ const applyActiveDndBehavior = (
   }
 };
 
+/// Separate test instructions from normal instructions.
+/// Test instructions (isTest=true) always bypass DND filtering.
+const partitionTestInstructions = (
+  instructions: readonly DispatchInstruction[]
+): {
+  readonly testInstructions: readonly DispatchInstruction[];
+  readonly normalInstructions: readonly DispatchInstruction[];
+} => ({
+  testInstructions: instructions.filter((i) => i.isTest),
+  normalInstructions: instructions.filter((i) => !i.isTest),
+});
+
 export const applyDndToInstructions = (
   instructions: readonly DispatchInstruction[],
   dndState: DndState,
@@ -195,7 +209,18 @@ export const applyDndToInstructions = (
   if (!dndState.active) {
     return passThrough(instructions);
   }
-  return applyActiveDndBehavior(instructions, behavior);
+
+  // Test instructions bypass DND -- the user explicitly requested the test.
+  const { testInstructions, normalInstructions } = partitionTestInstructions(instructions);
+  const normalResult = applyActiveDndBehavior(normalInstructions, behavior);
+
+  return {
+    deliverableInstructions: [
+      ...testInstructions,
+      ...normalResult.deliverableInstructions,
+    ],
+    queuedCount: normalResult.queuedCount,
+  };
 };
 
 // ---------------------------------------------------------------------------
@@ -206,11 +231,17 @@ export const applyDndToInstructions = (
 const formatQueueSummaryBody = (queuedCount: number): string =>
   `${queuedCount} notification${queuedCount === 1 ? "" : "s"} received while DND was active`;
 
+/// Default clock function -- returns current time as ISO string.
+const defaultGetNow = (): string => new Date().toISOString();
+
 /// Create a summary dispatch instruction for queued notifications when DND ends.
 ///
-/// Pure function: (queuedCount) -> DispatchInstruction
+/// Pure function: (queuedCount, getNow?) -> DispatchInstruction
+///
+/// The optional getNow parameter enables pure testing by injecting a clock.
 export const createDndQueueSummary = (
-  queuedCount: number
+  queuedCount: number,
+  getNow: () => string = defaultGetNow
 ): DispatchInstruction => ({
   channel: "toast",
   title: "DND Summary",
@@ -219,6 +250,6 @@ export const createDndQueueSummary = (
   volume: 0,
   isTest: false,
   eventId: "session_response_completed",
-  timestamp: new Date().toISOString(),
+  timestamp: getNow(),
   metadata: { queuedCount },
 });

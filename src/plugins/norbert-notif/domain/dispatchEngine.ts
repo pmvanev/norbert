@@ -9,7 +9,6 @@ import type {
   ChannelId,
   ChannelToggles,
   DispatchInstruction,
-  DndState,
   HookEvent,
   NotificationEventId,
   NotificationPreferences,
@@ -73,14 +72,20 @@ const buildInstruction = (
 
 /// Create a synthetic test notification instruction for a specified channel.
 ///
-/// Pure function: (channel, preferences) -> DispatchInstruction
+/// Pure function: (channel, preferences, getNow?) -> DispatchInstruction
 ///
 /// The instruction always has isTest=true and a [TEST] prefix in the title.
 /// It bypasses DND and does not require channel configuration -- the adapter
 /// is responsible for handling unconfigured channel errors.
+///
+/// The eventId is "test_notification" -- a sentinel value distinguishing
+/// test instructions from real event dispatches.
+///
+/// The optional getNow parameter enables pure testing by injecting a clock.
 export const createTestNotification = (
   channel: ChannelId,
-  preferences: NotificationPreferences
+  preferences: NotificationPreferences,
+  getNow: () => string = defaultGetNow
 ): DispatchInstruction => ({
   channel,
   title: "[TEST] Test Notification",
@@ -88,8 +93,8 @@ export const createTestNotification = (
   sound: SILENT_CHANNELS.has(channel) ? null : "phosphor-ping",
   volume: preferences.globalVolume,
   isTest: true,
-  eventId: "session_response_completed",
-  timestamp: new Date().toISOString(),
+  eventId: "test_notification" as NotificationEventId,
+  timestamp: getNow(),
   metadata: {},
 });
 
@@ -100,21 +105,23 @@ export const createTestNotification = (
 /// Default clock function -- returns current time as ISO string.
 const defaultGetNow = (): string => new Date().toISOString();
 
-/// Create dispatch instructions for a hook event given user preferences and DND state.
+/// Create dispatch instructions for a hook event given user preferences.
 ///
-/// Pure function: (event, preferences, dndState, getNow?) -> readonly DispatchInstruction[]
+/// Pure function: (event, preferences, getNow?) -> readonly DispatchInstruction[]
 ///
 /// The optional getNow parameter enables pure testing by injecting a clock.
+///
+/// DND filtering is NOT applied here. The caller is responsible for
+/// pipelining dispatch instructions through applyDndToInstructions
+/// separately. This keeps each stage composable and independently testable.
 ///
 /// Returns an empty array when:
 /// - The event type is not recognized in the event display registry
 /// - No preference entry exists for the event type
 /// - All channels are disabled for the event
-/// - DND is active (future: will support queuing behavior)
 export const createDispatchInstructions = (
   event: HookEvent,
   preferences: NotificationPreferences,
-  _dndState: DndState,
   getNow: () => string = defaultGetNow
 ): readonly DispatchInstruction[] => {
   // Step 1: Look up event display metadata

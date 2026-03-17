@@ -13,20 +13,12 @@ import type {
   EventPreference,
   ChannelId,
   ChannelToggles,
-  DndState,
   NotificationEventId,
 } from "./types";
 
 // ---------------------------------------------------------------------------
 // SHARED FIXTURES
 // ---------------------------------------------------------------------------
-
-const dndOff: DndState = {
-  active: false,
-  source: "none",
-  endsAt: null,
-  queuedCount: 0,
-};
 
 const makePreferences = (
   events: EventPreference[],
@@ -66,7 +58,7 @@ describe("createDispatchInstructions", () => {
       payload: { sessionName: "test-session" },
     };
 
-    const instructions = createDispatchInstructions(event, prefs, dndOff);
+    const instructions = createDispatchInstructions(event, prefs);
     const channels = instructions.map((i) => i.channel);
     expect(channels).toContain("toast");
     expect(channels).toContain("banner");
@@ -88,7 +80,7 @@ describe("createDispatchInstructions", () => {
       payload: { sessionName: "test" },
     };
 
-    const instructions = createDispatchInstructions(event, prefs, dndOff);
+    const instructions = createDispatchInstructions(event, prefs);
     expect(instructions).toHaveLength(0);
   });
 
@@ -103,7 +95,7 @@ describe("createDispatchInstructions", () => {
       payload: {},
     };
 
-    const instructions = createDispatchInstructions(event, prefs, dndOff);
+    const instructions = createDispatchInstructions(event, prefs);
     expect(instructions).toHaveLength(0);
   });
 
@@ -125,7 +117,7 @@ describe("createDispatchInstructions", () => {
       payload: { sessionName: "test" },
     };
 
-    const instructions = createDispatchInstructions(event, prefs, dndOff);
+    const instructions = createDispatchInstructions(event, prefs);
     expect(instructions[0].volume).toBe(60);
   });
 
@@ -144,7 +136,7 @@ describe("createDispatchInstructions", () => {
       payload: { sessionName: "test" },
     };
 
-    const instructions = createDispatchInstructions(event, prefs, dndOff);
+    const instructions = createDispatchInstructions(event, prefs);
     expect(instructions[0].isTest).toBe(false);
   });
 
@@ -163,7 +155,7 @@ describe("createDispatchInstructions", () => {
       payload: { sessionName: "test" },
     };
 
-    const instructions = createDispatchInstructions(event, prefs, dndOff);
+    const instructions = createDispatchInstructions(event, prefs);
     expect(instructions[0].channel).toBe("badge");
     expect(instructions[0].sound).toBeNull();
   });
@@ -184,7 +176,7 @@ describe("createDispatchInstructions", () => {
       payload: { sessionName: "api-refactor", cost: 25.12, threshold: 25.0 },
     };
 
-    const instructions = createDispatchInstructions(event, prefs, dndOff);
+    const instructions = createDispatchInstructions(event, prefs);
     for (const instruction of instructions) {
       expect(instruction.eventId).toBe("cost_threshold_reached");
     }
@@ -205,7 +197,7 @@ describe("createDispatchInstructions", () => {
       payload: { sessionName: "project-alpha", duration: "4m 32s", cost: 5.12 },
     };
 
-    const instructions = createDispatchInstructions(event, prefs, dndOff);
+    const instructions = createDispatchInstructions(event, prefs);
     expect(instructions[0].metadata).toEqual({
       sessionName: "project-alpha",
       duration: "4m 32s",
@@ -235,7 +227,7 @@ describe("createDispatchInstructions", () => {
       payload: { sessionName: "disabled-test" },
     };
 
-    const instructions = createDispatchInstructions(event, prefs, dndOff);
+    const instructions = createDispatchInstructions(event, prefs);
     expect(instructions).toHaveLength(0);
   });
 
@@ -255,7 +247,7 @@ describe("createDispatchInstructions", () => {
       payload: { sessionName: "cost-session", cost: 12.50, threshold: 10.0 },
     };
 
-    const instructions = createDispatchInstructions(event, prefs, dndOff);
+    const instructions = createDispatchInstructions(event, prefs);
     expect(instructions).toHaveLength(3);
 
     // Each instruction is self-contained with channel, title, body, and event ID
@@ -310,7 +302,7 @@ describe("createDispatchInstructions", () => {
           payload: { sessionName: "prop-test" },
         };
 
-        const instructions = createDispatchInstructions(event, prefs, dndOff);
+        const instructions = createDispatchInstructions(event, prefs);
 
         const disabledChannels = ALL_CHANNEL_IDS.filter((ch) => !toggles[ch]);
         const instructionChannels = instructions.map((i) => i.channel);
@@ -363,7 +355,7 @@ describe("createDispatchInstructions", () => {
             payload: { sessionName: "prop-test" },
           };
 
-          const instructions = createDispatchInstructions(event, prefs, dndOff);
+          const instructions = createDispatchInstructions(event, prefs);
           expect(instructions.length).toBeGreaterThan(0);
 
           for (const instruction of instructions) {

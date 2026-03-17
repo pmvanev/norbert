@@ -12,6 +12,7 @@ import fc from "fast-check";
 import {
   evaluateDndState,
   createDndQueueSummary,
+  parseTimeToMinutes,
 } from "../../../src/plugins/norbert-notif/domain/dndManager";
 import type {
   DndConfig,
@@ -131,6 +132,30 @@ describe("DND schedule evaluation", () => {
 
     expect(state.active).toBe(true);
     expect(state.source).toBe("manual");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseTimeToMinutes NaN guard (D9)
+// ---------------------------------------------------------------------------
+
+describe("parseTimeToMinutes NaN guard", () => {
+  it("returns -1 for malformed time string", () => {
+    expect(parseTimeToMinutes("abc:def")).toBe(-1);
+  });
+
+  it("returns -1 for empty string", () => {
+    expect(parseTimeToMinutes("")).toBe(-1);
+  });
+
+  it("returns -1 for single non-numeric value", () => {
+    expect(parseTimeToMinutes("noon")).toBe(-1);
+  });
+
+  it("returns correct minutes for valid time", () => {
+    expect(parseTimeToMinutes("09:30")).toBe(570);
+    expect(parseTimeToMinutes("00:00")).toBe(0);
+    expect(parseTimeToMinutes("23:59")).toBe(1439);
   });
 });
 

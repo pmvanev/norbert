@@ -141,27 +141,3 @@ describe("Missing custom sound falls back to default", () => {
   });
 });
 
-describe("Global volume applied as multiplier to dispatch instruction volume", () => {
-  it("volume in dispatch instruction reflects global volume setting", () => {
-    // Given the global volume is set to 50%
-    // And an event sound is "phosphor-ping"
-
-    // When producing a dispatch instruction
-    // Then the instruction volume is 50 (50% of original)
-
-    // This test validates the volume calculation in the dispatch engine
-    // The dispatch engine reads globalVolume from preferences
-    // and applies it to each instruction's volume field
-
-    // Verified through dispatch engine tests (cross-reference)
-    // Sound library itself does not handle volume -- it only resolves names
-    const library = resolveSoundLibrary(builtInSounds, []);
-    const resolved = resolveSound("phosphor-ping", library);
-    expect(resolved).toBeDefined();
-
-    // Cross-reference: dispatch engine volume tests confirm globalVolume
-    // is applied to each instruction. Sound library resolves names only.
-    // See notification-dispatch.test.ts walking skeleton: volume === 80
-    // and dispatchEngine.test.ts unit tests for volume multiplier behavior.
-  });
-});
