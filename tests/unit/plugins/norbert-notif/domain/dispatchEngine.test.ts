@@ -3,11 +3,13 @@
  *
  * Validates that cost threshold events produce correct dispatch instructions
  * across toast, banner, and badge channels with proper content formatting.
+ * Also validates global volume is applied to every dispatch instruction.
  *
  * Tests the dispatch pipeline as a pure function through the driving port.
  */
 
 import { describe, it, expect } from "vitest";
+import fc from "fast-check";
 import {
   createDispatchInstructions,
 } from "../../../../../src/plugins/norbert-notif/domain/dispatchEngine";
@@ -121,5 +123,62 @@ describe("Badge instruction carries event ID for count tracking", () => {
     const badge = instructions[0];
 
     expect(badge.sound).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Global volume applied to dispatch instructions
+// ---------------------------------------------------------------------------
+
+describe("Every dispatch instruction volume equals global volume from preferences", () => {
+  it("all instructions carry the globalVolume value regardless of channel", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 0, max: 100 }),
+        (volume) => {
+          const event = makeCostThresholdEvent(25.12, 25.0);
+          const prefs: NotificationPreferences = {
+            version: 1,
+            events: [
+              {
+                eventId: "cost_threshold_reached",
+                channels: { toast: true, banner: true, badge: true, email: false, webhook: false },
+                sound: "amber-pulse",
+                threshold: 25.0,
+              },
+            ],
+            globalVolume: volume,
+          };
+
+          const instructions = createDispatchInstructions(event, prefs, dndOff);
+
+          expect(instructions.length).toBeGreaterThan(0);
+          for (const instruction of instructions) {
+            expect(instruction.volume).toBe(volume);
+          }
+        }
+      )
+    );
+  });
+
+  it("volume 0 produces instructions with zero volume", () => {
+    const event = makeCostThresholdEvent(25.12, 25.0);
+    const prefs: NotificationPreferences = {
+      version: 1,
+      events: [
+        {
+          eventId: "cost_threshold_reached",
+          channels: { toast: true, banner: false, badge: false, email: false, webhook: false },
+          sound: "amber-pulse",
+          threshold: 25.0,
+        },
+      ],
+      globalVolume: 0,
+    };
+
+    const instructions = createDispatchInstructions(event, prefs, dndOff);
+
+    expect(instructions).toHaveLength(1);
+    expect(instructions[0].volume).toBe(0);
   });
 });
