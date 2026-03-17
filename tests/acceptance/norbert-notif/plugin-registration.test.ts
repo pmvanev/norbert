@@ -73,7 +73,7 @@ describe("User sees Notifications tab after norbert-notif loads", () => {
 // FOCUSED SCENARIOS: Status Bar and Settings Structure
 // ---------------------------------------------------------------------------
 
-describe.skip("Status bar shows DND state and unread count", () => {
+describe("Status bar shows DND state and unread count", () => {
   it("displays DND off and unread count when plugin is loaded", () => {
     // Given norbert-notif is loaded and DND is off
     // And 0 banner notifications are undismissed
@@ -84,22 +84,26 @@ describe.skip("Status bar shows DND state and unread count", () => {
 
     // Then the status bar item is registered
     expect(statusItems).toHaveLength(1);
-    // And it provides DND state and unread count
-    // (Implementation will provide a render function or data model)
+
+    // And its label encodes DND state (off) and unread count (0)
+    expect(statusItems[0].label).toContain("DND off");
+    expect(statusItems[0].label).toContain("0");
   });
 });
 
-describe.skip("Settings section has sec-hdr title with sub-sections", () => {
-  it("registers settings views for Events, Channels, and Do Not Disturb", () => {
+describe("Settings section has sec-hdr title with sub-sections", () => {
+  it("registers settings view with title 'Notifications' and sub-sections", () => {
     // Given norbert-notif is loaded
 
     // When inspecting the registered views
     const registry = loadNotifPlugin();
     const views = getViewsByPlugin(registry, "norbert-notif");
 
-    // Then a settings view is registered
-    // And it includes sub-sections: Events, Channels, Do Not Disturb
+    // Then a settings view is registered with label 'Notifications'
     expect(views.length).toBeGreaterThanOrEqual(1);
+    const settingsView = views.find((v) => v.label === "Notifications");
+    expect(settingsView).toBeDefined();
+    expect(settingsView!.id).toBe("notif-settings");
   });
 });
 

@@ -10,6 +10,11 @@
 import type { NorbertPlugin, NorbertAPI } from "../types";
 import { NORBERT_NOTIF_MANIFEST } from "./manifest";
 import { NOTIFICATION_EVENT_SOURCES } from "./domain/eventRegistry";
+import {
+  NOTIF_SETTINGS_VIEW_ID,
+  NOTIF_SETTINGS_VIEW_LABEL,
+  NOTIF_SETTINGS_VIEW_ICON,
+} from "./domain/settingsStructure";
 
 // ---------------------------------------------------------------------------
 // Tab constants
@@ -67,6 +72,17 @@ const onLoad = (api: NorbertAPI): void => {
     icon: NOTIF_STATUS_ICON,
     position: NOTIF_STATUS_POSITION,
     order: NOTIF_STATUS_ORDER,
+  });
+
+  // Register the notification settings view
+  api.ui.registerView({
+    id: NOTIF_SETTINGS_VIEW_ID,
+    label: NOTIF_SETTINGS_VIEW_LABEL,
+    icon: NOTIF_SETTINGS_VIEW_ICON,
+    primaryView: false,
+    minWidth: 300,
+    minHeight: 200,
+    floatMetric: null,
   });
 
   // Register hook processors for each notification event source
