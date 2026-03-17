@@ -78,7 +78,7 @@ export const MenuBar = ({ entries }: MenuBarProps) => {
 
   return (
     <div className="menu-bar" ref={barRef} onClick={handleBarClick}>
-      <div className="tb-logo"><Icon name="hexagon" size={14} /></div>
+      <div className="tb-logo"><Icon name="activity" size={14} /></div>
       {entries.map((entry) => (
         <div
           key={entry.label}
