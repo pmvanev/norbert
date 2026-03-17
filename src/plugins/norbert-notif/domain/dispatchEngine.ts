@@ -63,6 +63,32 @@ const buildInstruction = (
 });
 
 // ---------------------------------------------------------------------------
+// Test notification creation
+// ---------------------------------------------------------------------------
+
+/// Create a synthetic test notification instruction for a specified channel.
+///
+/// Pure function: (channel, preferences) -> DispatchInstruction
+///
+/// The instruction always has isTest=true and a [TEST] prefix in the title.
+/// It bypasses DND and does not require channel configuration -- the adapter
+/// is responsible for handling unconfigured channel errors.
+export const createTestNotification = (
+  channel: ChannelId,
+  preferences: NotificationPreferences
+): DispatchInstruction => ({
+  channel,
+  title: "[TEST] Test Notification",
+  body: "This is a test notification for channel verification.",
+  sound: SILENT_CHANNELS.has(channel) ? null : "phosphor-ping",
+  volume: preferences.globalVolume,
+  isTest: true,
+  eventId: "session_response_completed",
+  timestamp: new Date().toISOString(),
+  metadata: {},
+});
+
+// ---------------------------------------------------------------------------
 // Dispatch pipeline
 // ---------------------------------------------------------------------------
 

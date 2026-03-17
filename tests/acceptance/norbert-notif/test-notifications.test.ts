@@ -49,7 +49,7 @@ const defaultPrefs: NotificationPreferences = {
 // FOCUSED SCENARIOS: Test Notification Flow
 // ---------------------------------------------------------------------------
 
-describe.skip("Test notification routes through standard dispatch with [TEST] prefix", () => {
+describe("Test notification routes through standard dispatch with [TEST] prefix", () => {
   it("produces a dispatch instruction with isTest flag and [TEST] in title", () => {
     // Given any channel is configured and a test is initiated
     const channel: ChannelId = "toast";
@@ -68,7 +68,7 @@ describe.skip("Test notification routes through standard dispatch with [TEST] pr
   });
 });
 
-describe.skip("Test notification for specific channel produces single instruction", () => {
+describe("Test notification for specific channel produces single instruction", () => {
   it("generates exactly one instruction targeting the specified channel", () => {
     // Given the webhook channel is configured
     const channel: ChannelId = "webhook";
