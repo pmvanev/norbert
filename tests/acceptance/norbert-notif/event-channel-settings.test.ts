@@ -107,7 +107,7 @@ describe("Enable banner channel for an event updates preferences", () => {
   });
 });
 
-describe.skip("Change cost threshold to $25.00", () => {
+describe("Change cost threshold to $25.00", () => {
   it("threshold value of 25.00 passes validation for cost event", () => {
     // Given the cost threshold is currently $5.00
     // When the user changes the threshold to $25.00
@@ -127,7 +127,7 @@ describe.skip("Change cost threshold to $25.00", () => {
 // ERROR / BOUNDARY SCENARIOS
 // ---------------------------------------------------------------------------
 
-describe.skip("Invalid threshold value rejected with validation error", () => {
+describe("Invalid threshold value rejected with validation error", () => {
   it("negative threshold returns validation error", () => {
     // Given the user is editing the cost threshold
     // When the user enters "-5"
@@ -143,7 +143,7 @@ describe.skip("Invalid threshold value rejected with validation error", () => {
   });
 });
 
-describe.skip("Context window threshold validates range 1-99%", () => {
+describe("Context window threshold validates range 1-99%", () => {
   it("threshold outside 1-99 range is rejected", () => {
     // Given the user is editing the context window threshold
     // When the user enters 0%
@@ -160,7 +160,7 @@ describe.skip("Context window threshold validates range 1-99%", () => {
   });
 });
 
-describe.skip("Threshold must be a positive number (zero rejected)", () => {
+describe("Threshold must be a positive number (zero rejected)", () => {
   it("zero value is rejected for cost threshold", () => {
     // Given the user is editing the cost threshold
     // When the user enters 0

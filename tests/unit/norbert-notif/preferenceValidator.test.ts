@@ -9,6 +9,7 @@ import { describe, it, expect } from "vitest";
 import fc from "fast-check";
 import {
   validatePreferences,
+  validateThreshold,
 } from "../../../src/plugins/norbert-notif/domain/preferenceValidator";
 import type {
   NotificationPreferences,
@@ -135,6 +136,83 @@ describe("validatePreferences", () => {
           };
 
           const result = validatePreferences(prefs);
+          expect(result.ok).toBe(false);
+        }
+      )
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Threshold validation properties
+// ---------------------------------------------------------------------------
+
+describe("validateThreshold", () => {
+  it("any positive dollar amount passes validation", () => {
+    fc.assert(
+      fc.property(
+        fc.double({ min: 0.01, max: 1_000_000, noNaN: true }),
+        (amount) => {
+          const result = validateThreshold(amount, "$");
+          expect(result.ok).toBe(true);
+          if (result.ok) {
+            expect(result.value).toBe(amount);
+          }
+        }
+      )
+    );
+  });
+
+  it("negative values always rejected with positive error for any unit", () => {
+    fc.assert(
+      fc.property(
+        fc.double({ min: -1_000_000, max: -0.01, noNaN: true }),
+        fc.constantFrom("$", "%"),
+        (value, unit) => {
+          const result = validateThreshold(value, unit);
+          expect(result.ok).toBe(false);
+          if (!result.ok) {
+            expect(result.error).toContain("positive");
+          }
+        }
+      )
+    );
+  });
+
+  it("zero rejected for cost threshold with positive error", () => {
+    const result = validateThreshold(0, "$");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("positive");
+    }
+  });
+
+  it("percentage thresholds in 1-99 range pass validation", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1, max: 99 }),
+        (pct) => {
+          const result = validateThreshold(pct, "%");
+          expect(result.ok).toBe(true);
+          if (result.ok) {
+            expect(result.value).toBe(pct);
+          }
+        }
+      )
+    );
+  });
+
+  it("percentage thresholds outside 1-99 range rejected", () => {
+    fc.assert(
+      fc.property(
+        fc.oneof(
+          fc.constant(0),
+          fc.constant(100),
+          fc.integer({ min: 101, max: 1000 }),
+          fc.integer({ min: -1000, max: -1 })
+        ),
+        (pct) => {
+          const result = validateThreshold(pct, "%");
           expect(result.ok).toBe(false);
         }
       )

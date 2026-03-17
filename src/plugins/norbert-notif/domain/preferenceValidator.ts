@@ -52,11 +52,29 @@ export const validatePreferences = (
   return succeed(prefs);
 };
 
+// ---------------------------------------------------------------------------
+// Threshold validation
+// ---------------------------------------------------------------------------
+
+const isPositive = (value: number): boolean => value > 0;
+
+const isPercentageInRange = (value: number): boolean =>
+  Number.isInteger(value) && value >= 1 && value <= 99;
+
 /// Validate a threshold value for a given unit.
+/// Cost thresholds ("$") must be positive numbers.
+/// Percentage thresholds ("%") must be integers in the 1-99 range.
 export const validateThreshold = (
-  _value: number,
-  _unit: string
+  value: number,
+  unit: string
 ): ValidationResult<number> => {
-  // Stub: will be implemented in a later step
-  return { ok: true, value: _value };
+  if (!isPositive(value)) {
+    return fail("Threshold must be a positive number");
+  }
+
+  if (unit === "%" && !isPercentageInRange(value)) {
+    return fail("Percentage threshold must be between 1 and 99");
+  }
+
+  return succeed(value);
 };
