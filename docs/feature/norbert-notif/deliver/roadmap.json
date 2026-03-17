@@ -1,0 +1,551 @@
+{
+  "roadmap": {
+    "feature_id": "norbert-notif",
+    "goal": "Notification Center plugin delivering event-driven notifications through configurable channels with DND support",
+    "paradigm": "functional"
+  },
+  "phases": [
+    {
+      "id": "01",
+      "name": "Plugin Foundation (US-NOTIF-07)",
+      "steps": [
+        {
+          "id": "01-01",
+          "name": "Plugin manifest and entry point with hook registration",
+          "description": "Create norbert-notif plugin scaffold: manifest, onLoad/onUnload, sidebar tab, status bar item, and hook processor registrations for event sources.",
+          "acceptance_criteria": [
+            "Plugin registers sidebar tab with bell icon and label 'Notifications'",
+            "Status bar item registered on the left with DND state and unread count",
+            "Hook processors registered for notification event sources",
+            "Manifest declares id 'norbert-notif' with no plugin dependencies"
+          ],
+          "files_to_modify": [
+            "src/plugins/norbert-notif/manifest.ts",
+            "src/plugins/norbert-notif/index.ts",
+            "src/plugins/norbert-notif/domain/eventRegistry.ts"
+          ],
+          "depends_on": [],
+          "test_scenarios": [
+            "plugin-registration.test.ts: [WS] User sees Notifications tab after norbert-notif loads",
+            "plugin-registration.test.ts: Plugin loads independently with no plugin dependencies"
+          ]
+        },
+        {
+          "id": "01-02",
+          "name": "Status bar data and settings section structure",
+          "description": "Status bar item provides DND state and unread count data. Settings view registered with sec-hdr title 'Notifications' and sub-sections.",
+          "acceptance_criteria": [
+            "Status bar item displays DND state and unread count",
+            "Settings section has sec-hdr title 'Notifications'",
+            "Sub-sections Events, Channels, Do Not Disturb available"
+          ],
+          "files_to_modify": [
+            "src/plugins/norbert-notif/index.ts",
+            "src/plugins/norbert-notif/views/StatusBarItem.tsx"
+          ],
+          "depends_on": ["01-01"],
+          "test_scenarios": [
+            "plugin-registration.test.ts: Status bar shows DND state and unread count",
+            "plugin-registration.test.ts: Settings section has sec-hdr title with sub-sections"
+          ]
+        },
+        {
+          "id": "01-03",
+          "name": "Plugin boundary compliance",
+          "description": "Verify norbert-notif uses only public NorbertPlugin API. No internal Norbert module imports.",
+          "acceptance_criteria": [
+            "Plugin imports only from ../types and its own domain modules",
+            "No direct imports of Tauri, pluginLoader, hookBridge, or host internals"
+          ],
+          "files_to_modify": [
+            "src/plugins/norbert-notif/index.ts"
+          ],
+          "depends_on": ["01-01"],
+          "test_scenarios": [
+            "plugin-registration.test.ts: Plugin uses only public NorbertPlugin API"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "02",
+      "name": "Core Notification Dispatch (US-NOTIF-01)",
+      "steps": [
+        {
+          "id": "02-01",
+          "name": "Domain types and dispatch engine walking skeleton",
+          "description": "Create domain types (DispatchInstruction, EventPreference, DndState, etc.) and dispatch engine pure function. Session completion produces toast instruction.",
+          "acceptance_criteria": [
+            "createDispatchInstructions(event, prefs, dndOff) returns toast instruction for session completion",
+            "Toast instruction title contains 'Session Response Completed'",
+            "Toast instruction body includes session name, sound name, and volume"
+          ],
+          "files_to_modify": [
+            "src/plugins/norbert-notif/domain/types.ts",
+            "src/plugins/norbert-notif/domain/defaults.ts",
+            "src/plugins/norbert-notif/domain/dispatchEngine.ts"
+          ],
+          "depends_on": ["01-01"],
+          "test_scenarios": [
+            "notification-dispatch.test.ts: [WS] User receives notification when session completes"
+          ]
+        },
+        {
+          "id": "02-02",
+          "name": "Multi-channel dispatch for cost threshold",
+          "description": "Cost threshold event produces dispatch instructions for toast, banner, and badge channels when all enabled.",
+          "acceptance_criteria": [
+            "Cost threshold produces instructions for toast, banner, and badge",
+            "Toast body includes cost amount and threshold amount",
+            "Badge instruction carries event ID for count tracking"
+          ],
+          "files_to_modify": [
+            "src/plugins/norbert-notif/domain/dispatchEngine.ts"
+          ],
+          "depends_on": ["02-01"],
+          "test_scenarios": [
+            "notification-dispatch.test.ts: Cost threshold triggers multi-channel dispatch",
+            "notification-dispatch.test.ts: Badge count increments for banner instructions"
+          ]
+        },
+        {
+          "id": "02-03",
+          "name": "Hook error and context compaction dispatch",
+          "description": "Hook error includes hook name and error message in instructions. Context compaction includes session name.",
+          "acceptance_criteria": [
+            "Hook error toast title contains 'Hook Error'",
+            "Hook error banner body includes hook name and error message",
+            "Context compaction toast body includes session name and uses 'compaction' sound"
+          ],
+          "files_to_modify": [
+            "src/plugins/norbert-notif/domain/dispatchEngine.ts"
+          ],
+          "depends_on": ["02-01"],
+          "test_scenarios": [
+            "notification-dispatch.test.ts: Hook error dispatch includes context",
+            "notification-dispatch.test.ts: Context compaction produces toast with session details"
+          ]
+        },
+        {
+          "id": "02-04",
+          "name": "Disabled events and channel independence",
+          "description": "Disabled events produce no instructions. Each enabled channel gets independent instruction with full payload.",
+          "acceptance_criteria": [
+            "Event with all channels disabled produces zero instructions",
+            "Each instruction is self-contained with channel, title, body, and event ID",
+            "No instruction targets a disabled channel"
+          ],
+          "files_to_modify": [
+            "src/plugins/norbert-notif/domain/dispatchEngine.ts"
+          ],
+          "depends_on": ["02-01"],
+          "test_scenarios": [
+            "notification-dispatch.test.ts: Disabled event produces no dispatch instructions",
+            "notification-dispatch.test.ts: Dispatch produces independent instructions per channel",
+            "notification-dispatch.test.ts: @property Dispatch never produces instructions for disabled channels",
+            "notification-dispatch.test.ts: @property Every dispatch instruction includes event ID and timestamp metadata"
+          ]
+        },
+        {
+          "id": "02-05",
+          "name": "Unknown events and partial payloads",
+          "description": "Graceful handling of unrecognized event types and events with missing payload fields.",
+          "acceptance_criteria": [
+            "Unknown event type produces zero instructions",
+            "Event with missing payload fields still produces instructions with available data"
+          ],
+          "files_to_modify": [
+            "src/plugins/norbert-notif/domain/dispatchEngine.ts"
+          ],
+          "depends_on": ["02-01"],
+          "test_scenarios": [
+            "notification-dispatch.test.ts: Unknown event type produces no dispatch instructions",
+            "notification-dispatch.test.ts: Event with missing payload fields produces safe instructions"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "03",
+      "name": "Event and Channel Settings (US-NOTIF-02)",
+      "steps": [
+        {
+          "id": "03-01",
+          "name": "Default preferences matching product specification",
+          "description": "Generate default preferences with correct channel toggles, sounds, and thresholds for all 14 events.",
+          "acceptance_criteria": [
+            "Session completed defaults: Toast enabled, sound 'phosphor-ping'",
+            "Session started defaults: all channels disabled, sound 'silence'",
+            "Cost threshold defaults: Toast/Banner/Badge enabled, sound 'amber-pulse', threshold $5.00",
+            "Hook error defaults: Toast/Banner/Badge enabled, sound 'des-block'",
+            "Global volume defaults to 100%"
+          ],
+          "files_to_modify": [
+            "src/plugins/norbert-notif/domain/defaults.ts",
+            "src/plugins/norbert-notif/domain/eventRegistry.ts"
+          ],
+          "depends_on": ["02-01"],
+          "test_scenarios": [
+            "event-channel-settings.test.ts: Default preferences match product specification"
+          ]
+        },
+        {
+          "id": "03-02",
+          "name": "Preference validation and channel toggling",
+          "description": "Validate preference structure. Channel toggle changes produce valid preference updates.",
+          "acceptance_criteria": [
+            "Valid preference with banner enabled passes validation",
+            "Validated preferences preserve channel toggle state"
+          ],
+          "files_to_modify": [
+            "src/plugins/norbert-notif/domain/preferenceValidator.ts"
+          ],
+          "depends_on": ["03-01"],
+          "test_scenarios": [
+            "event-channel-settings.test.ts: Enable banner channel for an event updates preferences"
+          ]
+        },
+        {
+          "id": "03-03",
+          "name": "Threshold validation rules",
+          "description": "Validate threshold values: positive numbers accepted, negative/zero rejected, percentage range 1-99% enforced.",
+          "acceptance_criteria": [
+            "$25.00 threshold passes validation",
+            "Negative threshold rejected with 'positive' error message",
+            "Zero threshold rejected for cost events",
+            "Context window threshold outside 1-99% rejected"
+          ],
+          "files_to_modify": [
+            "src/plugins/norbert-notif/domain/preferenceValidator.ts"
+          ],
+          "depends_on": ["03-02"],
+          "test_scenarios": [
+            "event-channel-settings.test.ts: Change cost threshold to $25.00",
+            "event-channel-settings.test.ts: Invalid threshold value rejected with validation error",
+            "event-channel-settings.test.ts: Context window threshold validates range 1-99%",
+            "event-channel-settings.test.ts: Threshold must be a positive number (zero rejected)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "04",
+      "name": "Sound System (US-NOTIF-06)",
+      "steps": [
+        {
+          "id": "04-01",
+          "name": "Sound library resolution walking skeleton",
+          "description": "Merge built-in and custom sounds into unified library. Resolve sound by name.",
+          "acceptance_criteria": [
+            "resolveSoundLibrary merges 6 built-in sounds with custom sound entries",
+            "resolveSound by name returns correct SoundEntry with file path",
+            "Custom sounds appear alongside built-in sounds in merged library"
+          ],
+          "files_to_modify": [
+            "src/plugins/norbert-notif/domain/soundLibrary.ts"
+          ],
+          "depends_on": ["02-01"],
+          "test_scenarios": [
+            "sound-system.test.ts: [WS] User selects a sound and it resolves for playback"
+          ]
+        },
+        {
+          "id": "04-02",
+          "name": "Built-in and custom sound resolution",
+          "description": "Each built-in sound resolves to its file path. Custom sounds from user directory resolve as 'custom' source.",
+          "acceptance_criteria": [
+            "Built-in sound resolves with correct file path and 'built-in' source",
+            "Custom sound resolves with 'custom' source"
+          ],
+          "files_to_modify": [
+            "src/plugins/norbert-notif/domain/soundLibrary.ts"
+          ],
+          "depends_on": ["04-01"],
+          "test_scenarios": [
+            "sound-system.test.ts: Built-in sound resolved by name from library",
+            "sound-system.test.ts: Custom sound discovered from user directory"
+          ]
+        },
+        {
+          "id": "04-03",
+          "name": "Silence option and missing sound fallback",
+          "description": "Silence resolves to null file path. Missing custom sound returns undefined for caller fallback.",
+          "acceptance_criteria": [
+            "Silence sound entry has null filePath",
+            "Missing custom sound resolves to undefined",
+            "Default sound 'phosphor-ping' remains available as fallback"
+          ],
+          "files_to_modify": [
+            "src/plugins/norbert-notif/domain/soundLibrary.ts"
+          ],
+          "depends_on": ["04-01"],
+          "test_scenarios": [
+            "sound-system.test.ts: Silence option produces null file path",
+            "sound-system.test.ts: Missing custom sound falls back to default"
+          ]
+        },
+        {
+          "id": "04-04",
+          "name": "Global volume multiplier in dispatch",
+          "description": "Dispatch instruction volume reflects global volume setting from preferences.",
+          "acceptance_criteria": [
+            "Dispatch instruction volume matches global volume from preferences"
+          ],
+          "files_to_modify": [
+            "src/plugins/norbert-notif/domain/dispatchEngine.ts"
+          ],
+          "depends_on": ["04-01", "02-01"],
+          "test_scenarios": [
+            "sound-system.test.ts: Global volume applied as multiplier to dispatch instruction volume"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "05",
+      "name": "Test Notifications (US-NOTIF-03)",
+      "steps": [
+        {
+          "id": "05-01",
+          "name": "Test notification creation with [TEST] prefix",
+          "description": "Create synthetic test notification for a specified channel. Routes through dispatch pipeline with isTest flag.",
+          "acceptance_criteria": [
+            "createTestNotification produces instruction with isTest=true",
+            "Instruction title contains '[TEST]' prefix",
+            "Instruction targets the specified channel"
+          ],
+          "files_to_modify": [
+            "src/plugins/norbert-notif/domain/dispatchEngine.ts"
+          ],
+          "depends_on": ["02-01"],
+          "test_scenarios": [
+            "test-notifications.test.ts: Test notification routes through standard dispatch with [TEST] prefix",
+            "test-notifications.test.ts: Test notification for specific channel produces single instruction"
+          ]
+        },
+        {
+          "id": "05-02",
+          "name": "Test notification edge cases",
+          "description": "Test notifications work with unconfigured channels, bypass DND, and include [TEST] prefix for all channel types.",
+          "acceptance_criteria": [
+            "Unconfigured channel still produces test instruction (adapter handles error)",
+            "Test notification produced regardless of DND state",
+            "All 5 channel types get [TEST] prefix in title"
+          ],
+          "files_to_modify": [
+            "src/plugins/norbert-notif/domain/dispatchEngine.ts"
+          ],
+          "depends_on": ["05-01"],
+          "test_scenarios": [
+            "test-notifications.test.ts: Test notification with unconfigured channel still produces instruction",
+            "test-notifications.test.ts: Test notification during DND still delivers (bypasses DND)",
+            "test-notifications.test.ts: Test notification includes [TEST] in title for all channel types"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "06",
+      "name": "Do Not Disturb (US-NOTIF-04)",
+      "steps": [
+        {
+          "id": "06-01",
+          "name": "DND state evaluation with manual toggle",
+          "description": "Evaluate DND state from config and current time. Manual toggle sets active state with 'manual' source.",
+          "acceptance_criteria": [
+            "Manual DND enabled produces active state with source 'manual'",
+            "Disabled DND config produces inactive state"
+          ],
+          "files_to_modify": [
+            "src/plugins/norbert-notif/domain/dndManager.ts"
+          ],
+          "depends_on": ["02-01"],
+          "test_scenarios": [
+            "do-not-disturb.test.ts: Manual DND toggle suppresses dispatch",
+            "do-not-disturb.test.ts: DND state persists across evaluations"
+          ]
+        },
+        {
+          "id": "06-02",
+          "name": "DND queue behavior",
+          "description": "Queue behavior suppresses all instructions and increments queued count. Discard behavior produces nothing.",
+          "acceptance_criteria": [
+            "Queue behavior returns empty deliverable instructions with incremented queue count",
+            "Discard behavior returns empty instructions with zero queue count"
+          ],
+          "files_to_modify": [
+            "src/plugins/norbert-notif/domain/dndManager.ts"
+          ],
+          "depends_on": ["06-01"],
+          "test_scenarios": [
+            "do-not-disturb.test.ts: DND with queue behavior tags instructions for queuing",
+            "do-not-disturb.test.ts: DND with discard behavior produces no instructions"
+          ]
+        },
+        {
+          "id": "06-03",
+          "name": "DND banner-only behavior",
+          "description": "Banner-only behavior filters instructions to banner channel only with sound suppressed.",
+          "acceptance_criteria": [
+            "Only banner instructions delivered during banner-only DND",
+            "Banner instructions have null sound (sound suppressed)"
+          ],
+          "files_to_modify": [
+            "src/plugins/norbert-notif/domain/dndManager.ts"
+          ],
+          "depends_on": ["06-02"],
+          "test_scenarios": [
+            "do-not-disturb.test.ts: DND with banner-only behavior produces only banner instructions"
+          ]
+        },
+        {
+          "id": "06-04",
+          "name": "DND schedule evaluation",
+          "description": "Scheduled DND activates during configured day/time windows. Shows end time. Inactive outside window.",
+          "acceptance_criteria": [
+            "DND active during scheduled window with source 'schedule'",
+            "DND state includes end time from schedule",
+            "DND inactive outside scheduled window"
+          ],
+          "files_to_modify": [
+            "src/plugins/norbert-notif/domain/dndManager.ts"
+          ],
+          "depends_on": ["06-01"],
+          "test_scenarios": [
+            "do-not-disturb.test.ts: Scheduled DND activates at configured time"
+          ]
+        },
+        {
+          "id": "06-05",
+          "name": "DND queue summary on end",
+          "description": "When DND ends with queued notifications, produce summary toast instruction with count.",
+          "acceptance_criteria": [
+            "Summary toast instruction body includes queued count and 'DND'",
+            "Summary channel is 'toast'"
+          ],
+          "files_to_modify": [
+            "src/plugins/norbert-notif/domain/dndManager.ts"
+          ],
+          "depends_on": ["06-02"],
+          "test_scenarios": [
+            "do-not-disturb.test.ts: Queued notifications produce batch summary on DND end"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "07",
+      "name": "External Channels (US-NOTIF-05)",
+      "steps": [
+        {
+          "id": "07-01",
+          "name": "Webhook dispatch instruction with standard payload",
+          "description": "Webhook-enabled events produce instruction with event ID and event-specific metadata.",
+          "acceptance_criteria": [
+            "Webhook instruction carries event ID",
+            "Metadata includes event-specific data (cost, threshold, sessionName)"
+          ],
+          "files_to_modify": [
+            "src/plugins/norbert-notif/domain/dispatchEngine.ts"
+          ],
+          "depends_on": ["02-01"],
+          "test_scenarios": [
+            "external-channels.test.ts: Webhook dispatch instruction includes standard payload fields",
+            "external-channels.test.ts: Webhook timeout configuration reflected in instruction metadata"
+          ]
+        },
+        {
+          "id": "07-02",
+          "name": "Email dispatch instruction and channel independence",
+          "description": "Email instruction uses title as subject and body with event details. All channel instructions are independent data values.",
+          "acceptance_criteria": [
+            "Email instruction title contains event type for subject",
+            "Email instruction body contains session name",
+            "Toast, banner, and webhook instructions exist independently"
+          ],
+          "files_to_modify": [
+            "src/plugins/norbert-notif/domain/dispatchEngine.ts"
+          ],
+          "depends_on": ["07-01"],
+          "test_scenarios": [
+            "external-channels.test.ts: Email dispatch instruction includes subject and body with event details",
+            "external-channels.test.ts: Webhook failure does not appear in other channel instructions"
+          ]
+        }
+      ]
+    }
+  ],
+  "implementation_scope": {
+    "production_files": [
+      "src/plugins/norbert-notif/manifest.ts",
+      "src/plugins/norbert-notif/index.ts",
+      "src/plugins/norbert-notif/domain/types.ts",
+      "src/plugins/norbert-notif/domain/eventRegistry.ts",
+      "src/plugins/norbert-notif/domain/defaults.ts",
+      "src/plugins/norbert-notif/domain/dispatchEngine.ts",
+      "src/plugins/norbert-notif/domain/dndManager.ts",
+      "src/plugins/norbert-notif/domain/soundLibrary.ts",
+      "src/plugins/norbert-notif/domain/preferenceValidator.ts",
+      "src/plugins/norbert-notif/views/StatusBarItem.tsx"
+    ],
+    "test_files": [
+      "tests/acceptance/norbert-notif/plugin-registration.test.ts",
+      "tests/acceptance/norbert-notif/notification-dispatch.test.ts",
+      "tests/acceptance/norbert-notif/event-channel-settings.test.ts",
+      "tests/acceptance/norbert-notif/sound-system.test.ts",
+      "tests/acceptance/norbert-notif/test-notifications.test.ts",
+      "tests/acceptance/norbert-notif/do-not-disturb.test.ts",
+      "tests/acceptance/norbert-notif/external-channels.test.ts"
+    ]
+  },
+  "validation": {
+    "status": "approved",
+    "quality_gates": [
+      {
+        "gate": "step_ratio_check",
+        "result": "pass",
+        "detail": "24 steps / 10 production files = 2.4 (threshold: <= 2.5)"
+      },
+      {
+        "gate": "scenario_coverage",
+        "result": "pass",
+        "detail": "44 acceptance test scenarios mapped across 24 steps"
+      },
+      {
+        "gate": "walking_skeleton_alignment",
+        "result": "pass",
+        "detail": "3 walking skeletons at steps 01-01, 02-01, 04-01 matching DISTILL sequence"
+      },
+      {
+        "gate": "build_order_alignment",
+        "result": "pass",
+        "detail": "Phase order matches DISCUSS build order: scaffold -> dispatch -> settings -> sounds -> test -> dnd -> external"
+      },
+      {
+        "gate": "dependency_chain_valid",
+        "result": "pass",
+        "detail": "All step dependencies are within or from prior phases; no circular dependencies"
+      },
+      {
+        "gate": "ac_behavioral_not_implementation",
+        "result": "pass",
+        "detail": "AC describe observable outcomes (WHAT), not internal implementation (HOW)"
+      },
+      {
+        "gate": "functional_paradigm_compliance",
+        "result": "pass",
+        "detail": "Pure core functions (dispatchEngine, dndManager, soundLibrary) with effects at adapter boundary"
+      },
+      {
+        "gate": "max_files_per_step",
+        "result": "pass",
+        "detail": "No step exceeds 3 production files"
+      },
+      {
+        "gate": "identical_pattern_batching",
+        "result": "pass",
+        "detail": "Property tests batched with related focused scenarios; threshold validations batched"
+      }
+    ]
+  }
+}
