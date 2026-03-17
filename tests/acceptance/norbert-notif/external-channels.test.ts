@@ -118,7 +118,7 @@ describe("Webhook dispatch instruction includes standard payload fields", () => 
   });
 });
 
-describe.skip("Email dispatch instruction includes subject and body with event details", () => {
+describe("Email dispatch instruction includes subject and body with event details", () => {
   it("email instruction title serves as subject and body contains event details", () => {
     // Given "Anomaly detected" is enabled for Email
     const prefs = makeExternalPrefs(false, true);
@@ -168,7 +168,7 @@ describe("Webhook timeout configuration reflected in instruction metadata", () =
   });
 });
 
-describe.skip("Webhook failure does not appear in other channel instructions", () => {
+describe("Webhook failure does not appear in other channel instructions", () => {
   it("toast and banner instructions exist independently of webhook instruction", () => {
     // Given "Cost threshold reached" is enabled for Toast, Banner, and Webhook
     const prefs = makeExternalPrefs(true, false);
