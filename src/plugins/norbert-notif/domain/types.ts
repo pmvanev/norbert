@@ -137,6 +137,7 @@ export interface DispatchInstruction {
   readonly volume: number;
   readonly isTest: boolean;
   readonly eventId: NotificationEventId;
+  readonly timestamp: string;
   readonly metadata: Record<string, unknown>;
 }
 

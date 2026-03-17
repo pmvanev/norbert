@@ -48,6 +48,7 @@ const buildInstruction = (
   sound: string,
   volume: number,
   eventId: NotificationEventId,
+  timestamp: string,
   metadata: Record<string, unknown>
 ): DispatchInstruction => ({
   channel,
@@ -57,6 +58,7 @@ const buildInstruction = (
   volume,
   isTest: false,
   eventId,
+  timestamp,
   metadata,
 });
 
@@ -64,9 +66,14 @@ const buildInstruction = (
 // Dispatch pipeline
 // ---------------------------------------------------------------------------
 
+/// Default clock function -- returns current time as ISO string.
+const defaultGetNow = (): string => new Date().toISOString();
+
 /// Create dispatch instructions for a hook event given user preferences and DND state.
 ///
-/// Pure function: (event, preferences, dndState) -> readonly DispatchInstruction[]
+/// Pure function: (event, preferences, dndState, getNow?) -> readonly DispatchInstruction[]
+///
+/// The optional getNow parameter enables pure testing by injecting a clock.
 ///
 /// Returns an empty array when:
 /// - The event type is not recognized in the event display registry
@@ -76,7 +83,8 @@ const buildInstruction = (
 export const createDispatchInstructions = (
   event: HookEvent,
   preferences: NotificationPreferences,
-  _dndState: DndState
+  _dndState: DndState,
+  getNow: () => string = defaultGetNow
 ): readonly DispatchInstruction[] => {
   // Step 1: Look up event display metadata
   const eventDisplay = findEventDisplay(event.eventType);
@@ -102,7 +110,10 @@ export const createDispatchInstructions = (
   const title = eventDisplay.title;
   const body = eventDisplay.formatBody(event.payload);
 
-  // Step 5: Build one instruction per enabled channel
+  // Step 5: Capture timestamp once for all instructions in this batch
+  const timestamp = getNow();
+
+  // Step 6: Build one instruction per enabled channel
   return channels.map((channel) =>
     buildInstruction(
       channel,
@@ -111,6 +122,7 @@ export const createDispatchInstructions = (
       eventPreference.sound,
       preferences.globalVolume,
       eventDisplay.eventId,
+      timestamp,
       { ...event.payload }
     )
   );
