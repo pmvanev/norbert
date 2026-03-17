@@ -75,7 +75,7 @@ describe("Default preferences match product specification", () => {
   });
 });
 
-describe.skip("Enable banner channel for an event updates preferences", () => {
+describe("Enable banner channel for an event updates preferences", () => {
   it("toggling banner on for session completion reflects in validated preferences", () => {
     // Given "Session response completed" has Toast enabled and Banner disabled
     const prefs: NotificationPreferences = {

@@ -14,15 +14,42 @@ export type ValidationResult<T> =
   | { readonly ok: false; readonly error: string };
 
 // ---------------------------------------------------------------------------
-// Placeholder implementations -- to be completed in later steps
+// Validation helpers
+// ---------------------------------------------------------------------------
+
+const fail = (message: string): ValidationResult<never> => ({
+  ok: false,
+  error: message,
+});
+
+const succeed = <T>(value: T): ValidationResult<T> => ({
+  ok: true,
+  value,
+});
+
+const isVolumeInRange = (volume: number): boolean =>
+  Number.isInteger(volume) && volume >= 0 && volume <= 100;
+
+const hasEvents = (events: readonly unknown[]): boolean =>
+  events.length > 0;
+
+// ---------------------------------------------------------------------------
+// Preference validation
 // ---------------------------------------------------------------------------
 
 /// Validate a complete preferences object.
 export const validatePreferences = (
-  _prefs: NotificationPreferences
+  prefs: NotificationPreferences
 ): ValidationResult<NotificationPreferences> => {
-  // Stub: will be implemented in a later step
-  return { ok: true, value: _prefs };
+  if (!hasEvents(prefs.events)) {
+    return fail("Preferences must contain at least one event");
+  }
+
+  if (!isVolumeInRange(prefs.globalVolume)) {
+    return fail("Global volume must be an integer between 0 and 100");
+  }
+
+  return succeed(prefs);
 };
 
 /// Validate a threshold value for a given unit.
