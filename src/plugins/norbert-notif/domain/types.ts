@@ -127,10 +127,8 @@ export interface DndState {
 // Dispatch Engine Types
 // ---------------------------------------------------------------------------
 
-export type DispatchChannel = ChannelId;
-
 export interface DispatchInstruction {
-  readonly channel: DispatchChannel;
+  readonly channel: ChannelId;
   readonly title: string;
   readonly body: string;
   readonly sound: string | null;
@@ -142,8 +140,8 @@ export interface DispatchInstruction {
 }
 
 export type DispatchResult =
-  | { readonly ok: true; readonly channel: DispatchChannel; readonly timestamp: string }
-  | { readonly ok: false; readonly channel: DispatchChannel; readonly error: string; readonly timestamp: string };
+  | { readonly ok: true; readonly channel: ChannelId; readonly timestamp: string }
+  | { readonly ok: false; readonly channel: ChannelId; readonly error: string; readonly timestamp: string };
 
 // ---------------------------------------------------------------------------
 // Hook Event (incoming from hookBridge)

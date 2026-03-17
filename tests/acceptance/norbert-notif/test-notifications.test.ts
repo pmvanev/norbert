@@ -17,27 +17,12 @@ import {
 } from "../../../src/plugins/norbert-notif/domain/dispatchEngine";
 import {
   type ChannelId,
-  type DndState,
   type NotificationPreferences,
 } from "../../../src/plugins/norbert-notif/domain/types";
 
 // ---------------------------------------------------------------------------
 // TEST FIXTURES
 // ---------------------------------------------------------------------------
-
-const dndOff: DndState = {
-  active: false,
-  source: "none",
-  endsAt: null,
-  queuedCount: 0,
-};
-
-const dndActive: DndState = {
-  active: true,
-  source: "manual",
-  endsAt: null,
-  queuedCount: 2,
-};
 
 const defaultPrefs: NotificationPreferences = {
   version: 1,

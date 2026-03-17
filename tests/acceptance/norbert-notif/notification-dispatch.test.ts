@@ -21,7 +21,6 @@ import {
   type NotificationPreferences,
   type EventPreference,
   type DndState,
-  type DispatchInstruction,
 } from "../../../src/plugins/norbert-notif/domain/types";
 
 // ---------------------------------------------------------------------------

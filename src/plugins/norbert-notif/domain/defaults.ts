@@ -19,7 +19,7 @@ import type {
 export interface EventDisplayMetadata {
   readonly eventId: NotificationEventId;
   readonly title: string;
-  readonly formatBody: (payload: Record<string, unknown>) => string;
+  readonly formatBody: (payload: Readonly<Record<string, unknown>>) => string;
 }
 
 const formatSessionName = (payload: Record<string, unknown>): string =>

@@ -6,10 +6,7 @@
 /// - All entries have required fields (hookName, label)
 
 import { describe, it, expect } from "vitest";
-import {
-  NOTIFICATION_EVENT_SOURCES,
-  type NotificationEventSource,
-} from "./eventRegistry";
+import { NOTIFICATION_EVENT_SOURCES } from "./eventRegistry";
 
 describe("notification event registry", () => {
   it("contains at least one event source", () => {

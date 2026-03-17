@@ -40,6 +40,11 @@ const enabledChannels = (toggles: ChannelToggles): readonly ChannelId[] =>
 // Instruction building
 // ---------------------------------------------------------------------------
 
+/// Resolve the effective sound for a channel.
+/// Silent channels (badge, email, webhook) and the "silence" sound both resolve to null.
+const resolveEffectiveSound = (channel: ChannelId, sound: string): string | null =>
+  SILENT_CHANNELS.has(channel) ? null : sound === "silence" ? null : sound;
+
 /// Build a single dispatch instruction for one channel.
 const buildInstruction = (
   channel: ChannelId,
@@ -54,7 +59,7 @@ const buildInstruction = (
   channel,
   title,
   body,
-  sound: SILENT_CHANNELS.has(channel) ? null : sound === "silence" ? null : sound,
+  sound: resolveEffectiveSound(channel, sound),
   volume,
   isTest: false,
   eventId,

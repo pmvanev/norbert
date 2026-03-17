@@ -41,20 +41,6 @@ const dndManualConfig: DndConfig = {
   behavior: "queue_with_badge",
 };
 
-const dndDiscardConfig: DndConfig = {
-  manuallyEnabled: true,
-  scheduleEnabled: false,
-  schedule: [],
-  behavior: "discard_silently",
-};
-
-const dndBannerOnlyConfig: DndConfig = {
-  manuallyEnabled: true,
-  scheduleEnabled: false,
-  schedule: [],
-  behavior: "banner_only",
-};
-
 const dndScheduleConfig: DndConfig = {
   manuallyEnabled: false,
   scheduleEnabled: true,
@@ -79,6 +65,7 @@ const sampleInstructions: readonly DispatchInstruction[] = [
     volume: 80,
     isTest: false,
     eventId: "cost_threshold_reached",
+    timestamp: "2026-03-17T12:00:00Z",
     metadata: { cost: 25.12, threshold: 25.0 },
   },
   {
@@ -89,6 +76,7 @@ const sampleInstructions: readonly DispatchInstruction[] = [
     volume: 0,
     isTest: false,
     eventId: "cost_threshold_reached",
+    timestamp: "2026-03-17T12:00:00Z",
     metadata: { cost: 25.12, threshold: 25.0 },
   },
   {
@@ -99,6 +87,7 @@ const sampleInstructions: readonly DispatchInstruction[] = [
     volume: 0,
     isTest: false,
     eventId: "cost_threshold_reached",
+    timestamp: "2026-03-17T12:00:00Z",
     metadata: { cost: 25.12, threshold: 25.0 },
   },
 ];
