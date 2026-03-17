@@ -202,19 +202,23 @@ export const applyDndToInstructions = (
 // DND Queue Summary
 // ---------------------------------------------------------------------------
 
+/// Format the summary body describing queued notifications during DND.
+const formatQueueSummaryBody = (queuedCount: number): string =>
+  `${queuedCount} notification${queuedCount === 1 ? "" : "s"} received while DND was active`;
+
 /// Create a summary dispatch instruction for queued notifications when DND ends.
 ///
 /// Pure function: (queuedCount) -> DispatchInstruction
 export const createDndQueueSummary = (
-  _queuedCount: number
+  queuedCount: number
 ): DispatchInstruction => ({
   channel: "toast",
   title: "DND Summary",
-  body: "",
+  body: formatQueueSummaryBody(queuedCount),
   sound: null,
   volume: 0,
   isTest: false,
   eventId: "session_response_completed",
   timestamp: new Date().toISOString(),
-  metadata: {},
+  metadata: { queuedCount },
 });

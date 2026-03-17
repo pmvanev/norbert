@@ -9,7 +9,10 @@
 
 import { describe, it, expect } from "vitest";
 import fc from "fast-check";
-import { evaluateDndState } from "../../../src/plugins/norbert-notif/domain/dndManager";
+import {
+  evaluateDndState,
+  createDndQueueSummary,
+} from "../../../src/plugins/norbert-notif/domain/dndManager";
 import type {
   DndConfig,
   DndScheduleEntry,
@@ -128,5 +131,34 @@ describe("DND schedule evaluation", () => {
 
     expect(state.active).toBe(true);
     expect(state.source).toBe("manual");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PROPERTY TESTS: Queue summary
+// ---------------------------------------------------------------------------
+
+describe("DND queue summary", () => {
+  it("summary body contains queued count and DND for any positive count", () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 1, max: 1000 }), (count) => {
+        const summary = createDndQueueSummary(count);
+
+        expect(summary.channel).toBe("toast");
+        expect(summary.body).toContain(String(count));
+        expect(summary.body).toContain("DND");
+      }),
+      { numRuns: 100 }
+    );
+  });
+
+  it("summary channel is always toast", () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 0, max: 500 }), (count) => {
+        const summary = createDndQueueSummary(count);
+        expect(summary.channel).toBe("toast");
+      }),
+      { numRuns: 50 }
+    );
   });
 });

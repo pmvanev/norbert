@@ -233,7 +233,7 @@ describe("Scheduled DND activates at configured time", () => {
   });
 });
 
-describe.skip("Queued notifications produce batch summary on DND end", () => {
+describe("Queued notifications produce batch summary on DND end", () => {
   it("creates a summary instruction when DND ends with queued notifications", () => {
     // Given DND has been active and 3 notifications were queued
     const queuedCount = 3;
