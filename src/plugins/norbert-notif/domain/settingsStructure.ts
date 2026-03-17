@@ -25,7 +25,7 @@ export const NOTIF_SETTINGS_VIEW_ID = "notif-settings";
 export const NOTIF_SETTINGS_VIEW_LABEL = "Notifications";
 
 /// The icon for the settings view.
-export const NOTIF_SETTINGS_VIEW_ICON = "\u2699"; // gear symbol
+export const NOTIF_SETTINGS_VIEW_ICON = "\u2407"; // bell symbol
 
 /// The three sub-sections of the notifications settings view.
 export const NOTIF_SETTINGS_SUB_SECTIONS: readonly SettingsSubSection[] = [
