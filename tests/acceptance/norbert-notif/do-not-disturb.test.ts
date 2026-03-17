@@ -107,7 +107,7 @@ const sampleInstructions: readonly DispatchInstruction[] = [
 // FOCUSED SCENARIOS: DND State and Behavior
 // ---------------------------------------------------------------------------
 
-describe.skip("Manual DND toggle suppresses dispatch", () => {
+describe("Manual DND toggle suppresses dispatch", () => {
   it("evaluates DND as active when manually enabled", () => {
     // Given DND is manually enabled
     // When DND state is evaluated
@@ -250,7 +250,7 @@ describe.skip("Queued notifications produce batch summary on DND end", () => {
   });
 });
 
-describe.skip("DND state persists across evaluations", () => {
+describe("DND state persists across evaluations", () => {
   it("same config and time produce consistent DND state", () => {
     // Given DND is manually enabled
     // When evaluated multiple times with same config
