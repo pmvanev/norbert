@@ -33,6 +33,7 @@ import {
   Layout,
   Hexagon,
   ArrowLeft,
+  SquareActivity,
   type LucideProps,
 } from "lucide-react";
 
@@ -52,6 +53,7 @@ const ICON_REGISTRY: Readonly<Record<string, FC<LucideProps>>> = {
   "dollar": CircleDollarSign,
   "list-tree": ListTree,
   "hexagon": Hexagon,
+  "square-activity": SquareActivity,
 
   // Config viewer sub-tab icons
   "bot": Bot,

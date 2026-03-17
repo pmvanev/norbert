@@ -37,7 +37,7 @@ const GAUGE_CLUSTER_VIEW_ICON = "gauge"; // gauge cluster
 
 const OSCILLOSCOPE_VIEW_ID = "oscilloscope";
 const OSCILLOSCOPE_VIEW_LABEL = "Oscilloscope";
-const OSCILLOSCOPE_VIEW_ICON = "activity"; // oscilloscope trace
+const OSCILLOSCOPE_VIEW_ICON = "square-activity"; // oscilloscope trace
 
 const USAGE_DASHBOARD_VIEW_ID = "usage-dashboard";
 const USAGE_DASHBOARD_VIEW_LABEL = "Usage Dashboard";
