@@ -10,6 +10,7 @@ import type {
   AggregateMetrics,
   SessionSummary,
 } from "./types";
+import { estimateSessionCostRate } from "./performanceMonitor";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -19,7 +20,7 @@ import type {
 const toSessionSummary = (session: SessionMetrics): SessionSummary => ({
   sessionId: session.sessionId,
   tokenRate: session.burnRate,
-  costRate: 0, // cost rate derivation added in later steps
+  costRate: estimateSessionCostRate(session),
   contextWindowPct: session.contextWindowPct,
   activeAgentCount: session.activeAgentCount,
   sessionCost: session.sessionCost,
@@ -58,7 +59,7 @@ export const aggregateAcrossSessions = (
   if (sessions.length === 0) return EMPTY_AGGREGATE;
 
   const totalTokenRate = sessions.reduce((sum, s) => sum + s.burnRate, 0);
-  const totalCostRate = 0; // cost rate derivation added in later steps
+  const totalCostRate = sessions.reduce((sum, s) => sum + estimateSessionCostRate(s), 0);
   const totalActiveAgents = sessions.reduce((sum, s) => sum + s.activeAgentCount, 0);
   const summaries = sortByTokenRateDescending(sessions.map(toSessionSummary));
 

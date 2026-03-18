@@ -27,6 +27,37 @@ const SECONDS_PER_MINUTE = 60;
  * converted to minutes. When burn rate is near zero the estimate is
  * marked low-confidence since extrapolation is unreliable.
  */
+/**
+ * Convert a cost rate from dollars-per-second to dollars-per-minute.
+ *
+ * Pure scalar conversion: rate * 60.
+ */
+export const computeCostRatePerMinute = (costRatePerSecond: number): number =>
+  costRatePerSecond * SECONDS_PER_MINUTE;
+
+// ---------------------------------------------------------------------------
+// Per-session cost rate estimation
+// ---------------------------------------------------------------------------
+
+/**
+ * Estimate the instantaneous cost rate for a session.
+ *
+ * Uses average cost per token (sessionCost / totalTokens) multiplied by
+ * current burn rate (tokens/second) to estimate current dollars per second.
+ *
+ * When totalTokens is zero but sessionCost is positive, falls back to
+ * sessionCost as a rate estimate (treating it as if one second has elapsed).
+ * When burnRate is zero the session is idle and cost rate is zero.
+ */
+export const estimateSessionCostRate = (session: SessionMetrics): number => {
+  if (session.burnRate <= 0) return 0;
+  if (session.totalTokens > 0) {
+    return (session.sessionCost / session.totalTokens) * session.burnRate;
+  }
+  // Fallback: sessionCost > 0 but no token count yet
+  return session.sessionCost > 0 ? session.sessionCost : 0;
+};
+
 export const computeCompactionEstimate = (
   metrics: SessionMetrics,
 ): CompactionEstimate => {

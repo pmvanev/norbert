@@ -22,16 +22,9 @@ import {
   type AggregateMetrics,
 } from "../../../src/plugins/norbert-usage/domain/crossSessionAggregator";
 
-// ---------------------------------------------------------------------------
-// NOTE: Additional functions not yet needed for this step:
-//
-// import {
-//   computeCompactionEstimate,
-//   classifyContextUrgency,
-//   computeCostRatePerMinute,
-//   type CompactionEstimate,
-// } from "../../../src/plugins/norbert-usage/domain/performanceMonitor";
-// ---------------------------------------------------------------------------
+import {
+  computeCostRatePerMinute,
+} from "../../../src/plugins/norbert-usage/domain/performanceMonitor";
 
 // ---------------------------------------------------------------------------
 // Helper: create session metrics with specific values
@@ -75,7 +68,7 @@ describe("User views aggregate resource consumption across all active sessions",
 // Traces to: US-PM-006, JS-PM-5
 // ---------------------------------------------------------------------------
 
-describe.skip("User sees rolling cost rate across all active sessions", () => {
+describe("User sees rolling cost rate across all active sessions", () => {
   it("total cost rate reflects sum of per-session cost rates", () => {
     // Given Ravi has sessions with varying cost rates:
     // Opus 4 "refactor-auth" at $0.003/s, Opus 4 "migrate-db" at $0.002/s,
@@ -87,12 +80,13 @@ describe.skip("User sees rolling cost rate across all active sessions", () => {
     ];
 
     // When aggregate metrics are computed
-    // const aggregate = aggregateAcrossSessions(sessions);
+    const aggregate = aggregateAcrossSessions(sessions);
 
     // Then the total cost rate is the sum of per-session cost rates
+    expect(aggregate.totalCostRate).toBeGreaterThan(0);
     // And the cost/min display shows the rate in dollars per minute
-    // const costPerMin = computeCostRatePerMinute(aggregate.totalCostRate);
-    // expect(costPerMin).toBeGreaterThan(0);
+    const costPerMin = computeCostRatePerMinute(aggregate.totalCostRate);
+    expect(costPerMin).toBeGreaterThan(0);
   });
 });
 
@@ -252,7 +246,7 @@ describe("Aggregate updates when a session ends", () => {
 // Traces to: US-PM-006 AC "Zero cost correctly displayed during idle"
 // ---------------------------------------------------------------------------
 
-describe.skip("Zero cost rate when all sessions are idle", () => {
+describe("Zero cost rate when all sessions are idle", () => {
   it("cost rate is zero when no tokens are being consumed", () => {
     // Given Marcus has 2 sessions running but both agents are idle
     const sessions: ReadonlyArray<SessionMetrics> = [
@@ -261,12 +255,15 @@ describe.skip("Zero cost rate when all sessions are idle", () => {
     ];
 
     // When aggregate metrics are computed
-    // const aggregate = aggregateAcrossSessions(sessions);
+    const aggregate = aggregateAcrossSessions(sessions);
 
     // Then the total cost rate is zero
-    // expect(aggregate.totalCostRate).toBe(0);
+    expect(aggregate.totalCostRate).toBe(0);
     // And the total token rate is zero
-    // expect(aggregate.totalTokenRate).toBe(0);
+    expect(aggregate.totalTokenRate).toBe(0);
+    // And cost per minute is also zero
+    const costPerMin = computeCostRatePerMinute(aggregate.totalCostRate);
+    expect(costPerMin).toBe(0);
   });
 });
 
