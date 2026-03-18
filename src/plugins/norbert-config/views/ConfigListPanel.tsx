@@ -3,10 +3,13 @@
 /// Renders a scrollable list of items for the active sub-tab.
 /// Each row shows the item name, scope badge, and optional metadata.
 /// Clicking a row selects the item for display in the detail panel.
+/// Filterable tabs (agents, commands, hooks, skills, rules) show a
+/// source filter bar for narrowing items by origin (user/project/plugin).
 
-import type { FC } from "react";
+import { useState, useEffect, useMemo, type FC } from "react";
 import type {
   ConfigSubTab,
+  ConfigScope,
   AggregatedConfig,
   AgentParseResult,
   CommandDefinition,
@@ -20,6 +23,127 @@ import type {
 } from "../domain/types";
 import { EmptyState } from "./EmptyState";
 import { ErrorIndicator } from "./ErrorIndicator";
+
+// ---------------------------------------------------------------------------
+// Source label extraction -- unified across all filterable entity types
+// ---------------------------------------------------------------------------
+
+/** Derive the display label for an item's origin (user, project, or plugin name). */
+const sourceLabel = (scope: ConfigScope, source?: string): string =>
+  scope === "plugin" && source ? source : scope;
+
+/** Tabs that support source filtering. */
+const FILTERABLE_TABS = new Set<ConfigSubTab>(["agents", "commands", "hooks", "skills", "rules"]);
+
+/** Extract sorted unique source labels from a list of scoped items. */
+function collectSources(items: readonly { readonly scope: ConfigScope; readonly source?: string }[]): readonly string[] {
+  const labels = new Set<string>();
+  for (const item of items) {
+    labels.add(sourceLabel(item.scope, item.source));
+  }
+  return [...labels].sort((a, b) => a.localeCompare(b));
+}
+
+/** Extract sources from agents (handles the parsed/error discriminated union). */
+function collectAgentSources(agents: readonly AgentParseResult[]): readonly string[] {
+  const labels = new Set<string>();
+  for (const r of agents) {
+    if (r.tag === "parsed") {
+      labels.add(sourceLabel(r.agent.scope, r.agent.source));
+    }
+  }
+  return [...labels].sort((a, b) => a.localeCompare(b));
+}
+
+/** Filter agents by source label. */
+function filterAgents(agents: readonly AgentParseResult[], source: string | null): readonly AgentParseResult[] {
+  if (source === null) return agents;
+  return agents.filter((r) =>
+    r.tag === "parsed" && sourceLabel(r.agent.scope, r.agent.source) === source
+  );
+}
+
+/** Sort agents: by source label first, then by name within each group. */
+function sortAgentsBySource(agents: readonly AgentParseResult[]): readonly AgentParseResult[] {
+  return [...agents].sort((a, b) => {
+    const aLabel = a.tag === "parsed" ? sourceLabel(a.agent.scope, a.agent.source) : "";
+    const bLabel = b.tag === "parsed" ? sourceLabel(b.agent.scope, b.agent.source) : "";
+    const cmp = aLabel.localeCompare(bLabel);
+    if (cmp !== 0) return cmp;
+    const aName = a.tag === "parsed" ? a.agent.name : "";
+    const bName = b.tag === "parsed" ? b.agent.name : "";
+    return aName.localeCompare(bName);
+  });
+}
+
+/** Generic filter for items with scope and source. */
+function filterBySource<T extends { readonly scope: ConfigScope; readonly source?: string }>(
+  items: readonly T[],
+  source: string | null,
+): readonly T[] {
+  if (source === null) return items;
+  return items.filter((item) => sourceLabel(item.scope, item.source) === source);
+}
+
+/** Generic sort by source then name. */
+function sortBySource<T extends { readonly scope: ConfigScope; readonly source?: string; readonly name?: string }>(
+  items: readonly T[],
+): readonly T[] {
+  return [...items].sort((a, b) => {
+    const cmp = sourceLabel(a.scope, a.source).localeCompare(sourceLabel(b.scope, b.source));
+    if (cmp !== 0) return cmp;
+    return (a.name ?? "").localeCompare(b.name ?? "");
+  });
+}
+
+type SortMode = "name" | "source";
+
+// ---------------------------------------------------------------------------
+// SourceFilterBar -- filter chips + sort toggle for filterable tabs
+// ---------------------------------------------------------------------------
+
+const SourceFilterBar: FC<{
+  readonly sources: readonly string[];
+  readonly activeSource: string | null;
+  readonly onSourceChange: (source: string | null) => void;
+  readonly sortMode: SortMode;
+  readonly onSortChange: (mode: SortMode) => void;
+}> = ({ sources, activeSource, onSourceChange, sortMode, onSortChange }) => {
+  if (sources.length <= 1) return null;
+
+  return (
+    <div className="config-filter-bar">
+      <div className="config-filter-chips">
+        <button
+          className={`config-filter-chip${activeSource === null ? " active" : ""}`}
+          onClick={() => onSourceChange(null)}
+          type="button"
+        >
+          All
+        </button>
+        {sources.map((src) => (
+          <button
+            key={src}
+            className={`config-filter-chip${activeSource === src ? " active" : ""}`}
+            onClick={() => onSourceChange(activeSource === src ? null : src)}
+            type="button"
+          >
+            {src}
+          </button>
+        ))}
+      </div>
+      <button
+        className="config-sort-toggle"
+        onClick={() => onSortChange(sortMode === "name" ? "source" : "name")}
+        type="button"
+        title={`Sort by ${sortMode === "name" ? "source" : "name"}`}
+        aria-label={`Sort by ${sortMode === "name" ? "source" : "name"}`}
+      >
+        {sortMode === "source" ? "\u2B07 source" : "\u2B07 name"}
+      </button>
+    </div>
+  );
+};
 
 // ---------------------------------------------------------------------------
 // Props
@@ -240,29 +364,69 @@ export const ConfigListPanel: FC<ConfigListPanelProps> = ({
   selectedKey,
   onSelect,
 }) => {
+  const [activeSource, setActiveSource] = useState<string | null>(null);
+  const [sortMode, setSortMode] = useState<SortMode>("name");
+
+  // Reset filter/sort when tab changes.
+  useEffect(() => {
+    setActiveSource(null);
+    setSortMode("name");
+  }, [tab]);
+
+  const isFilterable = FILTERABLE_TABS.has(tab);
+
+  // Collect sources for the current tab (only for filterable tabs).
+  const sources = useMemo(() => {
+    if (!isFilterable) return [];
+    switch (tab) {
+      case "agents": return collectAgentSources(config.agents);
+      case "commands": return collectSources(config.commands);
+      case "hooks": return collectSources(config.hooks);
+      case "skills": return collectSources(config.skills);
+      case "rules": return collectSources(config.rules);
+      default: return [];
+    }
+  }, [tab, isFilterable, config]);
+
+  // Render the filter bar (only when multiple sources exist).
+  const filterBar = isFilterable ? (
+    <SourceFilterBar
+      sources={sources}
+      activeSource={activeSource}
+      onSourceChange={setActiveSource}
+      sortMode={sortMode}
+      onSortChange={setSortMode}
+    />
+  ) : null;
+
   switch (tab) {
     case "agents": {
       if (config.agents.length === 0) {
         return <EmptyState category="agents" guidance="Add agent definitions in .claude/agents/ as markdown files." />;
       }
+      const filtered = filterAgents(config.agents, activeSource);
+      const items = sortMode === "source" ? sortAgentsBySource(filtered) : filtered;
       return (
-        <div className="config-list" role="listbox" aria-label="Agents">
-          {config.agents.map((result, i) => {
-            const key = agentKey(result, i);
-            return (
-              <AgentRow
-                key={key}
-                result={result}
-                active={selectedKey === key}
-                onSelect={() =>
-                  result.tag === "parsed"
-                    ? onSelect({ tag: "agent", agent: result.agent }, key)
-                    : undefined
-                }
-              />
-            );
-          })}
-        </div>
+        <>
+          {filterBar}
+          <div className="config-list" role="listbox" aria-label="Agents">
+            {items.map((result, i) => {
+              const key = agentKey(result, i);
+              return (
+                <AgentRow
+                  key={key}
+                  result={result}
+                  active={selectedKey === key}
+                  onSelect={() =>
+                    result.tag === "parsed"
+                      ? onSelect({ tag: "agent", agent: result.agent }, key)
+                      : undefined
+                  }
+                />
+              );
+            })}
+          </div>
+        </>
       );
     }
 
@@ -270,20 +434,25 @@ export const ConfigListPanel: FC<ConfigListPanelProps> = ({
       if (config.commands.length === 0) {
         return <EmptyState category="commands" guidance="Add command definitions in .claude/commands/ as markdown files." />;
       }
+      const filtered = filterBySource(config.commands, activeSource);
+      const items = sortMode === "source" ? sortBySource(filtered) : filtered;
       return (
-        <div className="config-list" role="listbox" aria-label="Commands">
-          {config.commands.map((command) => {
-            const key = commandKey(command);
-            return (
-              <CommandRow
-                key={key}
-                command={command}
-                active={selectedKey === key}
-                onSelect={() => onSelect({ tag: "command", command }, key)}
-              />
-            );
-          })}
-        </div>
+        <>
+          {filterBar}
+          <div className="config-list" role="listbox" aria-label="Commands">
+            {items.map((command) => {
+              const key = commandKey(command);
+              return (
+                <CommandRow
+                  key={key}
+                  command={command}
+                  active={selectedKey === key}
+                  onSelect={() => onSelect({ tag: "command", command }, key)}
+                />
+              );
+            })}
+          </div>
+        </>
       );
     }
 
@@ -291,20 +460,25 @@ export const ConfigListPanel: FC<ConfigListPanelProps> = ({
       if (config.hooks.length === 0) {
         return <EmptyState category="hooks" guidance="Define hooks in settings.json under the hooks key." />;
       }
+      const filtered = filterBySource(config.hooks, activeSource);
+      const items = sortMode === "source" ? sortBySource(filtered) : filtered;
       return (
-        <div className="config-list" role="listbox" aria-label="Hooks">
-          {config.hooks.map((hook, i) => {
-            const key = hookKey(hook, i);
-            return (
-              <HookRow
-                key={key}
-                hook={hook}
-                active={selectedKey === key}
-                onSelect={() => onSelect({ tag: "hook", hook }, key)}
-              />
-            );
-          })}
-        </div>
+        <>
+          {filterBar}
+          <div className="config-list" role="listbox" aria-label="Hooks">
+            {items.map((hook, i) => {
+              const key = hookKey(hook, i);
+              return (
+                <HookRow
+                  key={key}
+                  hook={hook}
+                  active={selectedKey === key}
+                  onSelect={() => onSelect({ tag: "hook", hook }, key)}
+                />
+              );
+            })}
+          </div>
+        </>
       );
     }
 
@@ -331,22 +505,27 @@ export const ConfigListPanel: FC<ConfigListPanelProps> = ({
 
     case "skills": {
       if (config.skills.length === 0) {
-        return <EmptyState category="skills" guidance="Add skill definitions in .claude/commands/ as markdown files." />;
+        return <EmptyState category="skills" guidance="Skills are provided by installed plugins." />;
       }
+      const filtered = filterBySource(config.skills, activeSource);
+      const items = sortMode === "source" ? sortBySource(filtered) : filtered;
       return (
-        <div className="config-list" role="listbox" aria-label="Skills">
-          {config.skills.map((skill) => {
-            const key = skillKey(skill);
-            return (
-              <SkillRow
-                key={key}
-                skill={skill}
-                active={selectedKey === key}
-                onSelect={() => onSelect({ tag: "skill", skill }, key)}
-              />
-            );
-          })}
-        </div>
+        <>
+          {filterBar}
+          <div className="config-list" role="listbox" aria-label="Skills">
+            {items.map((skill) => {
+              const key = skillKey(skill);
+              return (
+                <SkillRow
+                  key={key}
+                  skill={skill}
+                  active={selectedKey === key}
+                  onSelect={() => onSelect({ tag: "skill", skill }, key)}
+                />
+              );
+            })}
+          </div>
+        </>
       );
     }
 
@@ -354,20 +533,25 @@ export const ConfigListPanel: FC<ConfigListPanelProps> = ({
       if (config.rules.length === 0) {
         return <EmptyState category="rules" guidance="Define rules in settings.json or CLAUDE.md files." />;
       }
+      const filtered = filterBySource(config.rules, activeSource);
+      const items = sortMode === "source" ? sortBySource(filtered) : filtered;
       return (
-        <div className="config-list" role="listbox" aria-label="Rules">
-          {config.rules.map((rule, i) => {
-            const key = ruleKey(rule, i);
-            return (
-              <RuleRow
-                key={key}
-                rule={rule}
-                active={selectedKey === key}
-                onSelect={() => onSelect({ tag: "rule", rule }, key)}
-              />
-            );
-          })}
-        </div>
+        <>
+          {filterBar}
+          <div className="config-list" role="listbox" aria-label="Rules">
+            {items.map((rule, i) => {
+              const key = ruleKey(rule, i);
+              return (
+                <RuleRow
+                  key={key}
+                  rule={rule}
+                  active={selectedKey === key}
+                  onSelect={() => onSelect({ tag: "rule", rule }, key)}
+                />
+              );
+            })}
+          </div>
+        </>
       );
     }
 
