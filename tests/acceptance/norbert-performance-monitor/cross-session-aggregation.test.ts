@@ -49,7 +49,7 @@ const createSessionSnapshot = (
 // Traces to: US-PM-002, JS-PM-1
 // ---------------------------------------------------------------------------
 
-describe.skip("User views aggregate resource consumption across all active sessions", () => {
+describe("User views aggregate resource consumption across all active sessions", () => {
   it("total token rate equals sum of per-session rates", () => {
     // Given Ravi has 3 active sessions with known token rates
     const sessions: ReadonlyArray<SessionMetrics> = [
@@ -59,14 +59,14 @@ describe.skip("User views aggregate resource consumption across all active sessi
     ];
 
     // When aggregate metrics are computed across all sessions
-    // const aggregate = aggregateAcrossSessions(sessions);
+    const aggregate = aggregateAcrossSessions(sessions);
 
     // Then the total tokens/s shows 527 tok/s
-    // expect(aggregate.totalTokenRate).toBe(527);
+    expect(aggregate.totalTokenRate).toBe(527);
     // And the session count is 3
-    // expect(aggregate.sessionCount).toBe(3);
+    expect(aggregate.sessionCount).toBe(3);
     // And per-session breakdown lists all 3 sessions
-    // expect(aggregate.sessions).toHaveLength(3);
+    expect(aggregate.sessions).toHaveLength(3);
   });
 });
 
@@ -101,7 +101,7 @@ describe.skip("User sees rolling cost rate across all active sessions", () => {
 // Traces to: US-PM-002 AC
 // ---------------------------------------------------------------------------
 
-describe.skip("Aggregate token rate is the sum of per-session burn rates", () => {
+describe("Aggregate token rate is the sum of per-session burn rates", () => {
   it("sums token rates across 3 mixed-model sessions", () => {
     // Given 3 sessions at 312, 185, and 30 tok/s
     const sessions: ReadonlyArray<SessionMetrics> = [
@@ -111,14 +111,14 @@ describe.skip("Aggregate token rate is the sum of per-session burn rates", () =>
     ];
 
     // When aggregate metrics are computed
-    // const aggregate = aggregateAcrossSessions(sessions);
+    const aggregate = aggregateAcrossSessions(sessions);
 
     // Then the total is 527 tok/s
-    // expect(aggregate.totalTokenRate).toBe(527);
+    expect(aggregate.totalTokenRate).toBe(527);
   });
 });
 
-describe.skip("Aggregate active agents is the sum of per-session agent counts", () => {
+describe("Aggregate active agents is the sum of per-session agent counts", () => {
   it("sums agent counts across sessions", () => {
     // Given 3 sessions with 1, 2, and 1 active agents respectively
     const sessions: ReadonlyArray<SessionMetrics> = [
@@ -128,14 +128,14 @@ describe.skip("Aggregate active agents is the sum of per-session agent counts", 
     ];
 
     // When aggregate metrics are computed
-    // const aggregate = aggregateAcrossSessions(sessions);
+    const aggregate = aggregateAcrossSessions(sessions);
 
     // Then total active agents is 4
-    // expect(aggregate.totalActiveAgents).toBe(4);
+    expect(aggregate.totalActiveAgents).toBe(4);
   });
 });
 
-describe.skip("Per-session breakdown is sorted by token rate descending", () => {
+describe("Per-session breakdown is sorted by token rate descending", () => {
   it("highest rate session appears first in breakdown", () => {
     // Given 3 sessions with rates 30, 312, and 185 tok/s (unsorted input)
     const sessions: ReadonlyArray<SessionMetrics> = [
@@ -145,12 +145,12 @@ describe.skip("Per-session breakdown is sorted by token rate descending", () => 
     ];
 
     // When aggregate metrics are computed
-    // const aggregate = aggregateAcrossSessions(sessions);
+    const aggregate = aggregateAcrossSessions(sessions);
 
     // Then sessions are listed in order: 312, 185, 30 tok/s
-    // expect(aggregate.sessions[0].tokenRate).toBe(312);
-    // expect(aggregate.sessions[1].tokenRate).toBe(185);
-    // expect(aggregate.sessions[2].tokenRate).toBe(30);
+    expect(aggregate.sessions[0].tokenRate).toBe(312);
+    expect(aggregate.sessions[1].tokenRate).toBe(185);
+    expect(aggregate.sessions[2].tokenRate).toBe(30);
   });
 });
 
@@ -206,7 +206,7 @@ describe("Empty aggregate when no sessions are active", () => {
 // Traces to: US-PM-002 AC "New sessions appear", "Ended sessions removed"
 // ---------------------------------------------------------------------------
 
-describe.skip("Aggregate updates when a new session is added", () => {
+describe("Aggregate updates when a new session is added", () => {
   it("total increases when a session is added to the active set", () => {
     // Given Elena has 2 sessions totaling 400 tok/s
     const existingSessions: ReadonlyArray<SessionMetrics> = [
@@ -221,13 +221,13 @@ describe.skip("Aggregate updates when a new session is added", () => {
     ];
 
     // Then the aggregate reflects 3 sessions at 480 tok/s
-    // const aggregate = aggregateAcrossSessions(updatedSessions);
-    // expect(aggregate.totalTokenRate).toBe(480);
-    // expect(aggregate.sessionCount).toBe(3);
+    const aggregate = aggregateAcrossSessions(updatedSessions);
+    expect(aggregate.totalTokenRate).toBe(480);
+    expect(aggregate.sessionCount).toBe(3);
   });
 });
 
-describe.skip("Aggregate updates when a session ends", () => {
+describe("Aggregate updates when a session ends", () => {
   it("total decreases when a session is removed from the active set", () => {
     // Given Marcus has 3 sessions with total 500 tok/s
     // And session "quick-fix" was contributing 100 tok/s
@@ -241,9 +241,9 @@ describe.skip("Aggregate updates when a session ends", () => {
     const remainingSessions = allSessions.filter(s => s.sessionId !== "quick-fix");
 
     // Then the total drops to 400 tok/s
-    // const aggregate = aggregateAcrossSessions(remainingSessions);
-    // expect(aggregate.totalTokenRate).toBe(400);
-    // expect(aggregate.sessionCount).toBe(2);
+    const aggregate = aggregateAcrossSessions(remainingSessions);
+    expect(aggregate.totalTokenRate).toBe(400);
+    expect(aggregate.sessionCount).toBe(2);
   });
 });
 
@@ -275,7 +275,7 @@ describe.skip("Zero cost rate when all sessions are idle", () => {
 // Traces to: Shared Artifacts Registry -- "Aggregate always equals sum of parts"
 // ---------------------------------------------------------------------------
 
-describe.skip("@property: aggregate total always equals sum of per-session values", () => {
+describe("@property: aggregate total always equals sum of per-session values", () => {
   it("sum invariant holds for any combination of session metrics", () => {
     // Given any valid set of active sessions with varying metrics
     const sessions: ReadonlyArray<SessionMetrics> = [
@@ -286,12 +286,12 @@ describe.skip("@property: aggregate total always equals sum of per-session value
     ];
 
     // When aggregate metrics are computed
-    // const aggregate = aggregateAcrossSessions(sessions);
+    const aggregate = aggregateAcrossSessions(sessions);
 
     // Then aggregate totals equal the sum of per-session values
-    // const expectedTokenRate = sessions.reduce((sum, s) => sum + s.burnRate, 0);
-    // const expectedAgents = sessions.reduce((sum, s) => sum + s.activeAgentCount, 0);
-    // expect(aggregate.totalTokenRate).toBe(expectedTokenRate);
-    // expect(aggregate.totalActiveAgents).toBe(expectedAgents);
+    const expectedTokenRate = sessions.reduce((sum, s) => sum + s.burnRate, 0);
+    const expectedAgents = sessions.reduce((sum, s) => sum + s.activeAgentCount, 0);
+    expect(aggregate.totalTokenRate).toBe(expectedTokenRate);
+    expect(aggregate.totalActiveAgents).toBe(expectedAgents);
   });
 });

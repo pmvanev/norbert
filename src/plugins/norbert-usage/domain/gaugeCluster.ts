@@ -5,7 +5,13 @@
 /// No side effects, no IO imports. Each instrument computation is a small
 /// pure function composed into the final result.
 
-import type { SessionMetrics, Urgency } from "./types";
+import type { SessionMetrics } from "./types";
+import {
+  classifyContextUrgency,
+  classifyTokenRateUrgency,
+  DEFAULT_URGENCY_THRESHOLDS,
+  type UrgencyThresholds,
+} from "./urgencyThresholds";
 
 // ---------------------------------------------------------------------------
 // GaugeClusterData -- output type for the gauge cluster view
@@ -47,56 +53,16 @@ export interface GaugeClusterData {
 }
 
 // ---------------------------------------------------------------------------
-// Threshold configuration
-// ---------------------------------------------------------------------------
-
-interface ThresholdConfig {
-  readonly fuelAmber: number;
-  readonly fuelRed: number;
-  readonly tachoAmber: number;
-  readonly tachoRed: number;
-}
-
-const DEFAULT_THRESHOLDS: ThresholdConfig = {
-  fuelAmber: 70,
-  fuelRed: 90,
-  tachoAmber: 400,
-  tachoRed: 500,
-};
-
-// ---------------------------------------------------------------------------
-// Urgency classifiers (small pure functions)
-// ---------------------------------------------------------------------------
-
-const classifyFuelUrgency = (
-  contextWindowPct: number,
-  thresholds: ThresholdConfig,
-): Urgency => {
-  if (contextWindowPct >= thresholds.fuelRed) return "red";
-  if (contextWindowPct >= thresholds.fuelAmber) return "amber";
-  return "normal";
-};
-
-const classifyTachoUrgency = (
-  burnRate: number,
-  thresholds: ThresholdConfig,
-): Urgency => {
-  if (burnRate >= thresholds.tachoRed) return "red";
-  if (burnRate >= thresholds.tachoAmber) return "amber";
-  return "normal";
-};
-
-// ---------------------------------------------------------------------------
 // Instrument builders (small pure functions)
 // ---------------------------------------------------------------------------
 
 const buildTachometer = (
   burnRate: number,
-  thresholds: ThresholdConfig,
+  thresholds: UrgencyThresholds,
 ): TachometerData => ({
   value: burnRate,
   unit: "tok/s",
-  urgency: classifyTachoUrgency(burnRate, thresholds),
+  urgency: classifyTokenRateUrgency(burnRate, thresholds),
 });
 
 /** Format context token usage as "Xk / Yk tokens", or "" when unknown. */
@@ -111,11 +77,11 @@ const buildFuelGauge = (
   contextWindowPct: number,
   contextWindowTokens: number,
   contextWindowMaxTokens: number,
-  thresholds: ThresholdConfig,
+  thresholds: UrgencyThresholds,
 ): FuelGaugeData => ({
   value: contextWindowPct,
   unit: "%",
-  urgency: classifyFuelUrgency(contextWindowPct, thresholds),
+  urgency: classifyContextUrgency(contextWindowPct, thresholds),
   tokenLabel: formatContextTokenLabel(contextWindowTokens, contextWindowMaxTokens),
 });
 
@@ -148,7 +114,7 @@ const buildWarningCluster = (hookEventCount: number): WarningClusterData => ({
  */
 export const computeGaugeClusterData = (
   metrics: SessionMetrics,
-  thresholds: ThresholdConfig = DEFAULT_THRESHOLDS,
+  thresholds: UrgencyThresholds = DEFAULT_URGENCY_THRESHOLDS,
 ): GaugeClusterData => ({
   tachometer: buildTachometer(metrics.burnRate, thresholds),
   fuelGauge: buildFuelGauge(metrics.contextWindowPct, metrics.contextWindowTokens, metrics.contextWindowMaxTokens, thresholds),
