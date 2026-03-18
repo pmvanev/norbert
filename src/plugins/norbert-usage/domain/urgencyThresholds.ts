@@ -25,6 +25,18 @@ export const DEFAULT_URGENCY_THRESHOLDS: UrgencyThresholds = {
 };
 
 // ---------------------------------------------------------------------------
+// Named threshold constants for cross-module reference
+// ---------------------------------------------------------------------------
+
+/** Amber threshold for context window percentage (shared with Gauge Cluster). */
+export const CONTEXT_AMBER_THRESHOLD =
+  DEFAULT_URGENCY_THRESHOLDS.contextAmber;
+
+/** Red threshold for context window percentage (shared with Gauge Cluster). */
+export const CONTEXT_RED_THRESHOLD =
+  DEFAULT_URGENCY_THRESHOLDS.contextRed;
+
+// ---------------------------------------------------------------------------
 // Urgency classifiers -- small pure functions
 // ---------------------------------------------------------------------------
 
