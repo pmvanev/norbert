@@ -22,16 +22,12 @@ import {
   type RateSample,
 } from "../../../src/plugins/norbert-usage/domain/timeSeriesSampler";
 
-// ---------------------------------------------------------------------------
-// NOTE: The oscilloscope functions below already exist and are reused by PM.
-// This test verifies the reuse contract: PM calls the same functions and
-// gets identical results to the oscilloscope view.
-//
-// import {
-//   prepareWaveformPoints,
-//   computeGridLines,
-// } from "../../../src/plugins/norbert-usage/domain/oscilloscope";
-// ---------------------------------------------------------------------------
+import {
+  createMultiWindowBuffer,
+  appendMultiWindowSample,
+  getActiveWindowSamples,
+  computeMultiWindowStats,
+} from "../../../src/plugins/norbert-usage/domain/multiWindowSampler";
 
 // ---------------------------------------------------------------------------
 // Helper: create a rate sample
@@ -44,29 +40,39 @@ const sample = (timestamp: number, tokenRate: number, costRate: number): RateSam
 });
 
 // ---------------------------------------------------------------------------
-// WALKING SKELETON: Oscilloscope and PM share waveform data
+// WALKING SKELETON: Oscilloscope and PM share waveform data pipeline
 // Traces to: US-PM-007, JS-PM-1 (subsumption: coexistence, not replacement)
 // ---------------------------------------------------------------------------
 
 describe("Oscilloscope waveform data is identical when accessed from PM context", () => {
-  it("same time-series buffer produces same waveform data for both views", () => {
-    // Given a shared time-series buffer with known data
-    let buffer = createBuffer(600);
+  it("multiWindowSampler produces samples compatible with oscilloscope computeStats", () => {
+    // Given a multi-window buffer populated with samples
+    let multiBuffer = createMultiWindowBuffer();
     for (let i = 0; i < 100; i++) {
-      buffer = appendSample(buffer, sample(i * 100, 200 + (i % 50), 0.03));
+      multiBuffer = appendMultiWindowSample(
+        multiBuffer,
+        sample(i * 100, 200 + (i % 50), 0.03),
+      );
     }
 
-    // When the oscilloscope view reads the buffer
-    const oscilloscopeSamples = getSamples(buffer);
-    const oscilloscopeStats = computeStats(buffer);
+    // When the PM retrieves samples from the 1m window
+    const pmSamples = getActiveWindowSamples(multiBuffer, "1m");
 
-    // And the PM view reads the same buffer
-    const pmSamples = getSamples(buffer);
-    const pmStats = computeStats(buffer);
+    // Then those samples can be fed into the oscilloscope's computeStats
+    // (verifying the integration contract: multiWindowSampler output
+    //  is compatible with oscilloscope's TimeSeriesBuffer pipeline)
+    let oscilloscopeBuffer = createBuffer(600);
+    for (const s of pmSamples) {
+      oscilloscopeBuffer = appendSample(oscilloscopeBuffer, s);
+    }
+    const oscilloscopeStats = computeStats(oscilloscopeBuffer);
+    const pmStats = computeMultiWindowStats(multiBuffer, "1m");
 
-    // Then both views see identical data
-    expect(pmSamples).toEqual(oscilloscopeSamples);
-    expect(pmStats).toEqual(oscilloscopeStats);
+    // Then the stats from both paths agree on peak and average rates
+    expect(pmStats.peakRate).toBe(oscilloscopeStats.peakRate);
+    expect(pmStats.avgRate).toBe(oscilloscopeStats.avgRate);
+    // And the PM samples are non-empty
+    expect(pmSamples.length).toBeGreaterThan(0);
   });
 });
 

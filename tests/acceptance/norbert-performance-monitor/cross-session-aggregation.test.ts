@@ -24,6 +24,7 @@ import {
 
 import {
   computeCostRatePerMinute,
+  estimateSessionCostRate,
 } from "../../../src/plugins/norbert-usage/domain/performanceMonitor";
 
 // ---------------------------------------------------------------------------
@@ -82,11 +83,16 @@ describe("User sees rolling cost rate across all active sessions", () => {
     // When aggregate metrics are computed
     const aggregate = aggregateAcrossSessions(sessions);
 
-    // Then the total cost rate is the sum of per-session cost rates
-    expect(aggregate.totalCostRate).toBeGreaterThan(0);
+    // Then the total cost rate equals the sum of per-session cost rates
+    const expectedTotalCostRate = sessions.reduce(
+      (sum, s) => sum + estimateSessionCostRate(s),
+      0,
+    );
+    expect(aggregate.totalCostRate).toBeCloseTo(expectedTotalCostRate);
     // And the cost/min display shows the rate in dollars per minute
     const costPerMin = computeCostRatePerMinute(aggregate.totalCostRate);
-    expect(costPerMin).toBeGreaterThan(0);
+    const expectedCostPerMin = computeCostRatePerMinute(expectedTotalCostRate);
+    expect(costPerMin).toBeCloseTo(expectedCostPerMin);
   });
 });
 

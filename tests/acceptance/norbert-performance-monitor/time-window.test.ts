@@ -162,40 +162,37 @@ describe("Session-length window computes dynamic resolution for full history", (
 // ---------------------------------------------------------------------------
 
 describe("Stats computed from 5-minute window differ from 1-minute window", () => {
-  it("peak rate may differ across time windows", () => {
-    // Given a time series where a spike occurred 3 minutes ago
-    // With 1-minute window: the spike is NOT visible (occurred before window)
-    // With 5-minute window: the spike IS visible
+  it("spike outside 1m range but within 5m range produces different peak stats", () => {
+    // Given a multi-window buffer
+    let multiBuffer = createMultiWindowBuffer();
 
-    // This validates that stats computation operates on the correct
-    // window's samples, not the entire history
+    // And a spike at t=0 (simulating ~3 minutes ago)
+    multiBuffer = appendMultiWindowSample(
+      multiBuffer,
+      sample(0, 800, 0.12),
+    );
 
-    // The existing computeStats function from timeSeriesSampler works
-    // on a TimeSeriesBuffer, so each window's buffer produces its own stats
-
-    // Using existing infrastructure to verify the concept:
-    let recentBuffer = createBuffer(600);
-    let widerBuffer = createBuffer(600);
-
-    // Spike at t=0 (3 minutes ago relative to current)
-    widerBuffer = appendSample(widerBuffer, sample(0, 800, 0.12));
-
-    // Recent steady data from t=120000 to t=180000 (last 60s)
+    // And steady data from t=120000 to t=180000 (last 60 seconds at 100ms intervals)
+    // The 1m buffer (capacity 600, interval 100ms) will be filled with 600 steady
+    // samples, evicting the spike. The 5m buffer (capacity 600, interval 500ms)
+    // retains the spike because only ~120 of its 600 slots are used.
     for (let i = 0; i < 600; i++) {
-      const t = 120000 + i * 100;
-      recentBuffer = appendSample(recentBuffer, sample(t, 200, 0.03));
-      widerBuffer = appendSample(widerBuffer, sample(t, 200, 0.03));
+      const t = 120_000 + i * 100;
+      multiBuffer = appendMultiWindowSample(multiBuffer, sample(t, 200, 0.03));
     }
 
-    // Then the 1-minute buffer peak is 200 (no spike visible)
-    const recentStats = computeStats(recentBuffer);
-    expect(recentStats.peakRate).toBe(200);
+    // When stats are computed for each window
+    const stats1m = computeMultiWindowStats(multiBuffer, "1m");
+    const stats5m = computeMultiWindowStats(multiBuffer, "5m");
 
-    // And the 5-minute buffer peak is 800 (spike is visible)
-    // Note: in the wider buffer, the spike sample was evicted because
-    // we added 600 samples after it. This demonstrates WHY multi-window
-    // buffers with different capacities are needed -- the software-crafter
-    // will implement multiWindowSampler to maintain separate buffers.
+    // Then the 1-minute window peak is 200 (spike evicted)
+    expect(stats1m.peakRate).toBe(200);
+
+    // And the 5-minute window peak is 800 (spike retained)
+    expect(stats5m.peakRate).toBe(800);
+
+    // Therefore peaks differ across windows
+    expect(stats5m.peakRate).not.toBe(stats1m.peakRate);
   });
 });
 

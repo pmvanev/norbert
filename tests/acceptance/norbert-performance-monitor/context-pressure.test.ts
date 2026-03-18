@@ -26,6 +26,7 @@ import {
 import {
   CONTEXT_AMBER_THRESHOLD,
   CONTEXT_RED_THRESHOLD,
+  DEFAULT_URGENCY_THRESHOLDS,
 } from "../../../src/plugins/norbert-usage/domain/urgencyThresholds";
 
 // ---------------------------------------------------------------------------
@@ -246,12 +247,12 @@ describe("Context at 100% is in red urgency zone", () => {
 // ---------------------------------------------------------------------------
 
 describe("@property: context urgency thresholds match Gauge Cluster thresholds", () => {
-  it("amber and red thresholds are identical to Gauge Cluster values", () => {
-    // Given the shared urgency threshold configuration
-    // When compared to the Gauge Cluster's fuel gauge thresholds
-    // Then the amber threshold matches (both 70%)
-    expect(CONTEXT_AMBER_THRESHOLD).toBe(70);
-    // And the red threshold matches (both 90%)
-    expect(CONTEXT_RED_THRESHOLD).toBe(90);
+  it("PM amber and red thresholds equal the shared DEFAULT_URGENCY_THRESHOLDS", () => {
+    // Given the PM's context pressure thresholds
+    // When compared to the Gauge Cluster's shared threshold source
+    // Then the amber threshold matches the shared source
+    expect(CONTEXT_AMBER_THRESHOLD).toBe(DEFAULT_URGENCY_THRESHOLDS.contextAmber);
+    // And the red threshold matches the shared source
+    expect(CONTEXT_RED_THRESHOLD).toBe(DEFAULT_URGENCY_THRESHOLDS.contextRed);
   });
 });
