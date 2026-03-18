@@ -143,3 +143,87 @@ export interface MetricCardData {
   readonly subtitle: string;
   readonly urgency: Urgency;
 }
+
+// ---------------------------------------------------------------------------
+// SessionSummary -- per-session data for aggregate breakdown panel
+// ---------------------------------------------------------------------------
+
+export interface SessionSummary {
+  readonly sessionId: string;
+  readonly tokenRate: number;
+  readonly costRate: number;
+  readonly contextWindowPct: number;
+  readonly activeAgentCount: number;
+  readonly sessionCost: number;
+}
+
+// ---------------------------------------------------------------------------
+// AggregateMetrics -- cross-session aggregate from all active sessions
+// ---------------------------------------------------------------------------
+
+export interface AggregateMetrics {
+  readonly totalTokenRate: number;
+  readonly totalCostRate: number;
+  readonly totalActiveAgents: number;
+  readonly sessionCount: number;
+  readonly sessions: ReadonlyArray<SessionSummary>;
+}
+
+// ---------------------------------------------------------------------------
+// TimeWindowConfig -- configuration for time window selection
+// ---------------------------------------------------------------------------
+
+export interface TimeWindowConfig {
+  readonly durationMs: number;
+  readonly label: string;
+  readonly sampleIntervalMs: number;
+  readonly bufferCapacity: number;
+}
+
+// ---------------------------------------------------------------------------
+// TimeWindowId -- discriminated union for time window selection
+// ---------------------------------------------------------------------------
+
+export type TimeWindowId = "1m" | "5m" | "15m" | "session";
+
+// ---------------------------------------------------------------------------
+// PMViewMode -- discriminated union for Performance Monitor navigation
+// ---------------------------------------------------------------------------
+
+export type PMViewMode =
+  | { readonly tag: "aggregate" }
+  | { readonly tag: "session-detail"; readonly sessionId: string };
+
+// ---------------------------------------------------------------------------
+// CompactionEstimate -- estimated time until context compaction
+// ---------------------------------------------------------------------------
+
+export interface CompactionEstimate {
+  readonly estimatedMinutes: number;
+  readonly confidence: "high" | "low";
+  readonly currentPct: number;
+  readonly remainingTokens: number;
+}
+
+// ---------------------------------------------------------------------------
+// AgentMetrics -- per-agent metrics within a session
+// ---------------------------------------------------------------------------
+
+export interface AgentMetrics {
+  readonly agentId: string;
+  readonly agentRole: string;
+  readonly tokenRate: number;
+  readonly costRate: number;
+  readonly tokenTotal: number;
+}
+
+// ---------------------------------------------------------------------------
+// SessionDetailData -- pre-computed data for session detail view
+// ---------------------------------------------------------------------------
+
+export interface SessionDetailData {
+  readonly sessionId: string;
+  readonly metrics: SessionMetrics;
+  readonly agents: ReadonlyArray<AgentMetrics>;
+  readonly compaction: CompactionEstimate;
+}
