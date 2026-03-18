@@ -5,7 +5,7 @@
 /// convenient single-module access. No side effects, no IO imports.
 
 import type { SessionMetrics } from "./metricsAggregator";
-import type { CompactionEstimate } from "./types";
+import type { CompactionEstimate, PMViewMode, AgentMetrics, SessionDetailData } from "./types";
 
 // Re-export classifyContextUrgency so consumers can import from one module
 export { classifyContextUrgency } from "./urgencyThresholds";
@@ -77,3 +77,56 @@ export const computeCompactionEstimate = (
     remainingTokens,
   };
 };
+
+// ---------------------------------------------------------------------------
+// Navigation state machine -- pure functions
+// ---------------------------------------------------------------------------
+
+/** Base breadcrumb label for the Performance Monitor view. */
+const PM_VIEW_LABEL = "Performance Monitor";
+
+/** Create the default aggregate view mode. */
+export const createAggregateViewMode = (): PMViewMode => ({
+  tag: "aggregate",
+});
+
+/** Create a session detail view mode for the given session identifier. */
+export const createSessionDetailViewMode = (sessionId: string): PMViewMode => ({
+  tag: "session-detail",
+  sessionId,
+});
+
+/**
+ * Compute the breadcrumb string for the current navigation state.
+ *
+ * Aggregate mode: "Performance Monitor"
+ * Session detail: "Performance Monitor > {sessionId}"
+ */
+export const computeBreadcrumb = (viewMode: PMViewMode): string => {
+  switch (viewMode.tag) {
+    case "aggregate":
+      return PM_VIEW_LABEL;
+    case "session-detail":
+      return `${PM_VIEW_LABEL} > ${viewMode.sessionId}`;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Session detail data composition -- pure function
+// ---------------------------------------------------------------------------
+
+/**
+ * Compose session detail data from metrics and optional agent breakdown.
+ *
+ * When agents are not provided, defaults to an empty array (graceful
+ * degradation). Compaction estimate is derived from session metrics.
+ */
+export const computeSessionDetailData = (
+  metrics: SessionMetrics,
+  agents: ReadonlyArray<AgentMetrics> = [],
+): SessionDetailData => ({
+  sessionId: metrics.sessionId,
+  metrics,
+  agents,
+  compaction: computeCompactionEstimate(metrics),
+});
