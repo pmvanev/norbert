@@ -13,12 +13,13 @@
 
 import { useState } from "react";
 import type { MetricsStore } from "../adapters/metricsStore";
-import type { PMViewMode } from "../domain/types";
+import type { PMViewMode, TimeWindowId } from "../domain/types";
 import {
   createAggregateViewMode,
   createSessionDetailViewMode,
   computeBreadcrumb,
 } from "../domain/performanceMonitor";
+import { PMTimeWindowSelector } from "./PMTimeWindowSelector";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -32,8 +33,12 @@ interface PerformanceMonitorViewProps {
 // Component
 // ---------------------------------------------------------------------------
 
+/** Default time window for Performance Monitor. */
+const DEFAULT_TIME_WINDOW: TimeWindowId = "1m";
+
 export const PerformanceMonitorView = ({ store: _store }: PerformanceMonitorViewProps) => {
   const [viewMode, setViewMode] = useState<PMViewMode>(createAggregateViewMode);
+  const [selectedWindow, setSelectedWindow] = useState<TimeWindowId>(DEFAULT_TIME_WINDOW);
 
   const navigateToSession = (sessionId: string): void => {
     setViewMode(createSessionDetailViewMode(sessionId));
@@ -49,6 +54,10 @@ export const PerformanceMonitorView = ({ store: _store }: PerformanceMonitorView
     <div className="performance-monitor" role="region" aria-label="Performance Monitor">
       <div className="sec-hdr">
         <span className="sec-t">{breadcrumb}</span>
+        <PMTimeWindowSelector
+          selectedWindow={selectedWindow}
+          onChange={setSelectedWindow}
+        />
         <span className="sec-a">multi-session</span>
       </div>
       <div className="pm-main">
