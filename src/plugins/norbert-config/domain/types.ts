@@ -29,6 +29,8 @@ export interface EnvVar {
 
 export interface AgentDefinition {
   readonly name: string;
+  readonly persona: string;
+  readonly role: string;
   readonly model: string;
   readonly toolCount: number;
   readonly tools: readonly string[];

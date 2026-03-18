@@ -54,14 +54,25 @@ const EnvVarRow: FC<{ readonly envVar: EnvVar }> = ({ envVar }) => {
 // Detail renderers
 // ---------------------------------------------------------------------------
 
+/** Format agent display name: "Persona, name" if persona exists, otherwise just name. */
+const formatAgentDisplayName = (agent: { readonly persona: string; readonly name: string }): string =>
+  agent.persona ? `${agent.persona}, ${agent.name}` : agent.name;
+
 const AgentDetail: FC<{ readonly agent: AgentDefinition }> = ({ agent }) => (
   <div className="config-detail-content">
     <div className="config-detail-header">
-      <span className="config-detail-title">{agent.name}</span>
+      <span className="config-detail-title">{formatAgentDisplayName(agent)}</span>
       <ScopeBadge scope={agent.scope} source={agent.source} />
       <span className="config-card-meta" data-mono="">
         {agent.model} {"\u00B7"} {agent.toolCount} tool{agent.toolCount !== 1 ? "s" : ""}
       </span>
+    </div>
+    {agent.role && (
+      <p className="config-card-description">{agent.role}</p>
+    )}
+    <div className="config-card-section">
+      <span className="config-card-section-label">Source</span>
+      <span className="config-card-source" data-mono="">{agent.filePath}</span>
     </div>
     <p className="config-card-description">{agent.description}</p>
     <div className="config-card-section">
@@ -80,10 +91,6 @@ const AgentDetail: FC<{ readonly agent: AgentDefinition }> = ({ agent }) => (
         </div>
       </div>
     )}
-    <div className="config-card-section">
-      <span className="config-card-section-label">Source</span>
-      <span className="config-card-source" data-mono="">{agent.filePath}</span>
-    </div>
   </div>
 );
 
@@ -158,6 +165,10 @@ const SkillDetail: FC<{ readonly skill: SkillDefinition }> = ({ skill }) => (
       <span className="config-detail-title">{skill.name}</span>
       <ScopeBadge scope={skill.scope} source={skill.source} />
     </div>
+    <div className="config-card-section">
+      <span className="config-card-section-label">Source</span>
+      <span className="config-card-source" data-mono="">{skill.filePath}</span>
+    </div>
     {skill.content ? (
       <div className="config-doc-body">
         <Markdown remarkPlugins={[remarkGfm]}>{skill.content}</Markdown>
@@ -165,10 +176,6 @@ const SkillDetail: FC<{ readonly skill: SkillDefinition }> = ({ skill }) => (
     ) : (
       <p className="config-card-description">{skill.description}</p>
     )}
-    <div className="config-card-section">
-      <span className="config-card-section-label">Source</span>
-      <span className="config-card-source" data-mono="">{skill.filePath}</span>
-    </div>
   </div>
 );
 
@@ -183,6 +190,10 @@ const RuleDetail: FC<{ readonly rule: RuleEntry }> = ({ rule }) => {
         <ScopeBadge scope={rule.scope} source={rule.source} />
       </div>
       <div className="config-card-section">
+        <span className="config-card-section-label">Source</span>
+        <span className="config-card-source" data-mono="">{rule.filePath}</span>
+      </div>
+      <div className="config-card-section">
         {rule.filePath.endsWith(".md") ? (
           <div className="config-doc-body">
             <Markdown remarkPlugins={[remarkGfm]}>{rule.text}</Markdown>
@@ -190,10 +201,6 @@ const RuleDetail: FC<{ readonly rule: RuleEntry }> = ({ rule }) => {
         ) : (
           <p className="config-card-rule-text">{rule.text}</p>
         )}
-      </div>
-      <div className="config-card-section">
-        <span className="config-card-section-label">Source</span>
-        <span className="config-card-source" data-mono="">{rule.filePath}</span>
       </div>
     </div>
   );

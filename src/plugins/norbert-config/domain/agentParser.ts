@@ -16,6 +16,7 @@ import type { AgentDefinition, AgentParseResult, ConfigScope } from "./types";
 interface Frontmatter {
   readonly model: string;
   readonly tools: readonly string[];
+  readonly description: string;
 }
 
 const FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---/;
@@ -28,7 +29,7 @@ function extractFrontmatter(content: string): {
 
   if (!match) {
     return {
-      frontmatter: { model: "default", tools: [] },
+      frontmatter: { model: "default", tools: [], description: "" },
       body: content,
     };
   }
@@ -49,7 +50,13 @@ function extractFrontmatter(content: string): {
 function parseFrontmatterYaml(yaml: string): Frontmatter {
   const model = extractModel(yaml);
   const tools = extractTools(yaml);
-  return { model, tools };
+  const description = extractFrontmatterDescription(yaml);
+  return { model, tools, description };
+}
+
+function extractFrontmatterDescription(yaml: string): string {
+  const match = yaml.match(/^description:\s*(.+)$/m);
+  return match ? match[1].trim() : "";
 }
 
 function extractModel(yaml: string): string {
@@ -74,6 +81,23 @@ function extractTools(yaml: string): readonly string[] {
 
 function deriveAgentName(filename: string): string {
   return filename.replace(/\.md$/, "");
+}
+
+// ---------------------------------------------------------------------------
+// Persona extraction -- "You are X, a Y" pattern
+// ---------------------------------------------------------------------------
+
+interface PersonaInfo {
+  readonly persona: string;
+  readonly role: string;
+}
+
+const PERSONA_REGEX = /You are (\w+),?\s+(?:a |an )?(.+?)(?:\.|$)/m;
+
+function extractPersona(body: string): PersonaInfo {
+  const match = body.match(PERSONA_REGEX);
+  if (!match) return { persona: "", role: "" };
+  return { persona: match[1], role: match[2].trim() };
 }
 
 // ---------------------------------------------------------------------------
@@ -109,11 +133,14 @@ export function parseAgentFile(
 
   const { frontmatter, body } = extractFrontmatter(content);
   const name = deriveAgentName(filename);
-  const description = extractDescription(body);
+  const description = frontmatter.description || extractDescription(body);
+  const { persona, role } = extractPersona(body);
   const systemPrompt = body;
 
   const agent: AgentDefinition = {
     name,
+    persona,
+    role,
     model: frontmatter.model,
     toolCount: frontmatter.tools.length,
     tools: frontmatter.tools,

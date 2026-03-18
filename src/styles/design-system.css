@@ -1159,6 +1159,28 @@ code, pre, .mono,
   flex-shrink: 0;
 }
 
+/* Multi-line list rows (agents, skills with descriptions) */
+.config-list-row.config-list-row-multi {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.config-list-row-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.config-list-desc {
+  font-size: 9px;
+  color: var(--text-m);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
 /* Detail panel */
 .config-detail-content {
   padding: 8px 0;

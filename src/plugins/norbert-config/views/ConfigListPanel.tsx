@@ -43,6 +43,10 @@ const ScopeBadge: FC<{ readonly scope: string; readonly source?: string }> = ({ 
 // List row components
 // ---------------------------------------------------------------------------
 
+/** Format agent display name: "Persona, name" if persona exists, otherwise just name. */
+const formatAgentDisplayName = (agent: { readonly persona: string; readonly name: string }): string =>
+  agent.persona ? `${agent.persona}, ${agent.name}` : agent.name;
+
 const AgentRow: FC<{
   readonly result: AgentParseResult;
   readonly active: boolean;
@@ -54,13 +58,18 @@ const AgentRow: FC<{
   const { agent } = result;
   return (
     <button
-      className={`config-list-row${active ? " active" : ""}`}
+      className={`config-list-row config-list-row-multi${active ? " active" : ""}`}
       onClick={onSelect}
       type="button"
     >
-      <span className="config-list-name">{agent.name}</span>
-      <ScopeBadge scope={agent.scope} source={agent.source} />
-      <span className="config-list-meta" data-mono="">{agent.model}</span>
+      <div className="config-list-row-top">
+        <span className="config-list-name">{formatAgentDisplayName(agent)}</span>
+        <ScopeBadge scope={agent.scope} source={agent.source} />
+        <span className="config-list-meta" data-mono="">{agent.model}</span>
+      </div>
+      {agent.description && (
+        <span className="config-list-desc">{agent.description}</span>
+      )}
     </button>
   );
 };
@@ -102,12 +111,17 @@ const SkillRow: FC<{
   readonly onSelect: () => void;
 }> = ({ skill, active, onSelect }) => (
   <button
-    className={`config-list-row${active ? " active" : ""}`}
+    className={`config-list-row config-list-row-multi${active ? " active" : ""}`}
     onClick={onSelect}
     type="button"
   >
-    <span className="config-list-name">{skill.name}</span>
-    <ScopeBadge scope={skill.scope} source={skill.source} />
+    <div className="config-list-row-top">
+      <span className="config-list-name">{skill.name}</span>
+      <ScopeBadge scope={skill.scope} source={skill.source} />
+    </div>
+    {skill.description && (
+      <span className="config-list-desc">{skill.description}</span>
+    )}
   </button>
 );
 
