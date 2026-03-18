@@ -1,0 +1,272 @@
+journey:
+  name: "Performance Monitoring"
+  goal: "Understand and manage resource consumption across all active Claude Code sessions through a multi-metric, multi-scope monitoring dashboard"
+  persona: "Ravi Patel -- Claude Code power user monitoring 2-5 concurrent sessions"
+
+  emotional_arc:
+    start: "Curious, slightly anxious about total resource consumption"
+    middle: "Increasingly informed and focused as metrics reveal the full picture"
+    end: "Confident and satisfied -- found the specific answer to the resource question"
+
+  relationship_to_existing:
+    oscilloscope_us005: "Subsumed -- token rate waveform becomes one chart in PM grid; oscilloscope view remains for backward compatibility"
+    gauge_cluster_us003: "Complementary -- ambient HUD vs deep-dive diagnostic"
+    usage_dashboard_us006: "Complementary -- retrospective summary vs live streaming metrics"
+
+steps:
+  - id: 1
+    name: "Open Performance Monitor"
+    action: "Select Performance Monitor mode from Usage tab toolbar"
+
+    shared_artifacts:
+      - name: "total_token_rate"
+        source: "MetricsAggregator (sum across active sessions)"
+        displayed_as: "${total_token_rate} tok/s"
+        consumers:
+          - "PM grid: tokens/s (total) chart"
+          - "PM stats bar: current rate"
+
+      - name: "cost_per_min"
+        source: "MetricsAggregator (sum cost rate * 60)"
+        displayed_as: "$${cost_per_min}/min"
+        consumers:
+          - "PM grid: cost/min chart"
+          - "PM stats bar"
+
+      - name: "active_agents_total"
+        source: "MetricsAggregator (sum activeAgentCount across sessions)"
+        displayed_as: "${active_agents_total} total"
+        consumers:
+          - "PM grid: active agents card"
+
+      - name: "session_list"
+        source: "Event Source Adapter (active sessions from sessions table)"
+        displayed_as: "Per-session rows in breakdown"
+        consumers:
+          - "PM grid: per-session breakdown"
+          - "PM drill-down navigation"
+
+      - name: "time_window"
+        source: "User selection state (default: 1m)"
+        displayed_as: "[1m] [5m] [15m] [Session]"
+        consumers:
+          - "All PM charts (time axis)"
+          - "Stats bar (window duration label)"
+          - "Sample resolution computation"
+
+    emotional_state:
+      entry: "Curious, slightly anxious"
+      exit: "Oriented -- sees the aggregate picture"
+
+    integration_checkpoint: |
+      - PM view registered with correct mode tab
+      - All metrics sourced from same data pipeline as gauge cluster
+      - Time window defaults to 1m (matches existing oscilloscope)
+      - Session list matches broadcast bar session list
+
+    gherkin: |
+      Scenario: Performance Monitor displays aggregate metric grid
+        Given Ravi Patel has 3 active sessions running
+        And session "refactor-auth" is burning 312 tok/s
+        And session "migrate-db" is burning 185 tok/s
+        And session "test-coverage" is burning 30 tok/s
+        When Ravi opens the Performance Monitor view
+        Then the tokens/s total chart shows approximately 527 tok/s
+        And the cost/min chart shows the aggregate cost rate
+        And the active agents card shows the total agent count
+        And the per-session breakdown lists all 3 sessions with individual rates
+
+  - id: 2
+    name: "Scan Aggregate Metric Grid"
+    action: "Read the metric grid to assess overall resource consumption"
+
+    shared_artifacts:
+      - name: "per_session_token_rate"
+        source: "SessionMetrics.burnRate per active session"
+        displayed_as: "Bar widths proportional to rate, numeric label"
+        consumers:
+          - "PM grid: per-session breakdown bars"
+          - "PM grid: per-session labels"
+
+      - name: "context_pct_per_session"
+        source: "SessionMetrics.contextWindowPct per session"
+        displayed_as: "Per-session % value and trend line color"
+        consumers:
+          - "PM grid: context % chart"
+          - "PM grid: urgency coloring (amber/red)"
+
+      - name: "urgency_thresholds"
+        source: "Configuration (shared with Gauge Cluster)"
+        displayed_as: "Dashed threshold lines on charts"
+        consumers:
+          - "PM grid: context % amber/red lines"
+          - "Gauge Cluster: fuel gauge zones"
+
+    emotional_state:
+      entry: "Oriented"
+      exit: "Informed, possibly concerned if metrics are in amber/red zone"
+
+    integration_checkpoint: |
+      - Sum of per-session rates equals total rate (no rounding divergence visible)
+      - Urgency thresholds match gauge cluster (amber 70%, red 90% for context)
+      - Chart time axes synchronized across all grid cells
+
+    gherkin: |
+      Scenario: Aggregate metrics reflect sum of session metrics
+        Given 3 sessions with token rates 312, 185, and 30 tok/s
+        When Ravi views the aggregate tokens/s chart
+        Then the total shows approximately 527 tok/s
+        And each session's contribution is visible in the per-session breakdown
+
+      Scenario: Context pressure shows urgency coloring
+        Given session "test-coverage" has context utilization at 82%
+        And the amber threshold is configured at 70%
+        When Ravi views the context window chart
+        Then the "test-coverage" trace is colored amber
+        And a dashed line marks the 70% amber threshold
+
+  - id: 3
+    name: "Drill into Session Detail"
+    action: "Click a session in the per-session breakdown to see session-level detail"
+
+    shared_artifacts:
+      - name: "selected_session_id"
+        source: "User click on session row"
+        displayed_as: "Session name in header breadcrumb"
+        consumers:
+          - "PM detail view: header"
+          - "PM detail view: all charts (scoped to session)"
+          - "Back navigation target"
+
+      - name: "session_token_rate"
+        source: "SessionMetrics.burnRate for selected session"
+        displayed_as: "${session_token_rate} tok/s"
+        consumers:
+          - "PM detail: token rate chart"
+          - "PM detail: stats bar"
+
+      - name: "agent_breakdown"
+        source: "Per-agent metrics derived from event attribution"
+        displayed_as: "Agent list with individual rates"
+        consumers:
+          - "PM detail: agents panel"
+
+      - name: "operational_metrics"
+        source: "Derived from event stream analysis"
+        displayed_as: "Inline stat row (tool calls/s, latency, errors, cache)"
+        consumers:
+          - "PM detail: operational metrics bar"
+
+    emotional_state:
+      entry: "Focused -- has identified the session of interest"
+      exit: "Diagnostic confidence -- understands session resource profile"
+
+    integration_checkpoint: |
+      - Session drill-down uses same time window as aggregate view
+      - Back button restores aggregate view with same state
+      - Session-level metrics here match same session data in aggregate view
+      - Agent breakdown sums to session total
+
+    gherkin: |
+      Scenario: Drill down from aggregate to session detail
+        Given Ravi is viewing the aggregate Performance Monitor
+        And session "refactor-auth" shows 312 tok/s in the breakdown
+        When Ravi clicks on "refactor-auth" in the session list
+        Then the view transitions to session detail for "refactor-auth"
+        And the header shows "Performance Monitor > refactor-auth"
+        And the token rate chart shows the session-specific waveform
+        And a Back button is visible to return to aggregate view
+
+      Scenario: Agent breakdown visible in session detail
+        Given Ravi is viewing session detail for "refactor-auth"
+        And the session has 2 active agents
+        When the agent breakdown loads
+        Then each agent is listed with its individual token rate
+        And the sum of agent rates approximates the session total
+
+  - id: 4
+    name: "Adjust Time Window"
+    action: "Select a different time window from the window selector"
+
+    shared_artifacts:
+      - name: "time_window_ms"
+        source: "User selection (1m=60000, 5m=300000, 15m=900000)"
+        displayed_as: "Active button highlight in selector"
+        consumers:
+          - "All chart time axes"
+          - "Stats bar window duration"
+          - "Sample resolution computation"
+
+      - name: "sample_resolution"
+        source: "Computed from time_window_ms"
+        displayed_as: "Resolution: ${resolution} in stats bar"
+        consumers:
+          - "Time-series buffer sampling"
+          - "Chart rendering (point density)"
+
+      - name: "historical_samples"
+        source: "Time-series buffer (live) or SQL query (playback)"
+        displayed_as: "Waveform data points"
+        consumers:
+          - "All waveform charts"
+
+    emotional_state:
+      entry: "Investigating a specific pattern"
+      exit: "Confident -- has temporal context for understanding the pattern"
+
+    integration_checkpoint: |
+      - Wider time windows use proportionally lower sample resolution
+      - Stats (peak, avg) reflect selected window, not fixed 60s
+      - Time window persists across aggregate/detail view switches
+
+    gherkin: |
+      Scenario: Switch to 5-minute time window
+        Given Ravi is viewing the Performance Monitor with 1-minute window
+        When Ravi selects the "5m" time window
+        Then all charts expand to show the last 5 minutes of data
+        And the stats bar shows "Window: 5m"
+        And the grid line interval adjusts to the wider window
+        And the sample resolution decreases to approximately 500ms
+
+      Scenario: Time window persists across drill-down
+        Given Ravi has selected the 15-minute time window
+        When Ravi drills into session "refactor-auth"
+        Then the session detail view uses the same 15-minute window
+        And when Ravi returns to aggregate view the 15-minute window is preserved
+
+error_paths:
+  - id: "A"
+    name: "No Active Sessions"
+    trigger: "User opens PM with no active Claude Code sessions"
+    behavior: "Empty state with guidance and link to most recent historical session"
+    emotional_design: "Inviting, not blaming. Clear next step."
+
+  - id: "B"
+    name: "Session Ends During Drill-Down"
+    trigger: "Active session ends while user is viewing its detail"
+    behavior: "Charts freeze at final values with 'Session ended at HH:MM' indicator. Time window controls remain for historical review."
+    emotional_design: "No abrupt blank. Graceful transition to playback."
+
+  - id: "C"
+    name: "Metric Data Unavailable"
+    trigger: "Specific metric cannot be computed (e.g., context % missing from payloads)"
+    behavior: "Chart slot shows explanatory message. Layout remains stable."
+    emotional_design: "Transparent about limitation. Does not pretend data exists."
+
+integration_validation:
+  shared_artifact_consistency:
+    - artifact: "urgency_thresholds"
+      must_match_across: [2, "gauge_cluster_us003"]
+      failure_message: "Context urgency thresholds must be identical in Performance Monitor and Gauge Cluster"
+
+    - artifact: "total_token_rate"
+      must_match_across: [1, 2]
+      failure_message: "Total token rate in header must equal sum of per-session rates in breakdown"
+
+    - artifact: "time_window"
+      must_match_across: [1, 2, 3, 4]
+      failure_message: "Time window selection must apply uniformly to all views"
+
+    - artifact: "session_list"
+      must_match_across: [1, "broadcast_bar"]
+      failure_message: "Session list must be consistent with broadcast bar session picker"
