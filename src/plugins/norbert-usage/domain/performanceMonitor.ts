@@ -4,8 +4,7 @@
 /// Re-exports classifyContextUrgency from urgencyThresholds for
 /// convenient single-module access. No side effects, no IO imports.
 
-import type { SessionMetrics } from "./metricsAggregator";
-import type { CompactionEstimate, PMViewMode, AgentMetrics, SessionDetailData } from "./types";
+import type { SessionMetrics, CompactionEstimate, PMViewMode, AgentMetrics, SessionDetailData } from "./types";
 
 // Re-export classifyContextUrgency so consumers can import from one module
 export { classifyContextUrgency } from "./urgencyThresholds";
@@ -21,19 +20,25 @@ const MIN_RELIABLE_BURN_RATE = 1;
 const SECONDS_PER_MINUTE = 60;
 
 /**
- * Compute estimated time until context window compaction.
- *
- * Remaining headroom divided by burn rate gives seconds to exhaustion,
- * converted to minutes. When burn rate is near zero the estimate is
- * marked low-confidence since extrapolation is unreliable.
- */
-/**
  * Convert a cost rate from dollars-per-second to dollars-per-minute.
  *
  * Pure scalar conversion: rate * 60.
  */
 export const computeCostRatePerMinute = (costRatePerSecond: number): number =>
   costRatePerSecond * SECONDS_PER_MINUTE;
+
+/**
+ * Format a cost rate (dollars-per-second) as a human-readable per-minute string.
+ *
+ * Shows four decimal places for very small rates (< $0.01/min),
+ * two decimal places otherwise, and "$0.00/min" for zero.
+ */
+export const formatCostPerMinute = (costRatePerSecond: number): string => {
+  const perMin = computeCostRatePerMinute(costRatePerSecond);
+  if (perMin === 0) return "$0.00/min";
+  if (perMin < 0.01) return `$${perMin.toFixed(4)}/min`;
+  return `$${perMin.toFixed(2)}/min`;
+};
 
 // ---------------------------------------------------------------------------
 // Per-session cost rate estimation
@@ -58,6 +63,13 @@ export const estimateSessionCostRate = (session: SessionMetrics): number => {
   return session.sessionCost > 0 ? session.sessionCost : 0;
 };
 
+/**
+ * Compute estimated time until context window compaction.
+ *
+ * Remaining headroom divided by burn rate gives seconds to exhaustion,
+ * converted to minutes. When burn rate is near zero the estimate is
+ * marked low-confidence since extrapolation is unreliable.
+ */
 export const computeCompactionEstimate = (
   metrics: SessionMetrics,
 ): CompactionEstimate => {

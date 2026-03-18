@@ -5,7 +5,7 @@
 /// No side effects, no IO imports. Each instrument computation is a small
 /// pure function composed into the final result.
 
-import type { SessionMetrics } from "./types";
+import type { SessionMetrics, Urgency } from "./types";
 import {
   classifyContextUrgency,
   classifyTokenRateUrgency,

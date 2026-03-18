@@ -16,7 +16,6 @@ import type { MetricsStore } from "../adapters/metricsStore";
 import type { PMViewMode, TimeWindowId } from "../domain/types";
 import {
   createAggregateViewMode,
-  createSessionDetailViewMode,
   computeBreadcrumb,
 } from "../domain/performanceMonitor";
 import { PMTimeWindowSelector } from "./PMTimeWindowSelector";
@@ -37,16 +36,8 @@ interface PerformanceMonitorViewProps {
 const DEFAULT_TIME_WINDOW: TimeWindowId = "1m";
 
 export const PerformanceMonitorView = ({ store: _store }: PerformanceMonitorViewProps) => {
-  const [viewMode, setViewMode] = useState<PMViewMode>(createAggregateViewMode);
+  const [viewMode, _setViewMode] = useState<PMViewMode>(createAggregateViewMode);
   const [selectedWindow, setSelectedWindow] = useState<TimeWindowId>(DEFAULT_TIME_WINDOW);
-
-  const navigateToSession = (sessionId: string): void => {
-    setViewMode(createSessionDetailViewMode(sessionId));
-  };
-
-  const navigateToAggregate = (): void => {
-    setViewMode(createAggregateViewMode());
-  };
 
   const breadcrumb = computeBreadcrumb(viewMode);
 

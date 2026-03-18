@@ -11,7 +11,7 @@
  */
 
 import type { SessionDetailData, RateSample, AgentMetrics } from "../domain/types";
-import { computeCostRatePerMinute } from "../domain/performanceMonitor";
+import { formatCostPerMinute, estimateSessionCostRate } from "../domain/performanceMonitor";
 import { formatRateOverlay } from "../domain/oscilloscope";
 import { PMChart } from "./PMChart";
 
@@ -30,13 +30,6 @@ interface PMSessionDetailProps {
 // ---------------------------------------------------------------------------
 // Formatting helpers (pure)
 // ---------------------------------------------------------------------------
-
-const formatCostPerMinute = (costRatePerSecond: number): string => {
-  const perMin = computeCostRatePerMinute(costRatePerSecond);
-  if (perMin === 0) return "$0.00/min";
-  if (perMin < 0.01) return `$${perMin.toFixed(4)}/min`;
-  return `$${perMin.toFixed(2)}/min`;
-};
 
 const formatContextWindow = (pct: number): string =>
   `${Math.round(pct)}%`;
@@ -129,11 +122,7 @@ export const PMSessionDetail = ({
   isEnded = false,
 }: PMSessionDetailProps) => {
   const burnRateLabel = formatRateOverlay(detailData.metrics.burnRate);
-  const costLabel = formatCostPerMinute(
-    detailData.metrics.sessionCost > 0 && detailData.metrics.totalTokens > 0
-      ? (detailData.metrics.sessionCost / detailData.metrics.totalTokens) * detailData.metrics.burnRate
-      : 0,
-  );
+  const costLabel = formatCostPerMinute(estimateSessionCostRate(detailData.metrics));
 
   return (
     <div

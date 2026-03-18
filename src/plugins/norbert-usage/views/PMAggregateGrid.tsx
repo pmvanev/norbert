@@ -10,7 +10,7 @@
  */
 
 import type { RateSample, AggregateMetrics, SessionSummary } from "../domain/types";
-import { computeCostRatePerMinute } from "../domain/performanceMonitor";
+import { formatCostPerMinute } from "../domain/performanceMonitor";
 import { formatRateOverlay } from "../domain/oscilloscope";
 import { PMChart } from "./PMChart";
 
@@ -27,13 +27,6 @@ interface PMAggregateGridProps {
 // ---------------------------------------------------------------------------
 // Formatting helpers (pure)
 // ---------------------------------------------------------------------------
-
-const formatCostPerMinute = (costRatePerSecond: number): string => {
-  const perMin = computeCostRatePerMinute(costRatePerSecond);
-  if (perMin === 0) return "$0.00/min";
-  if (perMin < 0.01) return `$${perMin.toFixed(4)}/min`;
-  return `$${perMin.toFixed(2)}/min`;
-};
 
 const formatAgentCount = (count: number): string =>
   `${count} agent${count !== 1 ? "s" : ""}`;
