@@ -28,6 +28,7 @@ import { ConfigDetailPanel } from "./plugins/norbert-config/views/ConfigDetailPa
 import type { SelectedConfigItem } from "./plugins/norbert-config/domain/types";
 import { GaugeClusterView } from "./plugins/norbert-usage/views/GaugeClusterView";
 import { OscilloscopeView } from "./plugins/norbert-usage/views/OscilloscopeView";
+import { PerformanceMonitorView } from "./plugins/norbert-usage/views/PerformanceMonitorView";
 import { UsageDashboardView } from "./plugins/norbert-usage/views/UsageDashboardView";
 import { CostTicker } from "./plugins/norbert-usage/views/CostTicker";
 import { computeDashboardData } from "./plugins/norbert-usage/domain/dashboard";
@@ -383,10 +384,16 @@ function App() {
     };
     CostTickerWrapper.displayName = "CostTickerWrapper";
 
+    const PerformanceMonitorWrapper: FC = () => (
+      <PerformanceMonitorView store={usageMetricsStore} />
+    );
+    PerformanceMonitorWrapper.displayName = "PerformanceMonitorWrapper";
+
     registry.set("gauge-cluster", GaugeClusterWrapper);
     registry.set("oscilloscope", OscilloscopeWrapper);
     registry.set("usage-dashboard", UsageDashboardWrapper);
     registry.set("cost-ticker", CostTickerWrapper);
+    registry.set("performance-monitor", PerformanceMonitorWrapper);
 
     // norbert-config views: list view in main zone, detail view in secondary.
     const ConfigViewerWrapper: FC = () => (
