@@ -11,6 +11,7 @@ import type { NorbertPlugin, NorbertAPI } from "../types";
 import { NORBERT_USAGE_MANIFEST } from "./manifest";
 import { createHookProcessor } from "./hookProcessor";
 import { createMetricsStore } from "./adapters/metricsStore";
+import { createMultiSessionStore } from "./adapters/multiSessionStore";
 import { DEFAULT_PRICING_TABLE } from "./domain/pricingModel";
 import { appendSample } from "./domain/timeSeriesSampler";
 import { computeInstantaneousRates, type MetricsSnapshot } from "./domain/instantaneousRate";
@@ -22,6 +23,7 @@ import type { RateSample } from "./domain/types";
 // ---------------------------------------------------------------------------
 
 export const usageMetricsStore = createMetricsStore();
+export const usageMultiSessionStore = createMultiSessionStore();
 
 // Mutable snapshot for instantaneous rate computation.
 // Module-level singleton alongside the metrics store.
@@ -42,6 +44,10 @@ const OSCILLOSCOPE_VIEW_ICON = "activity"; // oscilloscope trace
 const USAGE_DASHBOARD_VIEW_ID = "usage-dashboard";
 const USAGE_DASHBOARD_VIEW_LABEL = "Usage Dashboard";
 const USAGE_DASHBOARD_VIEW_ICON = "bar-chart"; // usage dashboard
+
+const PERFORMANCE_MONITOR_VIEW_ID = "performance-monitor";
+const PERFORMANCE_MONITOR_VIEW_LABEL = "Performance Monitor";
+const PERFORMANCE_MONITOR_VIEW_ICON = "monitor"; // performance monitor
 
 // ---------------------------------------------------------------------------
 // Tab constants
@@ -101,6 +107,17 @@ const onLoad = (api: NorbertAPI): void => {
     label: USAGE_DASHBOARD_VIEW_LABEL,
     icon: USAGE_DASHBOARD_VIEW_ICON,
     primaryView: true,
+    minWidth: 400,
+    minHeight: 300,
+    floatMetric: null,
+  });
+
+  // Register the Performance Monitor view (multi-session mode view)
+  api.ui.registerView({
+    id: PERFORMANCE_MONITOR_VIEW_ID,
+    label: PERFORMANCE_MONITOR_VIEW_LABEL,
+    icon: PERFORMANCE_MONITOR_VIEW_ICON,
+    primaryView: false,
     minWidth: 400,
     minHeight: 300,
     floatMetric: null,

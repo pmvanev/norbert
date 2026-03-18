@@ -89,15 +89,27 @@ describe("norbert-usage manifest", () => {
 // ---------------------------------------------------------------------------
 
 describe("norbert-usage onLoad view registrations", () => {
-  it("registers exactly 3 views: gauge-cluster, oscilloscope, usage-dashboard", () => {
+  it("registers exactly 4 views: gauge-cluster, oscilloscope, usage-dashboard, performance-monitor", () => {
     const { api, calls } = createStubApi();
     norbertUsagePlugin.onLoad(api);
 
-    expect(calls.views).toHaveLength(3);
+    expect(calls.views).toHaveLength(4);
     const viewIds = calls.views.map((v) => v.id);
     expect(viewIds).toContain("gauge-cluster");
     expect(viewIds).toContain("oscilloscope");
     expect(viewIds).toContain("usage-dashboard");
+    expect(viewIds).toContain("performance-monitor");
+  });
+
+  it("performance-monitor is not primary and has no floatMetric", () => {
+    const { api, calls } = createStubApi();
+    norbertUsagePlugin.onLoad(api);
+
+    const pm = calls.views.find((v) => v.id === "performance-monitor");
+    expect(pm).toBeDefined();
+    expect(pm!.primaryView).toBe(false);
+    expect(pm!.floatMetric).toBeNull();
+    expect(pm!.label).toBe("Performance Monitor");
   });
 
   it("gauge-cluster has floatMetric 'session_cost' and is not primary", () => {
