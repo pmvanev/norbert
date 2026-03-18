@@ -21,9 +21,10 @@ import { CONFIG_SUB_TABS } from "../../../../../src/plugins/norbert-config/domai
 // ---------------------------------------------------------------------------
 
 describe("CONFIG_SUB_TABS const array", () => {
-  it("contains all 7 expected sub-tab values", () => {
+  it("contains all 8 expected sub-tab values", () => {
     expect(CONFIG_SUB_TABS).toEqual([
       "agents",
+      "commands",
       "hooks",
       "skills",
       "rules",
@@ -33,8 +34,8 @@ describe("CONFIG_SUB_TABS const array", () => {
     ]);
   });
 
-  it("is readonly and has exactly 7 entries", () => {
-    expect(CONFIG_SUB_TABS).toHaveLength(7);
+  it("is readonly and has exactly 8 entries", () => {
+    expect(CONFIG_SUB_TABS).toHaveLength(8);
   });
 });
 

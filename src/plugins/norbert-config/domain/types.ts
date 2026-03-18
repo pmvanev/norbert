@@ -71,7 +71,20 @@ export interface McpServerConfig {
 }
 
 // ---------------------------------------------------------------------------
-// SkillDefinition -- parsed skill/command metadata
+// CommandDefinition -- parsed command metadata from .claude/commands/*.md
+// ---------------------------------------------------------------------------
+
+export interface CommandDefinition {
+  readonly name: string;
+  readonly description: string;
+  readonly content: string;
+  readonly filePath: string;
+  readonly scope: ConfigScope;
+  readonly source: string;
+}
+
+// ---------------------------------------------------------------------------
+// SkillDefinition -- parsed skill metadata from plugin skills/
 // ---------------------------------------------------------------------------
 
 export interface SkillDefinition {
@@ -159,6 +172,7 @@ export type SettingsParseResult =
 
 export interface AggregatedConfig {
   readonly agents: readonly AgentParseResult[];
+  readonly commands: readonly CommandDefinition[];
   readonly hooks: readonly HookConfig[];
   readonly mcpServers: readonly McpServerConfig[];
   readonly skills: readonly SkillDefinition[];
@@ -182,6 +196,7 @@ export type ConfigReadResult =
 
 export type SelectedConfigItem =
   | { readonly tag: "agent"; readonly agent: AgentDefinition }
+  | { readonly tag: "command"; readonly command: CommandDefinition }
   | { readonly tag: "hook"; readonly hook: HookConfig }
   | { readonly tag: "mcp"; readonly server: McpServerConfig }
   | { readonly tag: "skill"; readonly skill: SkillDefinition }
@@ -195,6 +210,7 @@ export type SelectedConfigItem =
 
 export const CONFIG_SUB_TABS = [
   "agents",
+  "commands",
   "hooks",
   "skills",
   "rules",

@@ -21,6 +21,7 @@ import { Icon } from "../../../components/Icon";
 
 const SUB_TAB_LABELS: Record<ConfigSubTab, string> = {
   agents: "Agents",
+  commands: "Commands",
   hooks: "Hooks",
   mcp: "MCP Servers",
   skills: "Skills",
@@ -35,6 +36,7 @@ const SUB_TAB_LABELS: Record<ConfigSubTab, string> = {
 
 const SUB_TAB_ICONS: Record<ConfigSubTab, string> = {
   agents: "bot",
+  commands: "terminal",
   hooks: "anchor",
   mcp: "server",
   skills: "sparkles",

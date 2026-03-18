@@ -65,6 +65,7 @@ describe("configAggregator properties", () => {
           const rawConfig: RawClaudeConfig = {
             agents,
             commands: [],
+            skills: [],
             settings: null,
             claudeMdFiles: [],
             errors: [],
@@ -77,7 +78,7 @@ describe("configAggregator properties", () => {
     );
   });
 
-  it("skills output length equals commands input length", () => {
+  it("commands output length equals commands input length", () => {
     fc.assert(
       fc.property(
         fc.array(commandFileEntryArb, { minLength: 0, maxLength: 5 }),
@@ -85,13 +86,14 @@ describe("configAggregator properties", () => {
           const rawConfig: RawClaudeConfig = {
             agents: [],
             commands,
+            skills: [],
             settings: null,
             claudeMdFiles: [],
             errors: [],
             scope: "both",
           };
           const result = aggregateConfig(rawConfig);
-          expect(result.skills).toHaveLength(commands.length);
+          expect(result.commands).toHaveLength(commands.length);
         },
       ),
     );
@@ -105,6 +107,7 @@ describe("configAggregator properties", () => {
           const rawConfig: RawClaudeConfig = {
             agents: [],
             commands: [],
+            skills: [],
             settings: null,
             claudeMdFiles: [],
             errors,
@@ -126,6 +129,7 @@ describe("configAggregator properties", () => {
     const rawConfig: RawClaudeConfig = {
       agents: [],
       commands: [],
+      skills: [],
       settings: null,
       claudeMdFiles: [],
       errors: [],
@@ -146,6 +150,7 @@ describe("configAggregator properties", () => {
           const rawConfig: RawClaudeConfig = {
             agents: [agentEntry],
             commands: [],
+            skills: [],
             settings: null,
             claudeMdFiles: [],
             errors: [],
@@ -176,6 +181,7 @@ describe("configAggregator properties", () => {
           const rawConfig: RawClaudeConfig = {
             agents: [],
             commands: [],
+            skills: [],
             settings: null,
             claudeMdFiles,
             errors: [],

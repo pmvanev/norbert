@@ -197,6 +197,7 @@ struct PluginDetail {
 struct ClaudeConfig {
     agents: Vec<FileEntry>,
     commands: Vec<FileEntry>,
+    skills: Vec<FileEntry>,
     settings: Option<FileEntry>,
     hooks: Vec<FileEntry>,
     rules: Vec<FileEntry>,
@@ -391,6 +392,7 @@ fn collect_scope_config(
     ClaudeConfig {
         agents,
         commands,
+        skills: Vec::new(),
         settings,
         hooks: Vec::new(),
         rules,
@@ -501,6 +503,7 @@ fn scan_plugin_directory(
     source: &str,
     all_agents: &mut Vec<FileEntry>,
     all_commands: &mut Vec<FileEntry>,
+    all_skills: &mut Vec<FileEntry>,
     all_hooks: &mut Vec<FileEntry>,
     all_rules: &mut Vec<FileEntry>,
     all_errors: &mut Vec<ReadError>,
@@ -523,7 +526,7 @@ fn scan_plugin_directory(
     let (skills, errs) = read_md_files_recursive(
         &install_path.join("skills"), "plugin", source,
     );
-    all_commands.extend(skills);
+    all_skills.extend(skills);
     all_errors.extend(errs);
 
     // hooks/hooks.json — read as a FileEntry for frontend parsing
@@ -547,6 +550,7 @@ fn scan_plugin_directory(
 fn collect_plugin_configs(claude_dir: &std::path::Path) -> ClaudeConfig {
     let mut all_agents = Vec::new();
     let mut all_commands = Vec::new();
+    let mut all_skills = Vec::new();
     let mut all_hooks = Vec::new();
     let mut all_rules = Vec::new();
     let mut all_errors = Vec::new();
@@ -567,8 +571,8 @@ fn collect_plugin_configs(claude_dir: &std::path::Path) -> ClaudeConfig {
                     scanned_paths.insert(install_path.to_string_lossy().to_string());
                     scan_plugin_directory(
                         install_path, plugin_name,
-                        &mut all_agents, &mut all_commands, &mut all_hooks,
-                        &mut all_rules, &mut all_errors,
+                        &mut all_agents, &mut all_commands, &mut all_skills,
+                        &mut all_hooks, &mut all_rules, &mut all_errors,
                     );
                 }
             }
@@ -625,8 +629,8 @@ fn collect_plugin_configs(claude_dir: &std::path::Path) -> ClaudeConfig {
                         let source = format!("{}@{}", plugin_name, marketplace_name);
                         scan_plugin_directory(
                             &version_path, &source,
-                            &mut all_agents, &mut all_commands, &mut all_hooks,
-                            &mut all_rules, &mut all_errors,
+                            &mut all_agents, &mut all_commands, &mut all_skills,
+                            &mut all_hooks, &mut all_rules, &mut all_errors,
                         );
                     }
                 }
@@ -637,6 +641,7 @@ fn collect_plugin_configs(claude_dir: &std::path::Path) -> ClaudeConfig {
     ClaudeConfig {
         agents: all_agents,
         commands: all_commands,
+        skills: all_skills,
         settings: None,
         hooks: all_hooks,
         rules: all_rules,
@@ -654,6 +659,7 @@ fn merge_configs(a: ClaudeConfig, b: ClaudeConfig) -> ClaudeConfig {
     ClaudeConfig {
         agents: [a.agents, b.agents].concat(),
         commands: [a.commands, b.commands].concat(),
+        skills: [a.skills, b.skills].concat(),
         settings,
         hooks: [a.hooks, b.hooks].concat(),
         rules: [a.rules, b.rules].concat(),
@@ -677,6 +683,7 @@ fn read_claude_config(scope: String) -> Result<ClaudeConfig, String> {
     let empty_config = ClaudeConfig {
         agents: Vec::new(),
         commands: Vec::new(),
+        skills: Vec::new(),
         settings: None,
         hooks: Vec::new(),
         rules: Vec::new(),

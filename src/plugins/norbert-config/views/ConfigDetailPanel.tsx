@@ -9,6 +9,7 @@ import remarkGfm from "remark-gfm";
 import type {
   SelectedConfigItem,
   AgentDefinition,
+  CommandDefinition,
   HookConfig,
   McpServerConfig,
   SkillDefinition,
@@ -90,6 +91,26 @@ const AgentDetail: FC<{ readonly agent: AgentDefinition }> = ({ agent }) => (
           ))}
         </div>
       </div>
+    )}
+  </div>
+);
+
+const CommandDetail: FC<{ readonly command: CommandDefinition }> = ({ command }) => (
+  <div className="config-detail-content">
+    <div className="config-detail-header">
+      <span className="config-detail-title">{command.name}</span>
+      <ScopeBadge scope={command.scope} source={command.source} />
+    </div>
+    <div className="config-card-section">
+      <span className="config-card-section-label">Source</span>
+      <span className="config-card-source" data-mono="">{command.filePath}</span>
+    </div>
+    {command.content ? (
+      <div className="config-doc-body">
+        <Markdown remarkPlugins={[remarkGfm]}>{command.content}</Markdown>
+      </div>
+    ) : (
+      <p className="config-card-description">{command.description}</p>
     )}
   </div>
 );
@@ -306,6 +327,8 @@ export const ConfigDetailPanel: FC<ConfigDetailPanelProps> = ({ selection }) => 
     switch (selection.tag) {
       case "agent":
         return <AgentDetail agent={selection.agent} />;
+      case "command":
+        return <CommandDetail command={selection.command} />;
       case "hook":
         return <HookDetail hook={selection.hook} />;
       case "mcp":

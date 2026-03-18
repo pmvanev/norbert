@@ -9,6 +9,7 @@ import type {
   ConfigSubTab,
   AggregatedConfig,
   AgentParseResult,
+  CommandDefinition,
   HookConfig,
   McpServerConfig,
   SkillDefinition,
@@ -73,6 +74,26 @@ const AgentRow: FC<{
     </button>
   );
 };
+
+const CommandRow: FC<{
+  readonly command: CommandDefinition;
+  readonly active: boolean;
+  readonly onSelect: () => void;
+}> = ({ command, active, onSelect }) => (
+  <button
+    className={`config-list-row config-list-row-multi${active ? " active" : ""}`}
+    onClick={onSelect}
+    type="button"
+  >
+    <div className="config-list-row-top">
+      <span className="config-list-name">{command.name}</span>
+      <ScopeBadge scope={command.scope} source={command.source} />
+    </div>
+    {command.description && (
+      <span className="config-list-desc">{command.description}</span>
+    )}
+  </button>
+);
 
 const HookRow: FC<{
   readonly hook: HookConfig;
@@ -191,6 +212,8 @@ const DocRow: FC<{
 const agentKey = (r: AgentParseResult, i: number): string =>
   r.tag === "parsed" ? r.agent.filePath : `error-${i}`;
 
+const commandKey = (c: CommandDefinition): string => c.filePath;
+
 const hookKey = (h: HookConfig, i: number): string =>
   `${h.event}-${h.command}-${i}`;
 
@@ -236,6 +259,27 @@ export const ConfigListPanel: FC<ConfigListPanelProps> = ({
                     ? onSelect({ tag: "agent", agent: result.agent }, key)
                     : undefined
                 }
+              />
+            );
+          })}
+        </div>
+      );
+    }
+
+    case "commands": {
+      if (config.commands.length === 0) {
+        return <EmptyState category="commands" guidance="Add command definitions in .claude/commands/ as markdown files." />;
+      }
+      return (
+        <div className="config-list" role="listbox" aria-label="Commands">
+          {config.commands.map((command) => {
+            const key = commandKey(command);
+            return (
+              <CommandRow
+                key={key}
+                command={command}
+                active={selectedKey === key}
+                onSelect={() => onSelect({ tag: "command", command }, key)}
               />
             );
           })}

@@ -10,6 +10,7 @@
 import type {
   AgentParseResult,
   AggregatedConfig,
+  CommandDefinition,
   ConfigScope,
   DocFile,
   HookConfig,
@@ -48,6 +49,7 @@ export interface RawPluginDetail {
 export interface RawClaudeConfig {
   readonly agents: readonly FileEntry[];
   readonly commands: readonly FileEntry[];
+  readonly skills: readonly FileEntry[];
   readonly settings: FileEntry | null;
   readonly hooks: readonly FileEntry[];
   readonly rules: readonly FileEntry[];
@@ -97,11 +99,31 @@ function parseAgentEntry(entry: FileEntry): AgentParseResult {
 }
 
 // ---------------------------------------------------------------------------
+// Command aggregation
+// ---------------------------------------------------------------------------
+
+function aggregateCommands(commandFiles: readonly FileEntry[]): readonly CommandDefinition[] {
+  return commandFiles.map(parseCommandEntry);
+}
+
+function parseCommandEntry(entry: FileEntry): CommandDefinition {
+  const filename = extractFilename(entry.path);
+  const partial = parseSkillFile(filename, entry.content);
+
+  return {
+    ...partial,
+    filePath: entry.path,
+    scope: entry.scope,
+    source: entry.source,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Skill aggregation
 // ---------------------------------------------------------------------------
 
-function aggregateSkills(commandFiles: readonly FileEntry[]): readonly SkillDefinition[] {
-  return commandFiles.map(parseSkillEntry);
+function aggregateSkills(skillFiles: readonly FileEntry[]): readonly SkillDefinition[] {
+  return skillFiles.map(parseSkillEntry);
 }
 
 function parseSkillEntry(entry: FileEntry): SkillDefinition {
@@ -286,7 +308,8 @@ function aggregateInstalledPlugins(
 
 export function aggregateConfig(rawConfig: RawClaudeConfig): AggregatedConfig {
   const agents = aggregateAgents(rawConfig.agents);
-  const skills = aggregateSkills(rawConfig.commands);
+  const commands = aggregateCommands(rawConfig.commands);
+  const skills = aggregateSkills(rawConfig.skills ?? []);
   const settings = aggregateSettings(rawConfig.settings);
   const docs = aggregateDocs(rawConfig.claudeMdFiles);
   const errors = [...rawConfig.errors];
@@ -308,6 +331,7 @@ export function aggregateConfig(rawConfig: RawClaudeConfig): AggregatedConfig {
 
   return {
     agents,
+    commands,
     skills,
     hooks: allHooks,
     mcpServers: settings.mcpServers,

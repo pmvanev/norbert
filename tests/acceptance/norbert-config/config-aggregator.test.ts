@@ -38,9 +38,10 @@ const readError = (path: string, error: string, scope: "user" | "project"): Read
   scope,
 });
 
-const emptyConfig = (scope: "user" | "project"): RawClaudeConfig => ({
+const emptyConfig = (scope: "user" | "project" | "both"): RawClaudeConfig => ({
   agents: [],
   commands: [],
+  skills: [],
   settings: null,
   claudeMdFiles: [],
   errors: [],
@@ -75,6 +76,7 @@ describe("User sees all configuration categories from .claude/ directory", () =>
           "user",
         ),
       ],
+      skills: [],
       settings: fileEntry(
         "~/.claude/settings.json",
         JSON.stringify({
@@ -101,8 +103,8 @@ describe("User sees all configuration categories from .claude/ directory", () =>
     // Then 2 agent definitions are available
     expect(aggregated.agents).toHaveLength(2);
 
-    // And 1 skill definition is available
-    expect(aggregated.skills).toHaveLength(1);
+    // And 1 command definition is available
+    expect(aggregated.commands).toHaveLength(1);
 
     // And 1 hook binding is available
     expect(aggregated.hooks).toHaveLength(1);
@@ -168,6 +170,7 @@ describe("Both user and project scopes aggregated with source annotations", () =
         ),
       ],
       commands: [],
+      skills: [],
       settings: null,
       claudeMdFiles: [],
       errors: [],
@@ -227,6 +230,7 @@ describe("Agents from both scopes combined in aggregated result", () => {
         fileEntry("./.claude/agents/c.md", "---\nmodel: sonnet-4\n---\n\nAgent C.", "project"),
       ],
       commands: [],
+      skills: [],
       settings: null,
       claudeMdFiles: [],
       errors: [],
@@ -254,6 +258,7 @@ describe("Per-file read errors isolated from successful reads", () => {
         fileEntry("~/.claude/agents/good-2.md", "---\nmodel: sonnet-4\n---\n\nAnother good agent.", "user"),
       ],
       commands: [],
+      skills: [],
       settings: null,
       claudeMdFiles: [],
       errors: [
@@ -285,6 +290,7 @@ describe("Settings parse error does not break agent and skill lists", () => {
       commands: [
         fileEntry("~/.claude/commands/deploy.md", "# Deploy\n\nDeploy to staging.", "user"),
       ],
+      skills: [],
       settings: fileEntry(
         "~/.claude/settings.json",
         "{ invalid json }",
@@ -301,8 +307,8 @@ describe("Settings parse error does not break agent and skill lists", () => {
     // Then agents are still parsed
     expect(aggregated.agents).toHaveLength(1);
 
-    // And skills are still parsed
-    expect(aggregated.skills).toHaveLength(1);
+    // And commands are still parsed
+    expect(aggregated.commands).toHaveLength(1);
 
     // And hooks/mcpServers/rules are empty due to the parse error
     expect(aggregated.hooks).toEqual([]);
