@@ -34,6 +34,7 @@ import {
   Hexagon,
   ArrowLeft,
   SquareActivity,
+  Terminal,
   type LucideProps,
 } from "lucide-react";
 
@@ -56,6 +57,7 @@ const ICON_REGISTRY: Readonly<Record<string, FC<LucideProps>>> = {
   "square-activity": SquareActivity,
 
   // Config viewer sub-tab icons
+  "terminal": Terminal,
   "bot": Bot,
   "anchor": Anchor,
   "server": Server,
