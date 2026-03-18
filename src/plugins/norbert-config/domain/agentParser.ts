@@ -93,11 +93,16 @@ interface PersonaInfo {
 }
 
 const PERSONA_REGEX = /You are (\w+),?\s+(?:a |an )?(.+?)(?:\.|$)/m;
+const ARTICLES = new Set(["a", "an", "the"]);
 
 function extractPersona(body: string): PersonaInfo {
   const match = body.match(PERSONA_REGEX);
   if (!match) return { persona: "", role: "" };
-  return { persona: match[1], role: match[2].trim() };
+  const firstWord = match[1];
+  if (ARTICLES.has(firstWord.toLowerCase())) {
+    return { persona: "", role: `${firstWord} ${match[2]}`.trim() };
+  }
+  return { persona: firstWord, role: match[2].trim() };
 }
 
 // ---------------------------------------------------------------------------

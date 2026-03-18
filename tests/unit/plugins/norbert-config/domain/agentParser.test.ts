@@ -186,6 +186,48 @@ describe("parseAgentFile with empty content", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Persona extraction: articles are not persona names
+// ---------------------------------------------------------------------------
+
+describe("persona extraction skips articles", () => {
+  it("treats 'the' as part of the role, not as a persona name", () => {
+    const content = "You are the solution architect for this project.";
+    const result = parseAgentFile("architect.md", content);
+    expect(result.tag).toBe("parsed");
+    if (result.tag !== "parsed") return;
+    expect(result.agent.persona).toBe("");
+    expect(result.agent.role).toBe("the solution architect for this project");
+  });
+
+  it("treats 'a' as part of the role, not as a persona name", () => {
+    const content = "You are a code review specialist.";
+    const result = parseAgentFile("reviewer.md", content);
+    expect(result.tag).toBe("parsed");
+    if (result.tag !== "parsed") return;
+    expect(result.agent.persona).toBe("");
+    expect(result.agent.role).toBe("a code review specialist");
+  });
+
+  it("treats 'an' as part of the role, not as a persona name", () => {
+    const content = "You are an expert debugger.";
+    const result = parseAgentFile("debugger.md", content);
+    expect(result.tag).toBe("parsed");
+    if (result.tag !== "parsed") return;
+    expect(result.agent.persona).toBe("");
+    expect(result.agent.role).toBe("an expert debugger");
+  });
+
+  it("preserves real persona names like Zeus", () => {
+    const content = "You are Zeus, a builder of agents.";
+    const result = parseAgentFile("nw-agent-builder.md", content);
+    expect(result.tag).toBe("parsed");
+    if (result.tag !== "parsed") return;
+    expect(result.agent.persona).toBe("Zeus");
+    expect(result.agent.role).toBe("builder of agents");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Properties: No frontmatter defaults
 // ---------------------------------------------------------------------------
 
