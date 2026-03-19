@@ -149,8 +149,8 @@ describe("Aggregate token buffer sums across all sessions", () => {
     expect(aggBuffer).toBeDefined();
     const latestSample = aggBuffer!.samples[aggBuffer!.samples.length - 1];
     expect(latestSample).toBeDefined();
-    // The aggregate sample value should approximately equal 527
-    expect(latestSample.tokenRate + latestSample.costRate).toBeGreaterThan(0); // buffer has data
+    // The aggregate sample value equals the sum: 312 + 185 + 30 = 527
+    expect(latestSample.tokenRate).toBe(527);
   });
 });
 
@@ -167,9 +167,12 @@ describe("Aggregate cost buffer sums across all sessions", () => {
     // When the aggregate cost buffer is read
     const aggBuffer = store.getAggregateBuffer("cost");
 
-    // Then the aggregate buffer contains summed cost data
+    // Then the aggregate cost value equals the sum: 0.18 + 0.004 = 0.184
+    // (category value stored in tokenRate field -- see multiSessionStore convention)
     expect(aggBuffer).toBeDefined();
     expect(aggBuffer!.samples.length).toBeGreaterThan(0);
+    const latestSample = aggBuffer!.samples[aggBuffer!.samples.length - 1];
+    expect(latestSample.tokenRate).toBeCloseTo(0.184);
   });
 });
 
@@ -372,9 +375,11 @@ describe("@property: aggregate sum always equals sum of per-session latest value
     // When the aggregate tokens buffer is read
     const aggBuffer = store.getAggregateBuffer("tokens");
 
-    // Then the aggregate sum invariant holds
+    // Then the aggregate sum invariant holds: aggregate equals sum of per-session latest values
     expect(aggBuffer).toBeDefined();
     expect(aggBuffer!.samples.length).toBeGreaterThan(0);
+    const expectedSum = rates.reduce((sum, r) => sum + r, 0);
+    expect(aggBuffer!.samples[aggBuffer!.samples.length - 1].tokenRate).toBe(expectedSum);
   });
 });
 

@@ -64,6 +64,14 @@ const extractCategoryValue = (
 ): number => samples[categoryId];
 
 /// Create a RateSample from a category value and timestamp.
+///
+/// Convention: all category values (tokens, cost, agents, context) are stored
+/// in the `tokenRate` field of the RateSample. The `costRate` field is set to 0.
+/// This reuses the existing RateSample type as a generic "category sample" --
+/// the field name is a misnomer for non-token categories but avoids introducing
+/// a separate CategorySample type. Consumers should read `tokenRate` to get the
+/// category value regardless of which category the buffer represents.
+/// TODO: introduce a dedicated CategorySample type to eliminate semantic mismatch.
 const createCategorySample = (value: number, timestamp: number): RateSample => ({
   timestamp,
   tokenRate: value,

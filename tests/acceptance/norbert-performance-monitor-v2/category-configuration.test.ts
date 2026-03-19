@@ -284,8 +284,8 @@ describe("Each category defines session table columns", () => {
     const tokens = getCategoryById("tokens");
 
     // When the session columns are read
-    // Then columns include expected headers
-    expect(tokens.sessionColumns.length).toBeGreaterThanOrEqual(3);
+    // Then columns include the expected headers
+    expect(tokens.sessionColumns).toEqual(["Session ID", "Tokens/s", "Agents", "Cost"]);
   });
 
   it("context category table has session ID, context %, urgency, remaining columns", () => {
@@ -293,8 +293,8 @@ describe("Each category defines session table columns", () => {
     const context = getCategoryById("context");
 
     // When the session columns are read
-    // Then columns include expected headers
-    expect(context.sessionColumns.length).toBeGreaterThanOrEqual(3);
+    // Then columns include the expected headers
+    expect(context.sessionColumns).toEqual(["Session ID", "Context %", "Urgency", "Remaining"]);
   });
 });
 

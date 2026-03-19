@@ -21,7 +21,6 @@ import { describe, it, expect } from "vitest";
 import {
   METRIC_CATEGORIES,
   getCategoryById,
-  type MetricCategoryId,
 } from "../../../src/plugins/norbert-usage/domain/categoryConfig";
 
 import {
@@ -32,10 +31,6 @@ import {
   createInitialMetrics,
   type SessionMetrics,
 } from "../../../src/plugins/norbert-usage/domain/metricsAggregator";
-
-import { createMultiSessionStore } from "../../../src/plugins/norbert-usage/adapters/multiSessionStore";
-import { createHookProcessor } from "../../../src/plugins/norbert-usage/hookProcessor";
-import { DEFAULT_PRICING_TABLE } from "../../../src/plugins/norbert-usage/domain/pricingModel";
 
 // ---------------------------------------------------------------------------
 // Helper
@@ -157,42 +152,8 @@ describe("Per-session grid shown when two or more sessions are active", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// FOCUSED SCENARIOS: Session Table Columns by Category
-// Traces to: Design spec Section 4 "Per-Session Breakdown"
-// ---------------------------------------------------------------------------
-
-describe("Session table columns change based on selected category", () => {
-  it("tokens category shows tokens/s, agents, cost columns", () => {
-    // Given the tokens category is selected
-    const tokens = getCategoryById("tokens");
-
-    // When the session columns are read
-    // Then the columns are specific to token monitoring
-    expect(tokens.sessionColumns).toBeDefined();
-    expect(tokens.sessionColumns.length).toBeGreaterThanOrEqual(3);
-  });
-
-  it("context category shows context %, urgency, remaining columns", () => {
-    // Given the context category is selected
-    const context = getCategoryById("context");
-
-    // When the session columns are read
-    // Then the columns are specific to context monitoring
-    expect(context.sessionColumns).toBeDefined();
-    expect(context.sessionColumns.length).toBeGreaterThanOrEqual(3);
-  });
-
-  it("agents category shows agents, tokens/s, status columns", () => {
-    // Given the agents category is selected
-    const agents = getCategoryById("agents");
-
-    // When the session columns are read
-    // Then the columns are specific to agent monitoring
-    expect(agents.sessionColumns).toBeDefined();
-    expect(agents.sessionColumns.length).toBeGreaterThanOrEqual(3);
-  });
-});
+// D5: Session table column tests moved to category-configuration.test.ts
+// where they assert specific column names instead of just length >= 3.
 
 // ---------------------------------------------------------------------------
 // FOCUSED SCENARIOS: Sidebar Current Value Display
@@ -383,30 +344,10 @@ describe("@property: every category has all required sidebar display fields", ()
 // ---------------------------------------------------------------------------
 
 describe("Performance Monitor v2 renders in the performance-monitor view slot", () => {
-  it("multiSessionStore exposes appendSessionSample for hook processor wiring", () => {
-    // Given the multi-session store created by the plugin
-    const store = createMultiSessionStore();
-
-    // When checking the store interface
-    // Then appendSessionSample is available as a function
-    expect(typeof store.appendSessionSample).toBe("function");
-  });
-
-  it("hook processor accepts appendSessionSample in its deps", () => {
-    // When creating a hook processor with appendSessionSample wired
-    const appendCalls: Array<{ sessionId: string; samples: unknown }> = [];
-    const processor = createHookProcessor({
-      updateMetrics: () => {},
-      updateMultiSessionMetrics: () => {},
-      appendSessionSample: (sessionId: string, samples: unknown) => {
-        appendCalls.push({ sessionId, samples });
-      },
-      pricingTable: DEFAULT_PRICING_TABLE,
-    });
-
-    // Then the processor is a function (wiring succeeded)
-    expect(typeof processor).toBe("function");
-  });
+  // D4: Removed "multiSessionStore exposes appendSessionSample" and
+  // "hook processor accepts appendSessionSample in its deps" tests --
+  // they only asserted typeof === 'function' (compile-time guarantees).
+  // Behavioral wiring is covered by per-session-category-buffers tests.
 
   it("v1 view files PMAggregateGrid and PMSessionDetail are removed", async () => {
     // Given the v2 Performance Monitor replaces v1 views
