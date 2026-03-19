@@ -53,15 +53,28 @@ The selected category has an accent-colored left border highlight.
 | **Tokens/s** | Token burn rate over time | tok/s | `--brand` (cyan/teal) |
 | **Cost** | Cost accumulation rate over time | $/min | `--amber` (amber/gold) |
 | **Agents** | Active agent count over time | count | `#4a9eff` (blue) |
-| **Context** | Context window utilization over time | % (0–100) | `#7aa89e` (muted teal) |
+| **Context** | Context window utilization per session | % (0–100) | `#7aa89e` (muted teal) |
 
 Each category gets its own dedicated graph with a Y-axis scaled to its unit type. No mixing units on the same axis. This is the core difference from what we had before — **one graph per unit type**, not everything crammed together.
+
+### Aggregate Graph Applicability
+
+Not every metric has a meaningful aggregate. When summing, averaging, or combining per-session values into a single number would be misleading or meaningless, **omit the aggregate graph entirely** and show only the per-session graphs.
+
+| Category | Aggregate makes sense? | Reason |
+|----------|----------------------|--------|
+| **Tokens/s** | Yes | Sum across sessions = total throughput |
+| **Cost** | Yes | Sum across sessions = total spend rate |
+| **Agents** | Yes | Sum across sessions = total active agents |
+| **Context** | **No** | Each session has its own context window; averaging or summing percentages is meaningless |
+
+For Context: skip the large aggregate graph and show only the per-session mini-graphs. This principle applies to any future metric where aggregation doesn't produce a meaningful number.
 
 ### Right Detail Pane
 
 Top to bottom:
 1. **Header**: category name + hardware-style subtitle (e.g., "Tokens/s" / "claude-sonnet-4-20250514")
-2. **Main graph**: large scrolling line chart, 60-second window
+2. **Main graph**: large scrolling line chart, 60-second window *(omitted when aggregate is not applicable)*
 3. **Time label**: "60 seconds" below the graph (or "5 minutes" / "15 minutes" per time window selection)
 4. **Stats grid**: 2-column grid of related numerical readouts
 5. **Per-session breakdown**: table showing per-session values for the selected metric
@@ -102,10 +115,10 @@ Top to bottom:
 
 Inspired by Task Manager's "Change graph to > Logical processors" feature that splits the CPU graph into a grid of per-core mini-graphs.
 
-The detail pane always shows **both** aggregate and per-session views stacked vertically:
+The detail pane shows aggregate and per-session views stacked vertically:
 
-1. **Aggregate graph** (top, large): the main graph showing the total/aggregate metric across all sessions — this is always the hero element
-2. **Per-session graph grid** (below, smaller): a grid of mini-graphs, one per active session, automatically appearing when there are 2+ sessions
+1. **Aggregate graph** (top, large): the main graph showing the total/aggregate metric across all sessions. **Omitted when aggregation is not meaningful** (see Aggregate Graph Applicability above).
+2. **Per-session graph grid** (below, smaller): a grid of mini-graphs, one per active session, automatically appearing when there are 2+ sessions. When the aggregate graph is omitted, the per-session graphs become the primary display and are rendered larger.
 
 The per-session grid:
 - Each mini-graph shows that session's individual time series for the selected category
@@ -116,14 +129,12 @@ The per-session grid:
 - Grid lines are omitted from mini-graphs to reduce clutter (only the line + fill)
 - When only 1 session is active, the per-session grid is hidden (aggregate = session in this case)
 
-This works for all four categories:
-
-| Category | Aggregate shows | Per-Session shows |
+| Category | Aggregate graph | Per-Session graphs |
 |----------|----------------|-------------------|
-| **Tokens/s** | Total tok/s across all sessions | Each session's individual tok/s |
-| **Cost** | Total $/min across all sessions | Each session's individual $/min |
-| **Agents** | Total agent count | Each session's agent count |
-| **Context** | Max context % across sessions | Each session's context % |
+| **Tokens/s** | Sum across sessions | Each session's individual tok/s |
+| **Cost** | Sum across sessions | Each session's individual $/min |
+| **Agents** | Sum across sessions | Each session's agent count |
+| **Context** | *Omitted* (not meaningful) | Each session's context % |
 
 **Data requirement**: Each session needs its own independent time-series buffer per category. The `MultiSessionStore` already tracks per-session `SessionMetrics`; we need to extend it to also maintain per-session `TimeSeriesBuffer` objects (or compute per-session rate samples in the hook processor).
 
