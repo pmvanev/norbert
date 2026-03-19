@@ -887,6 +887,133 @@ code, pre, .mono,
   color: var(--text-p);
 }
 
+/* ═══ PERFORMANCE MONITOR ═══ */
+
+.performance-monitor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 2px;
+}
+
+.pm-rate-chart {
+  flex: 1;
+  position: relative;
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--card-r);
+  overflow: hidden;
+  min-height: 100px;
+}
+
+.pm-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.pm-legend {
+  position: absolute;
+  bottom: 6px;
+  left: 12px;
+  display: flex;
+  gap: 14px;
+  pointer-events: none;
+}
+
+.pm-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9px;
+  font-family: var(--font-mono);
+  color: var(--text-m);
+}
+
+.pm-legend-dot {
+  width: 8px;
+  height: 2px;
+  border-radius: 1px;
+}
+
+.pm-stat-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  border: 1px solid var(--border-card);
+  border-radius: var(--card-r);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.pm-stat {
+  padding: 6px 10px;
+  border-right: 1px solid var(--border-card);
+}
+
+.pm-stat:last-child {
+  border-right: none;
+}
+
+.pm-stat-l {
+  font-size: 8px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-m);
+  font-family: var(--font-mono);
+  margin-bottom: 2px;
+}
+
+.pm-stat-v {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-p);
+}
+
+.pm-context-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-card);
+  border-radius: var(--card-r);
+  flex-shrink: 0;
+}
+
+.pm-context-bar .pm-stat-l {
+  flex-shrink: 0;
+  margin-bottom: 0;
+}
+
+.pm-context-bar .pm-stat-v {
+  flex-shrink: 0;
+  font-size: 13px;
+}
+
+.pm-context-track {
+  flex: 1;
+  height: 6px;
+  background: var(--bg-card);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.pm-context-fill {
+  height: 100%;
+  background: var(--brand);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.pm-context-fill.pm-urgency-amber {
+  background: var(--amber);
+}
+
+.pm-context-fill.pm-urgency-red {
+  background: var(--error, #ff4444);
+}
+
 /* ═══ USAGE DASHBOARD ═══ */
 
 .usage-dashboard {
