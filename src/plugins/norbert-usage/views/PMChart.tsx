@@ -9,7 +9,7 @@
  * uPlot provides built-in cursor crosshair and tooltip hooks.
  */
 
-import { useRef, useEffect, useCallback, useMemo } from "react";
+import { useRef, useEffect, useMemo } from "react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 import type { RateSample, ChartMode } from "../domain/types";
@@ -82,6 +82,15 @@ export const PMChart = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const uplotRef = useRef<uPlot | null>(null);
 
+  // Store callbacks in refs so uPlot hooks always call the latest version
+  // without triggering uPlot recreation.
+  const onHoverRef = useRef(onHover);
+  onHoverRef.current = onHover;
+  const onHoverEndRef = useRef(onHoverEnd);
+  onHoverEndRef.current = onHoverEnd;
+  const formatValueRef = useRef(formatValue);
+  formatValueRef.current = formatValue;
+
   const isAggregate = mode === "aggregate";
 
   // Build uPlot data from samples: [timestamps[], values[]]
@@ -92,7 +101,7 @@ export const PMChart = ({
     const timestamps = new Float64Array(samples.length);
     const values = new Float64Array(samples.length);
     for (let i = 0; i < samples.length; i++) {
-      timestamps[i] = samples[i].timestamp / 1000; // uPlot uses seconds
+      timestamps[i] = samples[i].timestamp / 1000;
       values[i] = samples[i][field];
     }
     return [timestamps, values];
@@ -106,36 +115,28 @@ export const PMChart = ({
     return peak > 0 ? peak * 1.1 : 1;
   }, [yMax, samples, field]);
 
-  // Build uPlot options
-  const buildOpts = useCallback((): uPlot.Options => {
+  // Create uPlot once on mount, destroy on unmount.
+  // Uses refs for callbacks so this effect only runs once.
+  useEffect(() => {
     const container = containerRef.current;
-    const width = container?.clientWidth ?? 300;
-    const height = container?.clientHeight ?? 120;
+    if (!container) return;
 
-    return {
+    const width = container.clientWidth || 300;
+    const height = container.clientHeight || 120;
+
+    const opts: uPlot.Options = {
       width,
       height,
       cursor: {
         show: true,
         x: true,
         y: false,
-        points: {
-          show: true,
-          size: 8,
-          fill: color,
-          stroke: color,
-        },
+        points: { show: false },
       },
       legend: { show: false },
       axes: [
+        { show: false, stroke: "transparent", grid: { show: false } },
         {
-          // X axis (time)
-          show: false,
-          stroke: "transparent",
-          grid: { show: false },
-        },
-        {
-          // Y axis
           show: isAggregate,
           stroke: "rgba(255,255,255,0.3)",
           grid: {
@@ -147,17 +148,15 @@ export const PMChart = ({
           size: isAggregate ? 50 : 0,
           font: "9px 'Share Tech Mono', monospace",
           values: (_u: uPlot, vals: number[]) =>
-            vals.map((v) => formatValue ? formatValue(v) : String(Math.round(v))),
+            vals.map((v) => formatValueRef.current ? formatValueRef.current(v) : String(Math.round(v))),
         },
       ],
       scales: {
         x: { time: false },
-        y: {
-          range: [0, effectiveYMax],
-        },
+        y: { range: [0, effectiveYMax] },
       },
       series: [
-        {}, // x series (timestamps)
+        {},
         {
           stroke: color,
           width: 1.5,
@@ -177,17 +176,19 @@ export const PMChart = ({
         setCursor: [
           (u: uPlot) => {
             const idx = u.cursor.idx;
-            if (idx == null || idx < 0 || !onHover) {
-              onHoverEnd?.();
+            if (idx == null || idx < 0) {
+              onHoverEndRef.current?.();
               return;
             }
+            const hover = onHoverRef.current;
+            if (!hover) return;
             const val = (u.data[1] as Float64Array | number[])[idx] ?? 0;
             const totalSamples = (u.data[0] as Float64Array | number[]).length;
             const timeOffsetMs = (totalSamples - 1 - idx) * 1000;
             const left = u.cursor.left ?? 0;
             const top = u.cursor.top ?? 0;
             const rect = u.root.getBoundingClientRect();
-            onHover({
+            hover({
               sampleIndex: idx,
               value: val as number,
               timeOffsetMs,
@@ -198,14 +199,7 @@ export const PMChart = ({
         ],
       },
     };
-  }, [color, isAggregate, effectiveYMax, formatValue, onHover, onHoverEnd]);
 
-  // Create / destroy uPlot instance
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const opts = buildOpts();
     const plot = new uPlot(opts, data, container);
     uplotRef.current = plot;
 
@@ -213,25 +207,16 @@ export const PMChart = ({
       plot.destroy();
       uplotRef.current = null;
     };
-    // Only recreate on mode/color/yMax change, not on data change
+    // Only create once per mount. Color/mode/yMax changes require remount
+    // via React key prop on the parent.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [buildOpts]);
+  }, [color, isAggregate, effectiveYMax]);
 
   // Update data without recreating the chart
   useEffect(() => {
     const plot = uplotRef.current;
     if (!plot) return;
     plot.setData(data, false);
-
-    // Resize if container changed
-    const container = containerRef.current;
-    if (container) {
-      const w = container.clientWidth;
-      const h = container.clientHeight;
-      if (w !== plot.width || h !== plot.height) {
-        plot.setSize({ width: w, height: h });
-      }
-    }
   }, [data]);
 
   // Handle container resize
@@ -252,7 +237,7 @@ export const PMChart = ({
     return () => observer.disconnect();
   }, []);
 
-  // Mini mode label overlay
+  // Current value for overlay
   const currentValue = samples.length > 0 ? samples[samples.length - 1][field] : 0;
   const displayValue = formatValue?.(currentValue) ?? String(Math.round(currentValue));
 
