@@ -4,6 +4,10 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   clearScreen: false,
+  test: {
+    globals: true,
+    setupFiles: ["./tests/setup.ts"],
+  },
   server: {
     port: 5173,
     strictPort: true,

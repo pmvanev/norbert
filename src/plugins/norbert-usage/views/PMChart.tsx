@@ -1,49 +1,19 @@
 /**
- * PMChart: reusable filled-area canvas chart for the Performance Monitor.
+ * PMChart: uPlot-based time-series chart for the Performance Monitor.
  *
  * Supports two rendering modes:
- * - aggregate: Y-axis labels, horizontal grid lines, current value overlay,
- *   gradient fill beneath the line.
- * - mini: no grid lines, session label + value overlay, gradient fill.
+ * - aggregate: Y-axis labels, grid lines, current value overlay, filled area
+ * - mini: no axes, session label overlay, filled area
  *
- * Hover: emits sample index, value, and time offset to parent via onHover.
- * Crosshair: draws vertical line + dot when hoverIndex is provided.
- * Canvas sizes responsively via ResizeObserver.
- *
- * Pure rendering functions from domain/chartRenderer.ts and
- * domain/oscilloscope.ts handle all coordinate computation.
+ * Hover: emits sample index, value, and time offset via onHover callback.
+ * uPlot provides built-in cursor crosshair and tooltip hooks.
  */
 
-import { useRef, useEffect, useCallback, useState } from "react";
+import { useRef, useEffect, useCallback, useMemo } from "react";
+import uPlot from "uplot";
+import "uplot/dist/uPlot.min.css";
 import type { RateSample, ChartMode } from "../domain/types";
-import {
-  computeCanvasDimensions,
-  formatRateOverlay,
-  type CanvasDimensions,
-  type RateField,
-} from "../domain/oscilloscope";
-import {
-  computeHitTest,
-  computeCrosshairPosition,
-  prepareHorizontalGridLines,
-  prepareFilledAreaPoints,
-  type HorizontalGridLine,
-  type FilledAreaPoint,
-  type CrosshairPosition,
-} from "../domain/chartRenderer";
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const DEFAULT_WIDTH = 300;
-const DEFAULT_HEIGHT = 120;
-const ASPECT_RATIO = 2.5;
-const CROSSHAIR_COLOR = "rgba(255, 255, 255, 0.3)";
-const CROSSHAIR_DOT_RADIUS = 4;
-const BACKGROUND_COLOR = "rgba(0, 8, 6, 0.8)";
-const GRID_LINE_COLOR = "rgba(255, 255, 255, 0.06)";
-const GRID_LABEL_COLOR = "rgba(255, 255, 255, 0.4)";
+import type { RateField } from "../domain/oscilloscope";
 
 // ---------------------------------------------------------------------------
 // Hover data emitted to parent
@@ -58,148 +28,17 @@ export interface HoverData {
 }
 
 // ---------------------------------------------------------------------------
-// Canvas drawing functions (pure rendering, no domain side effects)
-// ---------------------------------------------------------------------------
-
-const clearCanvas = (
-  ctx: CanvasRenderingContext2D,
-  dimensions: CanvasDimensions,
-): void => {
-  ctx.clearRect(0, 0, dimensions.width, dimensions.height);
-  ctx.fillStyle = BACKGROUND_COLOR;
-  ctx.fillRect(0, 0, dimensions.width, dimensions.height);
-};
-
-const drawHorizontalGridLines = (
-  ctx: CanvasRenderingContext2D,
-  gridLines: ReadonlyArray<HorizontalGridLine>,
-  dimensions: CanvasDimensions,
-): void => {
-  ctx.strokeStyle = GRID_LINE_COLOR;
-  ctx.lineWidth = 1;
-  ctx.font = "9px monospace";
-  ctx.fillStyle = GRID_LABEL_COLOR;
-
-  for (const line of gridLines) {
-    ctx.beginPath();
-    ctx.moveTo(dimensions.padding, line.y);
-    ctx.lineTo(dimensions.width - dimensions.padding, line.y);
-    ctx.stroke();
-    ctx.fillText(line.label, dimensions.width - dimensions.padding + 4, line.y + 3);
-  }
-};
-
-const drawFilledArea = (
-  ctx: CanvasRenderingContext2D,
-  points: ReadonlyArray<FilledAreaPoint>,
-  color: string,
-  dimensions: CanvasDimensions,
-): void => {
-  if (points.length < 2) return;
-
-  const bottomY = dimensions.height - dimensions.padding;
-
-  // Draw the gradient fill beneath the line
-  const gradient = ctx.createLinearGradient(0, dimensions.padding, 0, bottomY);
-  gradient.addColorStop(0, colorWithAlpha(color, 0.15));
-  gradient.addColorStop(1, colorWithAlpha(color, 0.05));
-
-  ctx.fillStyle = gradient;
-  ctx.beginPath();
-  ctx.moveTo(points[0].x, bottomY);
-  for (const point of points) {
-    ctx.lineTo(point.x, point.y);
-  }
-  ctx.lineTo(points[points.length - 1].x, bottomY);
-  ctx.closePath();
-  ctx.fill();
-
-  // Draw the line on top
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.5;
-  ctx.lineJoin = "round";
-  ctx.beginPath();
-  ctx.moveTo(points[0].x, points[0].y);
-  for (let i = 1; i < points.length; i++) {
-    ctx.lineTo(points[i].x, points[i].y);
-  }
-  ctx.stroke();
-};
-
-const drawCurrentValueOverlay = (
-  ctx: CanvasRenderingContext2D,
-  value: string,
-  color: string,
-  dimensions: CanvasDimensions,
-): void => {
-  ctx.font = "bold 18px monospace";
-  ctx.fillStyle = color;
-  ctx.fillText(value, dimensions.padding + 4, dimensions.padding + 22);
-};
-
-const drawMiniOverlay = (
-  ctx: CanvasRenderingContext2D,
-  label: string,
-  value: string,
-  color: string,
-  dimensions: CanvasDimensions,
-): void => {
-  // Session label at top-left
-  ctx.font = "bold 10px monospace";
-  ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
-  ctx.fillText(label, dimensions.padding + 2, dimensions.padding + 11);
-
-  // Current value at bottom-left
-  ctx.font = "bold 12px monospace";
-  ctx.fillStyle = color;
-  ctx.fillText(value, dimensions.padding + 2, dimensions.height - dimensions.padding - 4);
-};
-
-const drawCrosshair = (
-  ctx: CanvasRenderingContext2D,
-  crosshair: CrosshairPosition,
-  color: string,
-  dimensions: CanvasDimensions,
-): void => {
-  // Vertical crosshair line
-  ctx.strokeStyle = CROSSHAIR_COLOR;
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(crosshair.x, dimensions.padding);
-  ctx.lineTo(crosshair.x, dimensions.height - dimensions.padding);
-  ctx.stroke();
-
-  // Dot at the data point
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.arc(crosshair.x, crosshair.dotY, CROSSHAIR_DOT_RADIUS, 0, Math.PI * 2);
-  ctx.fill();
-};
-
-// ---------------------------------------------------------------------------
 // Color utility
 // ---------------------------------------------------------------------------
 
-/** Parse a 6-digit hex string into [r, g, b] or return undefined. */
-const parseHexToRgb = (hex: string): readonly [number, number, number] | undefined => {
-  const r = parseInt(hex.slice(0, 2), 16);
-  const g = parseInt(hex.slice(2, 4), 16);
-  const b = parseInt(hex.slice(4, 6), 16);
-  return Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b) ? undefined : [r, g, b];
-};
-
-/** Parse a hex or CSS color and return it with a specific alpha. */
-const colorWithAlpha = (color: string, alpha: number): string => {
-  // Match any 6-digit hex in the string (covers #RRGGBB and CSS var() fallbacks)
-  const hexMatch = color.match(/#([0-9a-f]{6})/i);
-  if (hexMatch) {
-    const rgb = parseHexToRgb(hexMatch[1]);
-    if (rgb) {
-      return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`;
-    }
+const hexToRgba = (color: string, alpha: number): string => {
+  const match = color.match(/#([0-9a-f]{6})/i);
+  if (match) {
+    const r = parseInt(match[1].slice(0, 2), 16);
+    const g = parseInt(match[1].slice(2, 4), 16);
+    const b = parseInt(match[1].slice(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   }
-
-  // Fallback: return a semi-transparent white
   return `rgba(255, 255, 255, ${alpha})`;
 };
 
@@ -232,162 +71,204 @@ export const PMChart = ({
   samples,
   field,
   color,
-  valueLabel,
   mode = "aggregate",
   yMax,
-  yLabels = [],
+  yLabels: _yLabels = [],
   label,
   formatValue,
-  hoverIndex,
   onHover,
   onHoverEnd,
 }: PMChartProps) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const uplotRef = useRef<uPlot | null>(null);
 
-  const [canvasDimensions, setCanvasDimensions] = useState<CanvasDimensions>({
-    width: DEFAULT_WIDTH,
-    height: DEFAULT_HEIGHT,
-    padding: 10,
-  });
+  const isAggregate = mode === "aggregate";
 
-  // Responsive resize via ResizeObserver
+  // Build uPlot data from samples: [timestamps[], values[]]
+  const data = useMemo((): uPlot.AlignedData => {
+    if (samples.length === 0) {
+      return [new Float64Array(0), new Float64Array(0)];
+    }
+    const timestamps = new Float64Array(samples.length);
+    const values = new Float64Array(samples.length);
+    for (let i = 0; i < samples.length; i++) {
+      timestamps[i] = samples[i].timestamp / 1000; // uPlot uses seconds
+      values[i] = samples[i][field];
+    }
+    return [timestamps, values];
+  }, [samples, field]);
+
+  // Compute effective yMax
+  const effectiveYMax = useMemo(() => {
+    if (yMax !== undefined && yMax > 0) return yMax;
+    if (samples.length === 0) return 1;
+    const peak = samples.reduce((max, s) => Math.max(max, s[field]), 0);
+    return peak > 0 ? peak * 1.1 : 1;
+  }, [yMax, samples, field]);
+
+  // Build uPlot options
+  const buildOpts = useCallback((): uPlot.Options => {
+    const container = containerRef.current;
+    const width = container?.clientWidth ?? 300;
+    const height = container?.clientHeight ?? 120;
+
+    return {
+      width,
+      height,
+      cursor: {
+        show: true,
+        x: true,
+        y: false,
+        points: {
+          show: true,
+          size: 8,
+          fill: color,
+          stroke: color,
+        },
+      },
+      legend: { show: false },
+      axes: [
+        {
+          // X axis (time)
+          show: false,
+          stroke: "transparent",
+          grid: { show: false },
+        },
+        {
+          // Y axis
+          show: isAggregate,
+          stroke: "rgba(255,255,255,0.3)",
+          grid: {
+            show: isAggregate,
+            stroke: "rgba(0, 229, 204, 0.06)",
+            width: 1,
+          },
+          ticks: { show: false },
+          size: isAggregate ? 50 : 0,
+          font: "9px 'Share Tech Mono', monospace",
+          values: (_u: uPlot, vals: number[]) =>
+            vals.map((v) => formatValue ? formatValue(v) : String(Math.round(v))),
+        },
+      ],
+      scales: {
+        x: { time: false },
+        y: {
+          range: [0, effectiveYMax],
+        },
+      },
+      series: [
+        {}, // x series (timestamps)
+        {
+          stroke: color,
+          width: 1.5,
+          fill: (u: uPlot) => {
+            const ctx = u.ctx;
+            const plotTop = u.bbox.top / devicePixelRatio;
+            const plotBot = (u.bbox.top + u.bbox.height) / devicePixelRatio;
+            const gradient = ctx.createLinearGradient(0, plotTop, 0, plotBot);
+            gradient.addColorStop(0, hexToRgba(color, 0.18));
+            gradient.addColorStop(1, hexToRgba(color, 0.03));
+            return gradient;
+          },
+          points: { show: false },
+        },
+      ],
+      hooks: {
+        setCursor: [
+          (u: uPlot) => {
+            const idx = u.cursor.idx;
+            if (idx == null || idx < 0 || !onHover) {
+              onHoverEnd?.();
+              return;
+            }
+            const val = (u.data[1] as Float64Array | number[])[idx] ?? 0;
+            const totalSamples = (u.data[0] as Float64Array | number[]).length;
+            const timeOffsetMs = (totalSamples - 1 - idx) * 1000;
+            const left = u.cursor.left ?? 0;
+            const top = u.cursor.top ?? 0;
+            const rect = u.root.getBoundingClientRect();
+            onHover({
+              sampleIndex: idx,
+              value: val as number,
+              timeOffsetMs,
+              tooltipX: rect.left + left,
+              tooltipY: rect.top + top,
+            });
+          },
+        ],
+      },
+    };
+  }, [color, isAggregate, effectiveYMax, formatValue, onHover, onHoverEnd]);
+
+  // Create / destroy uPlot instance
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const { width, height } = entry.contentRect;
-        if (width > 0 && height > 0) {
-          setCanvasDimensions(computeCanvasDimensions(width, height, ASPECT_RATIO));
-        }
+    const opts = buildOpts();
+    const plot = new uPlot(opts, data, container);
+    uplotRef.current = plot;
+
+    return () => {
+      plot.destroy();
+      uplotRef.current = null;
+    };
+    // Only recreate on mode/color/yMax change, not on data change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buildOpts]);
+
+  // Update data without recreating the chart
+  useEffect(() => {
+    const plot = uplotRef.current;
+    if (!plot) return;
+    plot.setData(data, false);
+
+    // Resize if container changed
+    const container = containerRef.current;
+    if (container) {
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      if (w !== plot.width || h !== plot.height) {
+        plot.setSize({ width: w, height: h });
+      }
+    }
+  }, [data]);
+
+  // Handle container resize
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const observer = new ResizeObserver(() => {
+      const plot = uplotRef.current;
+      if (!plot) return;
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      if (w > 0 && h > 0 && (w !== plot.width || h !== plot.height)) {
+        plot.setSize({ width: w, height: h });
       }
     });
-
     observer.observe(container);
     return () => observer.disconnect();
   }, []);
 
-  // Hover handler: map mouseX to sample index and emit
-  const handleMouseMove = useCallback(
-    (event: React.MouseEvent<HTMLCanvasElement>) => {
-      if (!onHover || samples.length === 0) return;
-
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-
-      const rect = canvas.getBoundingClientRect();
-      const mouseX = event.clientX - rect.left;
-      const result = computeHitTest(
-        mouseX,
-        canvasDimensions.width,
-        samples.length,
-        canvasDimensions.padding,
-      );
-
-      if (result.sampleIndex < 0) return;
-
-      const sampleValue = samples[result.sampleIndex][field];
-      const timeOffsetMs = (samples.length - 1 - result.sampleIndex) * 1000;
-
-      onHover({
-        sampleIndex: result.sampleIndex,
-        value: sampleValue,
-        timeOffsetMs,
-        tooltipX: event.clientX,
-        tooltipY: event.clientY,
-      });
-    },
-    [onHover, samples, canvasDimensions, field],
-  );
-
-  const handleMouseLeave = useCallback(() => {
-    onHoverEnd?.();
-  }, [onHoverEnd]);
-
-  // Render frame: draws the filled-area chart with mode-specific overlays
-  const renderFrame = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    // Compute the effective yMax from data or prop
-    const effectiveYMax = yMax ?? computePeakFromSamples(samples, field);
-
-    // Prepare filled-area points using chartRenderer (maps samples to canvas coords)
-    const chartSamples = samples.map((s) => ({
-      timestamp: s.timestamp,
-      value: s[field],
-    }));
-    const points = prepareFilledAreaPoints(chartSamples, canvasDimensions, effectiveYMax);
-
-    // Clear canvas
-    clearCanvas(ctx, canvasDimensions);
-
-    // Aggregate mode: draw horizontal grid lines with Y-axis labels
-    if (mode === "aggregate" && yLabels.length > 0) {
-      const gridLines = prepareHorizontalGridLines(canvasDimensions, yLabels);
-      drawHorizontalGridLines(ctx, gridLines, canvasDimensions);
-    }
-
-    // Draw filled area with gradient
-    drawFilledArea(ctx, points, color, canvasDimensions);
-
-    // Mode-specific overlays
-    const currentRate = samples.length > 0 ? samples[samples.length - 1][field] : 0;
-    const displayValue = valueLabel ?? formatValue?.(currentRate) ?? formatRateOverlay(currentRate);
-
-    if (mode === "aggregate") {
-      drawCurrentValueOverlay(ctx, displayValue, color, canvasDimensions);
-    } else {
-      drawMiniOverlay(ctx, label ?? title, displayValue, color, canvasDimensions);
-    }
-
-    // Draw crosshair when hoverIndex is provided
-    if (hoverIndex !== undefined && hoverIndex >= 0 && hoverIndex < samples.length) {
-      const sampleValue = samples[hoverIndex][field];
-      const crosshair = computeCrosshairPosition(
-        hoverIndex,
-        sampleValue,
-        samples.length,
-        effectiveYMax,
-        canvasDimensions,
-      );
-      drawCrosshair(ctx, crosshair, color, canvasDimensions);
-    }
-  }, [samples, canvasDimensions, field, color, title, valueLabel, mode, yMax, yLabels, label, formatValue, hoverIndex]);
-
-  useEffect(() => {
-    renderFrame();
-  }, [renderFrame]);
+  // Mini mode label overlay
+  const currentValue = samples.length > 0 ? samples[samples.length - 1][field] : 0;
+  const displayValue = formatValue?.(currentValue) ?? String(Math.round(currentValue));
 
   return (
     <div ref={containerRef} className="pm-chart-cell" role="img" aria-label={title}>
-      <canvas
-        ref={canvasRef}
-        width={canvasDimensions.width}
-        height={canvasDimensions.height}
-        className="pm-chart-canvas"
-        onMouseMove={handleMouseMove}
-        onMouseLeave={handleMouseLeave}
-      />
+      {!isAggregate && (
+        <div className="pm-chart-mini-overlay" style={{ color }}>
+          <span className="pm-chart-mini-label">{label ?? title}</span>
+          <span className="pm-chart-mini-value">{displayValue}</span>
+        </div>
+      )}
+      {isAggregate && (
+        <div className="pm-chart-agg-overlay" style={{ color }}>
+          <span className="pm-chart-agg-value">{displayValue}</span>
+        </div>
+      )}
     </div>
   );
-};
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Compute peak value from samples for auto-scaling when yMax not provided. */
-const computePeakFromSamples = (
-  samples: ReadonlyArray<RateSample>,
-  field: RateField,
-): number => {
-  if (samples.length === 0) return 1;
-  const peak = samples.reduce((max, s) => Math.max(max, s[field]), 0);
-  return peak > 0 ? peak : 1;
 };
