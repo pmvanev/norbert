@@ -53,6 +53,8 @@ export interface HoverData {
   readonly sampleIndex: number;
   readonly value: number;
   readonly timeOffsetMs: number;
+  readonly tooltipX: number;
+  readonly tooltipY: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -293,6 +295,8 @@ export const PMChart = ({
         sampleIndex: result.sampleIndex,
         value: sampleValue,
         timeOffsetMs,
+        tooltipX: event.clientX,
+        tooltipY: event.clientY,
       });
     },
     [onHover, samples, canvasDimensions, field],

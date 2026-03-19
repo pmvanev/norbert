@@ -21,6 +21,7 @@ import type { MetricCategoryId, TimeWindowId, HoverState } from "../domain/types
 import { PMTimeWindowSelector } from "./PMTimeWindowSelector";
 import { PMSidebar } from "./PMSidebar";
 import { PMDetailPane } from "./PMDetailPane";
+import { PMTooltip } from "./PMTooltip";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -101,6 +102,21 @@ export const PerformanceMonitorView = ({
           hoverState={hoverState}
           onHoverChange={setHoverState}
         />
+      </div>
+
+      {/* Floating tooltip -- uses fixed positioning, placed outside pm-container */}
+      <PMTooltip hoverState={hoverState} />
+
+      {/* Visually-hidden live region for screen readers to announce hover values */}
+      <div
+        className="sr-only"
+        aria-live="polite"
+        aria-atomic="true"
+        role="status"
+      >
+        {hoverState.active
+          ? `${hoverState.formattedValue}, ${hoverState.timeOffset}`
+          : ""}
       </div>
     </div>
   );

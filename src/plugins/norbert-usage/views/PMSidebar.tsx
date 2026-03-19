@@ -147,7 +147,7 @@ export const PMSidebar = ({
   selectedCategory,
   onCategorySelect,
 }: PMSidebarProps) => (
-  <div className="pm-sidebar" role="navigation" aria-label="Metric categories">
+  <div className="pm-sidebar" role="listbox" aria-label="Metric categories">
     {METRIC_CATEGORIES.map((category) => {
       const isSelected = category.id === selectedCategory;
       const currentValue = extractLatestValue(multiSessionStore, category.id);
@@ -159,7 +159,8 @@ export const PMSidebar = ({
           className={`pm-sidebar-row${isSelected ? " pm-sidebar-row-selected" : ""}`}
           style={isSelected ? { borderLeftColor: category.color } : undefined}
           onClick={() => onCategorySelect(category.id)}
-          aria-current={isSelected ? "true" : undefined}
+          role="option"
+          aria-selected={isSelected}
           data-category={category.id}
         >
           <div className="pm-sidebar-label">{category.label}</div>

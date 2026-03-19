@@ -5,17 +5,19 @@
  *   1. Header (category name + subtitle)
  *   2. Aggregate graph (PMChart in aggregate mode) -- omitted for context
  *   3. Per-session graph grid (PMChart in mini mode) -- hidden when 1 session
- *   4. Stats grid placeholder (04-03)
- *   5. Session table placeholder (04-03)
+ *   4. Stats grid (PMStatsGrid with derived aggregate metrics)
+ *   5. Session table (PMSessionTable with per-session breakdown)
  *
  * Pure data flows through categoryConfig and MultiSessionStore.
  * Canvas drawing (via PMChart) is the only side effect (at the view boundary).
  */
 
 import type { MultiSessionStore } from "../adapters/multiSessionStore";
-import type { MetricCategoryId, HoverState } from "../domain/types";
+import type { MetricCategoryId, HoverState, TimeWindowId } from "../domain/types";
 import { getCategoryById, type MetricCategory } from "../domain/categoryConfig";
 import { PMChart, type HoverData } from "./PMChart";
+import { PMStatsGrid } from "./PMStatsGrid";
+import { PMSessionTable, type SessionRowData } from "./PMSessionTable";
 
 // ---------------------------------------------------------------------------
 // Pure layout helpers
@@ -33,6 +35,94 @@ const shouldShowPerSessionGrid = (sessionCount: number): boolean =>
 const shouldShowAggregateGraph = (category: MetricCategory): boolean =>
   category.aggregateApplicable;
 
+/** Map a TimeWindowId to a human-readable duration label. */
+const formatDurationLabel = (windowId: TimeWindowId): string => {
+  switch (windowId) {
+    case "1m": return "60 seconds";
+    case "5m": return "5 minutes";
+    case "15m": return "15 minutes";
+    case "session": return "Full session";
+  }
+};
+
+/**
+ * Derive stats grid metrics from the aggregate buffer for a category.
+ * Returns a key-value record suitable for PMStatsGrid.
+ */
+const deriveStatsFromBuffer = (
+  multiSessionStore: MultiSessionStore,
+  categoryId: MetricCategoryId,
+): Readonly<Record<string, number | string>> => {
+  const buffer = multiSessionStore.getAggregateBuffer(categoryId);
+  const samples = buffer.samples;
+  const sessions = multiSessionStore.getSessions();
+
+  if (samples.length === 0) {
+    return { sessions: sessions.length };
+  }
+
+  const values = samples.map((s) => s.tokenRate);
+  const peak = Math.max(...values);
+  const avg = values.reduce((sum, v) => sum + v, 0) / values.length;
+  const current = values[values.length - 1];
+
+  // Common fields across categories
+  return {
+    peak,
+    avg: Math.round(avg * 100) / 100,
+    current,
+    sessions: sessions.length,
+    totalTokens: values.reduce((sum, v) => sum + v, 0),
+    costRate: current,
+    toolCalls: "--",
+    sessionTotal: "--",
+    totalCost: "--",
+    avgCostPerToken: "--",
+    model: "--",
+    active: current,
+    totalSpawned: "--",
+    avgPerSession: sessions.length > 0 ? Math.round(peak / sessions.length) : 0,
+    remaining: `${100 - Math.round(current)}%`,
+    maxTokens: "--",
+    urgency: "--",
+    compressions: "--",
+  };
+};
+
+/**
+ * Build SessionRowData[] from multiSessionStore sessions for the given category.
+ * Each row contains pre-formatted cell values matching the category's sessionColumns.
+ */
+const buildSessionRows = (
+  multiSessionStore: MultiSessionStore,
+  categoryId: MetricCategoryId,
+  category: MetricCategory,
+): ReadonlyArray<SessionRowData> => {
+  const sessions = multiSessionStore.getSessions();
+
+  return sessions.map((session) => {
+    const sessionBuffer = multiSessionStore.getSessionBuffer(session.sessionId, categoryId);
+    const latestValue = sessionBuffer && sessionBuffer.samples.length > 0
+      ? sessionBuffer.samples[sessionBuffer.samples.length - 1].tokenRate
+      : 0;
+
+    // Build cell values for columns after the Session ID column
+    const cells = category.sessionColumns.slice(1).map((col) => {
+      // First data column is the primary metric for this category
+      if (col === category.sessionColumns[1]) {
+        return category.formatValue(latestValue);
+      }
+      return "--";
+    });
+
+    return {
+      sessionId: session.sessionId,
+      cells,
+      sortValue: latestValue,
+    };
+  });
+};
+
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
@@ -40,7 +130,11 @@ const shouldShowAggregateGraph = (category: MetricCategory): boolean =>
 interface PMDetailPaneProps {
   readonly multiSessionStore: MultiSessionStore;
   readonly selectedCategory: MetricCategoryId;
-  readonly selectedWindow: string;
+  // NOTE: selectedWindow currently has no effect on displayed data. The buffer
+  // is always 60 samples (1-minute window). Full multi-window buffer support is
+  // deferred. The time window selector serves as UI scaffolding that will be
+  // functional when multi-window buffers are implemented.
+  readonly selectedWindow: TimeWindowId;
   readonly hoverState: HoverState;
   readonly onHoverChange: (state: HoverState) => void;
 }
@@ -86,8 +180,8 @@ export const PMDetailPane = ({
       formattedValue: category.formatValue(data.value),
       timeOffset: `${Math.round(data.timeOffsetMs / 1000)}s ago`,
       color: category.color,
-      tooltipX: 0,
-      tooltipY: 0,
+      tooltipX: data.tooltipX,
+      tooltipY: data.tooltipY,
     });
   };
 
@@ -103,11 +197,17 @@ export const PMDetailPane = ({
   // Derive the crosshair index for synchronized hover across charts
   const activeCrosshairIndex = hoverState.active ? hoverState.sampleIndex : undefined;
 
+  // Derive stats and session rows for the real components
+  const metricsData = deriveStatsFromBuffer(multiSessionStore, selectedCategory);
+  const sessionRows = buildSessionRows(multiSessionStore, selectedCategory, category);
+
   return (
     <div
       className="pm-detail-pane"
       data-selected-category={selectedCategory}
       data-selected-window={selectedWindow}
+      role="region"
+      aria-label="Metric detail"
     >
       {/* Header */}
       <div className="pm-detail-header">
@@ -144,6 +244,9 @@ export const PMDetailPane = ({
             onHover={handleAggregateHover}
             onHoverEnd={handleHoverEnd}
           />
+          <span className="pm-detail-duration-label">
+            {formatDurationLabel(selectedWindow)}
+          </span>
         </div>
       )}
 
@@ -192,40 +295,19 @@ export const PMDetailPane = ({
         </div>
       )}
 
-      {/* Stats grid placeholder (04-03) */}
-      <div className="pm-detail-stats-grid" data-category={selectedCategory}>
-        {category.statsConfig.map((stat) => (
-          <div key={stat.key} className="pm-detail-stat-cell">
-            <span className="pm-detail-stat-label">{stat.label}</span>
-            <span className="pm-detail-stat-value" data-mono="true">
-              --
-            </span>
-          </div>
-        ))}
-      </div>
+      {/* Stats grid */}
+      <PMStatsGrid
+        statsConfig={category.statsConfig}
+        metricsData={metricsData}
+        categoryId={selectedCategory}
+      />
 
-      {/* Session table placeholder (04-03) */}
-      <div className="pm-detail-session-table" data-category={selectedCategory}>
-        <div className="pm-detail-table-header">
-          {category.sessionColumns.map((col) => (
-            <span key={col} className="pm-detail-table-col">
-              {col}
-            </span>
-          ))}
-        </div>
-        {sessions.map((session) => (
-          <div key={session.sessionId} className="pm-detail-table-row">
-            <span className="pm-detail-table-cell" data-mono="true">
-              {session.sessionId}
-            </span>
-            {category.sessionColumns.slice(1).map((col) => (
-              <span key={col} className="pm-detail-table-cell" data-mono="true">
-                --
-              </span>
-            ))}
-          </div>
-        ))}
-      </div>
+      {/* Session table */}
+      <PMSessionTable
+        columns={category.sessionColumns}
+        rows={sessionRows}
+        categoryId={selectedCategory}
+      />
     </div>
   );
 };
