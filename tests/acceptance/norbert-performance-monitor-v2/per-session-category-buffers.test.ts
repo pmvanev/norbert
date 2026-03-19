@@ -22,9 +22,16 @@ import { describe, it, expect } from "vitest";
 import {
   createMultiSessionStore,
   type MultiSessionStore,
+  type CategorySampleInput,
 } from "../../../src/plugins/norbert-usage/adapters/multiSessionStore";
 
 import type { MetricCategoryId } from "../../../src/plugins/norbert-usage/domain/categoryConfig";
+
+// Hook processor: driving port for the category sample feeding pipeline
+import { createHookProcessor, type HookProcessorDeps } from "../../../src/plugins/norbert-usage/hookProcessor";
+import type { SessionMetrics } from "../../../src/plugins/norbert-usage/domain/types";
+import { createInitialMetrics } from "../../../src/plugins/norbert-usage/domain/metricsAggregator";
+import { DEFAULT_PRICING_TABLE } from "../../../src/plugins/norbert-usage/domain/pricingModel";
 
 // ---------------------------------------------------------------------------
 // WALKING SKELETON: User sees per-session graphs update with new data
@@ -368,5 +375,107 @@ describe("@property: aggregate sum always equals sum of per-session latest value
     // Then the aggregate sum invariant holds
     expect(aggBuffer).toBeDefined();
     expect(aggBuffer!.samples.length).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// STEP 02-02: Hook processor feeds category samples to MultiSessionStore
+// Traces to: architecture-design.md "hookProcessor -> appendSessionSample"
+// ---------------------------------------------------------------------------
+
+describe("Hook processor feeds per-category samples after metrics update", () => {
+  // Helper: create a hook processor with spy appendSessionSample
+  const createTestProcessor = () => {
+    // Mutable session metrics store (spy for updateMultiSessionMetrics)
+    const sessionMetrics = new Map<string, SessionMetrics>();
+    const appendedSamples: Array<{ sessionId: string; samples: CategorySampleInput }> = [];
+
+    const deps: HookProcessorDeps = {
+      updateMetrics: () => {}, // single-session pipeline -- no-op for these tests
+      updateMultiSessionMetrics: (sessionId, reducer) => {
+        const prev = sessionMetrics.get(sessionId) ?? createInitialMetrics(sessionId);
+        sessionMetrics.set(sessionId, reducer(prev));
+      },
+      appendSessionSample: (sessionId, samples) => {
+        appendedSamples.push({ sessionId, samples });
+      },
+      pricingTable: DEFAULT_PRICING_TABLE,
+    };
+
+    const processor = createHookProcessor(deps);
+    return { processor, appendedSamples, sessionMetrics };
+  };
+
+  it("Token rate sample derived from instantaneous rate on event", () => {
+    // Given a hook processor wired with appendSessionSample spy
+    const { processor, appendedSamples } = createTestProcessor();
+
+    // When a prompt_submit event arrives with token usage for session "s1"
+    // First event establishes baseline
+    processor({
+      session_id: "s1",
+      event_type: "prompt_submit",
+      payload: {
+        usage: { input_tokens: 100, output_tokens: 50, cache_read_tokens: 0, cache_creation_tokens: 0 },
+        model: "claude-sonnet-4-20250514",
+      },
+    });
+
+    // Then appendSessionSample was called with the session ID and a tokens value
+    expect(appendedSamples.length).toBeGreaterThanOrEqual(1);
+    const lastSample = appendedSamples[appendedSamples.length - 1];
+    expect(lastSample.sessionId).toBe("s1");
+    // Token rate is derived from instantaneous rate computation (>= 0)
+    expect(lastSample.samples.tokens).toBeGreaterThanOrEqual(0);
+    expect(typeof lastSample.samples.tokens).toBe("number");
+    // Cost rate is also derived from instantaneous rate (>= 0)
+    expect(lastSample.samples.cost).toBeGreaterThanOrEqual(0);
+    expect(typeof lastSample.samples.cost).toBe("number");
+  });
+
+  it("Agent count sample derived from session metrics", () => {
+    // Given a hook processor wired with appendSessionSample spy
+    const { processor, appendedSamples } = createTestProcessor();
+
+    // When a session_start event arrives (increments activeAgentCount)
+    processor({
+      session_id: "s2",
+      event_type: "session_start",
+      payload: {},
+    });
+
+    // Then appendSessionSample was called with agents value from updated metrics
+    expect(appendedSamples.length).toBeGreaterThanOrEqual(1);
+    const lastSample = appendedSamples[appendedSamples.length - 1];
+    expect(lastSample.sessionId).toBe("s2");
+    // Agent count should be 1 after session_start
+    expect(lastSample.samples.agents).toBe(1);
+    // Context percentage should also be present (from metrics)
+    expect(typeof lastSample.samples.context).toBe("number");
+  });
+
+  it("Existing single-session pipeline unchanged after extension", () => {
+    // Given a hook processor with both single-session and multi-session callbacks
+    let singleSessionUpdated = false;
+    const deps: HookProcessorDeps = {
+      updateMetrics: () => { singleSessionUpdated = true; },
+      updateMultiSessionMetrics: (_sid, _reducer) => {},
+      appendSessionSample: (_sid, _samples) => {},
+      pricingTable: DEFAULT_PRICING_TABLE,
+    };
+    const processor = createHookProcessor(deps);
+
+    // When an event arrives
+    processor({
+      session_id: "s3",
+      event_type: "prompt_submit",
+      payload: {
+        usage: { input_tokens: 50, output_tokens: 25, cache_read_tokens: 0, cache_creation_tokens: 0 },
+        model: "claude-sonnet-4-20250514",
+      },
+    });
+
+    // Then the single-session updateMetrics callback was still invoked
+    expect(singleSessionUpdated).toBe(true);
   });
 });

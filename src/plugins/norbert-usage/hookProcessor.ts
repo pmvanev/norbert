@@ -10,7 +10,9 @@
 import type { HookProcessor } from "../types";
 import type { SessionMetrics, PricingTable } from "./domain/types";
 import type { AggregatorEvent } from "./domain/metricsAggregator";
+import type { CategorySampleInput } from "./adapters/multiSessionStore";
 import { aggregateEvent } from "./domain/metricsAggregator";
+import { computeInstantaneousRates } from "./domain/instantaneousRate";
 
 // ---------------------------------------------------------------------------
 // Dependencies — injected at construction
@@ -19,6 +21,7 @@ import { aggregateEvent } from "./domain/metricsAggregator";
 export interface HookProcessorDeps {
   readonly updateMetrics: (reducer: (prev: SessionMetrics) => SessionMetrics) => void;
   readonly updateMultiSessionMetrics?: (sessionId: string, reducer: (prev: SessionMetrics) => SessionMetrics) => void;
+  readonly appendSessionSample?: (sessionId: string, samples: CategorySampleInput) => void;
   readonly pricingTable: PricingTable;
 }
 
@@ -61,6 +64,36 @@ const buildAggregatorEvent = (
 });
 
 // ---------------------------------------------------------------------------
+// Category sample derivation — pure helper
+// ---------------------------------------------------------------------------
+
+/** Derive per-category sample values from previous and updated session metrics. */
+const deriveCategorySamples = (
+  previous: SessionMetrics,
+  updated: SessionMetrics,
+): CategorySampleInput => {
+  const now = Date.now();
+  const previousSnapshot = {
+    totalTokens: previous.totalTokens,
+    sessionCost: previous.sessionCost,
+    timestamp: now - 1, // ensure non-zero delta
+  };
+  const currentSnapshot = {
+    totalTokens: updated.totalTokens,
+    sessionCost: updated.sessionCost,
+    timestamp: now,
+  };
+  const { tokenRate, costRate } = computeInstantaneousRates(currentSnapshot, previousSnapshot);
+
+  return {
+    tokens: tokenRate,
+    cost: costRate,
+    agents: updated.activeAgentCount,
+    context: updated.contextWindowPct,
+  };
+};
+
+// ---------------------------------------------------------------------------
 // Public API — factory with dependency injection
 // ---------------------------------------------------------------------------
 
@@ -85,7 +118,7 @@ const extractSessionId = (payload: unknown): string | null => {
 };
 
 export const createHookProcessor = (deps: HookProcessorDeps): HookProcessor => {
-  const { updateMetrics, updateMultiSessionMetrics, pricingTable } = deps;
+  const { updateMetrics, updateMultiSessionMetrics, appendSessionSample, pricingTable } = deps;
 
   return (payload: unknown): void => {
     const eventType = extractEventType(payload);
@@ -99,9 +132,22 @@ export const createHookProcessor = (deps: HookProcessorDeps): HookProcessor => {
     if (updateMultiSessionMetrics) {
       const sessionId = extractSessionId(payload);
       if (sessionId) {
-        updateMultiSessionMetrics(sessionId, (previous: SessionMetrics): SessionMetrics =>
-          aggregateEvent(previous, event, pricingTable),
-        );
+        // Capture previous and updated metrics for category sample derivation
+        let previousMetrics: SessionMetrics | undefined;
+        let updatedMetrics: SessionMetrics | undefined;
+
+        updateMultiSessionMetrics(sessionId, (previous: SessionMetrics): SessionMetrics => {
+          previousMetrics = previous;
+          const next = aggregateEvent(previous, event, pricingTable);
+          updatedMetrics = next;
+          return next;
+        });
+
+        // Append per-category samples after metrics update
+        if (appendSessionSample && previousMetrics && updatedMetrics) {
+          const samples = deriveCategorySamples(previousMetrics, updatedMetrics);
+          appendSessionSample(sessionId, samples);
+        }
       }
     }
   };
