@@ -1,26 +1,36 @@
 /**
- * PMChart: reusable canvas chart cell for the Performance Monitor aggregate grid.
+ * PMChart: reusable filled-area canvas chart for the Performance Monitor.
  *
- * Renders a single metric waveform on an HTML Canvas element, reusing the
- * pure rendering functions from domain/oscilloscope.ts (prepareWaveformPoints,
- * computeGridLines, formatRateOverlay).
+ * Supports two rendering modes:
+ * - aggregate: Y-axis labels, horizontal grid lines, current value overlay,
+ *   gradient fill beneath the line.
+ * - mini: no grid lines, session label + value overlay, gradient fill.
  *
- * Each PMChart is one cell in the 2x2 aggregate grid. It receives samples,
- * a rate field to display, and a title/color for theming.
+ * Hover: emits sample index, value, and time offset to parent via onHover.
+ * Crosshair: draws vertical line + dot when hoverIndex is provided.
+ * Canvas sizes responsively via ResizeObserver.
+ *
+ * Pure rendering functions from domain/chartRenderer.ts and
+ * domain/oscilloscope.ts handle all coordinate computation.
  */
 
 import { useRef, useEffect, useCallback, useState } from "react";
-import type { RateSample } from "../domain/types";
+import type { RateSample, ChartMode } from "../domain/types";
 import {
-  prepareWaveformPoints,
-  computeGridLines,
   computeCanvasDimensions,
   formatRateOverlay,
   type CanvasDimensions,
-  type WaveformPoint,
-  type GridLine,
   type RateField,
 } from "../domain/oscilloscope";
+import {
+  computeHitTest,
+  computeCrosshairPosition,
+  prepareHorizontalGridLines,
+  prepareFilledAreaPoints,
+  type HorizontalGridLine,
+  type FilledAreaPoint,
+  type CrosshairPosition,
+} from "../domain/chartRenderer";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -28,25 +38,25 @@ import {
 
 const DEFAULT_WIDTH = 300;
 const DEFAULT_HEIGHT = 120;
-const WINDOW_DURATION_MS = 60_000;
-const GRID_INTERVAL_MS = 15_000;
 const ASPECT_RATIO = 2.5;
-
-// ---------------------------------------------------------------------------
-// Theme helpers
-// ---------------------------------------------------------------------------
-
-const getThemeColor = (prop: string, fallback: string): string => {
-  if (typeof document === "undefined") return fallback;
-  const value = getComputedStyle(document.documentElement).getPropertyValue(prop).trim();
-  return value || fallback;
-};
-
-const GRID_COLOR_FALLBACK = "rgba(0, 229, 204, 0.08)";
+const CROSSHAIR_COLOR = "rgba(255, 255, 255, 0.3)";
+const CROSSHAIR_DOT_RADIUS = 4;
+const BACKGROUND_COLOR = "rgba(0, 8, 6, 0.8)";
+const GRID_LINE_COLOR = "rgba(255, 255, 255, 0.06)";
 const GRID_LABEL_COLOR = "rgba(255, 255, 255, 0.4)";
 
 // ---------------------------------------------------------------------------
-// Canvas drawing (pure rendering, no domain side effects)
+// Hover data emitted to parent
+// ---------------------------------------------------------------------------
+
+export interface HoverData {
+  readonly sampleIndex: number;
+  readonly value: number;
+  readonly timeOffsetMs: number;
+}
+
+// ---------------------------------------------------------------------------
+// Canvas drawing functions (pure rendering, no domain side effects)
 // ---------------------------------------------------------------------------
 
 const clearCanvas = (
@@ -54,68 +64,142 @@ const clearCanvas = (
   dimensions: CanvasDimensions,
 ): void => {
   ctx.clearRect(0, 0, dimensions.width, dimensions.height);
-  ctx.fillStyle = "rgba(0, 8, 6, 0.6)";
+  ctx.fillStyle = BACKGROUND_COLOR;
   ctx.fillRect(0, 0, dimensions.width, dimensions.height);
 };
 
-const drawGridLines = (
+const drawHorizontalGridLines = (
   ctx: CanvasRenderingContext2D,
-  gridLines: ReadonlyArray<GridLine>,
+  gridLines: ReadonlyArray<HorizontalGridLine>,
   dimensions: CanvasDimensions,
 ): void => {
-  ctx.strokeStyle = GRID_COLOR_FALLBACK;
+  ctx.strokeStyle = GRID_LINE_COLOR;
   ctx.lineWidth = 1;
-  ctx.font = "8px monospace";
+  ctx.font = "9px monospace";
   ctx.fillStyle = GRID_LABEL_COLOR;
 
   for (const line of gridLines) {
     ctx.beginPath();
-    ctx.moveTo(line.x, dimensions.padding);
-    ctx.lineTo(line.x, dimensions.height - dimensions.padding);
+    ctx.moveTo(dimensions.padding, line.y);
+    ctx.lineTo(dimensions.width - dimensions.padding, line.y);
     ctx.stroke();
-    ctx.fillText(line.label, line.x + 2, line.labelY);
+    ctx.fillText(line.label, dimensions.width - dimensions.padding + 4, line.y + 3);
   }
 };
 
-const drawTrace = (
+const drawFilledArea = (
   ctx: CanvasRenderingContext2D,
-  points: ReadonlyArray<WaveformPoint>,
+  points: ReadonlyArray<FilledAreaPoint>,
   color: string,
+  dimensions: CanvasDimensions,
 ): void => {
   if (points.length < 2) return;
 
+  const bottomY = dimensions.height - dimensions.padding;
+
+  // Draw the gradient fill beneath the line
+  const gradient = ctx.createLinearGradient(0, dimensions.padding, 0, bottomY);
+  gradient.addColorStop(0, colorWithAlpha(color, 0.15));
+  gradient.addColorStop(1, colorWithAlpha(color, 0.05));
+
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, bottomY);
+  for (const point of points) {
+    ctx.lineTo(point.x, point.y);
+  }
+  ctx.lineTo(points[points.length - 1].x, bottomY);
+  ctx.closePath();
+  ctx.fill();
+
+  // Draw the line on top
   ctx.strokeStyle = color;
   ctx.lineWidth = 1.5;
   ctx.lineJoin = "round";
   ctx.beginPath();
   ctx.moveTo(points[0].x, points[0].y);
-
   for (let i = 1; i < points.length; i++) {
     ctx.lineTo(points[i].x, points[i].y);
   }
-
   ctx.stroke();
 };
 
-const drawTitle = (
-  ctx: CanvasRenderingContext2D,
-  title: string,
-  dimensions: CanvasDimensions,
-): void => {
-  ctx.font = "bold 11px monospace";
-  ctx.fillStyle = getThemeColor("--text-p", "#c8f0e8");
-  ctx.fillText(title, dimensions.padding + 2, dimensions.padding + 12);
-};
-
-const drawValue = (
+const drawCurrentValueOverlay = (
   ctx: CanvasRenderingContext2D,
   value: string,
   color: string,
   dimensions: CanvasDimensions,
 ): void => {
-  ctx.font = "bold 13px monospace";
+  ctx.font = "bold 18px monospace";
+  ctx.fillStyle = color;
+  ctx.fillText(value, dimensions.padding + 4, dimensions.padding + 22);
+};
+
+const drawMiniOverlay = (
+  ctx: CanvasRenderingContext2D,
+  label: string,
+  value: string,
+  color: string,
+  dimensions: CanvasDimensions,
+): void => {
+  // Session label at top-left
+  ctx.font = "bold 10px monospace";
+  ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+  ctx.fillText(label, dimensions.padding + 2, dimensions.padding + 11);
+
+  // Current value at bottom-left
+  ctx.font = "bold 12px monospace";
   ctx.fillStyle = color;
   ctx.fillText(value, dimensions.padding + 2, dimensions.height - dimensions.padding - 4);
+};
+
+const drawCrosshair = (
+  ctx: CanvasRenderingContext2D,
+  crosshair: CrosshairPosition,
+  color: string,
+  dimensions: CanvasDimensions,
+): void => {
+  // Vertical crosshair line
+  ctx.strokeStyle = CROSSHAIR_COLOR;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(crosshair.x, dimensions.padding);
+  ctx.lineTo(crosshair.x, dimensions.height - dimensions.padding);
+  ctx.stroke();
+
+  // Dot at the data point
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(crosshair.x, crosshair.dotY, CROSSHAIR_DOT_RADIUS, 0, Math.PI * 2);
+  ctx.fill();
+};
+
+// ---------------------------------------------------------------------------
+// Color utility
+// ---------------------------------------------------------------------------
+
+/** Parse a hex or CSS color and return it with a specific alpha. */
+const colorWithAlpha = (color: string, alpha: number): string => {
+  // Handle hex colors
+  const hexMatch = color.match(/^#([0-9a-f]{6})$/i);
+  if (hexMatch) {
+    const r = parseInt(hexMatch[1].slice(0, 2), 16);
+    const g = parseInt(hexMatch[1].slice(2, 4), 16);
+    const b = parseInt(hexMatch[1].slice(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
+  // Handle CSS var() fallback -- extract the fallback hex
+  const varMatch = color.match(/#([0-9a-f]{6})/i);
+  if (varMatch) {
+    const r = parseInt(varMatch[1].slice(0, 2), 16);
+    const g = parseInt(varMatch[1].slice(2, 4), 16);
+    const b = parseInt(varMatch[1].slice(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
+  // Fallback: return a semi-transparent white
+  return `rgba(255, 255, 255, ${alpha})`;
 };
 
 // ---------------------------------------------------------------------------
@@ -128,6 +212,14 @@ interface PMChartProps {
   readonly field: RateField;
   readonly color: string;
   readonly valueLabel?: string;
+  readonly mode?: ChartMode;
+  readonly yMax?: number;
+  readonly yLabels?: ReadonlyArray<string>;
+  readonly label?: string;
+  readonly formatValue?: (value: number) => string;
+  readonly hoverIndex?: number;
+  readonly onHover?: (data: HoverData) => void;
+  readonly onHoverEnd?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -140,6 +232,14 @@ export const PMChart = ({
   field,
   color,
   valueLabel,
+  mode = "aggregate",
+  yMax,
+  yLabels = [],
+  label,
+  formatValue,
+  hoverIndex,
+  onHover,
+  onHoverEnd,
 }: PMChartProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -147,10 +247,10 @@ export const PMChart = ({
   const [canvasDimensions, setCanvasDimensions] = useState<CanvasDimensions>({
     width: DEFAULT_WIDTH,
     height: DEFAULT_HEIGHT,
-    padding: 8,
+    padding: 10,
   });
 
-  // Responsive resize
+  // Responsive resize via ResizeObserver
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -168,6 +268,42 @@ export const PMChart = ({
     return () => observer.disconnect();
   }, []);
 
+  // Hover handler: map mouseX to sample index and emit
+  const handleMouseMove = useCallback(
+    (event: React.MouseEvent<HTMLCanvasElement>) => {
+      if (!onHover || samples.length === 0) return;
+
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = event.clientX - rect.left;
+      const result = computeHitTest(
+        mouseX,
+        canvasDimensions.width,
+        samples.length,
+        canvasDimensions.padding,
+      );
+
+      if (result.sampleIndex < 0) return;
+
+      const sampleValue = samples[result.sampleIndex][field];
+      const timeOffsetMs = (samples.length - 1 - result.sampleIndex) * 1000;
+
+      onHover({
+        sampleIndex: result.sampleIndex,
+        value: sampleValue,
+        timeOffsetMs,
+      });
+    },
+    [onHover, samples, canvasDimensions, field],
+  );
+
+  const handleMouseLeave = useCallback(() => {
+    onHoverEnd?.();
+  }, [onHoverEnd]);
+
+  // Render frame: draws the filled-area chart with mode-specific overlays
   const renderFrame = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -175,26 +311,55 @@ export const PMChart = ({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const gridLines = computeGridLines(
-      canvasDimensions,
-      WINDOW_DURATION_MS,
-      GRID_INTERVAL_MS,
-    );
+    // Compute the effective yMax from data or prop
+    const effectiveYMax = yMax ?? computePeakFromSamples(samples, field);
 
-    const points = prepareWaveformPoints(samples, canvasDimensions, field);
+    // Prepare filled-area points using chartRenderer (maps samples to canvas coords)
+    const chartSamples = samples.map((s) => ({
+      timestamp: s.timestamp,
+      value: s[field],
+    }));
+    const points = prepareFilledAreaPoints(chartSamples, canvasDimensions, effectiveYMax);
 
-    const currentRate = samples.length > 0
-      ? samples[samples.length - 1][field]
-      : 0;
-
+    // Clear canvas
     clearCanvas(ctx, canvasDimensions);
-    drawGridLines(ctx, gridLines, canvasDimensions);
-    drawTrace(ctx, points, color);
-    drawTitle(ctx, title, canvasDimensions);
 
-    const label = valueLabel ?? formatRateOverlay(currentRate);
-    drawValue(ctx, label, color, canvasDimensions);
-  }, [samples, canvasDimensions, field, color, title, valueLabel]);
+    // Aggregate mode: draw horizontal grid lines with Y-axis labels
+    if (mode === "aggregate" && yLabels.length > 0) {
+      const gridLines = prepareHorizontalGridLines(canvasDimensions, effectiveYMax, yLabels);
+      drawHorizontalGridLines(ctx, gridLines, canvasDimensions);
+    }
+
+    // Draw filled area with gradient
+    drawFilledArea(ctx, points, color, canvasDimensions);
+
+    // Mode-specific overlays
+    if (mode === "aggregate") {
+      // Current value overlay in top-left
+      const currentRate = samples.length > 0 ? samples[samples.length - 1][field] : 0;
+      const displayValue = valueLabel ?? formatValue?.(currentRate) ?? formatRateOverlay(currentRate);
+      drawCurrentValueOverlay(ctx, displayValue, color, canvasDimensions);
+    } else {
+      // Mini mode: session label + value overlay
+      const currentRate = samples.length > 0 ? samples[samples.length - 1][field] : 0;
+      const displayValue = valueLabel ?? formatValue?.(currentRate) ?? formatRateOverlay(currentRate);
+      const displayLabel = label ?? title;
+      drawMiniOverlay(ctx, displayLabel, displayValue, color, canvasDimensions);
+    }
+
+    // Draw crosshair when hoverIndex is provided
+    if (hoverIndex !== undefined && hoverIndex >= 0 && hoverIndex < samples.length) {
+      const sampleValue = samples[hoverIndex][field];
+      const crosshair = computeCrosshairPosition(
+        hoverIndex,
+        sampleValue,
+        samples.length,
+        effectiveYMax,
+        canvasDimensions,
+      );
+      drawCrosshair(ctx, crosshair, color, canvasDimensions);
+    }
+  }, [samples, canvasDimensions, field, color, title, valueLabel, mode, yMax, yLabels, label, formatValue, hoverIndex]);
 
   useEffect(() => {
     renderFrame();
@@ -207,7 +372,23 @@ export const PMChart = ({
         width={canvasDimensions.width}
         height={canvasDimensions.height}
         className="pm-chart-canvas"
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
       />
     </div>
   );
+};
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Compute peak value from samples for auto-scaling when yMax not provided. */
+const computePeakFromSamples = (
+  samples: ReadonlyArray<RateSample>,
+  field: RateField,
+): number => {
+  if (samples.length === 0) return 1;
+  const peak = samples.reduce((max, s) => Math.max(max, s[field]), 0);
+  return peak > 0 ? peak : 1;
 };
