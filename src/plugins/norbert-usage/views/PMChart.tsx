@@ -107,12 +107,12 @@ export const PMChart = ({
     return [timestamps, values];
   }, [samples, field]);
 
-  // Compute effective yMax
+  // Autoscale Y-axis from data with 10% headroom.
+  // Ignores the static yMax prop — the graph always fits the actual data.
   const effectiveYMax = useMemo(() => {
-    if (yMax !== undefined && yMax > 0) return yMax;
-    if (samples.length === 0) return 1;
+    if (samples.length === 0) return yMax ?? 1;
     const peak = samples.reduce((max, s) => Math.max(max, s[field]), 0);
-    return peak > 0 ? peak * 1.1 : 1;
+    return peak > 0 ? peak * 1.1 : (yMax ?? 1);
   }, [yMax, samples, field]);
 
   // Create uPlot once on mount, destroy on unmount.
@@ -207,17 +207,18 @@ export const PMChart = ({
       plot.destroy();
       uplotRef.current = null;
     };
-    // Only create once per mount. Color/mode/yMax changes require remount
-    // via React key prop on the parent.
+    // Only recreate on color/mode change. Y-axis autoscales via setScale.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [color, isAggregate, effectiveYMax]);
+  }, [color, isAggregate]);
 
-  // Update data without recreating the chart
+  // Update data and autoscale Y axis without recreating the chart
   useEffect(() => {
     const plot = uplotRef.current;
     if (!plot) return;
     plot.setData(data, false);
-  }, [data]);
+    // Update Y scale range to fit the current data
+    plot.setScale("y", { min: 0, max: effectiveYMax });
+  }, [data, effectiveYMax]);
 
   // Handle container resize
   useEffect(() => {
