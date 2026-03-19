@@ -98,22 +98,23 @@ Top to bottom:
 - Changes the graph's time window (and sample resolution)
 - Default: 1m
 
-### Split-Scope Mode (Per-Session Graphs)
+### Per-Session Graphs (Always Visible)
 
 Inspired by Task Manager's "Change graph to > Logical processors" feature that splits the CPU graph into a grid of per-core mini-graphs.
 
-A **toggle button** ("Aggregate" / "Per Session") next to the time pills switches between:
+The detail pane always shows **both** aggregate and per-session views stacked vertically:
 
-- **Aggregate mode** (default): single large graph showing the total/aggregate metric across all sessions
-- **Per-Session mode**: the graph area becomes a grid of mini-graphs, one per active session
+1. **Aggregate graph** (top, large): the main graph showing the total/aggregate metric across all sessions — this is always the hero element
+2. **Per-session graph grid** (below, smaller): a grid of mini-graphs, one per active session, automatically appearing when there are 2+ sessions
 
-In per-session mode:
+The per-session grid:
 - Each mini-graph shows that session's individual time series for the selected category
 - Each graph has a **label** (truncated session ID) and **current value** overlaid
 - All graphs share the **same Y-axis scale** (the category's `yMax`) for visual comparison
 - The grid auto-arranges: 2 sessions = 2 columns, 3 sessions = 2x2 grid (one empty), 4+ sessions = 3 columns
 - Each graph uses the same filled-area line chart style as the aggregate graph
 - Grid lines are omitted from mini-graphs to reduce clutter (only the line + fill)
+- When only 1 session is active, the per-session grid is hidden (aggregate = session in this case)
 
 This works for all four categories:
 
@@ -125,6 +126,22 @@ This works for all four categories:
 | **Context** | Max context % across sessions | Each session's context % |
 
 **Data requirement**: Each session needs its own independent time-series buffer per category. The `MultiSessionStore` already tracks per-session `SessionMetrics`; we need to extend it to also maintain per-session `TimeSeriesBuffer` objects (or compute per-session rate samples in the hook processor).
+
+### Hover Tooltips
+
+Hovering over any point on a graph line reveals a tooltip anchored near the cursor:
+
+- **Trigger**: mouse enters the graph canvas area. As the cursor moves horizontally, the tooltip tracks the nearest data point in the time series.
+- **Visual indicator**: a thin vertical crosshair line (1px, `rgba(255,255,255,0.3)`) from top to bottom of the graph at the hovered X position. A small dot (4px circle, line color) marks the exact data point on the line.
+- **Tooltip content** (varies by category):
+  - **Tokens/s**: `"842 tok/s · 23s ago"`
+  - **Cost**: `"$0.0341/min · 23s ago"`
+  - **Agents**: `"3 agents · 23s ago"`
+  - **Context**: `"72% · 23s ago"`
+- **Tooltip style**: small floating box with dark background (`rgba(0,8,6,0.95)`), 1px border in the line color, monospace font, 10px. Positioned above and to the right of the cursor (flips left if near the right edge).
+- **Time offset**: displayed as seconds ago relative to the right edge (newest point), e.g., "23s ago", "1s ago", "58s ago"
+- **Applies to**: both aggregate graphs and per-session mini-graphs
+- **Exit**: tooltip disappears when cursor leaves the canvas area
 
 ---
 
