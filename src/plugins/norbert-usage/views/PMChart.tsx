@@ -178,24 +178,23 @@ const drawCrosshair = (
 // Color utility
 // ---------------------------------------------------------------------------
 
+/** Parse a 6-digit hex string into [r, g, b] or return undefined. */
+const parseHexToRgb = (hex: string): readonly [number, number, number] | undefined => {
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  return Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b) ? undefined : [r, g, b];
+};
+
 /** Parse a hex or CSS color and return it with a specific alpha. */
 const colorWithAlpha = (color: string, alpha: number): string => {
-  // Handle hex colors
-  const hexMatch = color.match(/^#([0-9a-f]{6})$/i);
+  // Match any 6-digit hex in the string (covers #RRGGBB and CSS var() fallbacks)
+  const hexMatch = color.match(/#([0-9a-f]{6})/i);
   if (hexMatch) {
-    const r = parseInt(hexMatch[1].slice(0, 2), 16);
-    const g = parseInt(hexMatch[1].slice(2, 4), 16);
-    const b = parseInt(hexMatch[1].slice(4, 6), 16);
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-  }
-
-  // Handle CSS var() fallback -- extract the fallback hex
-  const varMatch = color.match(/#([0-9a-f]{6})/i);
-  if (varMatch) {
-    const r = parseInt(varMatch[1].slice(0, 2), 16);
-    const g = parseInt(varMatch[1].slice(2, 4), 16);
-    const b = parseInt(varMatch[1].slice(4, 6), 16);
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    const rgb = parseHexToRgb(hexMatch[1]);
+    if (rgb) {
+      return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`;
+    }
   }
 
   // Fallback: return a semi-transparent white
@@ -326,7 +325,7 @@ export const PMChart = ({
 
     // Aggregate mode: draw horizontal grid lines with Y-axis labels
     if (mode === "aggregate" && yLabels.length > 0) {
-      const gridLines = prepareHorizontalGridLines(canvasDimensions, effectiveYMax, yLabels);
+      const gridLines = prepareHorizontalGridLines(canvasDimensions, yLabels);
       drawHorizontalGridLines(ctx, gridLines, canvasDimensions);
     }
 
@@ -334,17 +333,13 @@ export const PMChart = ({
     drawFilledArea(ctx, points, color, canvasDimensions);
 
     // Mode-specific overlays
+    const currentRate = samples.length > 0 ? samples[samples.length - 1][field] : 0;
+    const displayValue = valueLabel ?? formatValue?.(currentRate) ?? formatRateOverlay(currentRate);
+
     if (mode === "aggregate") {
-      // Current value overlay in top-left
-      const currentRate = samples.length > 0 ? samples[samples.length - 1][field] : 0;
-      const displayValue = valueLabel ?? formatValue?.(currentRate) ?? formatRateOverlay(currentRate);
       drawCurrentValueOverlay(ctx, displayValue, color, canvasDimensions);
     } else {
-      // Mini mode: session label + value overlay
-      const currentRate = samples.length > 0 ? samples[samples.length - 1][field] : 0;
-      const displayValue = valueLabel ?? formatValue?.(currentRate) ?? formatRateOverlay(currentRate);
-      const displayLabel = label ?? title;
-      drawMiniOverlay(ctx, displayLabel, displayValue, color, canvasDimensions);
+      drawMiniOverlay(ctx, label ?? title, displayValue, color, canvasDimensions);
     }
 
     // Draw crosshair when hoverIndex is provided

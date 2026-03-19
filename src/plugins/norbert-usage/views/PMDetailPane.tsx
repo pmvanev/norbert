@@ -76,10 +76,10 @@ export const PMDetailPane = ({
   const aggregateBuffer = multiSessionStore.getAggregateBuffer(selectedCategory);
 
   // Build hover handlers that populate the shared HoverState
-  const handleAggregateHover = (data: HoverData): void => {
+  const createHoverHandler = (canvasId: string) => (data: HoverData): void => {
     onHoverChange({
       active: true,
-      canvasId: `aggregate-${selectedCategory}`,
+      canvasId,
       mouseX: 0,
       sampleIndex: data.sampleIndex,
       value: data.value,
@@ -90,26 +90,13 @@ export const PMDetailPane = ({
       tooltipY: 0,
     });
   };
+
+  const handleAggregateHover = createHoverHandler(`aggregate-${selectedCategory}`);
 
   const handleHoverEnd = (): void => {
     onHoverChange({
       ...hoverState,
       active: false,
-    });
-  };
-
-  const createSessionHoverHandler = (sessionId: string) => (data: HoverData): void => {
-    onHoverChange({
-      active: true,
-      canvasId: `session-${sessionId}-${selectedCategory}`,
-      mouseX: 0,
-      sampleIndex: data.sampleIndex,
-      value: data.value,
-      formattedValue: category.formatValue(data.value),
-      timeOffset: `${Math.round(data.timeOffsetMs / 1000)}s ago`,
-      color: category.color,
-      tooltipX: 0,
-      tooltipY: 0,
     });
   };
 
@@ -196,7 +183,7 @@ export const PMDetailPane = ({
                       ? activeCrosshairIndex
                       : undefined
                   }
-                  onHover={createSessionHoverHandler(session.sessionId)}
+                  onHover={createHoverHandler(`session-${session.sessionId}-${selectedCategory}`)}
                   onHoverEnd={handleHoverEnd}
                 />
               </div>

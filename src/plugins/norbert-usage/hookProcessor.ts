@@ -39,6 +39,13 @@ const extractEventType = (payload: unknown): string => {
   return typeof eventType === "string" ? eventType : "unknown";
 };
 
+/** Extract session_id from the raw event payload wrapper. */
+const extractSessionId = (payload: unknown): string | null => {
+  if (!isRecord(payload)) return null;
+  const sid = payload["session_id"];
+  return typeof sid === "string" ? sid : null;
+};
+
 /** Extract the inner payload from a DB event wrapper.
  *
  * Events from get_session_events arrive as:
@@ -110,13 +117,6 @@ const deriveCategorySamples = (
  * 3. aggregateEvent(prev, event, pricingTable) -> next SessionMetrics
  * 4. updateMetrics(reducer) -> effect (store update)
  */
-/** Extract session_id from the raw event payload wrapper. */
-const extractSessionId = (payload: unknown): string | null => {
-  if (!isRecord(payload)) return null;
-  const sid = payload["session_id"];
-  return typeof sid === "string" ? sid : null;
-};
-
 export const createHookProcessor = (deps: HookProcessorDeps): HookProcessor => {
   const { updateMetrics, updateMultiSessionMetrics, appendSessionSample, pricingTable } = deps;
 

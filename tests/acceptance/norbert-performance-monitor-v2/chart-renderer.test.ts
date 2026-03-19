@@ -198,7 +198,6 @@ describe("Horizontal grid lines positioned at Y-axis intervals", () => {
     // When horizontal grid lines are computed
     const gridLines = prepareHorizontalGridLines(
       STANDARD_DIMENSIONS,
-      yMax,
       yLabels,
     );
 
@@ -360,7 +359,7 @@ describe("Filled-area chart handles single sample without crashing", () => {
 describe("Horizontal grid lines with zero yMax produces no grid lines", () => {
   it("zero yMax means no intervals to draw", () => {
     // Given a yMax of 0 and empty labels
-    const gridLines = prepareHorizontalGridLines(STANDARD_DIMENSIONS, 0, []);
+    const gridLines = prepareHorizontalGridLines(STANDARD_DIMENSIONS, []);
 
     // Then no grid lines are produced
     expect(gridLines).toHaveLength(0);

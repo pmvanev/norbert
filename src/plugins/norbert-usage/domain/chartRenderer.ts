@@ -6,7 +6,7 @@
  * No canvas context mutation -- the view layer uses these data structures
  * to draw on HTML Canvas.
  *
- * Composes with oscilloscope.ts (CanvasDimensions type).
+ * Composes with oscilloscope (CanvasDimensions type).
  */
 
 import type { CanvasDimensions } from "./oscilloscope";
@@ -109,7 +109,6 @@ export const formatTimeOffset = (offsetMs: number): string => {
  */
 export const prepareHorizontalGridLines = (
   dimensions: CanvasDimensions,
-  _yMax: number,
   yLabels: ReadonlyArray<string>,
 ): ReadonlyArray<HorizontalGridLine> => {
   if (yLabels.length === 0) {
