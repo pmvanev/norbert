@@ -187,6 +187,44 @@ export interface TimeWindowConfig {
 export type TimeWindowId = "1m" | "5m" | "15m" | "session";
 
 // ---------------------------------------------------------------------------
+// MetricCategoryId -- discriminated union for the four metric categories
+// ---------------------------------------------------------------------------
+
+export type MetricCategoryId = "tokens" | "cost" | "agents" | "context";
+
+// ---------------------------------------------------------------------------
+// CategorySample -- per-category sample point for multi-category buffers
+// ---------------------------------------------------------------------------
+
+export interface CategorySample {
+  readonly timestamp: number;
+  readonly value: number;
+}
+
+// ---------------------------------------------------------------------------
+// HoverState -- shared hover state for crosshair + tooltip rendering
+// ---------------------------------------------------------------------------
+
+export interface HoverState {
+  readonly active: boolean;
+  readonly canvasId: string;
+  readonly mouseX: number;
+  readonly sampleIndex: number;
+  readonly value: number;
+  readonly formattedValue: string;
+  readonly timeOffset: string;
+  readonly color: string;
+  readonly tooltipX: number;
+  readonly tooltipY: number;
+}
+
+// ---------------------------------------------------------------------------
+// ChartMode -- discriminated union for chart rendering mode
+// ---------------------------------------------------------------------------
+
+export type ChartMode = "aggregate" | "mini";
+
+// ---------------------------------------------------------------------------
 // PMViewMode -- discriminated union for Performance Monitor navigation
 // ---------------------------------------------------------------------------
 
