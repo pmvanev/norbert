@@ -225,14 +225,6 @@ export interface HoverState {
 export type ChartMode = "aggregate" | "mini";
 
 // ---------------------------------------------------------------------------
-// PMViewMode -- discriminated union for Performance Monitor navigation
-// ---------------------------------------------------------------------------
-
-export type PMViewMode =
-  | { readonly tag: "aggregate" }
-  | { readonly tag: "session-detail"; readonly sessionId: string };
-
-// ---------------------------------------------------------------------------
 // CompactionEstimate -- estimated time until context compaction
 // ---------------------------------------------------------------------------
 
@@ -243,25 +235,3 @@ export interface CompactionEstimate {
   readonly remainingTokens: number;
 }
 
-// ---------------------------------------------------------------------------
-// AgentMetrics -- per-agent metrics within a session
-// ---------------------------------------------------------------------------
-
-export interface AgentMetrics {
-  readonly agentId: string;
-  readonly agentRole: string;
-  readonly tokenRate: number;
-  readonly costRate: number;
-  readonly tokenTotal: number;
-}
-
-// ---------------------------------------------------------------------------
-// SessionDetailData -- pre-computed data for session detail view
-// ---------------------------------------------------------------------------
-
-export interface SessionDetailData {
-  readonly sessionId: string;
-  readonly metrics: SessionMetrics;
-  readonly agents: ReadonlyArray<AgentMetrics>;
-  readonly compaction: CompactionEstimate;
-}

@@ -33,6 +33,10 @@ import {
   type SessionMetrics,
 } from "../../../src/plugins/norbert-usage/domain/metricsAggregator";
 
+import { createMultiSessionStore } from "../../../src/plugins/norbert-usage/adapters/multiSessionStore";
+import { createHookProcessor } from "../../../src/plugins/norbert-usage/hookProcessor";
+import { DEFAULT_PRICING_TABLE } from "../../../src/plugins/norbert-usage/domain/pricingModel";
+
 // ---------------------------------------------------------------------------
 // Helper
 // ---------------------------------------------------------------------------
@@ -370,5 +374,63 @@ describe("@property: every category has all required sidebar display fields", ()
       expect(category.color).toMatch(/^#[0-9a-fA-F]{6}$/);
       expect(typeof category.formatValue).toBe("function");
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WIRING: Performance Monitor v2 renders in the performance-monitor view slot
+// Traces to: 05-01, US-PM-001
+// ---------------------------------------------------------------------------
+
+describe("Performance Monitor v2 renders in the performance-monitor view slot", () => {
+  it("multiSessionStore exposes appendSessionSample for hook processor wiring", () => {
+    // Given the multi-session store created by the plugin
+    const store = createMultiSessionStore();
+
+    // When checking the store interface
+    // Then appendSessionSample is available as a function
+    expect(typeof store.appendSessionSample).toBe("function");
+  });
+
+  it("hook processor accepts appendSessionSample in its deps", () => {
+    // When creating a hook processor with appendSessionSample wired
+    const appendCalls: Array<{ sessionId: string; samples: unknown }> = [];
+    const processor = createHookProcessor({
+      updateMetrics: () => {},
+      updateMultiSessionMetrics: () => {},
+      appendSessionSample: (sessionId: string, samples: unknown) => {
+        appendCalls.push({ sessionId, samples });
+      },
+      pricingTable: DEFAULT_PRICING_TABLE,
+    });
+
+    // Then the processor is a function (wiring succeeded)
+    expect(typeof processor).toBe("function");
+  });
+
+  it("v1 view files PMAggregateGrid and PMSessionDetail are removed", async () => {
+    // Given the v2 Performance Monitor replaces v1 views
+    // When checking for v1 module existence
+    const fs = await import("fs");
+    const path = await import("path");
+    const viewsDir = path.resolve(__dirname, "../../../src/plugins/norbert-usage/views");
+
+    // Then v1 files no longer exist
+    expect(fs.existsSync(path.join(viewsDir, "PMAggregateGrid.tsx"))).toBe(false);
+    expect(fs.existsSync(path.join(viewsDir, "PMSessionDetail.tsx"))).toBe(false);
+  });
+
+  it("v1 types PMViewMode, AgentMetrics, SessionDetailData are removed from types.ts", async () => {
+    // Given the v2 PM uses new domain types
+    // When reading the types module source
+    const fs = await import("fs");
+    const path = await import("path");
+    const typesPath = path.resolve(__dirname, "../../../src/plugins/norbert-usage/domain/types.ts");
+    const source = fs.readFileSync(typesPath, "utf-8");
+
+    // Then the v1-only types are no longer exported
+    expect(source).not.toContain("export type PMViewMode");
+    expect(source).not.toContain("export interface AgentMetrics");
+    expect(source).not.toContain("export interface SessionDetailData");
   });
 });

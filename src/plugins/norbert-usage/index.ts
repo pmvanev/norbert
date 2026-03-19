@@ -162,6 +162,9 @@ const onLoad = (api: NorbertAPI): void => {
         usageMultiSessionStore.updateSession(sessionId, reducer(prev));
       }
     },
+    appendSessionSample: (sessionId, samples) => {
+      usageMultiSessionStore.appendSessionSample(sessionId, samples);
+    },
     pricingTable: DEFAULT_PRICING_TABLE,
   });
   api.hooks.register("session-event", processor);
