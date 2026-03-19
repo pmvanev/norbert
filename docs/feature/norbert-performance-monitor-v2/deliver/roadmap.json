@@ -1,0 +1,398 @@
+{
+  "roadmap": {
+    "project_id": "norbert-performance-monitor-v2",
+    "created_at": "2026-03-19T19:26:40Z",
+    "total_steps": 10,
+    "phases": 5
+  },
+  "phases": [
+    {
+      "id": "01",
+      "name": "Domain Types and Category Configuration",
+      "steps": [
+        {
+          "id": "01-01",
+          "name": "Metric category types and configuration",
+          "description": "Define MetricCategoryId, MetricCategory, CategorySample, HoverState, ChartMode types. Create categoryConfig with const array of 4 categories including formatting, colors, aggregate applicability, stats config, and session table columns.",
+          "criteria": [
+            "4 metric categories defined with distinct colors and Y-axis config",
+            "Context category marked as aggregate-not-applicable",
+            "Each category has value formatter producing display strings",
+            "Stats config and session column definitions present per category"
+          ],
+          "time_estimate": "3h",
+          "dependencies": [],
+          "implementation_scope": {
+            "files_to_modify": [
+              "src/plugins/norbert-usage/domain/types.ts"
+            ],
+            "files_to_create": [
+              "src/plugins/norbert-usage/domain/categoryConfig.ts"
+            ],
+            "tests": [
+              "tests/acceptance/norbert-performance-monitor-v2/category-configuration.test.ts#User sees four distinct metric categories for monitoring",
+              "tests/acceptance/norbert-performance-monitor-v2/category-configuration.test.ts#Each category has a distinct display label",
+              "tests/acceptance/norbert-performance-monitor-v2/category-configuration.test.ts#Each category has a distinct line color",
+              "tests/acceptance/norbert-performance-monitor-v2/category-configuration.test.ts#Token rate formatted with unit suffix",
+              "tests/acceptance/norbert-performance-monitor-v2/category-configuration.test.ts#Cost rate formatted as dollars per minute",
+              "tests/acceptance/norbert-performance-monitor-v2/category-configuration.test.ts#Agent count formatted as integer",
+              "tests/acceptance/norbert-performance-monitor-v2/category-configuration.test.ts#Context percentage formatted with percent sign",
+              "tests/acceptance/norbert-performance-monitor-v2/category-configuration.test.ts#Tokens, cost, and agents support aggregate graphs",
+              "tests/acceptance/norbert-performance-monitor-v2/category-configuration.test.ts#Context does not support aggregate graph",
+              "tests/acceptance/norbert-performance-monitor-v2/category-configuration.test.ts#Each category defines 6 stats grid cells",
+              "tests/acceptance/norbert-performance-monitor-v2/category-configuration.test.ts#Each category defines session table columns",
+              "tests/acceptance/norbert-performance-monitor-v2/category-configuration.test.ts#Looking up a nonexistent category returns undefined",
+              "tests/acceptance/norbert-performance-monitor-v2/category-configuration.test.ts#Token rate formatter handles zero",
+              "tests/acceptance/norbert-performance-monitor-v2/category-configuration.test.ts#Token rate formatter handles very large values",
+              "tests/acceptance/norbert-performance-monitor-v2/category-configuration.test.ts#Cost formatter handles very small rates",
+              "tests/acceptance/norbert-performance-monitor-v2/category-configuration.test.ts#Context formatter handles 100%",
+              "tests/acceptance/norbert-performance-monitor-v2/category-configuration.test.ts#Agent count formatter handles zero agents",
+              "tests/acceptance/norbert-performance-monitor-v2/category-configuration.test.ts#@property: all categories have unique identifiers and colors"
+            ]
+          },
+          "validation": {
+            "status": "pending"
+          }
+        },
+        {
+          "id": "01-02",
+          "name": "Chart renderer pure functions",
+          "description": "Filled-area line chart renderer composing with oscilloscope functions. Adds gradient fill, horizontal grid lines, Y-axis labels, current value overlay, crosshair, hit-test, and sparkline rendering.",
+          "criteria": [
+            "Filled-area chart renders line with gradient fill beneath",
+            "Horizontal grid lines drawn at Y-axis intervals",
+            "Hit-test maps mouseX to nearest sample index and value",
+            "Sparkline renders line-only (no fill, no grid, no labels)",
+            "Crosshair renders vertical line + dot at specified index"
+          ],
+          "time_estimate": "4h",
+          "dependencies": ["01-01"],
+          "implementation_scope": {
+            "files_to_modify": [],
+            "files_to_create": [
+              "src/plugins/norbert-usage/domain/chartRenderer.ts"
+            ],
+            "tests": [
+              "tests/acceptance/norbert-performance-monitor-v2/chart-renderer.test.ts#User hovers over chart point and sees value with time offset",
+              "tests/acceptance/norbert-performance-monitor-v2/chart-renderer.test.ts#Hit-test at left edge maps to first sample",
+              "tests/acceptance/norbert-performance-monitor-v2/chart-renderer.test.ts#Hit-test at right edge maps to last sample",
+              "tests/acceptance/norbert-performance-monitor-v2/chart-renderer.test.ts#Hit-test outside canvas bounds is clamped",
+              "tests/acceptance/norbert-performance-monitor-v2/chart-renderer.test.ts#Hit-test with single sample always returns index 0",
+              "tests/acceptance/norbert-performance-monitor-v2/chart-renderer.test.ts#Hit-test with empty buffer returns negative index",
+              "tests/acceptance/norbert-performance-monitor-v2/chart-renderer.test.ts#Time offset formatted as seconds ago",
+              "tests/acceptance/norbert-performance-monitor-v2/chart-renderer.test.ts#Horizontal grid lines positioned at Y-axis intervals",
+              "tests/acceptance/norbert-performance-monitor-v2/chart-renderer.test.ts#Filled-area chart produces line points with baseline",
+              "tests/acceptance/norbert-performance-monitor-v2/chart-renderer.test.ts#Filled-area chart with all zero values produces flat baseline",
+              "tests/acceptance/norbert-performance-monitor-v2/chart-renderer.test.ts#Sparkline produces line-only points without grid or labels",
+              "tests/acceptance/norbert-performance-monitor-v2/chart-renderer.test.ts#Sparkline with empty samples produces no points",
+              "tests/acceptance/norbert-performance-monitor-v2/chart-renderer.test.ts#Crosshair positioned at hovered sample",
+              "tests/acceptance/norbert-performance-monitor-v2/chart-renderer.test.ts#Chart renderer handles zero yMax gracefully",
+              "tests/acceptance/norbert-performance-monitor-v2/chart-renderer.test.ts#Chart renderer handles negative mouse coordinates",
+              "tests/acceptance/norbert-performance-monitor-v2/chart-renderer.test.ts#Filled-area chart handles single sample without crashing",
+              "tests/acceptance/norbert-performance-monitor-v2/chart-renderer.test.ts#Horizontal grid lines with zero yMax produces no grid lines",
+              "tests/acceptance/norbert-performance-monitor-v2/chart-renderer.test.ts#Time offset for large values formats correctly",
+              "tests/acceptance/norbert-performance-monitor-v2/chart-renderer.test.ts#@property: hit-test index is always within buffer bounds"
+            ]
+          },
+          "validation": {
+            "status": "pending"
+          }
+        }
+      ]
+    },
+    {
+      "id": "02",
+      "name": "Adapter Extension",
+      "steps": [
+        {
+          "id": "02-01",
+          "name": "Extend MultiSessionStore with per-category buffers",
+          "description": "Add per-session per-category TimeSeriesBuffers and aggregate category buffers to MultiSessionStore. Add subscribe/notify, appendSessionSample, getSessionBuffer, getAggregateBuffer methods.",
+          "criteria": [
+            "Per-session samples appendable for each of 4 categories",
+            "Aggregate buffers auto-recomputed on sample append (sum for tokens/cost/agents)",
+            "Context aggregate buffer not populated (non-applicable)",
+            "Subscribers notified on state change",
+            "Existing addSession/removeSession/updateSession/getSessions unchanged"
+          ],
+          "time_estimate": "4h",
+          "dependencies": ["01-01"],
+          "implementation_scope": {
+            "files_to_modify": [
+              "src/plugins/norbert-usage/adapters/multiSessionStore.ts"
+            ],
+            "files_to_create": [],
+            "tests": [
+              "tests/acceptance/norbert-performance-monitor-v2/per-session-category-buffers.test.ts#User sees per-session metric graphs update as events arrive",
+              "tests/acceptance/norbert-performance-monitor-v2/per-session-category-buffers.test.ts#Each session maintains independent buffers per category",
+              "tests/acceptance/norbert-performance-monitor-v2/per-session-category-buffers.test.ts#Removing a session cleans up its per-category buffers",
+              "tests/acceptance/norbert-performance-monitor-v2/per-session-category-buffers.test.ts#Appending to a nonexistent session is a no-op",
+              "tests/acceptance/norbert-performance-monitor-v2/per-session-category-buffers.test.ts#Aggregate token buffer sums across all sessions",
+              "tests/acceptance/norbert-performance-monitor-v2/per-session-category-buffers.test.ts#Aggregate cost buffer sums across all sessions",
+              "tests/acceptance/norbert-performance-monitor-v2/per-session-category-buffers.test.ts#Context category has no aggregate buffer",
+              "tests/acceptance/norbert-performance-monitor-v2/per-session-category-buffers.test.ts#Subscribers are notified when samples are appended",
+              "tests/acceptance/norbert-performance-monitor-v2/per-session-category-buffers.test.ts#Unsubscribed callbacks are not invoked",
+              "tests/acceptance/norbert-performance-monitor-v2/per-session-category-buffers.test.ts#Existing store operations unchanged after extension",
+              "tests/acceptance/norbert-performance-monitor-v2/per-session-category-buffers.test.ts#Getting buffer for unknown category returns empty buffer",
+              "tests/acceptance/norbert-performance-monitor-v2/per-session-category-buffers.test.ts#Adding same session twice is idempotent",
+              "tests/acceptance/norbert-performance-monitor-v2/per-session-category-buffers.test.ts#Aggregate buffer updates when a session is removed",
+              "tests/acceptance/norbert-performance-monitor-v2/per-session-category-buffers.test.ts#Multiple rapid samples accumulate in ring buffer",
+              "tests/acceptance/norbert-performance-monitor-v2/per-session-category-buffers.test.ts#@property: context aggregate buffer is never populated regardless of session count",
+              "tests/acceptance/norbert-performance-monitor-v2/per-session-category-buffers.test.ts#@property: aggregate sum always equals sum of per-session latest values"
+            ]
+          },
+          "validation": {
+            "status": "pending"
+          }
+        },
+        {
+          "id": "02-02",
+          "name": "Extend hookProcessor to feed category samples",
+          "description": "After metrics update, compute per-category sample values and call appendSessionSample on the extended MultiSessionStore.",
+          "criteria": [
+            "Token rate and cost rate samples derived from instantaneous rate computation",
+            "Agent count and context percentage samples derived from updated SessionMetrics",
+            "Samples appended to MultiSessionStore per session per category on each event",
+            "Existing broadcast-session pipeline unchanged"
+          ],
+          "time_estimate": "2h",
+          "dependencies": ["02-01"],
+          "implementation_scope": {
+            "files_to_modify": [
+              "src/plugins/norbert-usage/hookProcessor.ts"
+            ],
+            "files_to_create": [],
+            "tests": [
+              "tests/acceptance/norbert-performance-monitor-v2/per-session-category-buffers.test.ts#Token rate sample derived from instantaneous rate on event",
+              "tests/acceptance/norbert-performance-monitor-v2/per-session-category-buffers.test.ts#Agent count sample derived from session metrics",
+              "tests/acceptance/norbert-performance-monitor-v2/per-session-category-buffers.test.ts#Existing single-session pipeline unchanged after extension"
+            ]
+          },
+          "validation": {
+            "status": "pending"
+          }
+        }
+      ]
+    },
+    {
+      "id": "03",
+      "name": "View Layer - Layout Shell",
+      "steps": [
+        {
+          "id": "03-01",
+          "name": "PMContainerView with sidebar+detail layout",
+          "description": "Replace PerformanceMonitorView with master-detail layout shell managing selectedCategory, selectedWindow, and hoverState. Subscribes to MultiSessionStore. Renders PMSidebar (left) and PMDetailPane (right).",
+          "criteria": [
+            "Sidebar+detail dual-pane layout renders with correct proportions",
+            "Category selection updates detail pane content",
+            "Time window selection persists across category switches",
+            "View subscribes to MultiSessionStore and re-renders on data updates",
+            "sec-hdr title area showing 'Performance Monitor'"
+          ],
+          "time_estimate": "4h",
+          "dependencies": ["02-01"],
+          "implementation_scope": {
+            "files_to_modify": [
+              "src/plugins/norbert-usage/views/PerformanceMonitorView.tsx"
+            ],
+            "files_to_create": [],
+            "tests": [
+              "tests/acceptance/norbert-performance-monitor-v2/sidebar-and-detail-layout.test.ts#User selects a metric category and sees category-scoped detail pane",
+              "tests/acceptance/norbert-performance-monitor-v2/sidebar-and-detail-layout.test.ts#Detail pane shows aggregate graph for aggregatable categories",
+              "tests/acceptance/norbert-performance-monitor-v2/sidebar-and-detail-layout.test.ts#Detail pane omits aggregate graph for context category",
+              "tests/acceptance/norbert-performance-monitor-v2/sidebar-and-detail-layout.test.ts#No sessions active produces zero aggregate for all categories",
+              "tests/acceptance/norbert-performance-monitor-v2/sidebar-and-detail-layout.test.ts#Session ends while viewing detail pane",
+              "tests/acceptance/norbert-performance-monitor-v2/sidebar-and-detail-layout.test.ts#New session added while viewing detail pane",
+              "tests/acceptance/norbert-performance-monitor-v2/sidebar-and-detail-layout.test.ts#Default category selection is tokens",
+              "tests/acceptance/norbert-performance-monitor-v2/sidebar-and-detail-layout.test.ts#Time window selection persists when switching categories"
+            ]
+          },
+          "validation": {
+            "status": "pending"
+          }
+        },
+        {
+          "id": "03-02",
+          "name": "PMSidebar with sparklines",
+          "description": "Category list where each row shows label, current value, and sparkline canvas. Selected category has accent-colored left border.",
+          "criteria": [
+            "4 category rows rendered with correct labels and colors",
+            "Current value updates from aggregate buffer latest sample",
+            "Sparkline canvas renders last 60s line using chartRenderer",
+            "Selected category highlighted with left border in category color",
+            "Clicking a row emits category selection"
+          ],
+          "time_estimate": "3h",
+          "dependencies": ["03-01", "01-02"],
+          "implementation_scope": {
+            "files_to_modify": [],
+            "files_to_create": [
+              "src/plugins/norbert-usage/views/PMSidebar.tsx"
+            ],
+            "tests": [
+              "tests/acceptance/norbert-performance-monitor-v2/sidebar-and-detail-layout.test.ts#Sidebar shows current value for each category from latest sample",
+              "tests/acceptance/norbert-performance-monitor-v2/sidebar-and-detail-layout.test.ts#@property: every category has all required sidebar display fields"
+            ]
+          },
+          "validation": {
+            "status": "pending"
+          }
+        }
+      ]
+    },
+    {
+      "id": "04",
+      "name": "View Layer - Detail Pane Components",
+      "steps": [
+        {
+          "id": "04-01",
+          "name": "PMChart with filled-area rendering and hover",
+          "description": "Replace PMChart with filled-area canvas chart supporting aggregate and mini modes. Emits hover coordinates for tooltip. Renders crosshair when hovered.",
+          "criteria": [
+            "Aggregate mode: Y-axis labels, horizontal grid lines, current value overlay, gradient fill",
+            "Mini mode: no grid lines, session label + value overlay, gradient fill",
+            "Hover emits sample index, value, and time offset to container",
+            "Crosshair renders at hovered position (vertical line + dot)",
+            "Canvas sizes responsively via ResizeObserver"
+          ],
+          "time_estimate": "4h",
+          "dependencies": ["01-02", "03-01"],
+          "implementation_scope": {
+            "files_to_modify": [
+              "src/plugins/norbert-usage/views/PMChart.tsx"
+            ],
+            "files_to_create": [],
+            "tests": [
+              "tests/acceptance/norbert-performance-monitor-v2/hover-tooltip.test.ts#User hovers over token chart and sees rate with time offset",
+              "tests/acceptance/norbert-performance-monitor-v2/hover-tooltip.test.ts#Hit-test maps hover position to correct sample for tooltip",
+              "tests/acceptance/norbert-performance-monitor-v2/hover-tooltip.test.ts#Tooltip handles edge of chart area gracefully",
+              "tests/acceptance/norbert-performance-monitor-v2/hover-tooltip.test.ts#Tooltip disappears when cursor leaves canvas area",
+              "tests/acceptance/norbert-performance-monitor-v2/hover-tooltip.test.ts#@property: same mouseX always produces same sampleIndex"
+            ]
+          },
+          "validation": {
+            "status": "pending"
+          }
+        },
+        {
+          "id": "04-02",
+          "name": "PMDetailPane with aggregate graph, per-session grid, stats, table",
+          "description": "Detail pane rendering all category-scoped sections. Aggregate graph omitted when category is non-aggregatable. Per-session grid auto-arranges. Hidden when single session active.",
+          "criteria": [
+            "Aggregate graph visible for tokens/cost/agents categories",
+            "Aggregate graph omitted for context; per-session graphs render larger",
+            "Per-session grid shows one mini-graph per active session with shared Y-axis scale",
+            "Per-session grid hidden when only 1 session active",
+            "Stats grid and session table render below graphs"
+          ],
+          "time_estimate": "4h",
+          "dependencies": ["04-01"],
+          "implementation_scope": {
+            "files_to_modify": [],
+            "files_to_create": [
+              "src/plugins/norbert-usage/views/PMDetailPane.tsx"
+            ],
+            "tests": [
+              "tests/acceptance/norbert-performance-monitor-v2/sidebar-and-detail-layout.test.ts#Per-session grid hidden when only one session is active",
+              "tests/acceptance/norbert-performance-monitor-v2/sidebar-and-detail-layout.test.ts#Per-session grid shown when two or more sessions are active",
+              "tests/acceptance/norbert-performance-monitor-v2/sidebar-and-detail-layout.test.ts#Session table columns change based on selected category",
+              "tests/acceptance/norbert-performance-monitor-v2/sidebar-and-detail-layout.test.ts#Session with zero context data shows safely in detail pane",
+              "tests/acceptance/norbert-performance-monitor-v2/sidebar-and-detail-layout.test.ts#All sessions idle shows zero rates across all categories",
+              "tests/acceptance/norbert-performance-monitor-v2/sidebar-and-detail-layout.test.ts#Session breakdown sorted by primary metric for each category"
+            ]
+          },
+          "validation": {
+            "status": "pending"
+          }
+        },
+        {
+          "id": "04-03",
+          "name": "PMTooltip, PMStatsGrid, PMSessionTable",
+          "description": "Floating tooltip, 2-column stats grid, and per-session breakdown table -- all driven by category configuration.",
+          "criteria": [
+            "Tooltip shows formatted value + time offset, positioned near cursor",
+            "Tooltip border color matches category line color",
+            "Stats grid shows 6 cells (2x3) with category-specific labels and values",
+            "Session table columns change per selected category",
+            "Session rows sorted by primary metric descending"
+          ],
+          "time_estimate": "4h",
+          "dependencies": ["04-02"],
+          "implementation_scope": {
+            "files_to_modify": [],
+            "files_to_create": [
+              "src/plugins/norbert-usage/views/PMTooltip.tsx",
+              "src/plugins/norbert-usage/views/PMStatsGrid.tsx",
+              "src/plugins/norbert-usage/views/PMSessionTable.tsx"
+            ],
+            "tests": [
+              "tests/acceptance/norbert-performance-monitor-v2/hover-tooltip.test.ts#Tooltip shows cost rate formatted for cost category",
+              "tests/acceptance/norbert-performance-monitor-v2/hover-tooltip.test.ts#Tooltip shows agent count for agents category",
+              "tests/acceptance/norbert-performance-monitor-v2/hover-tooltip.test.ts#Tooltip shows percentage for context category",
+              "tests/acceptance/norbert-performance-monitor-v2/hover-tooltip.test.ts#Tooltip border color matches the selected category line color"
+            ]
+          },
+          "validation": {
+            "status": "pending"
+          }
+        }
+      ]
+    },
+    {
+      "id": "05",
+      "name": "Integration and Polish",
+      "steps": [
+        {
+          "id": "05-01",
+          "name": "Wire PMContainerView into plugin registration and App.tsx",
+          "description": "Update index.ts to wire extended MultiSessionStore. Ensure PMContainerView renders in performance-monitor view slot. Remove v1 view files and unused v1 types.",
+          "criteria": [
+            "Performance Monitor v2 renders in the performance-monitor view slot",
+            "Extended MultiSessionStore wired with per-category buffer initialization",
+            "v1 view files (PMAggregateGrid, PMSessionDetail) removed",
+            "Existing views (Oscilloscope, Gauge Cluster, Dashboard) unchanged",
+            "PMViewMode, AgentMetrics, SessionDetailData types removed from types.ts"
+          ],
+          "time_estimate": "2h",
+          "dependencies": ["04-03", "02-02"],
+          "implementation_scope": {
+            "files_to_modify": [
+              "src/plugins/norbert-usage/index.ts",
+              "src/plugins/norbert-usage/domain/types.ts"
+            ],
+            "files_to_create": [],
+            "files_to_remove": [
+              "src/plugins/norbert-usage/views/PMAggregateGrid.tsx",
+              "src/plugins/norbert-usage/views/PMSessionDetail.tsx"
+            ],
+            "tests": [
+              "tests/acceptance/norbert-performance-monitor-v2/sidebar-and-detail-layout.test.ts#Performance Monitor v2 renders in the performance-monitor view slot"
+            ]
+          },
+          "validation": {
+            "status": "pending"
+          }
+        }
+      ]
+    }
+  ],
+  "implementation_scope": {
+    "source_directories": [
+      "src/plugins/norbert-usage/"
+    ],
+    "test_directories": [
+      "tests/acceptance/norbert-performance-monitor-v2/"
+    ],
+    "excluded_patterns": [
+      "__init__.py",
+      "__pycache__/**"
+    ]
+  },
+  "validation": {
+    "status": "approved",
+    "reviewer": "software-crafter-reviewer",
+    "reviewed_at": "2026-03-19",
+    "approved_at": "2026-03-19",
+    "revision_notes": "F1: added tests for 02-02 hookProcessor. F2: added wiring test for 05-01. F3: US-PM-003 drill-down deferred to future iteration (v2 focuses on sidebar+category layout). F4: added time window persistence test to 03-01."
+  }
+}
