@@ -1061,6 +1061,75 @@ code, pre, .mono,
   color: var(--error, #ff4444) !important;
 }
 
+/* PM Sidebar (v2 category list with sparklines) */
+
+.pm-container {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.pm-sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 180px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border-card);
+  overflow-y: auto;
+}
+
+.pm-sidebar-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: none;
+  border-left: 3px solid transparent;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-ui);
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.pm-sidebar-row:hover {
+  background: var(--hover);
+}
+
+.pm-sidebar-row-selected {
+  background: var(--bg-card);
+  border-left-width: 3px;
+  border-left-style: solid;
+}
+
+.pm-sidebar-label {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-m);
+  font-family: var(--font-mono);
+}
+
+.pm-sidebar-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-p);
+  line-height: 1;
+}
+
+.pm-sidebar-sparkline {
+  display: block;
+  margin-top: 2px;
+}
+
+.pm-detail-pane {
+  flex: 1;
+  overflow-y: auto;
+  min-width: 0;
+}
+
 /* ═══ USAGE DASHBOARD ═══ */
 
 .usage-dashboard {

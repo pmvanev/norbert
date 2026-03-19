@@ -10,7 +10,8 @@
  *   - hoverState: shared crosshair state for chart tooltips
  *
  * Subscribes to MultiSessionStore for re-renders on data updates.
- * PMSidebar and PMDetailPane are placeholder slots for 03-02 and 04-02.
+ * PMSidebar renders category rows with sparklines. PMDetailPane is a
+ * placeholder slot for 04-02.
  */
 
 import { useState, useEffect } from "react";
@@ -18,6 +19,7 @@ import type { MetricsStore } from "../adapters/metricsStore";
 import type { MultiSessionStore } from "../adapters/multiSessionStore";
 import type { MetricCategoryId, TimeWindowId, HoverState } from "../domain/types";
 import { PMTimeWindowSelector } from "./PMTimeWindowSelector";
+import { PMSidebar } from "./PMSidebar";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -60,8 +62,8 @@ export const PerformanceMonitorView = ({
   const [selectedWindow, setSelectedWindow] = useState<TimeWindowId>(DEFAULT_TIME_WINDOW);
   const [hoverState, setHoverState] = useState<HoverState>(INITIAL_HOVER_STATE);
 
-  // Setters will be passed to PMSidebar (03-02) and PMDetailPane (04-02)
-  void setSelectedCategory;
+  // hoverState + setter will be passed to PMDetailPane (04-02)
+  void hoverState;
   void setHoverState;
 
   // Force re-render when store data changes
@@ -85,11 +87,11 @@ export const PerformanceMonitorView = ({
       </div>
 
       <div className="pm-container">
-        {/* Left: PMSidebar placeholder (03-02) */}
-        <div
-          className="pm-sidebar"
-          data-selected-category={selectedCategory}
-          data-hover-active={hoverState.active}
+        {/* Left: PMSidebar (03-02) */}
+        <PMSidebar
+          multiSessionStore={multiSessionStore}
+          selectedCategory={selectedCategory}
+          onCategorySelect={setSelectedCategory}
         />
 
         {/* Right: PMDetailPane placeholder (04-02) */}
