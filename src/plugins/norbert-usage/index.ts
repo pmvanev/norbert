@@ -37,9 +37,7 @@ const GAUGE_CLUSTER_VIEW_ID = "gauge-cluster";
 const GAUGE_CLUSTER_VIEW_LABEL = "Gauge Cluster";
 const GAUGE_CLUSTER_VIEW_ICON = "gauge"; // gauge cluster
 
-const OSCILLOSCOPE_VIEW_ID = "oscilloscope";
-const OSCILLOSCOPE_VIEW_LABEL = "Oscilloscope";
-const OSCILLOSCOPE_VIEW_ICON = "activity"; // oscilloscope trace
+const PERFORMANCE_MONITOR_VIEW_ICON = "activity"; // waveform trace
 
 const USAGE_DASHBOARD_VIEW_ID = "usage-dashboard";
 const USAGE_DASHBOARD_VIEW_LABEL = "Usage Dashboard";
@@ -47,7 +45,6 @@ const USAGE_DASHBOARD_VIEW_ICON = "bar-chart"; // usage dashboard
 
 const PERFORMANCE_MONITOR_VIEW_ID = "performance-monitor";
 const PERFORMANCE_MONITOR_VIEW_LABEL = "Performance Monitor";
-const PERFORMANCE_MONITOR_VIEW_ICON = "monitor"; // performance monitor
 
 // ---------------------------------------------------------------------------
 // Tab constants
@@ -88,17 +85,6 @@ const onLoad = (api: NorbertAPI): void => {
     minWidth: 200,
     minHeight: 150,
     floatMetric: "session_cost",
-  });
-
-  // Register the Oscilloscope view
-  api.ui.registerView({
-    id: OSCILLOSCOPE_VIEW_ID,
-    label: OSCILLOSCOPE_VIEW_LABEL,
-    icon: OSCILLOSCOPE_VIEW_ICON,
-    primaryView: false,
-    minWidth: 300,
-    minHeight: 200,
-    floatMetric: null,
   });
 
   // Register the Usage Dashboard as the primary view

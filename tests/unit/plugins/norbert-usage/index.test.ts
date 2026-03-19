@@ -89,14 +89,13 @@ describe("norbert-usage manifest", () => {
 // ---------------------------------------------------------------------------
 
 describe("norbert-usage onLoad view registrations", () => {
-  it("registers exactly 4 views: gauge-cluster, oscilloscope, usage-dashboard, performance-monitor", () => {
+  it("registers exactly 3 views: gauge-cluster, usage-dashboard, performance-monitor", () => {
     const { api, calls } = createStubApi();
     norbertUsagePlugin.onLoad(api);
 
-    expect(calls.views).toHaveLength(4);
+    expect(calls.views).toHaveLength(3);
     const viewIds = calls.views.map((v) => v.id);
     expect(viewIds).toContain("gauge-cluster");
-    expect(viewIds).toContain("oscilloscope");
     expect(viewIds).toContain("usage-dashboard");
     expect(viewIds).toContain("performance-monitor");
   });
@@ -132,14 +131,13 @@ describe("norbert-usage onLoad view registrations", () => {
     expect(dashboard!.label).toBe("Usage Dashboard");
   });
 
-  it("oscilloscope is not primary and has no floatMetric", () => {
+  it("performance-monitor uses the activity icon", () => {
     const { api, calls } = createStubApi();
     norbertUsagePlugin.onLoad(api);
 
-    const oscilloscope = calls.views.find((v) => v.id === "oscilloscope");
-    expect(oscilloscope).toBeDefined();
-    expect(oscilloscope!.primaryView).toBe(false);
-    expect(oscilloscope!.floatMetric).toBeNull();
+    const pm = calls.views.find((v) => v.id === "performance-monitor");
+    expect(pm).toBeDefined();
+    expect(pm!.icon).toBe("activity");
   });
 });
 
