@@ -20,6 +20,7 @@ import type { MultiSessionStore } from "../adapters/multiSessionStore";
 import type { MetricCategoryId, TimeWindowId, HoverState } from "../domain/types";
 import { PMTimeWindowSelector } from "./PMTimeWindowSelector";
 import { PMSidebar } from "./PMSidebar";
+import { PMDetailPane } from "./PMDetailPane";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -62,9 +63,7 @@ export const PerformanceMonitorView = ({
   const [selectedWindow, setSelectedWindow] = useState<TimeWindowId>(DEFAULT_TIME_WINDOW);
   const [hoverState, setHoverState] = useState<HoverState>(INITIAL_HOVER_STATE);
 
-  // hoverState + setter will be passed to PMDetailPane (04-02)
-  void hoverState;
-  void setHoverState;
+  // hoverState + setter passed to PMDetailPane
 
   // Force re-render when store data changes
   const [, setRenderTick] = useState(0);
@@ -94,11 +93,13 @@ export const PerformanceMonitorView = ({
           onCategorySelect={setSelectedCategory}
         />
 
-        {/* Right: PMDetailPane placeholder (04-02) */}
-        <div
-          className="pm-detail-pane"
-          data-selected-category={selectedCategory}
-          data-selected-window={selectedWindow}
+        {/* Right: PMDetailPane (04-02) */}
+        <PMDetailPane
+          multiSessionStore={multiSessionStore}
+          selectedCategory={selectedCategory}
+          selectedWindow={selectedWindow}
+          hoverState={hoverState}
+          onHoverChange={setHoverState}
         />
       </div>
     </div>
