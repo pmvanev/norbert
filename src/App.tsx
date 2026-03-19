@@ -5,6 +5,7 @@ import {
   type SessionInfo,
   formatField,
   deriveConnectionStatus,
+  isSessionActive,
 } from "./domain/status";
 import {
   type ThemeName,
@@ -205,14 +206,21 @@ function App() {
 
   useEffect(() => {
     const intervalId = setInterval(() => {
-      const liveSessions = sessions.filter((s) => s.ended_at === null && s.last_event_at !== null);
-      if (liveSessions.length === 0) return;
+      const liveSessions = sessions.filter((s) => isSessionActive(s));
+      if (liveSessions.length === 0) {
+        // No active sessions — clean up all tracked sessions from the store
+        for (const tracked of usageMultiSessionStore.getSessions()) {
+          usageMultiSessionStore.removeSession(tracked.sessionId);
+        }
+        return;
+      }
 
-      // Remove ended sessions from multi-session store
+      // Remove ended/stale sessions from multi-session store and cleanup
       const liveIds = new Set(liveSessions.map((s) => s.id));
       for (const tracked of usageMultiSessionStore.getSessions()) {
         if (!liveIds.has(tracked.sessionId)) {
           usageMultiSessionStore.removeSession(tracked.sessionId);
+          processedCountsRef.current.delete(tracked.sessionId);
         }
       }
 
