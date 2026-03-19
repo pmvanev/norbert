@@ -1,19 +1,21 @@
 /**
- * PerformanceMonitorView: real-time performance monitoring dashboard.
+ * PerformanceMonitorView: real-time multi-session performance dashboard.
  *
  * Layout grouped by unit type:
  *   - Rate chart (tokens/s + cost/s): dual-trace canvas waveform at ~10Hz
- *   - Count metrics (agents, sessions): numeric cards
- *   - Percentage metrics (context window %): bar gauge
- *   - Session breakdown: per-session table
+ *   - Rate metrics: current, peak, average (all tok/s unit)
+ *   - Count metrics: active agents total, tool calls, total tokens
+ *   - Percentage: context window % bar gauge
+ *   - Per-session breakdown: tokens/s, agents, context % per session
  *
- * Subscribes to MetricsStore and uses a ref-based animation loop
- * (same pattern as OscilloscopeView) for continuous rendering.
+ * Subscribes to both MetricsStore (for time series waveform) and
+ * MultiSessionStore (for cross-session aggregation).
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { MetricsStore } from "../adapters/metricsStore";
-import type { TimeSeriesBuffer, SessionMetrics, TimeWindowId } from "../domain/types";
+import type { MultiSessionStore } from "../adapters/multiSessionStore";
+import type { TimeSeriesBuffer, TimeWindowId } from "../domain/types";
 import {
   prepareWaveformPoints,
   computeGridLines,
@@ -26,13 +28,14 @@ import {
 import { getSamples, appendSample, computeStats } from "../domain/timeSeriesSampler";
 import { computeCostRatePerMinute } from "../domain/performanceMonitor";
 import { classifyContextUrgency } from "../domain/urgencyThresholds";
+import { aggregateAcrossSessions } from "../domain/crossSessionAggregator";
 import { PMTimeWindowSelector } from "./PMTimeWindowSelector";
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const REFRESH_INTERVAL_MS = 100; // ~10Hz
+const REFRESH_INTERVAL_MS = 100;
 const WINDOW_DURATION_MS = 60_000;
 const GRID_INTERVAL_MS = 10_000;
 const ASPECT_RATIO = 4;
@@ -86,6 +89,7 @@ const drawTrace = (ctx: CanvasRenderingContext2D, points: ReadonlyArray<Waveform
 
 interface PerformanceMonitorViewProps {
   readonly store: MetricsStore;
+  readonly multiSessionStore: MultiSessionStore;
 }
 
 // ---------------------------------------------------------------------------
@@ -94,14 +98,13 @@ interface PerformanceMonitorViewProps {
 
 const DEFAULT_TIME_WINDOW: TimeWindowId = "1m";
 
-export const PerformanceMonitorView = ({ store }: PerformanceMonitorViewProps) => {
+const truncateId = (id: string, max: number = 16): string =>
+  id.length > max ? `${id.slice(0, max - 1)}\u2026` : id;
+
+export const PerformanceMonitorView = ({ store, multiSessionStore }: PerformanceMonitorViewProps) => {
   const [selectedWindow, setSelectedWindow] = useState<TimeWindowId>(DEFAULT_TIME_WINDOW);
 
-  // Ref-based store access (same pattern as OscilloscopeView)
   const bufferRef = useRef<TimeSeriesBuffer>(store.getTimeSeries());
-  const metricsRef = useRef<SessionMetrics>(store.getMetrics());
-
-  // Canvas refs
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -110,26 +113,32 @@ export const PerformanceMonitorView = ({ store }: PerformanceMonitorViewProps) =
     width: 600, height: 150, padding: 10,
   });
 
-  // Live metric state (updated each render frame)
   const [liveMetrics, setLiveMetrics] = useState({
     tokenRate: "0 tok/s",
     costPerMin: "$0.00/min",
     peakRate: "0 tok/s",
     avgRate: "0 tok/s",
-    activeAgents: 0,
-    contextPct: 0,
-    contextUrgency: "normal" as "normal" | "amber" | "red",
+    totalActiveAgents: 0,
     sessionCost: "$0.00",
     totalTokens: 0,
     toolCalls: 0,
   });
 
-  // Subscribe to store
+  // Per-session breakdown
+  const [sessionRows, setSessionRows] = useState<ReadonlyArray<{
+    id: string;
+    tokenRate: string;
+    agents: number;
+    contextPct: number;
+    contextUrgency: string;
+  }>>([]);
+
+  // Aggregate context (max across sessions)
+  const [contextBar, setContextBar] = useState({ pct: 0, urgency: "normal" as "normal" | "amber" | "red" });
+
+  // Subscribe to store for time series
   useEffect(() => {
-    return store.subscribe((m, ts) => {
-      metricsRef.current = m;
-      bufferRef.current = ts;
-    });
+    return store.subscribe((_m, ts) => { bufferRef.current = ts; });
   }, [store]);
 
   // Responsive resize
@@ -148,26 +157,24 @@ export const PerformanceMonitorView = ({ store }: PerformanceMonitorViewProps) =
     return () => observer.disconnect();
   }, []);
 
-  // Render frame (10Hz animation loop)
+  // Render frame (10Hz)
   const renderFrame = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Heartbeat: inject zero-rate sample during idle
+    // Heartbeat
     const now = Date.now();
     const currentSamples = getSamples(bufferRef.current);
     const lastTime = currentSamples.length > 0
-      ? currentSamples[currentSamples.length - 1].timestamp
-      : 0;
+      ? currentSamples[currentSamples.length - 1].timestamp : 0;
     if (now - lastTime >= REFRESH_INTERVAL_MS) {
       bufferRef.current = appendSample(bufferRef.current, { timestamp: now, tokenRate: 0, costRate: 0 });
     }
 
     const buffer = bufferRef.current;
     const samples = getSamples(buffer);
-    const metrics = metricsRef.current;
     const stats = computeStats(buffer);
 
     // Draw rate chart
@@ -182,29 +189,51 @@ export const PerformanceMonitorView = ({ store }: PerformanceMonitorViewProps) =
     drawTrace(ctx, tokenPoints, tokenColor);
     drawTrace(ctx, costPoints, costColor);
 
-    // Current rate overlay
+    // Rate overlay
     const currentRate = samples.length > 0 ? samples[samples.length - 1].tokenRate : 0;
     ctx.font = "bold 13px monospace";
     ctx.fillStyle = getThemeColor("--text-p", "#c8f0e8");
     ctx.fillText(formatRateOverlay(currentRate), canvasDimensions.padding + 4, canvasDimensions.padding + 14);
 
-    // Update live metric cards
+    // Aggregate from multi-session store
+    const allSessions = multiSessionStore.getSessions();
+    const aggregate = aggregateAcrossSessions(allSessions);
+
     const currentCostRate = samples.length > 0 ? samples[samples.length - 1].costRate : 0;
+    const totalAgents = aggregate.sessionCount > 0 ? aggregate.totalActiveAgents : 0;
+    const totalTokens = allSessions.reduce((sum, s) => sum + s.totalTokens, 0);
+    const totalToolCalls = allSessions.reduce((sum, s) => sum + s.toolCallCount, 0);
+    const totalCost = allSessions.reduce((sum, s) => sum + s.sessionCost, 0);
+
     setLiveMetrics({
-      tokenRate: formatRateOverlay(currentRate),
+      tokenRate: formatRateOverlay(aggregate.sessionCount > 0 ? aggregate.totalTokenRate : currentRate),
       costPerMin: `$${computeCostRatePerMinute(currentCostRate).toFixed(4)}/min`,
       peakRate: formatRateOverlay(stats.peakRate),
       avgRate: formatRateOverlay(stats.avgRate),
-      activeAgents: metrics.activeAgentCount,
-      contextPct: metrics.contextWindowPct,
-      contextUrgency: classifyContextUrgency(metrics.contextWindowPct),
-      sessionCost: `$${metrics.sessionCost.toFixed(4)}`,
-      totalTokens: metrics.totalTokens,
-      toolCalls: metrics.toolCallCount,
+      totalActiveAgents: totalAgents,
+      sessionCost: `$${totalCost.toFixed(4)}`,
+      totalTokens,
+      toolCalls: totalToolCalls,
     });
-  }, [canvasDimensions]);
 
-  // Start/stop animation loop
+    // Per-session breakdown
+    const rows = allSessions.map((s) => ({
+      id: s.sessionId,
+      tokenRate: formatRateOverlay(s.burnRate),
+      agents: s.activeAgentCount,
+      contextPct: s.contextWindowPct,
+      contextUrgency: classifyContextUrgency(s.contextWindowPct),
+    }));
+    setSessionRows(rows);
+
+    // Context bar: show max context pressure across sessions
+    const maxContextPct = allSessions.length > 0
+      ? Math.max(...allSessions.map((s) => s.contextWindowPct))
+      : 0;
+    setContextBar({ pct: maxContextPct, urgency: classifyContextUrgency(maxContextPct) });
+  }, [canvasDimensions, multiSessionStore]);
+
+  // Animation loop
   useEffect(() => {
     renderFrame();
     intervalRef.current = setInterval(renderFrame, REFRESH_INTERVAL_MS);
@@ -213,9 +242,9 @@ export const PerformanceMonitorView = ({ store }: PerformanceMonitorViewProps) =
     };
   }, [renderFrame]);
 
-  const urgencyClass = liveMetrics.contextUrgency === "red"
+  const urgencyClass = contextBar.urgency === "red"
     ? "pm-urgency-red"
-    : liveMetrics.contextUrgency === "amber"
+    : contextBar.urgency === "amber"
       ? "pm-urgency-amber"
       : "";
 
@@ -249,10 +278,10 @@ export const PerformanceMonitorView = ({ store }: PerformanceMonitorViewProps) =
         </div>
       </div>
 
-      {/* ── Rate stats (same unit: rate) ── */}
+      {/* ── Rates (tok/s unit) ── */}
       <div className="pm-stat-row">
         <div className="pm-stat">
-          <div className="pm-stat-l">Current</div>
+          <div className="pm-stat-l">Tokens/s Total</div>
           <div className="pm-stat-v" data-mono="" style={{ color: "var(--brand)" }}>{liveMetrics.tokenRate}</div>
         </div>
         <div className="pm-stat">
@@ -269,11 +298,11 @@ export const PerformanceMonitorView = ({ store }: PerformanceMonitorViewProps) =
         </div>
       </div>
 
-      {/* ── Counts + percentage metrics ── */}
+      {/* ── Counts ── */}
       <div className="pm-stat-row">
         <div className="pm-stat">
-          <div className="pm-stat-l">Agents</div>
-          <div className="pm-stat-v" data-mono="">{liveMetrics.activeAgents}</div>
+          <div className="pm-stat-l">Active Agents</div>
+          <div className="pm-stat-v" data-mono="">{liveMetrics.totalActiveAgents}</div>
         </div>
         <div className="pm-stat">
           <div className="pm-stat-l">Tool Calls</div>
@@ -289,19 +318,42 @@ export const PerformanceMonitorView = ({ store }: PerformanceMonitorViewProps) =
         </div>
       </div>
 
-      {/* ── Context window (percentage unit) ── */}
+      {/* ── Context window % (max across sessions) ── */}
       <div className="pm-context-bar">
         <div className="pm-stat-l">Context Window</div>
         <div className="pm-context-track">
           <div
             className={`pm-context-fill ${urgencyClass}`}
-            style={{ width: `${Math.min(liveMetrics.contextPct, 100)}%` }}
+            style={{ width: `${Math.min(contextBar.pct, 100)}%` }}
           />
         </div>
         <div className="pm-stat-v" data-mono="">
-          {liveMetrics.contextPct.toFixed(0)}%
+          {contextBar.pct.toFixed(0)}%
         </div>
       </div>
+
+      {/* ── Per-session breakdown ── */}
+      {sessionRows.length > 0 && (
+        <div className="pm-sessions">
+          <div className="pm-sessions-hdr">
+            <span>Session</span>
+            <span>Tokens/s</span>
+            <span>Agents</span>
+            <span>Context %</span>
+          </div>
+          {sessionRows.map((row) => (
+            <div key={row.id} className="pm-session-row">
+              <span className="pm-session-id" data-mono="">{truncateId(row.id)}</span>
+              <span data-mono="">{row.tokenRate}</span>
+              <span data-mono="">{row.agents}</span>
+              <span data-mono="" className={
+                row.contextUrgency === "red" ? "pm-urgency-red" :
+                row.contextUrgency === "amber" ? "pm-urgency-amber" : ""
+              }>{row.contextPct.toFixed(0)}%</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

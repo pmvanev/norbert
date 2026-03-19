@@ -19,7 +19,7 @@ import { loadPlugins } from "./plugins/lifecycleManager";
 import { createNorbertAPI } from "./plugins/apiFactory";
 import { createPluginRegistry, getAllViews } from "./plugins/pluginRegistry";
 import { norbertSessionPlugin } from "./plugins/norbert-session/index";
-import { norbertUsagePlugin, usageMetricsStore } from "./plugins/norbert-usage/index";
+import { norbertUsagePlugin, usageMetricsStore, usageMultiSessionStore } from "./plugins/norbert-usage/index";
 import { norbertConfigPlugin } from "./plugins/norbert-config/index";
 import { norbertNotifPlugin } from "./plugins/norbert-notif/index";
 import { NotificationCenterStandalone } from "./plugins/norbert-notif/views/NotificationCenterView";
@@ -195,55 +195,65 @@ function App() {
 
   /// Event poller: bridges SQLite events → hook bridge → metricsStore.
   ///
-  /// Scoped to a single session — the most active un-ended session (most
-  /// recent last_event_at). Per the product spec, plugin views are session-
-  /// scoped: the Context Broadcast Bar will eventually broadcast one session
-  /// to all subscribed plugins. For now, auto-select the most active one.
+  /// Polls ALL live sessions so the multi-session store gets per-session
+  /// metrics. The "primary" session (most active) also feeds the transcript
+  /// poller for token usage data.
   ///
-  /// Tracks processed event count to avoid re-delivering on each poll cycle.
-  const processedCountRef = useRef(0);
+  /// Tracks per-session processed event counts to avoid re-delivering.
+  const processedCountsRef = useRef<Map<string, number>>(new Map());
   const polledSessionIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const intervalId = setInterval(() => {
-      // Pick the most active un-ended session (most recent last_event_at)
       const liveSessions = sessions.filter((s) => s.ended_at === null && s.last_event_at !== null);
       if (liveSessions.length === 0) return;
 
-      const target = liveSessions.reduce((best, s) =>
+      // Remove ended sessions from multi-session store
+      const liveIds = new Set(liveSessions.map((s) => s.id));
+      for (const tracked of usageMultiSessionStore.getSessions()) {
+        if (!liveIds.has(tracked.sessionId)) {
+          usageMultiSessionStore.removeSession(tracked.sessionId);
+        }
+      }
+
+      // Identify primary session for transcript poller
+      const primary = liveSessions.reduce((best, s) =>
         new Date(s.last_event_at!).getTime() > new Date(best.last_event_at!).getTime() ? s : best
       );
 
-      // Reset count when target session changes
-      if (target.id !== polledSessionIdRef.current) {
-        processedCountRef.current = 0;
-        polledSessionIdRef.current = target.id;
+      if (primary.id !== polledSessionIdRef.current) {
+        polledSessionIdRef.current = primary.id;
         transcriptPathRef.current = null;
         lastTranscriptInputRef.current = 0;
         lastTranscriptOutputRef.current = 0;
       }
 
-      invoke<Array<{ session_id: string; event_type: string; payload: Record<string, unknown>; received_at: string; provider: string }>>(
-        "get_session_events",
-        { sessionId: target.id }
-      )
-        .then((events) => {
-          const newEvents = events.slice(processedCountRef.current);
-          for (const event of newEvents) {
-            deliverHookEvent("session-event", event);
-            // Extract transcript_path from the inner payload for the transcript poller
-            if (transcriptPathRef.current === null && event.payload) {
-              const tp = (event.payload as Record<string, unknown>)["transcript_path"];
-              if (typeof tp === "string") {
-                transcriptPathRef.current = tp;
+      // Poll events for each live session
+      for (const session of liveSessions) {
+        const prevCount = processedCountsRef.current.get(session.id) ?? 0;
+
+        invoke<Array<{ session_id: string; event_type: string; payload: Record<string, unknown>; received_at: string; provider: string }>>(
+          "get_session_events",
+          { sessionId: session.id }
+        )
+          .then((events) => {
+            const newEvents = events.slice(prevCount);
+            for (const event of newEvents) {
+              deliverHookEvent("session-event", event);
+              // Extract transcript_path from primary session
+              if (session.id === polledSessionIdRef.current && transcriptPathRef.current === null && event.payload) {
+                const tp = (event.payload as Record<string, unknown>)["transcript_path"];
+                if (typeof tp === "string") {
+                  transcriptPathRef.current = tp;
+                }
               }
             }
-          }
-          processedCountRef.current = events.length;
-        })
-        .catch(() => {
-          // Silently ignore — status poller handles connectivity errors
-        });
+            processedCountsRef.current.set(session.id, events.length);
+          })
+          .catch(() => {
+            // Silently ignore — status poller handles connectivity errors
+          });
+      }
     }, POLL_INTERVAL_MS);
 
     return () => clearInterval(intervalId);
@@ -379,7 +389,7 @@ function App() {
     CostTickerWrapper.displayName = "CostTickerWrapper";
 
     const PerformanceMonitorWrapper: FC = () => (
-      <PerformanceMonitorView store={usageMetricsStore} />
+      <PerformanceMonitorView store={usageMetricsStore} multiSessionStore={usageMultiSessionStore} />
     );
     PerformanceMonitorWrapper.displayName = "PerformanceMonitorWrapper";
 

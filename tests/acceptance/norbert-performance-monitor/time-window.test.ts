@@ -42,6 +42,7 @@ import {
 import type { TimeWindowId } from "../../../src/plugins/norbert-usage/domain/types";
 import { PerformanceMonitorView } from "../../../src/plugins/norbert-usage/views/PerformanceMonitorView";
 import { createMetricsStore } from "../../../src/plugins/norbert-usage/adapters/metricsStore";
+import { createMultiSessionStore } from "../../../src/plugins/norbert-usage/adapters/multiSessionStore";
 
 // ---------------------------------------------------------------------------
 // Helper: create a rate sample at a given time
@@ -308,7 +309,7 @@ describe("Time window persists when switching from aggregate to session detail",
   it("selected time window survives aggregate-to-detail-to-aggregate navigation", () => {
     const store = createMetricsStore("test-session");
 
-    render(React.createElement(PerformanceMonitorView, { store }));
+    render(React.createElement(PerformanceMonitorView, { store, multiSessionStore: createMultiSessionStore() }));
 
     // Given the time window selector is visible with default "1m" selected
     const selector = screen.getByRole("group", { name: /time window/i });
@@ -345,7 +346,7 @@ describe("Charts update when time window selection changes", () => {
   it("changing time window selection updates the displayed window label", () => {
     const store = createMetricsStore("test-session");
 
-    render(React.createElement(PerformanceMonitorView, { store }));
+    render(React.createElement(PerformanceMonitorView, { store, multiSessionStore: createMultiSessionStore() }));
 
     // Given the default "1m" window is selected
     const oneMinButton = screen.getByRole("button", { name: "1m" });

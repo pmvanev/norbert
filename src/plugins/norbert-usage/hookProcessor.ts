@@ -18,6 +18,7 @@ import { aggregateEvent } from "./domain/metricsAggregator";
 
 export interface HookProcessorDeps {
   readonly updateMetrics: (reducer: (prev: SessionMetrics) => SessionMetrics) => void;
+  readonly updateMultiSessionMetrics?: (sessionId: string, reducer: (prev: SessionMetrics) => SessionMetrics) => void;
   readonly pricingTable: PricingTable;
 }
 
@@ -76,8 +77,15 @@ const buildAggregatorEvent = (
  * 3. aggregateEvent(prev, event, pricingTable) -> next SessionMetrics
  * 4. updateMetrics(reducer) -> effect (store update)
  */
+/** Extract session_id from the raw event payload wrapper. */
+const extractSessionId = (payload: unknown): string | null => {
+  if (!isRecord(payload)) return null;
+  const sid = payload["session_id"];
+  return typeof sid === "string" ? sid : null;
+};
+
 export const createHookProcessor = (deps: HookProcessorDeps): HookProcessor => {
-  const { updateMetrics, pricingTable } = deps;
+  const { updateMetrics, updateMultiSessionMetrics, pricingTable } = deps;
 
   return (payload: unknown): void => {
     const eventType = extractEventType(payload);
@@ -86,6 +94,16 @@ export const createHookProcessor = (deps: HookProcessorDeps): HookProcessor => {
     updateMetrics((previous: SessionMetrics): SessionMetrics =>
       aggregateEvent(previous, event, pricingTable),
     );
+
+    // Also feed multi-session store if available
+    if (updateMultiSessionMetrics) {
+      const sessionId = extractSessionId(payload);
+      if (sessionId) {
+        updateMultiSessionMetrics(sessionId, (previous: SessionMetrics): SessionMetrics =>
+          aggregateEvent(previous, event, pricingTable),
+        );
+      }
+    }
   };
 };
 

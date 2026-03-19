@@ -1014,6 +1014,53 @@ code, pre, .mono,
   background: var(--error, #ff4444);
 }
 
+.pm-sessions {
+  border: 1px solid var(--border-card);
+  border-radius: var(--card-r);
+  overflow: hidden;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+
+.pm-sessions-hdr {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 0;
+  padding: 4px 10px;
+  font-size: 8px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-m);
+  border-bottom: 1px solid var(--border-card);
+}
+
+.pm-session-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 0;
+  padding: 3px 10px;
+  color: var(--text-p);
+}
+
+.pm-session-row:nth-child(even) {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.pm-session-id {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pm-urgency-amber {
+  color: var(--amber) !important;
+}
+
+.pm-urgency-red {
+  color: var(--error, #ff4444) !important;
+}
+
 /* ═══ USAGE DASHBOARD ═══ */
 
 .usage-dashboard {

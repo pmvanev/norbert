@@ -136,6 +136,7 @@ const onLoad = (api: NorbertAPI): void => {
 
   // Wire hook processor to the shared module-level store.
   // On each event: reduce metrics, compute burn rate, push a time series sample.
+  // Also feeds multi-session store for cross-session PM aggregation.
   const processor = createHookProcessor({
     updateMetrics: (reducer) => {
       const reduced = reducer(usageMetricsStore.getMetrics());
@@ -153,6 +154,13 @@ const onLoad = (api: NorbertAPI): void => {
       const sample: RateSample = { timestamp: now, tokenRate, costRate };
       const nextTimeSeries = appendSample(usageMetricsStore.getTimeSeries(), sample);
       usageMetricsStore.update(nextMetrics, nextTimeSeries);
+    },
+    updateMultiSessionMetrics: (sessionId, reducer) => {
+      usageMultiSessionStore.addSession(sessionId);
+      const prev = usageMultiSessionStore.getSession(sessionId);
+      if (prev) {
+        usageMultiSessionStore.updateSession(sessionId, reducer(prev));
+      }
     },
     pricingTable: DEFAULT_PRICING_TABLE,
   });
