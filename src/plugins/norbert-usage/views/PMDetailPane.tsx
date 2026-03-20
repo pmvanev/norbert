@@ -35,6 +35,15 @@ const shouldShowPerSessionGrid = (sessionCount: number): boolean =>
 const shouldShowAggregateGraph = (category: MetricCategory): boolean =>
   category.aggregateApplicable;
 
+/** Format a session ID as a short display label (e.g., "Session 1", "Session 2"). */
+const formatSessionLabel = (
+  sessionId: string,
+  allSessions: ReadonlyArray<{ readonly sessionId: string }>,
+): string => {
+  const index = allSessions.findIndex((s) => s.sessionId === sessionId);
+  return index >= 0 ? `Session ${index + 1}` : sessionId.slice(0, 8);
+};
+
 /** Map a TimeWindowId to a human-readable duration label. */
 const formatDurationLabel = (windowId: TimeWindowId): string => {
   switch (windowId) {
@@ -129,6 +138,7 @@ const buildSessionRows = (
 
     return {
       sessionId: session.sessionId,
+      displayLabel: formatSessionLabel(session.sessionId, sessions),
       cells,
       sortValue: latestValue,
     };
@@ -312,14 +322,14 @@ export const PMDetailPane = ({
                 className={`pm-detail-session-chart${!showAggregate ? " pm-detail-session-chart-primary" : ""}`}
               >
                 <PMChart
-                  title={`${category.label} - ${session.sessionId}`}
+                  title={`${category.label} - ${formatSessionLabel(session.sessionId, sessions)}`}
                   samples={samples}
                   field="tokenRate"
                   color={themeColor}
                   mode="mini"
                   yMax={category.yMax}
                   yLabels={category.yLabels}
-                  label={session.sessionId}
+                  label={formatSessionLabel(session.sessionId, sessions)}
                   formatValue={category.formatValue}
                   hoverIndex={
                     hoverState.active &&

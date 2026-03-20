@@ -15,6 +15,7 @@
 /** A single row of session data with pre-formatted cell values. */
 export interface SessionRowData {
   readonly sessionId: string;
+  readonly displayLabel: string;
   readonly cells: ReadonlyArray<string>;
   readonly sortValue: number;
 }
@@ -65,7 +66,7 @@ export const PMSessionTable = ({
       {sortedRows.map((row) => (
         <div key={row.sessionId} className="pm-detail-table-row">
           <span className="pm-detail-table-cell" data-mono="true">
-            {row.sessionId}
+            {row.displayLabel}
           </span>
           {row.cells.map((cellValue, index) => (
             <span

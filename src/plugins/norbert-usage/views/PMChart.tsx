@@ -398,8 +398,7 @@ export const PMChart = ({
       <div ref={containerRef} className="pm-chart-cell">
         <canvas
           ref={canvasRef}
-          width={canvasDimensions.width}
-          height={canvasDimensions.height}
+          className="pm-chart-canvas"
         />
       </div>
     </div>

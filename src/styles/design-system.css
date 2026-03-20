@@ -1378,6 +1378,13 @@ code, pre, .mono,
   min-height: 0;
 }
 
+.pm-chart-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
 /* ═══ USAGE DASHBOARD ═══ */
 
 .usage-dashboard {
