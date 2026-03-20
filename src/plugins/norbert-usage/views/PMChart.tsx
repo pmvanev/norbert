@@ -69,7 +69,6 @@ interface PMChartProps {
   readonly samples: ReadonlyArray<RateSample>;
   readonly field: RateField;
   readonly color: string;
-  readonly valueLabel?: string;
   readonly mode?: ChartMode;
   readonly yMax?: number;
   readonly yLabels?: ReadonlyArray<string>;
@@ -232,10 +231,6 @@ export const PMChart = ({
   const onHoverEndRef = useRef(onHoverEnd);
   onHoverEndRef.current = onHoverEnd;
 
-  // Track real mouse viewport position from mousemove events
-  const mouseXRef = useRef(0);
-  const mouseYRef = useRef(0);
-
   // Track CSS-pixel X position for crosshair rendering (null = not hovering)
   const crosshairXRef = useRef<number | null>(null);
 
@@ -327,9 +322,6 @@ export const PMChart = ({
     if (!canvas) return;
 
     const handleMouseMove = (e: MouseEvent): void => {
-      mouseXRef.current = e.clientX;
-      mouseYRef.current = e.clientY;
-
       const rect = canvas.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
 
