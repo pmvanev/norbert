@@ -236,6 +236,8 @@ export const PMChart = ({
     plot.setData(data, false);
     // Update Y scale range to fit the current data
     plot.setScale("y", { min: 0, max: effectiveYMax });
+    plot.redraw();
+
   }, [data, effectiveYMax]);
 
   // Handle container resize

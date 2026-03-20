@@ -66,24 +66,34 @@ const deriveStatsFromBuffer = (
   const avg = values.reduce((sum, v) => sum + v, 0) / values.length;
   const current = values[values.length - 1];
 
-  // Common fields across categories
+  // Aggregate metrics from session data
+  const totalToolCalls = sessions.reduce((sum, s) => sum + s.toolCallCount, 0);
+  const totalTokensAgg = sessions.reduce((sum, s) => sum + s.totalTokens, 0);
+  const totalCostAgg = sessions.reduce((sum, s) => sum + s.sessionCost, 0);
+  const activeAgents = sessions.reduce((sum, s) => sum + s.activeAgentCount, 0);
+  const latestModel = sessions.length > 0 ? sessions[sessions.length - 1].contextWindowModel : "--";
+
   return {
     peak,
     avg: Math.round(avg * 100) / 100,
     current,
     sessions: sessions.length,
-    totalTokens: values.reduce((sum, v) => sum + v, 0),
+    totalTokens: totalTokensAgg,
     costRate: current,
-    toolCalls: "--",
-    sessionTotal: "--",
-    totalCost: "--",
-    avgCostPerToken: "--",
-    model: "--",
-    active: current,
-    totalSpawned: "--",
+    toolCalls: totalToolCalls,
+    sessionTotal: totalCostAgg > 0 ? `$${totalCostAgg.toFixed(4)}` : "--",
+    totalCost: totalCostAgg > 0 ? `$${totalCostAgg.toFixed(4)}` : "--",
+    avgCostPerToken: totalTokensAgg > 0
+      ? `$${(totalCostAgg / totalTokensAgg * 1_000_000).toFixed(2)}/M`
+      : "--",
+    model: latestModel || "--",
+    active: activeAgents,
+    totalSpawned: totalToolCalls,
     avgPerSession: sessions.length > 0 ? Math.round(peak / sessions.length) : 0,
     remaining: `${100 - Math.round(current)}%`,
-    maxTokens: "--",
+    maxTokens: sessions.length > 0
+      ? sessions[sessions.length - 1].contextWindowMaxTokens.toLocaleString()
+      : "--",
     urgency: "--",
     compressions: "--",
   };

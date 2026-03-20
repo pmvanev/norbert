@@ -587,6 +587,37 @@ code, pre, .mono,
   font-family: var(--font-mono);
 }
 
+/* ═══ TIME WINDOW SELECTOR ═══ */
+
+.pm-time-window-selector {
+  display: flex;
+  gap: 2px;
+}
+
+.pm-tw-btn {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  border: 1px solid var(--border-card);
+  border-radius: var(--card-r);
+  background: transparent;
+  color: var(--text-m);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+
+.pm-tw-btn:hover {
+  background: var(--hover);
+  color: var(--text-p);
+}
+
+.pm-tw-btn--active {
+  background: var(--bg-card);
+  color: var(--text-p);
+  border-color: var(--border-card-h);
+}
+
 /* ═══ NOTIFICATION BADGE (amber) ═══ */
 
 .sidebar-icon .ab-badge {
@@ -1166,7 +1197,7 @@ code, pre, .mono,
 .pm-tooltip {
   position: fixed;
   z-index: 500;
-  background: rgba(0, 8, 6, 0.95);
+  background: var(--bg-float, rgba(0, 8, 6, 0.95));
   border: 1px solid;
   border-radius: var(--card-r);
   padding: 4px 8px;
