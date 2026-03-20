@@ -10,13 +10,20 @@
 ///   appendSessionSample(id, samples) -- append per-category sample values
 ///   getSessionBuffer(id, categoryId) -- per-session buffer for a category
 ///   getAggregateBuffer(categoryId) -- aggregate buffer across sessions
+///   getAggregateWindowBuffer(categoryId, windowId) -- aggregate buffer for a specific time window
+///   getSessionWindowBuffer(sessionId, categoryId, windowId) -- session buffer for a specific time window
 ///   subscribe(callback) -- register state-change listener
 
-import type { SessionMetrics, TimeSeriesBuffer, RateSample } from "../domain/types";
+import type { SessionMetrics, TimeSeriesBuffer, RateSample, TimeWindowId } from "../domain/types";
 import type { MetricCategoryId } from "../domain/categoryConfig";
 import { createInitialMetrics } from "../domain/metricsAggregator";
 import { createBuffer, appendSample } from "../domain/timeSeriesSampler";
 import { METRIC_CATEGORIES } from "../domain/categoryConfig";
+import {
+  createMultiWindowBuffer,
+  appendMultiWindowSample,
+  type MultiWindowBuffer,
+} from "../domain/multiWindowSampler";
 
 // ---------------------------------------------------------------------------
 // Category sample input -- values for each of the 4 metric categories
@@ -42,6 +49,8 @@ export interface MultiSessionStore {
   readonly appendSessionSample: (sessionId: string, samples: CategorySampleInput) => void;
   readonly getSessionBuffer: (sessionId: string, categoryId: MetricCategoryId) => TimeSeriesBuffer | undefined;
   readonly getAggregateBuffer: (categoryId: MetricCategoryId) => TimeSeriesBuffer;
+  readonly getAggregateWindowBuffer: (categoryId: MetricCategoryId, windowId: TimeWindowId) => TimeSeriesBuffer;
+  readonly getSessionWindowBuffer: (sessionId: string, categoryId: MetricCategoryId, windowId: TimeWindowId) => TimeSeriesBuffer | undefined;
   readonly subscribe: (callback: () => void) => () => void;
 }
 
@@ -93,6 +102,27 @@ const createCategoryBuffers = (): Map<MetricCategoryId, TimeSeriesBuffer> => {
   return buffers;
 };
 
+/// Create an empty set of multi-window buffers for all 4 categories.
+const createCategoryMultiWindowBuffers = (): Map<MetricCategoryId, MultiWindowBuffer> => {
+  const buffers = new Map<MetricCategoryId, MultiWindowBuffer>();
+  for (const id of CATEGORY_IDS) {
+    buffers.set(id, createMultiWindowBuffer());
+  }
+  return buffers;
+};
+
+/// Extract the TimeSeriesBuffer for a specific window from a MultiWindowBuffer.
+const extractWindowBuffer = (
+  multiWindowBuffer: MultiWindowBuffer,
+  windowId: TimeWindowId,
+): TimeSeriesBuffer => {
+  const windowState = multiWindowBuffer.windows[windowId];
+  if (!windowState) {
+    return createBuffer(DEFAULT_BUFFER_CAPACITY);
+  }
+  return windowState.buffer;
+};
+
 /// Recompute aggregate buffer for a given category by summing per-session latest values.
 const recomputeAggregateBuffer = (
   sessionBuffers: Map<string, Map<MetricCategoryId, TimeSeriesBuffer>>,
@@ -126,11 +156,14 @@ export const createMultiSessionStore = (): MultiSessionStore => {
   const sessions = new Map<string, SessionMetrics>();
   const sessionBuffers = new Map<string, Map<MetricCategoryId, TimeSeriesBuffer>>();
   const aggregateBuffers = new Map<MetricCategoryId, TimeSeriesBuffer>();
+  const sessionMultiWindowBuffers = new Map<string, Map<MetricCategoryId, MultiWindowBuffer>>();
+  const aggregateMultiWindowBuffers = new Map<MetricCategoryId, MultiWindowBuffer>();
   const subscribers = new Set<() => void>();
 
   // Initialize aggregate buffers for all categories
   for (const id of CATEGORY_IDS) {
     aggregateBuffers.set(id, createBuffer(DEFAULT_BUFFER_CAPACITY));
+    aggregateMultiWindowBuffers.set(id, createMultiWindowBuffer());
   }
 
   const notifySubscribers = (): void => {
@@ -143,11 +176,13 @@ export const createMultiSessionStore = (): MultiSessionStore => {
     if (sessions.has(sessionId)) return;
     sessions.set(sessionId, createInitialMetrics(sessionId));
     sessionBuffers.set(sessionId, createCategoryBuffers());
+    sessionMultiWindowBuffers.set(sessionId, createCategoryMultiWindowBuffers());
   };
 
   const removeSession = (sessionId: string): void => {
     sessions.delete(sessionId);
     sessionBuffers.delete(sessionId);
+    sessionMultiWindowBuffers.delete(sessionId);
   };
 
   const updateSession = (sessionId: string, metrics: SessionMetrics): void => {
@@ -167,16 +202,34 @@ export const createMultiSessionStore = (): MultiSessionStore => {
     if (!categoryBufferMap) return;
 
     const timestamp = Date.now();
+    const sessionMwBufferMap = sessionMultiWindowBuffers.get(sessionId);
 
-    // Append per-category samples to session buffers
+    // Append per-category samples to session buffers (single-window and multi-window)
     for (const categoryId of CATEGORY_IDS) {
       const value = extractCategoryValue(samples, categoryId);
-      const sample = createCategorySample(value, timestamp);
+      const rateSample = createCategorySample(value, timestamp);
+
+      // Single-window buffer (existing behavior)
       const currentBuffer = categoryBufferMap.get(categoryId)!;
-      categoryBufferMap.set(categoryId, appendSample(currentBuffer, sample));
+      categoryBufferMap.set(categoryId, appendSample(currentBuffer, rateSample));
+
+      // Multi-window buffers (1m/5m/15m)
+      if (sessionMwBufferMap) {
+        const currentMwBuffer = sessionMwBufferMap.get(categoryId)!;
+        sessionMwBufferMap.set(categoryId, appendMultiWindowSample(currentMwBuffer, rateSample));
+      }
+
+      // Aggregate multi-window buffers (for aggregatable categories)
+      if (isCategoryAggregatable(categoryId)) {
+        const currentAggMwBuffer = aggregateMultiWindowBuffers.get(categoryId)!;
+        aggregateMultiWindowBuffers.set(
+          categoryId,
+          appendMultiWindowSample(currentAggMwBuffer, rateSample),
+        );
+      }
     }
 
-    // Recompute aggregate buffers for aggregatable categories
+    // Recompute aggregate buffers for aggregatable categories (single-window, existing behavior)
     for (const categoryId of CATEGORY_IDS) {
       const currentAggregate = aggregateBuffers.get(categoryId)!;
       aggregateBuffers.set(
@@ -200,6 +253,29 @@ export const createMultiSessionStore = (): MultiSessionStore => {
   const getAggregateBuffer = (categoryId: MetricCategoryId): TimeSeriesBuffer =>
     aggregateBuffers.get(categoryId) ?? createBuffer(DEFAULT_BUFFER_CAPACITY);
 
+  const getAggregateWindowBuffer = (
+    categoryId: MetricCategoryId,
+    windowId: TimeWindowId,
+  ): TimeSeriesBuffer => {
+    const multiWindowBuffer = aggregateMultiWindowBuffers.get(categoryId);
+    if (!multiWindowBuffer) {
+      return createBuffer(DEFAULT_BUFFER_CAPACITY);
+    }
+    return extractWindowBuffer(multiWindowBuffer, windowId);
+  };
+
+  const getSessionWindowBuffer = (
+    sessionId: string,
+    categoryId: MetricCategoryId,
+    windowId: TimeWindowId,
+  ): TimeSeriesBuffer | undefined => {
+    const sessionMwBufferMap = sessionMultiWindowBuffers.get(sessionId);
+    if (!sessionMwBufferMap) return undefined;
+    const multiWindowBuffer = sessionMwBufferMap.get(categoryId);
+    if (!multiWindowBuffer) return undefined;
+    return extractWindowBuffer(multiWindowBuffer, windowId);
+  };
+
   const subscribe = (callback: () => void): (() => void) => {
     subscribers.add(callback);
     return () => {
@@ -216,6 +292,8 @@ export const createMultiSessionStore = (): MultiSessionStore => {
     appendSessionSample,
     getSessionBuffer,
     getAggregateBuffer,
+    getAggregateWindowBuffer,
+    getSessionWindowBuffer,
     subscribe,
   };
 };
