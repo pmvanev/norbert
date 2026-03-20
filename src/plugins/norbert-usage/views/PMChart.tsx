@@ -184,6 +184,26 @@ const drawLineTrace = (
   ctx.stroke();
 };
 
+const drawCrosshair = (
+  ctx: CanvasRenderingContext2D,
+  crosshairX: number,
+  dimensions: CanvasDimensions,
+  color: string,
+): void => {
+  const topY = dimensions.padding;
+  const bottomY = dimensions.height - dimensions.padding;
+
+  ctx.save();
+  ctx.strokeStyle = hexToRgba(color, 0.6);
+  ctx.lineWidth = 1;
+  ctx.setLineDash?.([]);
+  ctx.beginPath();
+  ctx.moveTo(crosshairX, topY);
+  ctx.lineTo(crosshairX, bottomY);
+  ctx.stroke();
+  ctx.restore();
+};
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -215,6 +235,9 @@ export const PMChart = ({
   // Track real mouse viewport position from mousemove events
   const mouseXRef = useRef(0);
   const mouseYRef = useRef(0);
+
+  // Track CSS-pixel X position for crosshair rendering (null = not hovering)
+  const crosshairXRef = useRef<number | null>(null);
 
   const isAggregate = mode === "aggregate";
 
@@ -290,6 +313,12 @@ export const PMChart = ({
 
     drawFilledArea(ctx, points, color, canvasDimensions);
     drawLineTrace(ctx, points, color);
+
+    // Draw crosshair at hovered position (CSS pixel space, DPR-independent)
+    const crosshairX = crosshairXRef.current;
+    if (crosshairX !== null) {
+      drawCrosshair(ctx, crosshairX, canvasDimensions, color);
+    }
   }, [canvasDimensions, chartSamples, effectiveYMax, color, isAggregate]);
 
   // Mouse interaction: hit-test and hover callbacks
@@ -301,11 +330,16 @@ export const PMChart = ({
       mouseXRef.current = e.clientX;
       mouseYRef.current = e.clientY;
 
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+
+      // Update crosshair position and trigger re-render
+      crosshairXRef.current = mouseX;
+      renderFrame();
+
       const hover = onHoverRef.current;
       if (!hover) return;
 
-      const rect = canvas.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
       const { sampleIndex } = computeHitTest(
         mouseX,
         canvasDimensions.width,
@@ -328,6 +362,8 @@ export const PMChart = ({
     };
 
     const handleMouseLeave = (): void => {
+      crosshairXRef.current = null;
+      renderFrame();
       onHoverEndRef.current?.();
     };
 
@@ -338,7 +374,7 @@ export const PMChart = ({
       canvas.removeEventListener("mousemove", handleMouseMove);
       canvas.removeEventListener("mouseleave", handleMouseLeave);
     };
-  }, [canvasDimensions, chartSamples]);
+  }, [canvasDimensions, chartSamples, renderFrame]);
 
   // Initial render + periodic redraw at ~1Hz
   useEffect(() => {
