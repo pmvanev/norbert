@@ -54,7 +54,7 @@ interface PMTooltipProps {
 
 export const PMTooltip = ({
   hoverState,
-  containerWidth = 800,
+  containerWidth = typeof window !== "undefined" ? window.innerWidth : 800,
 }: PMTooltipProps) => {
   if (!hoverState.active) {
     return null;

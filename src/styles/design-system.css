@@ -1335,7 +1335,7 @@ code, pre, .mono,
   min-height: 100px;
 }
 
-/* PM Chart (uPlot) */
+/* PM Chart */
 .pm-chart-cell {
   position: relative;
   width: 100%;
@@ -1367,17 +1367,9 @@ code, pre, .mono,
   white-space: nowrap;
 }
 
-.pm-chart-cell .uplot {
-  width: 100% !important;
-}
-
-.pm-chart-cell .u-over {
-  cursor: crosshair !important;
-}
-
-/* Sharpen uPlot canvas rendering */
 .pm-chart-cell canvas {
   image-rendering: auto;
+  cursor: crosshair;
 }
 
 /* When inside the flex wrapper, fill remaining space */

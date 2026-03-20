@@ -1,12 +1,11 @@
 /**
  * Vitest global test setup.
  *
- * Stubs browser APIs not available in jsdom/happy-dom that third-party
- * libraries (e.g., uPlot) call on module initialization.
+ * Stubs browser APIs not available in jsdom/happy-dom that application
+ * code may rely on at runtime.
  */
 
-// uPlot calls window.matchMedia on load for DPR detection.
-// jsdom does not implement matchMedia.
+// jsdom does not implement matchMedia -- stub for DPR-related code paths.
 if (typeof window !== "undefined" && !window.matchMedia) {
   window.matchMedia = (query: string) => ({
     matches: false,
@@ -20,7 +19,7 @@ if (typeof window !== "undefined" && !window.matchMedia) {
   });
 }
 
-// uPlot accesses ResizeObserver for auto-sizing.
+// jsdom does not implement ResizeObserver.
 if (typeof window !== "undefined" && !window.ResizeObserver) {
   window.ResizeObserver = class ResizeObserver {
     observe() {}
