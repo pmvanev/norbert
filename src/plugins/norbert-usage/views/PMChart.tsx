@@ -2,8 +2,8 @@
  * PMChart: uPlot-based time-series chart for the Performance Monitor.
  *
  * Supports two rendering modes:
- * - aggregate: Y-axis labels, grid lines, current value overlay, filled area
- * - mini: no axes, session label overlay, filled area
+ * - aggregate: grid lines, filled area
+ * - mini: no axes, session label, filled area
  *
  * Hover: emits sample index, value, and time offset via onHover callback.
  * uPlot provides built-in cursor crosshair and tooltip hooks.
@@ -74,6 +74,13 @@ interface PMChartProps {
 }
 
 // ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+/** How often (ms) the chart redraws to show time progression. */
+const CHART_REFRESH_MS = 1000;
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -102,6 +109,12 @@ export const PMChart = ({
   const formatValueRef = useRef(formatValue);
   formatValueRef.current = formatValue;
 
+  // Track the real mouse viewport position from mousemove events.
+  // uPlot's cursor.left/top can be wrong under Windows DPI scaling;
+  // clientX/clientY from the DOM event are always correct.
+  const mouseXRef = useRef(0);
+  const mouseYRef = useRef(0);
+
   const isAggregate = mode === "aggregate";
 
   // Build uPlot data from samples: [timestamps[], values[]]
@@ -119,7 +132,6 @@ export const PMChart = ({
   }, [samples, field]);
 
   // Autoscale Y-axis from data with 10% headroom.
-  // Ignores the static yMax prop — the graph always fits the actual data.
   const effectiveYMax = useMemo(() => {
     if (samples.length === 0) return yMax ?? 1;
     const peak = samples.reduce((max, s) => Math.max(max, s[field]), 0);
@@ -127,7 +139,6 @@ export const PMChart = ({
   }, [yMax, samples, field]);
 
   // Create uPlot once on mount, destroy on unmount.
-  // Uses refs for callbacks so this effect only runs once.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -135,9 +146,12 @@ export const PMChart = ({
     const width = container.clientWidth || 300;
     const height = container.clientHeight || 120;
 
+    const gridStroke = getCssVar("--osc-grid", "rgba(0, 229, 204, 0.06)");
+
     const opts: uPlot.Options = {
       width,
       height,
+      pxAlign: 0,
       cursor: {
         show: true,
         x: true,
@@ -149,22 +163,12 @@ export const PMChart = ({
         {
           show: false,
           stroke: "transparent",
-          grid: {
-            show: true,
-            stroke: getCssVar("--osc-grid", "rgba(0, 229, 204, 0.06)"),
-            width: 1,
-            dash: [2, 4],
-          },
+          grid: { show: true, stroke: gridStroke, width: 1, dash: [2, 4] },
         },
         {
           show: false,
           stroke: "transparent",
-          grid: {
-            show: true,
-            stroke: getCssVar("--osc-grid", "rgba(0, 229, 204, 0.06)"),
-            width: 1,
-            dash: [2, 4],
-          },
+          grid: { show: true, stroke: gridStroke, width: 1, dash: [2, 4] },
           ticks: { show: false },
           size: 0,
         },
@@ -203,15 +207,12 @@ export const PMChart = ({
             const val = (u.data[1] as Float64Array | number[])[idx] ?? 0;
             const totalSamples = (u.data[0] as Float64Array | number[]).length;
             const timeOffsetMs = (totalSamples - 1 - idx) * 1000;
-            const left = u.cursor.left ?? 0;
-            const top = u.cursor.top ?? 0;
-            const rect = u.over.getBoundingClientRect();
             hover({
               sampleIndex: idx,
               value: val as number,
               timeOffsetMs,
-              tooltipX: rect.left + left,
-              tooltipY: rect.top + top,
+              tooltipX: mouseXRef.current,
+              tooltipY: mouseYRef.current,
             });
           },
         ],
@@ -221,7 +222,21 @@ export const PMChart = ({
     const plot = new uPlot(opts, data, container);
     uplotRef.current = plot;
 
+    // Capture real mouse coordinates from the plot overlay element.
+    const overEl = plot.over;
+    const handleMouseMove = (e: MouseEvent): void => {
+      mouseXRef.current = e.clientX;
+      mouseYRef.current = e.clientY;
+    };
+    const handleMouseLeave = (): void => {
+      onHoverEndRef.current?.();
+    };
+    overEl.addEventListener("mousemove", handleMouseMove);
+    overEl.addEventListener("mouseleave", handleMouseLeave);
+
     return () => {
+      overEl.removeEventListener("mousemove", handleMouseMove);
+      overEl.removeEventListener("mouseleave", handleMouseLeave);
       plot.destroy();
       uplotRef.current = null;
     };
@@ -234,11 +249,19 @@ export const PMChart = ({
     const plot = uplotRef.current;
     if (!plot) return;
     plot.setData(data, false);
-    // Update Y scale range to fit the current data
     plot.setScale("y", { min: 0, max: effectiveYMax });
     plot.redraw();
-
   }, [data, effectiveYMax]);
+
+  // Periodic redraw so the chart visually advances as time passes,
+  // even when no new samples arrive.
+  useEffect(() => {
+    const id = setInterval(() => {
+      const plot = uplotRef.current;
+      if (plot) plot.redraw();
+    }, CHART_REFRESH_MS);
+    return () => clearInterval(id);
+  }, []);
 
   // Handle container resize
   useEffect(() => {
