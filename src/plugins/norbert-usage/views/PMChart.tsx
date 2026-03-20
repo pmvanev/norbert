@@ -146,20 +146,27 @@ export const PMChart = ({
       },
       legend: { show: false },
       axes: [
-        { show: false, stroke: "transparent", grid: { show: false } },
         {
-          show: isAggregate,
-          stroke: getCssVar("--text-m", "rgba(255,255,255,0.2)"),
+          show: false,
+          stroke: "transparent",
           grid: {
-            show: isAggregate,
+            show: true,
             stroke: getCssVar("--osc-grid", "rgba(0, 229, 204, 0.06)"),
             width: 1,
+            dash: [2, 4],
+          },
+        },
+        {
+          show: false,
+          stroke: "transparent",
+          grid: {
+            show: true,
+            stroke: getCssVar("--osc-grid", "rgba(0, 229, 204, 0.06)"),
+            width: 1,
+            dash: [2, 4],
           },
           ticks: { show: false },
-          size: isAggregate ? 50 : 0,
-          font: `9px ${getCssVar("--font-mono", "'Share Tech Mono', monospace")}`,
-          values: (_u: uPlot, vals: number[]) =>
-            vals.map((v) => formatValueRef.current ? formatValueRef.current(v) : String(Math.round(v))),
+          size: 0,
         },
       ],
       scales: {
@@ -249,23 +256,14 @@ export const PMChart = ({
     return () => observer.disconnect();
   }, []);
 
-  // Current value for overlay
-  const currentValue = samples.length > 0 ? samples[samples.length - 1][field] : 0;
-  const displayValue = formatValue?.(currentValue) ?? String(Math.round(currentValue));
-
   return (
-    <div ref={containerRef} className="pm-chart-cell" role="img" aria-label={title}>
-      {!isAggregate && (
-        <div className="pm-chart-mini-overlay" style={{ color }}>
-          <span className="pm-chart-mini-label">{label ?? title}</span>
-          <span className="pm-chart-mini-value">{displayValue}</span>
+    <div className="pm-chart-wrap" role="img" aria-label={title}>
+      {!isAggregate && label && (
+        <div className="pm-chart-ext-label" style={{ color }}>
+          {label}
         </div>
       )}
-      {isAggregate && (
-        <div className="pm-chart-agg-overlay" style={{ color }}>
-          <span className="pm-chart-agg-value">{displayValue}</span>
-        </div>
-      )}
+      <div ref={containerRef} className="pm-chart-cell" />
     </div>
   );
 };

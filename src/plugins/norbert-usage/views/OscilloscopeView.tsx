@@ -14,12 +14,13 @@ import type { TimeSeriesBuffer, RateSample } from "../domain/types";
 import {
   prepareWaveformPoints,
   computeGridLines,
+  computeHorizontalGridLines,
   computeCanvasDimensions,
-  formatRateOverlay,
   formatStatsBar,
   type CanvasDimensions,
   type WaveformPoint,
   type GridLine,
+  type HGridLine,
 } from "../domain/oscilloscope";
 import { getSamples, appendSample, computeStats } from "../domain/timeSeriesSampler";
 import type { MetricsStore } from "../adapters/metricsStore";
@@ -50,9 +51,6 @@ const COST_RATE_COLOR_PROP = "--amber";
 const COST_RATE_COLOR_FALLBACK = "#f0920a";
 const GRID_COLOR_PROP = "--osc-grid";
 const GRID_COLOR_FALLBACK = "rgba(0, 229, 204, 0.08)";
-const GRID_LABEL_COLOR = "rgba(255, 255, 255, 0.4)";
-const OVERLAY_COLOR_PROP = "--text-p";
-const OVERLAY_COLOR_FALLBACK = "#c8f0e8";
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
@@ -70,30 +68,41 @@ const clearCanvas = (
   dimensions: CanvasDimensions,
 ): void => {
   ctx.clearRect(0, 0, dimensions.width, dimensions.height);
-  // Semi-transparent overlay for trace contrast while allowing
-  // CSS glassmorphic background to show through.
-  ctx.fillStyle = "rgba(0, 8, 6, 0.6)";
+  // Very light tint — just enough for grid contrast, lets the app
+  // background show through like Task Manager performance charts.
+  ctx.fillStyle = "rgba(0, 0, 0, 0.15)";
   ctx.fillRect(0, 0, dimensions.width, dimensions.height);
 };
 
+const HORIZONTAL_GRID_COUNT = 4;
+
 const drawGridLines = (
   ctx: CanvasRenderingContext2D,
-  gridLines: ReadonlyArray<GridLine>,
+  verticalLines: ReadonlyArray<GridLine>,
+  horizontalLines: ReadonlyArray<HGridLine>,
   dimensions: CanvasDimensions,
 ): void => {
   ctx.strokeStyle = getThemeColor(GRID_COLOR_PROP, GRID_COLOR_FALLBACK);
   ctx.lineWidth = 1;
-  ctx.font = "9px monospace";
-  ctx.fillStyle = GRID_LABEL_COLOR;
+  ctx.setLineDash?.([2, 4]);
 
-  for (const line of gridLines) {
+  // Vertical lines
+  for (const line of verticalLines) {
     ctx.beginPath();
     ctx.moveTo(line.x, dimensions.padding);
     ctx.lineTo(line.x, dimensions.height - dimensions.padding);
     ctx.stroke();
-
-    ctx.fillText(line.label, line.x + 3, line.labelY);
   }
+
+  // Horizontal lines
+  for (const line of horizontalLines) {
+    ctx.beginPath();
+    ctx.moveTo(dimensions.padding, line.y);
+    ctx.lineTo(dimensions.width - dimensions.padding, line.y);
+    ctx.stroke();
+  }
+
+  ctx.setLineDash?.([]);
 };
 
 const drawTrace = (
@@ -104,7 +113,7 @@ const drawTrace = (
   if (points.length < 2) return;
 
   ctx.strokeStyle = color;
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = 2;
   ctx.lineJoin = "round";
   ctx.beginPath();
   ctx.moveTo(points[0].x, points[0].y);
@@ -114,16 +123,6 @@ const drawTrace = (
   }
 
   ctx.stroke();
-};
-
-const drawRateOverlay = (
-  ctx: CanvasRenderingContext2D,
-  label: string,
-  dimensions: CanvasDimensions,
-): void => {
-  ctx.font = "bold 14px monospace";
-  ctx.fillStyle = getThemeColor(OVERLAY_COLOR_PROP, OVERLAY_COLOR_FALLBACK);
-  ctx.fillText(label, dimensions.padding + 4, dimensions.padding + 16);
 };
 
 // ---------------------------------------------------------------------------
@@ -183,6 +182,18 @@ export const OscilloscopeView = ({ store }: OscilloscopeViewProps) => {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    // Scale canvas for HiDPI displays to eliminate blurry rendering
+    const dpr = devicePixelRatio || 1;
+    const cssW = canvasDimensions.width;
+    const cssH = canvasDimensions.height;
+    if (canvas.width !== cssW * dpr || canvas.height !== cssH * dpr) {
+      canvas.width = cssW * dpr;
+      canvas.height = cssH * dpr;
+      canvas.style.width = `${cssW}px`;
+      canvas.style.height = `${cssH}px`;
+      ctx.scale(dpr, dpr);
+    }
+
     // Inject zero-rate heartbeat when no new sample has arrived,
     // keeping the waveform scrolling continuously during idle.
     const now = Date.now();
@@ -198,10 +209,14 @@ export const OscilloscopeView = ({ store }: OscilloscopeViewProps) => {
 
     const buffer = bufferRef.current;
     const samples = getSamples(buffer);
-    const gridLines = computeGridLines(
+    const verticalLines = computeGridLines(
       canvasDimensions,
       WINDOW_DURATION_MS,
       GRID_INTERVAL_MS,
+    );
+    const horizontalLines = computeHorizontalGridLines(
+      canvasDimensions,
+      HORIZONTAL_GRID_COUNT,
     );
 
     const tokenRatePoints = prepareWaveformPoints(
@@ -218,20 +233,13 @@ export const OscilloscopeView = ({ store }: OscilloscopeViewProps) => {
     const currentStats = computeStats(buffer);
     setStatsDisplay(formatStatsBar(currentStats));
 
-    const rateLabel = formatRateOverlay(
-      currentStats.peakRate > 0
-        ? samples[samples.length - 1]?.tokenRate ?? 0
-        : 0,
-    );
-
     const tokenColor = getThemeColor(TOKEN_RATE_COLOR_PROP, TOKEN_RATE_COLOR_FALLBACK);
     const costColor = getThemeColor(COST_RATE_COLOR_PROP, COST_RATE_COLOR_FALLBACK);
 
     clearCanvas(ctx, canvasDimensions);
-    drawGridLines(ctx, gridLines, canvasDimensions);
+    drawGridLines(ctx, verticalLines, horizontalLines, canvasDimensions);
     drawTrace(ctx, tokenRatePoints, tokenColor);
     drawTrace(ctx, costRatePoints, costColor);
-    drawRateOverlay(ctx, rateLabel, canvasDimensions);
   }, [canvasDimensions]);
 
   useEffect(() => {

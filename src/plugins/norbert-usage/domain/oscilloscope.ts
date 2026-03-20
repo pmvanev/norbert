@@ -34,6 +34,11 @@ export interface GridLine {
   readonly labelY: number;
 }
 
+/** A horizontal grid line on the canvas. */
+export interface HGridLine {
+  readonly y: number;
+}
+
 /** Which rate field to extract from a RateSample. */
 export type RateField = "tokenRate" | "costRate";
 
@@ -121,6 +126,34 @@ export const computeGridLines = (
       label: `-${secondsFromEnd}s`,
       labelY: padding + 10,
     });
+  }
+
+  return lines;
+};
+
+// ---------------------------------------------------------------------------
+// computeHorizontalGridLines -- horizontal grid lines at even Y intervals
+// ---------------------------------------------------------------------------
+
+/**
+ * Compute horizontal grid line positions evenly spaced within the drawable area.
+ * Excludes lines at the exact top and bottom edges.
+ */
+export const computeHorizontalGridLines = (
+  dimensions: CanvasDimensions,
+  count: number,
+): ReadonlyArray<HGridLine> => {
+  if (count <= 0) return [];
+
+  const { height, padding } = dimensions;
+  const topY = padding;
+  const bottomY = height - padding;
+  const span = bottomY - topY;
+  const lines: HGridLine[] = [];
+
+  for (let i = 1; i <= count; i++) {
+    const y = topY + (i / (count + 1)) * span;
+    lines.push({ y });
   }
 
   return lines;

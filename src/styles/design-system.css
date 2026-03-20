@@ -815,9 +815,9 @@ code, pre, .mono,
 .osc-main {
   flex: 1;
   position: relative;
-  background: var(--bg-card);
+  background: transparent;
   border: 1px solid var(--border-card);
-  border-radius: var(--card-r);
+  border-radius: 0;
   overflow: hidden;
   min-height: 120px;
 }
@@ -858,7 +858,8 @@ code, pre, .mono,
   grid-template-columns: repeat(4, 1fr);
   gap: 0;
   border: 1px solid var(--border-card);
-  border-radius: var(--card-r);
+  border-top: none;
+  border-radius: 0;
   overflow: hidden;
   flex-shrink: 0;
 }
@@ -1278,7 +1279,7 @@ code, pre, .mono,
   flex-direction: column;
 }
 
-.pm-detail-aggregate-graph .pm-chart-cell {
+.pm-detail-aggregate-graph .pm-chart-wrap {
   flex: 1;
 }
 
@@ -1306,10 +1307,30 @@ code, pre, .mono,
   width: 100%;
   height: 100%;
   min-height: 60px;
-  background: var(--osc-bg, rgba(0, 8, 6, 0.85));
+  background: transparent;
   border: 1px solid var(--border-card);
-  border-radius: var(--card-r);
+  border-radius: 0;
   overflow: hidden;
+}
+
+.pm-chart-wrap {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 60px;
+}
+
+.pm-chart-ext-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  padding: 2px 4px 1px;
+  opacity: 0.7;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pm-chart-cell .uplot {
@@ -1320,45 +1341,15 @@ code, pre, .mono,
   cursor: crosshair !important;
 }
 
-.pm-chart-agg-overlay {
-  position: absolute;
-  top: 6px;
-  left: 10px;
-  z-index: 10;
-  pointer-events: none;
+/* Sharpen uPlot canvas rendering */
+.pm-chart-cell canvas {
+  image-rendering: auto;
 }
 
-.pm-chart-agg-value {
-  font-family: var(--font-mono);
-  font-size: 16px;
-  font-weight: bold;
-}
-
-.pm-chart-mini-overlay {
-  position: absolute;
-  top: 3px;
-  left: 6px;
-  z-index: 10;
-  pointer-events: none;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.pm-chart-mini-label {
-  font-family: var(--font-mono);
-  font-size: 8px;
-  color: rgba(255, 255, 255, 0.5);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 120px;
-}
-
-.pm-chart-mini-value {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: bold;
+/* When inside the flex wrapper, fill remaining space */
+.pm-chart-wrap > .pm-chart-cell {
+  flex: 1;
+  min-height: 0;
 }
 
 /* ═══ USAGE DASHBOARD ═══ */
