@@ -160,14 +160,14 @@ describe("CSS layout chain smoke test", () => {
     });
   });
 
-  describe("oscilloscope uses seamless transparent background", () => {
+  describe("oscilloscope uses card background", () => {
     const block = extractRules(css, ".osc-main");
 
-    it("uses transparent background", () => {
-      expect(hasDeclaration(block, "background", "transparent")).toBe(true);
+    it("uses var(--bg-card) background", () => {
+      expect(hasDeclaration(block, "background", "var(--bg-card)")).toBe(true);
     });
 
-    it("has subtle card border", () => {
+    it("has card border", () => {
       expect(hasDeclaration(block, "border", "1px solid var(--border-card)")).toBe(true);
     });
   });

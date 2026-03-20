@@ -146,7 +146,7 @@ export const PMChart = ({
     const width = container.clientWidth || 300;
     const height = container.clientHeight || 120;
 
-    const gridStroke = getCssVar("--osc-grid", "rgba(0, 229, 204, 0.06)");
+    const gridStroke = getCssVar("--osc-grid", "rgba(0, 229, 204, 0.18)");
 
     const opts: uPlot.Options = {
       width,

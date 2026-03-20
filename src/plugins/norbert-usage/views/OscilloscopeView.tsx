@@ -50,7 +50,7 @@ const TOKEN_RATE_COLOR_FALLBACK = "#00e5cc";
 const COST_RATE_COLOR_PROP = "--amber";
 const COST_RATE_COLOR_FALLBACK = "#f0920a";
 const GRID_COLOR_PROP = "--osc-grid";
-const GRID_COLOR_FALLBACK = "rgba(0, 229, 204, 0.08)";
+const GRID_COLOR_FALLBACK = "rgba(0, 229, 204, 0.18)";
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
