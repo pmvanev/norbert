@@ -1,0 +1,192 @@
+journey:
+  name: "Monitor Active Claude Code Sessions"
+  goal: "Observe real-time resource consumption across active Claude Code sessions via live-updating charts"
+  persona: "Raj Patel -- senior developer running 2-3 parallel Claude Code sessions"
+
+  emotional_arc:
+    start: "Curious -- wants to know what is happening with token burn and cost"
+    middle: "Oriented and informed -- sees live data, drills into specific values"
+    end: "Confident and in control -- understands resource patterns, can act on them"
+
+  job_stories:
+    - id: JS-01
+      situation: "I have 2-3 Claude Code sessions actively consuming tokens"
+      motivation: "see a live, scrolling chart of token consumption across all sessions"
+      outcome: "understand at a glance whether burn rate is normal or abnormally high"
+      forces:
+        push: "Charts currently show no data despite active sessions"
+        pull: "Task Manager-style always-updating charts with immediate visual feedback"
+        anxiety: "Will the charts actually reflect real data or show stale/wrong values?"
+        habit: "Checking the sidebar numbers or oscilloscope view instead of PM charts"
+
+    - id: JS-02
+      situation: "I notice a spike on the chart and want the exact value"
+      motivation: "hover over the chart and see a tooltip near my cursor"
+      outcome: "know the precise token rate and time offset without mental calculation"
+      forces:
+        push: "Tooltip currently appears far from cursor; crosshair is offset"
+        pull: "Tooltip tracks cursor precisely like any standard desktop chart"
+        anxiety: "Is the displayed value actually for the point under my cursor?"
+        habit: "Reading raw numbers from the stats grid instead of hovering"
+
+    - id: JS-03
+      situation: "I want to see longer-term trends beyond the last 60 seconds"
+      motivation: "click a time window button (5m, 15m, Session) and see that range"
+      outcome: "compare current burn rate against the last 15 minutes of activity"
+      forces:
+        push: "Time window buttons change visual state but do not change displayed data"
+        pull: "Each window shows appropriately downsampled data for that time range"
+        anxiety: "Will changing time window lose the current view or cause a blank chart?"
+        habit: "Always staying on 1m because the other buttons have never worked"
+
+steps:
+  - id: 1
+    name: "See live charts with data"
+    action: "Open Performance Monitor tab; observe charts rendering with live session data"
+
+    shared_artifacts:
+      - name: "aggregateBuffer.samples"
+        source: "multiSessionStore.getAggregateBuffer(categoryId)"
+        displayed_as: "uPlot time-series line"
+        consumers:
+          - "PMChart (aggregate mode)"
+          - "PMSidebar sparklines"
+          - "PMStatsGrid derived metrics"
+
+      - name: "sessionMetrics"
+        source: "multiSessionStore.getSessions()"
+        displayed_as: "session count, stats grid values"
+        consumers:
+          - "PMDetailPane header subtitle"
+          - "PMStatsGrid"
+          - "PMSessionTable"
+
+    emotional_state:
+      entry: "Curious -- what is happening with my sessions?"
+      exit: "Oriented -- I can see live activity on the charts"
+
+    integration_checkpoint: |
+      Data pipeline must flow: hookProcessor -> appendSessionSample -> subscriber notification -> React re-render -> uPlot.setData() -> visible line on chart.
+      Verify: samples array has length > 0 when sessions are active.
+      Verify: uPlot receives Float64Array data, not empty arrays.
+
+    gherkin: |
+      Scenario: Charts display data for active sessions
+        Given Raj has 3 active Claude Code sessions generating token events
+        When the Performance Monitor view renders
+        Then the aggregate chart shows a visible line with data points
+        And the chart line advances rightward as new samples arrive
+
+  - id: 2
+    name: "Hover chart for detail"
+    action: "Move mouse over chart area to see crosshair and tooltip"
+
+    shared_artifacts:
+      - name: "HoverState"
+        source: "PMChart setCursor hook -> onHoverChange"
+        displayed_as: "crosshair line + floating tooltip"
+        consumers:
+          - "PMTooltip (position and content)"
+          - "PMChart hoverIndex (crosshair sync)"
+
+      - name: "mousePosition"
+        source: "mousemove event on uPlot.over element"
+        displayed_as: "tooltipX, tooltipY in HoverState"
+        consumers:
+          - "PMTooltip fixed positioning"
+
+    emotional_state:
+      entry: "Oriented -- sees data, wants specifics"
+      exit: "Informed -- knows exact value at specific time"
+
+    integration_checkpoint: |
+      Cursor crosshair must align with actual mouse position accounting for DPI scaling.
+      Tooltip must appear within 16px of cursor position on all DPI settings (100%, 125%, 150%).
+      Verify: uPlot cursor.left matches logical pixel position of mouse.
+
+    gherkin: |
+      Scenario: Tooltip appears near cursor with correct value
+        Given Raj is viewing the Tokens/s aggregate chart with data
+        When Raj hovers over a data point showing 527 tok/s from 12 seconds ago
+        Then a tooltip appears within 16 pixels of the cursor position
+        And the tooltip displays "527 tok/s" and "12s ago"
+        And a vertical crosshair line intersects the cursor horizontal position
+
+  - id: 3
+    name: "Switch time window"
+    action: "Click a time window button (1m, 5m, 15m, Session) to change displayed range"
+
+    shared_artifacts:
+      - name: "selectedWindow"
+        source: "PerformanceMonitorView state"
+        displayed_as: "active button highlight in PMTimeWindowSelector"
+        consumers:
+          - "PMDetailPane (buffer selection)"
+          - "PMDetailPane duration label"
+
+      - name: "windowBuffer"
+        source: "multiWindowSampler.getActiveWindowSamples(windowId)"
+        displayed_as: "chart data for selected time range"
+        consumers:
+          - "PMChart samples prop"
+
+    emotional_state:
+      entry: "Informed -- understands current moment, wants broader context"
+      exit: "In control -- can view data at any time range"
+
+    integration_checkpoint: |
+      multiWindowSampler must be wired into multiSessionStore so each time window
+      has its own buffer with appropriate sample interval.
+      Verify: switching to 5m shows ~600 samples at 500ms intervals (not 60 samples at 1s).
+      Verify: switching back to 1m shows the higher-resolution data.
+
+    gherkin: |
+      Scenario: Time window button changes displayed data range
+        Given Raj is viewing the 1-minute token rate chart
+        And the session has been active for 6 minutes
+        When Raj clicks the "5m" time window button
+        Then the chart displays 5 minutes of historical data
+        And the duration label reads "5 minutes"
+        And the chart uses a coarser sample interval than the 1m view
+
+  - id: 4
+    name: "Switch category"
+    action: "Click a different category in the sidebar (Cost, Agents, Context)"
+
+    shared_artifacts:
+      - name: "selectedCategory"
+        source: "PerformanceMonitorView state"
+        displayed_as: "highlighted sidebar row"
+        consumers:
+          - "PMDetailPane (buffer selection, formatting, stats)"
+          - "PMSidebar active state"
+
+    emotional_state:
+      entry: "In control -- has understood one metric dimension"
+      exit: "Comprehensive -- understands multiple metric dimensions"
+
+    integration_checkpoint: |
+      Category switch must update chart color, format function, y-axis scale, and
+      stats grid content. Each category uses its own buffer in the store.
+
+    gherkin: |
+      Scenario: Category switch updates chart and stats
+        Given Raj is viewing the Tokens/s chart
+        When Raj clicks "Cost" in the sidebar
+        Then the detail pane header shows "Cost"
+        And the chart line uses the amber cost color
+        And the stats grid shows cost-specific metrics (Session Total, Avg Cost/Token)
+
+integration_validation:
+  shared_artifact_consistency:
+    - artifact: "aggregateBuffer.samples"
+      must_match_across: [1, 2, 4]
+      failure_message: "Chart data, hover values, and stats grid must all derive from the same buffer"
+
+    - artifact: "HoverState.tooltipX/tooltipY"
+      must_match_across: [2]
+      failure_message: "Tooltip position must match actual mouse coordinates regardless of DPI scaling"
+
+    - artifact: "selectedWindow"
+      must_match_across: [3]
+      failure_message: "Active time window must change the actual data buffer, not just the button highlight"
