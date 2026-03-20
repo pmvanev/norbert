@@ -293,7 +293,7 @@ export const PMChart = ({
       canvas.height = cssH * dpr;
       canvas.style.width = `${cssW}px`;
       canvas.style.height = `${cssH}px`;
-      ctx.scale(dpr, dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
 
     // Compute chart points from domain function

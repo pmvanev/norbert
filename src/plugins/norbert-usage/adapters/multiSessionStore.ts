@@ -219,12 +219,28 @@ export const createMultiSessionStore = (): MultiSessionStore => {
         sessionMwBufferMap.set(categoryId, appendMultiWindowSample(currentMwBuffer, rateSample));
       }
 
-      // Aggregate multi-window buffers (for aggregatable categories)
+    }
+
+    // Recompute aggregate multi-window buffers by summing across sessions
+    for (const categoryId of CATEGORY_IDS) {
       if (isCategoryAggregatable(categoryId)) {
+        let sum = 0;
+        for (const [, sessionMwMap] of sessionMultiWindowBuffers) {
+          const mwBuffer = sessionMwMap.get(categoryId);
+          if (mwBuffer) {
+            // Find the latest value from any window (use 1m as canonical)
+            const windowState = mwBuffer.windows["1m"];
+            if (windowState && windowState.buffer.samples.length > 0) {
+              const latestSample = windowState.buffer.samples[windowState.buffer.samples.length - 1];
+              sum += latestSample.tokenRate;
+            }
+          }
+        }
+        const aggregateSample = createCategorySample(sum, timestamp);
         const currentAggMwBuffer = aggregateMultiWindowBuffers.get(categoryId)!;
         aggregateMultiWindowBuffers.set(
           categoryId,
-          appendMultiWindowSample(currentAggMwBuffer, rateSample),
+          appendMultiWindowSample(currentAggMwBuffer, aggregateSample),
         );
       }
     }
