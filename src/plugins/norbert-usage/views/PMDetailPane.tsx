@@ -192,7 +192,7 @@ export const PMDetailPane = ({
       value: data.value,
       formattedValue: category.formatValue(data.value),
       timeOffset: `${Math.round(data.timeOffsetMs / 1000)}s ago`,
-      color: category.color,
+      color: themeColor,
       tooltipX: data.tooltipX,
       tooltipY: data.tooltipY,
     });

@@ -1197,7 +1197,7 @@ code, pre, .mono,
 .pm-tooltip {
   position: fixed;
   z-index: 500;
-  background: var(--bg-float, rgba(0, 8, 6, 0.95));
+  background: var(--bg-menu, var(--bg-float, rgba(0, 8, 6, 0.95)));
   border: 1px solid;
   border-radius: var(--card-r);
   padding: 4px 8px;
@@ -1206,6 +1206,9 @@ code, pre, .mono,
   gap: 6px;
   pointer-events: none;
   white-space: nowrap;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-family: var(--font-mono);
 }
 
 .pm-tooltip-value {

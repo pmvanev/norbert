@@ -22,8 +22,8 @@ import type { HoverState } from "../domain/types";
 const TOOLTIP_WIDTH = 140;
 
 /** Offset from cursor position. */
-const TOOLTIP_OFFSET_X = 12;
-const TOOLTIP_OFFSET_Y = -28;
+const TOOLTIP_OFFSET_X = 8;
+const TOOLTIP_OFFSET_Y = -8;
 
 /**
  * Compute tooltip left position, flipping to the left side of the
