@@ -205,7 +205,7 @@ export const PMChart = ({
             const timeOffsetMs = (totalSamples - 1 - idx) * 1000;
             const left = u.cursor.left ?? 0;
             const top = u.cursor.top ?? 0;
-            const rect = u.root.getBoundingClientRect();
+            const rect = u.over.getBoundingClientRect();
             hover({
               sampleIndex: idx,
               value: val as number,
