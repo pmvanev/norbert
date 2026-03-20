@@ -52,8 +52,9 @@ const formatDurationLabel = (windowId: TimeWindowId): string => {
 const deriveStatsFromBuffer = (
   multiSessionStore: MultiSessionStore,
   categoryId: MetricCategoryId,
+  windowId: TimeWindowId,
 ): Readonly<Record<string, number | string>> => {
-  const buffer = multiSessionStore.getAggregateBuffer(categoryId);
+  const buffer = multiSessionStore.getAggregateWindowBuffer(categoryId, windowId);
   const samples = buffer.samples;
   const sessions = multiSessionStore.getSessions();
 
@@ -107,11 +108,12 @@ const buildSessionRows = (
   multiSessionStore: MultiSessionStore,
   categoryId: MetricCategoryId,
   category: MetricCategory,
+  windowId: TimeWindowId,
 ): ReadonlyArray<SessionRowData> => {
   const sessions = multiSessionStore.getSessions();
 
   return sessions.map((session) => {
-    const sessionBuffer = multiSessionStore.getSessionBuffer(session.sessionId, categoryId);
+    const sessionBuffer = multiSessionStore.getSessionWindowBuffer(session.sessionId, categoryId, windowId);
     const latestValue = sessionBuffer && sessionBuffer.samples.length > 0
       ? sessionBuffer.samples[sessionBuffer.samples.length - 1].tokenRate
       : 0;
@@ -140,10 +142,6 @@ const buildSessionRows = (
 interface PMDetailPaneProps {
   readonly multiSessionStore: MultiSessionStore;
   readonly selectedCategory: MetricCategoryId;
-  // NOTE: selectedWindow currently has no effect on displayed data. The buffer
-  // is always 60 samples (1-minute window). Full multi-window buffer support is
-  // deferred. The time window selector serves as UI scaffolding that will be
-  // functional when multi-window buffers are implemented.
   readonly selectedWindow: TimeWindowId;
   readonly hoverState: HoverState;
   readonly onHoverChange: (state: HoverState) => void;
@@ -179,8 +177,8 @@ export const PMDetailPane = ({
   const showPerSessionGrid = shouldShowPerSessionGrid(sessionCount);
   const gridColumns = computeGridColumns(sessionCount);
 
-  // Aggregate buffer for the main graph
-  const aggregateBuffer = multiSessionStore.getAggregateBuffer(selectedCategory);
+  // Aggregate buffer for the main graph (window-aware)
+  const aggregateBuffer = multiSessionStore.getAggregateWindowBuffer(selectedCategory, selectedWindow);
 
   // Build hover handlers that populate the shared HoverState
   const createHoverHandler = (canvasId: string) => (data: HoverData): void => {
@@ -211,8 +209,8 @@ export const PMDetailPane = ({
   const activeCrosshairIndex = hoverState.active ? hoverState.sampleIndex : undefined;
 
   // Derive stats and session rows for the real components
-  const metricsData = deriveStatsFromBuffer(multiSessionStore, selectedCategory);
-  const sessionRows = buildSessionRows(multiSessionStore, selectedCategory, category);
+  const metricsData = deriveStatsFromBuffer(multiSessionStore, selectedCategory, selectedWindow);
+  const sessionRows = buildSessionRows(multiSessionStore, selectedCategory, category, selectedWindow);
 
   return (
     <div
@@ -272,9 +270,10 @@ export const PMDetailPane = ({
           }}
         >
           {sessions.map((session) => {
-            const sessionBuffer = multiSessionStore.getSessionBuffer(
+            const sessionBuffer = multiSessionStore.getSessionWindowBuffer(
               session.sessionId,
               selectedCategory,
+              selectedWindow,
             );
             const samples = sessionBuffer?.samples ?? [];
 
