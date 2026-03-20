@@ -1,19 +1,26 @@
 /**
- * PMChart: uPlot-based time-series chart for the Performance Monitor.
+ * PMChart: canvas-based time-series chart for the Performance Monitor.
  *
  * Supports two rendering modes:
- * - aggregate: grid lines, filled area
+ * - aggregate: grid lines, filled area, line trace
  * - mini: no axes, session label, filled area
  *
  * Hover: emits sample index, value, and time offset via onHover callback.
- * uPlot provides built-in cursor crosshair and tooltip hooks.
+ * Renders on HTML Canvas with DPR scaling (no blurry rendering at 125%/150% DPI).
+ *
+ * Pure rendering logic delegated to domain/chartRenderer.ts and domain/oscilloscope.ts.
+ * This component handles canvas drawing, resize observation, and periodic redraw (~1Hz).
  */
 
-import { useRef, useEffect, useMemo } from "react";
-import uPlot from "uplot";
-import "uplot/dist/uPlot.min.css";
+import { useRef, useEffect, useCallback, useState, useMemo } from "react";
 import type { RateSample, ChartMode } from "../domain/types";
-import type { RateField } from "../domain/oscilloscope";
+import type { RateField, CanvasDimensions } from "../domain/oscilloscope";
+import { computeHorizontalGridLines } from "../domain/oscilloscope";
+import {
+  prepareFilledAreaPoints,
+  computeHitTest,
+  type FilledAreaPoint,
+} from "../domain/chartRenderer";
 
 // ---------------------------------------------------------------------------
 // Hover data emitted to parent
@@ -28,7 +35,7 @@ export interface HoverData {
 }
 
 // ---------------------------------------------------------------------------
-// Color utility
+// Color utilities
 // ---------------------------------------------------------------------------
 
 const hexToRgba = (color: string, alpha: number): string => {
@@ -80,6 +87,103 @@ interface PMChartProps {
 /** How often (ms) the chart redraws to show time progression. */
 const CHART_REFRESH_MS = 1000;
 
+const DEFAULT_WIDTH = 300;
+const DEFAULT_HEIGHT = 120;
+const CANVAS_PADDING = 10;
+const HORIZONTAL_GRID_COUNT = 4;
+const VERTICAL_GRID_COUNT = 5;
+
+// ---------------------------------------------------------------------------
+// Pure canvas drawing functions
+// ---------------------------------------------------------------------------
+
+const clearCanvas = (
+  ctx: CanvasRenderingContext2D,
+  dimensions: CanvasDimensions,
+): void => {
+  ctx.clearRect(0, 0, dimensions.width, dimensions.height);
+  ctx.fillStyle = "rgba(0, 0, 0, 0.15)";
+  ctx.fillRect(0, 0, dimensions.width, dimensions.height);
+};
+
+const drawGridLines = (
+  ctx: CanvasRenderingContext2D,
+  dimensions: CanvasDimensions,
+): void => {
+  const gridColor = getCssVar("--osc-grid", "rgba(0, 229, 204, 0.18)");
+  ctx.strokeStyle = gridColor;
+  ctx.lineWidth = 1;
+  ctx.setLineDash?.([2, 4]);
+
+  // Horizontal grid lines
+  const horizontalLines = computeHorizontalGridLines(dimensions, HORIZONTAL_GRID_COUNT);
+  for (const line of horizontalLines) {
+    ctx.beginPath();
+    ctx.moveTo(dimensions.padding, line.y);
+    ctx.lineTo(dimensions.width - dimensions.padding, line.y);
+    ctx.stroke();
+  }
+
+  // Vertical grid lines (evenly spaced)
+  const { width, height, padding } = dimensions;
+  const drawableWidth = width - 2 * padding;
+  for (let i = 1; i <= VERTICAL_GRID_COUNT; i++) {
+    const x = padding + (i / (VERTICAL_GRID_COUNT + 1)) * drawableWidth;
+    ctx.beginPath();
+    ctx.moveTo(x, padding);
+    ctx.lineTo(x, height - padding);
+    ctx.stroke();
+  }
+
+  ctx.setLineDash?.([]);
+};
+
+const drawFilledArea = (
+  ctx: CanvasRenderingContext2D,
+  points: ReadonlyArray<FilledAreaPoint>,
+  color: string,
+  dimensions: CanvasDimensions,
+): void => {
+  if (points.length < 2) return;
+
+  const bottomY = dimensions.height - dimensions.padding;
+
+  // Create gradient fill
+  const gradient = ctx.createLinearGradient(0, dimensions.padding, 0, bottomY);
+  gradient.addColorStop(0, hexToRgba(color, 0.18));
+  gradient.addColorStop(1, hexToRgba(color, 0.03));
+
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, bottomY);
+  for (const point of points) {
+    ctx.lineTo(point.x, point.y);
+  }
+  ctx.lineTo(points[points.length - 1].x, bottomY);
+  ctx.closePath();
+  ctx.fill();
+};
+
+const drawLineTrace = (
+  ctx: CanvasRenderingContext2D,
+  points: ReadonlyArray<FilledAreaPoint>,
+  color: string,
+): void => {
+  if (points.length < 2) return;
+
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+
+  for (let i = 1; i < points.length; i++) {
+    ctx.lineTo(points[i].x, points[i].y);
+  }
+
+  ctx.stroke();
+};
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -93,193 +197,161 @@ export const PMChart = ({
   yMax,
   yLabels: _yLabels = [],
   label,
-  formatValue,
+  formatValue: _formatValue,
+  hoverIndex: _hoverIndex,
   onHover,
   onHoverEnd,
 }: PMChartProps) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const uplotRef = useRef<uPlot | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Store callbacks in refs so uPlot hooks always call the latest version
-  // without triggering uPlot recreation.
+  // Store callbacks in refs so redraw always uses the latest version
   const onHoverRef = useRef(onHover);
   onHoverRef.current = onHover;
   const onHoverEndRef = useRef(onHoverEnd);
   onHoverEndRef.current = onHoverEnd;
-  const formatValueRef = useRef(formatValue);
-  formatValueRef.current = formatValue;
 
-  // Track the real mouse viewport position from mousemove events.
-  // uPlot's cursor.left/top can be wrong under Windows DPI scaling;
-  // clientX/clientY from the DOM event are always correct.
+  // Track real mouse viewport position from mousemove events
   const mouseXRef = useRef(0);
   const mouseYRef = useRef(0);
 
   const isAggregate = mode === "aggregate";
 
-  // Build uPlot data from samples: [timestamps[], values[]]
-  const data = useMemo((): uPlot.AlignedData => {
-    if (samples.length === 0) {
-      return [new Float64Array(0), new Float64Array(0)];
-    }
-    const timestamps = new Float64Array(samples.length);
-    const values = new Float64Array(samples.length);
-    for (let i = 0; i < samples.length; i++) {
-      timestamps[i] = samples[i].timestamp / 1000;
-      values[i] = samples[i][field];
-    }
-    return [timestamps, values];
-  }, [samples, field]);
+  const [canvasDimensions, setCanvasDimensions] = useState<CanvasDimensions>({
+    width: DEFAULT_WIDTH,
+    height: DEFAULT_HEIGHT,
+    padding: CANVAS_PADDING,
+  });
 
-  // Autoscale Y-axis from data with 10% headroom.
+  // Autoscale Y-axis from data with 10% headroom
   const effectiveYMax = useMemo(() => {
     if (samples.length === 0) return yMax ?? 1;
     const peak = samples.reduce((max, s) => Math.max(max, s[field]), 0);
     return peak > 0 ? peak * 1.1 : (yMax ?? 1);
   }, [yMax, samples, field]);
 
-  // Create uPlot once on mount, destroy on unmount.
+  // Convert RateSamples to ChartSample format for prepareFilledAreaPoints
+  const chartSamples = useMemo(
+    () => samples.map((s) => ({ timestamp: s.timestamp, value: s[field] })),
+    [samples, field],
+  );
+
+  // ResizeObserver for responsive canvas dimensions
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    const width = container.clientWidth || 300;
-    const height = container.clientHeight || 120;
-
-    const gridStroke = getCssVar("--osc-grid", "rgba(0, 229, 204, 0.18)");
-
-    const opts: uPlot.Options = {
-      width,
-      height,
-      pxAlign: 0,
-      cursor: {
-        show: true,
-        x: true,
-        y: false,
-        points: { show: false },
-      },
-      legend: { show: false },
-      axes: [
-        {
-          show: false,
-          stroke: "transparent",
-          grid: { show: true, stroke: gridStroke, width: 1, dash: [2, 4] },
-        },
-        {
-          show: false,
-          stroke: "transparent",
-          grid: { show: true, stroke: gridStroke, width: 1, dash: [2, 4] },
-          ticks: { show: false },
-          size: 0,
-        },
-      ],
-      scales: {
-        x: { time: false },
-        y: { range: [0, effectiveYMax] },
-      },
-      series: [
-        {},
-        {
-          stroke: color,
-          width: 1.5,
-          fill: (u: uPlot) => {
-            const ctx = u.ctx;
-            const plotTop = u.bbox.top / devicePixelRatio;
-            const plotBot = (u.bbox.top + u.bbox.height) / devicePixelRatio;
-            const gradient = ctx.createLinearGradient(0, plotTop, 0, plotBot);
-            gradient.addColorStop(0, hexToRgba(color, 0.18));
-            gradient.addColorStop(1, hexToRgba(color, 0.03));
-            return gradient;
-          },
-          points: { show: false },
-        },
-      ],
-      hooks: {
-        setCursor: [
-          (u: uPlot) => {
-            const idx = u.cursor.idx;
-            if (idx == null || idx < 0) {
-              onHoverEndRef.current?.();
-              return;
-            }
-            const hover = onHoverRef.current;
-            if (!hover) return;
-            const val = (u.data[1] as Float64Array | number[])[idx] ?? 0;
-            const totalSamples = (u.data[0] as Float64Array | number[]).length;
-            const timeOffsetMs = (totalSamples - 1 - idx) * 1000;
-            hover({
-              sampleIndex: idx,
-              value: val as number,
-              timeOffsetMs,
-              tooltipX: mouseXRef.current,
-              tooltipY: mouseYRef.current,
-            });
-          },
-        ],
-      },
-    };
-
-    const plot = new uPlot(opts, data, container);
-    uplotRef.current = plot;
-
-    // Capture real mouse coordinates from the plot overlay element.
-    const overEl = plot.over;
-    const handleMouseMove = (e: MouseEvent): void => {
-      mouseXRef.current = e.clientX;
-      mouseYRef.current = e.clientY;
-    };
-    const handleMouseLeave = (): void => {
-      onHoverEndRef.current?.();
-    };
-    overEl.addEventListener("mousemove", handleMouseMove);
-    overEl.addEventListener("mouseleave", handleMouseLeave);
-
-    return () => {
-      overEl.removeEventListener("mousemove", handleMouseMove);
-      overEl.removeEventListener("mouseleave", handleMouseLeave);
-      plot.destroy();
-      uplotRef.current = null;
-    };
-    // Only recreate on color/mode change. Y-axis autoscales via setScale.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [color, isAggregate]);
-
-  // Update data and autoscale Y axis without recreating the chart
-  useEffect(() => {
-    const plot = uplotRef.current;
-    if (!plot) return;
-    plot.setData(data, false);
-    plot.setScale("y", { min: 0, max: effectiveYMax });
-    plot.redraw();
-  }, [data, effectiveYMax]);
-
-  // Periodic redraw so the chart visually advances as time passes,
-  // even when no new samples arrive.
-  useEffect(() => {
-    const id = setInterval(() => {
-      const plot = uplotRef.current;
-      if (plot) plot.redraw();
-    }, CHART_REFRESH_MS);
-    return () => clearInterval(id);
-  }, []);
-
-  // Handle container resize
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const observer = new ResizeObserver(() => {
-      const plot = uplotRef.current;
-      if (!plot) return;
-      const w = container.clientWidth;
-      const h = container.clientHeight;
-      if (w > 0 && h > 0 && (w !== plot.width || h !== plot.height)) {
-        plot.setSize({ width: w, height: h });
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          setCanvasDimensions({
+            width: Math.round(width),
+            height: Math.round(height),
+            padding: CANVAS_PADDING,
+          });
+        }
       }
     });
+
     observer.observe(container);
     return () => observer.disconnect();
   }, []);
+
+  const renderFrame = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    // Scale canvas for HiDPI displays to eliminate blurry rendering
+    const dpr = devicePixelRatio || 1;
+    const cssW = canvasDimensions.width;
+    const cssH = canvasDimensions.height;
+    if (canvas.width !== cssW * dpr || canvas.height !== cssH * dpr) {
+      canvas.width = cssW * dpr;
+      canvas.height = cssH * dpr;
+      canvas.style.width = `${cssW}px`;
+      canvas.style.height = `${cssH}px`;
+      ctx.scale(dpr, dpr);
+    }
+
+    // Compute chart points from domain function
+    const points = prepareFilledAreaPoints(chartSamples, canvasDimensions, effectiveYMax);
+
+    // Draw pipeline: clear -> grid -> filled area -> line trace
+    clearCanvas(ctx, canvasDimensions);
+
+    if (isAggregate) {
+      drawGridLines(ctx, canvasDimensions);
+    }
+
+    drawFilledArea(ctx, points, color, canvasDimensions);
+    drawLineTrace(ctx, points, color);
+  }, [canvasDimensions, chartSamples, effectiveYMax, color, isAggregate]);
+
+  // Mouse interaction: hit-test and hover callbacks
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const handleMouseMove = (e: MouseEvent): void => {
+      mouseXRef.current = e.clientX;
+      mouseYRef.current = e.clientY;
+
+      const hover = onHoverRef.current;
+      if (!hover) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const { sampleIndex } = computeHitTest(
+        mouseX,
+        canvasDimensions.width,
+        chartSamples.length,
+        canvasDimensions.padding,
+      );
+
+      if (sampleIndex < 0) return;
+
+      const value = chartSamples[sampleIndex]?.value ?? 0;
+      const timeOffsetMs = (chartSamples.length - 1 - sampleIndex) * 1000;
+
+      hover({
+        sampleIndex,
+        value,
+        timeOffsetMs,
+        tooltipX: e.clientX,
+        tooltipY: e.clientY,
+      });
+    };
+
+    const handleMouseLeave = (): void => {
+      onHoverEndRef.current?.();
+    };
+
+    canvas.addEventListener("mousemove", handleMouseMove);
+    canvas.addEventListener("mouseleave", handleMouseLeave);
+
+    return () => {
+      canvas.removeEventListener("mousemove", handleMouseMove);
+      canvas.removeEventListener("mouseleave", handleMouseLeave);
+    };
+  }, [canvasDimensions, chartSamples]);
+
+  // Initial render + periodic redraw at ~1Hz
+  useEffect(() => {
+    renderFrame();
+
+    intervalRef.current = setInterval(renderFrame, CHART_REFRESH_MS);
+
+    return () => {
+      if (intervalRef.current !== null) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, [renderFrame]);
 
   return (
     <div className="pm-chart-wrap" role="img" aria-label={title}>
@@ -288,7 +360,13 @@ export const PMChart = ({
           {label}
         </div>
       )}
-      <div ref={containerRef} className="pm-chart-cell" />
+      <div ref={containerRef} className="pm-chart-cell">
+        <canvas
+          ref={canvasRef}
+          width={canvasDimensions.width}
+          height={canvasDimensions.height}
+        />
+      </div>
     </div>
   );
 };
