@@ -17,6 +17,8 @@
   --warning: #f0920a;
   --error: #ff4560;
   --violet: #a78bfa;
+  --blue: #4a9eff;
+  --teal: #7aa89e;
   --bg-app: #060d0b;
   --bg-title: rgba(3, 7, 6, 0.98);
   --bg-activity: rgba(3, 7, 6, 0.95);
@@ -115,6 +117,8 @@
   --warning: #e8885e;
   --error: #ef4444;
   --violet: #a78bfa;
+  --blue: #6ba3d6;
+  --teal: #8fb5a8;
   --bg-app: #2b2a27;
   --bg-title: #232220;
   --bg-activity: #232220;
@@ -213,6 +217,8 @@
   --warning: #cca700;
   --error: #f48771;
   --violet: #c586c0;
+  --blue: #569cd6;
+  --teal: #4ec9b0;
   --bg-app: #1e1e1e;
   --bg-title: #3c3c3c;
   --bg-activity: #333;
@@ -311,6 +317,8 @@
   --warning: #da7756;
   --error: #dc2626;
   --violet: #7c3aed;
+  --blue: #4a7fb5;
+  --teal: #5c8a7e;
   --bg-app: #faf9f7;
   --bg-title: #f2f1ee;
   --bg-activity: #f2f1ee;
@@ -409,6 +417,8 @@
   --warning: #bf8803;
   --error: #e51400;
   --violet: #af00db;
+  --blue: #0078d4;
+  --teal: #00897b;
   --bg-app: #ffffff;
   --bg-title: #dddddd;
   --bg-activity: #2c2c2c;

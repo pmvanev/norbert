@@ -15,7 +15,7 @@
 import type { MultiSessionStore } from "../adapters/multiSessionStore";
 import type { MetricCategoryId, HoverState, TimeWindowId } from "../domain/types";
 import { getCategoryById, type MetricCategory } from "../domain/categoryConfig";
-import { PMChart, type HoverData } from "./PMChart";
+import { PMChart, type HoverData, resolveThemeColor } from "./PMChart";
 import { PMStatsGrid } from "./PMStatsGrid";
 import { PMSessionTable, type SessionRowData } from "./PMSessionTable";
 
@@ -160,6 +160,9 @@ export const PMDetailPane = ({
     );
   }
 
+  // Resolve theme-aware color from CSS var at render time
+  const themeColor = resolveThemeColor(category.cssVar, category.color);
+
   const sessions = multiSessionStore.getSessions();
   const sessionCount = sessions.length;
   const showAggregate = shouldShowAggregateGraph(category);
@@ -213,7 +216,7 @@ export const PMDetailPane = ({
       <div className="pm-detail-header">
         <span
           className="pm-detail-category-name"
-          style={{ color: category.color }}
+          style={{ color: themeColor }}
         >
           {category.label}
         </span>
@@ -231,7 +234,7 @@ export const PMDetailPane = ({
             title={`${category.label} (Aggregate)`}
             samples={aggregateBuffer.samples}
             field="tokenRate"
-            color={category.color}
+            color={themeColor}
             mode="aggregate"
             yMax={category.yMax}
             yLabels={category.yLabels}
@@ -274,7 +277,7 @@ export const PMDetailPane = ({
                   title={`${category.label} - ${session.sessionId}`}
                   samples={samples}
                   field="tokenRate"
-                  color={category.color}
+                  color={themeColor}
                   mode="mini"
                   yMax={category.yMax}
                   yLabels={category.yLabels}

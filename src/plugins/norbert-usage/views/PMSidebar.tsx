@@ -22,6 +22,7 @@ import {
 } from "../domain/categoryConfig";
 import { prepareSparklinePoints, type FilledAreaPoint } from "../domain/chartRenderer";
 import type { CanvasDimensions } from "../domain/oscilloscope";
+import { resolveThemeColor } from "./PMChart";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -110,7 +111,7 @@ const SparklineCanvas = ({
       category.yMax,
     );
 
-    drawSparkline(ctx, points, category.color);
+    drawSparkline(ctx, points, resolveThemeColor(category.cssVar, category.color));
   }, [multiSessionStore, category]);
 
   useEffect(() => {
@@ -157,7 +158,7 @@ export const PMSidebar = ({
         <button
           key={category.id}
           className={`pm-sidebar-row${isSelected ? " pm-sidebar-row-selected" : ""}`}
-          style={isSelected ? { borderLeftColor: category.color } : undefined}
+          style={isSelected ? { borderLeftColor: resolveThemeColor(category.cssVar, category.color) } : undefined}
           onClick={() => onCategorySelect(category.id)}
           role="option"
           aria-selected={isSelected}

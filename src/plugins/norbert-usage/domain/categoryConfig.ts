@@ -26,6 +26,8 @@ export interface MetricCategory {
   readonly id: MetricCategoryId;
   readonly label: string;
   readonly color: string;
+  /** CSS custom property name for theme-aware color resolution. */
+  readonly cssVar: string;
   readonly yMax: number;
   readonly yLabels: ReadonlyArray<string>;
   readonly aggregateApplicable: boolean;
@@ -117,6 +119,7 @@ export const METRIC_CATEGORIES: ReadonlyArray<MetricCategory> = [
     id: "tokens",
     label: "Tokens/s",
     color: "#00e5cc",
+    cssVar: "--brand",
     yMax: 2000,
     yLabels: ["0", "500", "1000", "1500", "2000"],
     aggregateApplicable: true,
@@ -129,6 +132,7 @@ export const METRIC_CATEGORIES: ReadonlyArray<MetricCategory> = [
     id: "cost",
     label: "Cost",
     color: "#f0920a",
+    cssVar: "--amber",
     yMax: 0.1,
     yLabels: ["$0", "$0.025", "$0.05", "$0.075", "$0.10"],
     aggregateApplicable: true,
@@ -141,6 +145,7 @@ export const METRIC_CATEGORIES: ReadonlyArray<MetricCategory> = [
     id: "agents",
     label: "Agents",
     color: "#4a9eff",
+    cssVar: "--blue",
     yMax: 10,
     yLabels: ["0", "2", "4", "6", "8", "10"],
     aggregateApplicable: true,
@@ -153,6 +158,7 @@ export const METRIC_CATEGORIES: ReadonlyArray<MetricCategory> = [
     id: "context",
     label: "Context",
     color: "#7aa89e",
+    cssVar: "--teal",
     yMax: 100,
     yLabels: ["0%", "25%", "50%", "75%", "100%"],
     aggregateApplicable: false,

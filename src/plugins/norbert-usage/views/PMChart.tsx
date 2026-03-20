@@ -42,6 +42,17 @@ const hexToRgba = (color: string, alpha: number): string => {
   return `rgba(255, 255, 255, ${alpha})`;
 };
 
+/** Read a CSS custom property from :root, with fallback. */
+const getCssVar = (name: string, fallback: string): string => {
+  if (typeof document === "undefined") return fallback;
+  const val = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return val || fallback;
+};
+
+/** Resolve a category color through its CSS var, falling back to the hardcoded hex. */
+export const resolveThemeColor = (cssVar: string, fallback: string): string =>
+  getCssVar(cssVar, fallback);
+
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
@@ -138,15 +149,15 @@ export const PMChart = ({
         { show: false, stroke: "transparent", grid: { show: false } },
         {
           show: isAggregate,
-          stroke: "rgba(255,255,255,0.3)",
+          stroke: getCssVar("--text-m", "rgba(255,255,255,0.2)"),
           grid: {
             show: isAggregate,
-            stroke: "rgba(0, 229, 204, 0.06)",
+            stroke: getCssVar("--osc-grid", "rgba(0, 229, 204, 0.06)"),
             width: 1,
           },
           ticks: { show: false },
           size: isAggregate ? 50 : 0,
-          font: "9px 'Share Tech Mono', monospace",
+          font: `9px ${getCssVar("--font-mono", "'Share Tech Mono', monospace")}`,
           values: (_u: uPlot, vals: number[]) =>
             vals.map((v) => formatValueRef.current ? formatValueRef.current(v) : String(Math.round(v))),
         },
