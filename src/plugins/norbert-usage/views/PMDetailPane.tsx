@@ -180,6 +180,35 @@ export const PMDetailPane = ({
   // Aggregate buffer for the main graph (window-aware)
   const aggregateBuffer = multiSessionStore.getAggregateWindowBuffer(selectedCategory, selectedWindow);
 
+  // Empty state: no active sessions and no historical aggregate data
+  const hasNoData = sessionCount === 0 && aggregateBuffer.samples.length === 0;
+
+  if (hasNoData) {
+    return (
+      <div
+        className="pm-detail-pane"
+        data-selected-category={selectedCategory}
+        data-selected-window={selectedWindow}
+        role="region"
+        aria-label="Metric detail"
+      >
+        {/* Header */}
+        <div className="pm-detail-header">
+          <span
+            className="pm-detail-category-name"
+            style={{ color: themeColor }}
+          >
+            {category.label}
+          </span>
+          <span className="pm-detail-subtitle">
+            No active sessions
+          </span>
+        </div>
+        <div className="pm-detail-empty">No active sessions</div>
+      </div>
+    );
+  }
+
   // Build hover handlers that populate the shared HoverState
   const createHoverHandler = (canvasId: string) => (data: HoverData): void => {
     onHoverChange({
