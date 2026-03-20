@@ -321,13 +321,20 @@ export const PMChart = ({
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    let rafPending = false;
     const handleMouseMove = (e: MouseEvent): void => {
       const rect = canvas.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
 
-      // Update crosshair position and trigger re-render
+      // Update crosshair position and schedule redraw via rAF
       crosshairXRef.current = mouseX;
-      renderFrame();
+      if (!rafPending) {
+        rafPending = true;
+        requestAnimationFrame(() => {
+          rafPending = false;
+          renderFrame();
+        });
+      }
 
       const hover = onHoverRef.current;
       if (!hover) return;

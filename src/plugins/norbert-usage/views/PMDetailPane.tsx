@@ -63,7 +63,7 @@ const deriveStatsFromBuffer = (
   }
 
   const values = samples.map((s) => s.tokenRate);
-  const peak = Math.max(...values);
+  const peak = values.reduce((a, b) => Math.max(a, b), 0);
   const avg = values.reduce((sum, v) => sum + v, 0) / values.length;
   const current = values[values.length - 1];
 
@@ -91,7 +91,7 @@ const deriveStatsFromBuffer = (
     active: activeAgents,
     totalSpawned: totalToolCalls,
     avgPerSession: sessions.length > 0 ? Math.round(peak / sessions.length) : 0,
-    remaining: `${100 - Math.round(current)}%`,
+    remaining: `${Math.max(0, 100 - Math.round(current))}%`,
     maxTokens: sessions.length > 0
       ? sessions[sessions.length - 1].contextWindowMaxTokens.toLocaleString()
       : "--",
