@@ -155,11 +155,16 @@ const onLoad = (api: NorbertAPI): void => {
       const nextTimeSeries = appendSample(usageMetricsStore.getTimeSeries(), sample);
       usageMetricsStore.update(nextMetrics, nextTimeSeries);
     },
-    updateMultiSessionMetrics: (sessionId, reducer) => {
+    updateMultiSessionMetrics: (sessionId, label, reducer) => {
       usageMultiSessionStore.addSession(sessionId);
       const prev = usageMultiSessionStore.getSession(sessionId);
       if (prev) {
-        usageMultiSessionStore.updateSession(sessionId, reducer(prev));
+        const updated = reducer(prev);
+        // Populate sessionLabel from cwd on first event (when label is empty)
+        const withLabel = updated.sessionLabel === "" && label !== ""
+          ? { ...updated, sessionLabel: label }
+          : updated;
+        usageMultiSessionStore.updateSession(sessionId, withLabel);
       }
     },
     appendSessionSample: (sessionId, samples) => {

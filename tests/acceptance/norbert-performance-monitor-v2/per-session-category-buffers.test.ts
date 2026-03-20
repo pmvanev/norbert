@@ -397,7 +397,7 @@ describe("Hook processor feeds per-category samples after metrics update", () =>
 
     const deps: HookProcessorDeps = {
       updateMetrics: () => {}, // single-session pipeline -- no-op for these tests
-      updateMultiSessionMetrics: (sessionId, reducer) => {
+      updateMultiSessionMetrics: (sessionId, _label, reducer) => {
         const prev = sessionMetrics.get(sessionId) ?? createInitialMetrics(sessionId);
         sessionMetrics.set(sessionId, reducer(prev));
       },

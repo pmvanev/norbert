@@ -20,7 +20,7 @@ import { computeInstantaneousRates } from "./domain/instantaneousRate";
 
 export interface HookProcessorDeps {
   readonly updateMetrics: (reducer: (prev: SessionMetrics) => SessionMetrics) => void;
-  readonly updateMultiSessionMetrics?: (sessionId: string, reducer: (prev: SessionMetrics) => SessionMetrics) => void;
+  readonly updateMultiSessionMetrics?: (sessionId: string, label: string, reducer: (prev: SessionMetrics) => SessionMetrics) => void;
   readonly appendSessionSample?: (sessionId: string, samples: CategorySampleInput) => void;
   readonly pricingTable: PricingTable;
 }
@@ -44,6 +44,29 @@ const extractSessionId = (payload: unknown): string | null => {
   if (!isRecord(payload)) return null;
   const sid = payload["session_id"];
   return typeof sid === "string" ? sid : null;
+};
+
+/** Extract a human-readable project name from the event payload.
+ *  Claude Code hook payloads include a `cwd` field with the working directory.
+ *  Falls back to the last segment of `transcript_path` parent directories. */
+const extractSessionLabel = (payload: unknown): string => {
+  if (!isRecord(payload)) return "";
+  // Try cwd first (top-level field on Claude Code hook payloads)
+  const cwd = payload["cwd"];
+  if (typeof cwd === "string" && cwd.length > 0) {
+    const segments = cwd.replace(/\\/g, "/").split("/").filter(Boolean);
+    return segments[segments.length - 1] ?? "";
+  }
+  // Try inner payload's cwd
+  const inner = payload["payload"];
+  if (isRecord(inner)) {
+    const innerCwd = inner["cwd"];
+    if (typeof innerCwd === "string" && innerCwd.length > 0) {
+      const segments = innerCwd.replace(/\\/g, "/").split("/").filter(Boolean);
+      return segments[segments.length - 1] ?? "";
+    }
+  }
+  return "";
 };
 
 /** Extract the inner payload from a DB event wrapper.
@@ -132,11 +155,12 @@ export const createHookProcessor = (deps: HookProcessorDeps): HookProcessor => {
     if (updateMultiSessionMetrics) {
       const sessionId = extractSessionId(payload);
       if (sessionId) {
+        const label = extractSessionLabel(payload);
         // Capture previous and updated metrics for category sample derivation
         let previousMetrics: SessionMetrics | undefined;
         let updatedMetrics: SessionMetrics | undefined;
 
-        updateMultiSessionMetrics(sessionId, (previous: SessionMetrics): SessionMetrics => {
+        updateMultiSessionMetrics(sessionId, label, (previous: SessionMetrics): SessionMetrics => {
           previousMetrics = previous;
           const next = aggregateEvent(previous, event, pricingTable);
           updatedMetrics = next;

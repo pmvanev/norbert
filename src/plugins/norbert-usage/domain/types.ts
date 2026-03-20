@@ -63,6 +63,7 @@ export interface CostResult {
 
 export interface SessionMetrics {
   readonly sessionId: string;
+  readonly sessionLabel: string;
   readonly totalTokens: number;
   readonly inputTokens: number;
   readonly outputTokens: number;

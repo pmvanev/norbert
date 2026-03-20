@@ -76,6 +76,25 @@ export const PerformanceMonitorView = ({
     return unsubscribe;
   }, [multiSessionStore]);
 
+  // Heartbeat: inject zero-rate samples at ~1Hz so charts keep scrolling
+  // when no real events arrive, producing a flat line during idle.
+  useEffect(() => {
+    const id = setInterval(() => {
+      const sessions = multiSessionStore.getSessions();
+      if (sessions.length > 0) {
+        for (const session of sessions) {
+          multiSessionStore.appendSessionSample(session.sessionId, {
+            tokens: 0,
+            cost: 0,
+            agents: session.activeAgentCount,
+            context: session.contextWindowPct,
+          });
+        }
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [multiSessionStore]);
+
   return (
     <div className="performance-monitor" role="region" aria-label="Performance Monitor">
       <div className="sec-hdr">

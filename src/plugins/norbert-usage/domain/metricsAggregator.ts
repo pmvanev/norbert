@@ -24,8 +24,9 @@ export type AggregatorEvent = {
 // ---------------------------------------------------------------------------
 
 /** Create zeroed SessionMetrics for a new session. */
-export const createInitialMetrics = (sessionId: string): SessionMetrics => ({
+export const createInitialMetrics = (sessionId: string, sessionLabel = ""): SessionMetrics => ({
   sessionId,
+  sessionLabel,
   totalTokens: 0,
   inputTokens: 0,
   outputTokens: 0,
