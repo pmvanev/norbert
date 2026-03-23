@@ -16,6 +16,7 @@ use axum::{
     Json, Router,
 };
 use norbert_lib::adapters::db::SqliteEventStore;
+use norbert_lib::adapters::otel::parse_export_logs_request;
 use norbert_lib::adapters::providers::claude_code::ClaudeCodeProvider;
 use norbert_lib::domain::HOOK_PORT;
 use norbert_lib::ports::{EventProvider, EventStore};
@@ -86,10 +87,40 @@ async fn handle_hook_event(
     }
 }
 
-/// Build the axum router with hook routes.
+/// Handle POST /v1/logs (OTLP HTTP log export).
+///
+/// Accepts an ExportLogsServiceRequest JSON body, delegates parsing to
+/// the pure OTLP parser, persists each recognized event via EventStore,
+/// and returns 200 OK with {} per OTLP spec. Returns 400 for malformed JSON.
+async fn handle_otlp_logs(
+    State(state): State<Arc<AppState>>,
+    body: axum::body::Bytes,
+) -> impl IntoResponse {
+    let json_body: serde_json::Value = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(_) => {
+            return (StatusCode::BAD_REQUEST, "malformed JSON".to_string());
+        }
+    };
+
+    let received_at = chrono::Utc::now().to_rfc3339();
+    let events = parse_export_logs_request(&json_body, &received_at);
+
+    let store = state.event_store.lock().unwrap();
+    for event in &events {
+        if let Err(e) = store.write_event(event) {
+            eprintln!("Failed to persist OTLP event: {}", e);
+        }
+    }
+
+    (StatusCode::OK, "{}".to_string())
+}
+
+/// Build the axum router with hook routes and OTLP log receiver.
 fn build_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/hooks/:event_type", post(handle_hook_event))
+        .route("/v1/logs", post(handle_otlp_logs))
         .with_state(state)
 }
 
@@ -354,5 +385,185 @@ mod tests {
         let sessions = state.event_store.lock().unwrap().get_sessions().unwrap();
         assert_eq!(sessions.len(), 1);
         assert_eq!(sessions[0].id, "sess-attribution-test");
+    }
+
+    // --- OTLP /v1/logs handler tests ---
+
+    /// Build a minimal valid OTLP ExportLogsServiceRequest with one api_request log record.
+    fn otlp_api_request_body(session_id: &str) -> serde_json::Value {
+        serde_json::json!({
+            "resourceLogs": [{
+                "resource": {
+                    "attributes": [
+                        {"key": "service.name", "value": {"stringValue": "claude-code"}}
+                    ]
+                },
+                "scopeLogs": [{
+                    "scope": {"name": "com.anthropic.claude_code.events"},
+                    "logRecords": [{
+                        "timeUnixNano": "1774290633104000000",
+                        "observedTimeUnixNano": "1774290633104000000",
+                        "body": {"stringValue": "claude_code.api_request"},
+                        "attributes": [
+                            {"key": "session.id", "value": {"stringValue": session_id}},
+                            {"key": "event.name", "value": {"stringValue": "api_request"}},
+                            {"key": "event.timestamp", "value": {"stringValue": "2026-03-23T18:30:33Z"}},
+                            {"key": "event.sequence", "value": {"intValue": "1"}},
+                            {"key": "prompt.id", "value": {"stringValue": "prompt-1"}},
+                            {"key": "model", "value": {"stringValue": "claude-opus-4-6"}},
+                            {"key": "input_tokens", "value": {"stringValue": "337"}},
+                            {"key": "output_tokens", "value": {"stringValue": "12"}},
+                            {"key": "cache_read_tokens", "value": {"stringValue": "100"}},
+                            {"key": "cache_creation_tokens", "value": {"stringValue": "200"}}
+                        ],
+                        "droppedAttributesCount": 0
+                    }]
+                }]
+            }]
+        })
+    }
+
+    #[tokio::test]
+    async fn otlp_valid_api_request_returns_200_and_persists_event() {
+        let state = test_state();
+        let app = build_router(state.clone());
+
+        let body = otlp_api_request_body("sess-otlp-1");
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/v1/logs")
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::to_string(&body).unwrap()))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Verify response body is {}
+        let response_body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(
+            std::str::from_utf8(&response_body).unwrap(),
+            "{}",
+            "OTLP success response must be {{}}"
+        );
+
+        // Verify event persisted with correct type and provider
+        let count = state.event_store.lock().unwrap().get_event_count().unwrap();
+        assert_eq!(count, 1, "One event should be persisted from OTLP request");
+
+        let stored_type: String = {
+            let store = state.event_store.lock().unwrap();
+            store
+                .get_stored_event_type("sess-otlp-1")
+                .expect("should find stored event")
+        };
+        assert_eq!(
+            stored_type, "api_request",
+            "Event should be stored with canonical type api_request"
+        );
+    }
+
+    #[tokio::test]
+    async fn otlp_malformed_json_returns_400() {
+        let state = test_state();
+        let app = build_router(state);
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/v1/logs")
+            .header("content-type", "application/json")
+            .body(Body::from("not valid json {{{"))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn otlp_empty_resource_logs_returns_200_no_events() {
+        let state = test_state();
+        let app = build_router(state.clone());
+
+        let body = serde_json::json!({"resourceLogs": []});
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/v1/logs")
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::to_string(&body).unwrap()))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let count = state.event_store.lock().unwrap().get_event_count().unwrap();
+        assert_eq!(count, 0, "No events should be persisted for empty resourceLogs");
+    }
+
+    #[tokio::test]
+    async fn otlp_unrecognized_event_returns_200_no_events() {
+        let state = test_state();
+        let app = build_router(state.clone());
+
+        let body = serde_json::json!({
+            "resourceLogs": [{
+                "resource": {"attributes": []},
+                "scopeLogs": [{
+                    "scope": {"name": "test"},
+                    "logRecords": [{
+                        "timeUnixNano": "1774290633104000000",
+                        "observedTimeUnixNano": "1774290633104000000",
+                        "body": {"stringValue": "unknown.event_type"},
+                        "attributes": [
+                            {"key": "session.id", "value": {"stringValue": "sess-unknown"}},
+                            {"key": "event.name", "value": {"stringValue": "unknown_event_type"}}
+                        ],
+                        "droppedAttributesCount": 0
+                    }]
+                }]
+            }]
+        });
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/v1/logs")
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::to_string(&body).unwrap()))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let count = state.event_store.lock().unwrap().get_event_count().unwrap();
+        assert_eq!(count, 0, "No events should be persisted for unrecognized event types");
+    }
+
+    #[tokio::test]
+    async fn otlp_route_does_not_affect_hooks_route() {
+        // Verify existing /hooks/:type route still works alongside /v1/logs
+        let state = test_state();
+        let app = build_router(state.clone());
+
+        let body = serde_json::json!({
+            "session_id": "sess-hooks-coexist",
+            "tool": "bash"
+        });
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/hooks/PreToolUse")
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::to_string(&body).unwrap()))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "Existing /hooks/:type route must still work after adding /v1/logs"
+        );
     }
 }
