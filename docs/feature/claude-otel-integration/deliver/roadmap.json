@@ -1,7 +1,13 @@
 {
+  "project_id": "claude-otel-integration",
   "feature_id": "claude-otel-integration",
   "paradigm": "functional",
+  "created_at": "2026-03-23T19:00:00Z",
   "total_steps": 5,
+  "phases": [
+    {"id": "01", "name": "Backend -- Domain and OTLP Ingestion", "steps": ["01-01", "01-02", "01-03"]},
+    {"id": "02", "name": "Frontend -- Cost Bypass and Polling Suppression", "steps": ["02-01", "02-02"]}
+  ],
   "validation": {
     "step_ratio": 1.0,
     "step_ratio_limit": 2.5,
