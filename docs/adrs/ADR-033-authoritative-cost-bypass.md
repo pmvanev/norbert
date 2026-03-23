@@ -1,14 +1,14 @@
-# ADR-033: Authoritative Cost Bypass
+# ADR-033: OTel-Reported Cost Bypass
 
 ## Status
 
-Accepted
+Accepted (updated 2026-03-23: clarified that `cost_usd` is "estimated" per Anthropic docs, not authoritative billing data)
 
 ## Context
 
-Norbert estimates API call costs using a local pricing table (`pricingModel.ts`) with per-model rates. These rates can drift from Anthropic's actual pricing when models are updated or new models launch. OTel spans from Claude Code include `cost_usd` -- the authoritative per-request cost calculated by Anthropic's billing system.
+Norbert estimates API call costs using a local pricing table (`pricingModel.ts`) with per-model rates. These rates can drift from Anthropic's actual pricing when models are updated or new models launch. OTel log records from Claude Code include `cost_usd` -- described by Anthropic as "Estimated cost in USD." While not authoritative billing data, it is calculated by Anthropic's systems and is closer to actual pricing than Norbert's local table.
 
-The question is how to integrate authoritative cost data without breaking the existing pricing model fallback for non-OTel sessions.
+The question is how to integrate OTel-reported cost data without breaking the existing pricing model fallback for non-OTel sessions.
 
 ## Decision
 
@@ -23,7 +23,7 @@ When processing an `api_request` event in `metricsAggregator.ts`, check for `cos
 - **Rejected**: Conflates two responsibilities. `calculateCost` is a pure estimation function. Adding a "just return this value" path makes it a conditional passthrough, not a calculator. Violates single responsibility.
 
 ### B: Separate cost extraction module
-- New `costExtractor.ts` that decides between authoritative and estimated cost
+- New `costExtractor.ts` that decides between OTel-reported and estimated cost
 - **Rejected**: Over-engineering. The conditional is a single `if` check in the aggregator. A new module for one conditional adds indirection without value.
 
 ### C: Bypass in aggregator (selected)
@@ -32,6 +32,6 @@ When processing an `api_request` event in `metricsAggregator.ts`, check for `cos
 
 ## Consequences
 
-- **Positive**: Authoritative cost data used when available. Zero change to pricing model. Transcript-polled events continue using estimated costs.
+- **Positive**: OTel-reported cost used when available. Zero change to pricing model. Transcript-polled events continue using estimated costs.
 - **Positive**: `cost_usd = 0.0` is treated as valid (zero cost for fully cached response), not as missing.
-- **Negative**: Cost accuracy depends on Claude Code correctly reporting `cost_usd`. If Claude Code has billing bugs, Norbert inherits them. Mitigated: Anthropic's billing is the ground truth; if it's wrong, the user's bill is also wrong.
+- **Negative**: Cost accuracy depends on Claude Code correctly reporting `cost_usd`. Since Anthropic describes it as "estimated," there may be minor discrepancies with actual billing. Accepted: Anthropic's estimate is still closer to truth than Norbert's local pricing table.

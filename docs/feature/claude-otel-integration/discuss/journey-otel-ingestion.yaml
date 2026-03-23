@@ -1,8 +1,9 @@
 journey:
   name: "OTel Data Ingestion"
-  goal: "Receive real-time token usage and cost data from Claude Code via OpenTelemetry, replacing the slow and fragile transcript JSONL polling"
+  goal: "Receive real-time token usage, cost, prompt, tool, and error data from Claude Code via OpenTelemetry logs protocol, replacing the slow and fragile transcript JSONL polling"
   persona: "Norbert Developer (self-hosted, local-first observability user running Claude Code sessions)"
   feature_id: "claude-otel-integration"
+  research_reference: "docs/research/claude-code-otel-telemetry-actual-emissions.md"
 
   emotional_arc:
     start: "Curious but cautious -- will this actually work seamlessly?"
@@ -15,12 +16,12 @@ journey:
         When I am running a Claude Code session and want to see real-time token usage,
         I want token and cost data to arrive in Norbert within milliseconds of each API call,
         so I can monitor spending and context usage as it happens, not seconds later.
-      functional: "Receive OTel spans containing token/cost attributes in sub-second latency"
+      functional: "Receive OTel log records containing token/cost attributes in sub-second latency"
       emotional: "Feel confident that the monitoring data is current, not stale"
       social: "Be seen as someone who runs a tight ship on AI spend"
       forces:
         push: "Token data arrives 3-9 seconds late via transcript polling; file read failures silently drop data"
-        pull: "Sub-second OTel push delivery with authoritative cost_usd from Anthropic"
+        pull: "Sub-second OTel push delivery with OTel-reported cost_usd from Anthropic"
         anxiety: "Will OTel setup be complicated? Will I lose data during the transition?"
         habit: "Transcript polling works 'well enough' and requires zero configuration"
 
@@ -29,12 +30,12 @@ journey:
         When I start using Norbert for the first time (or enable OTel on an existing install),
         I want a simple way to configure Claude Code to send telemetry to Norbert,
         so I can start receiving real-time data without manually editing environment variables.
-      functional: "Configure CLAUDE_CODE_ENABLE_TELEMETRY and OTEL_EXPORTER_OTLP_ENDPOINT"
+      functional: "Configure CLAUDE_CODE_ENABLE_TELEMETRY and OTEL_EXPORTER_OTLP_ENDPOINT via norbert-cc-plugin settings"
       emotional: "Feel that setup is effortless and trustworthy"
       social: "Not feel stupid for needing help with env var configuration"
       forces:
         push: "Manual env var setup is error-prone and undiscoverable"
-        pull: "One-click setup wizard that validates connectivity"
+        pull: "norbert-cc-plugin auto-configures env vars in settings.json"
         anxiety: "Is my telemetry data going somewhere I don't want?"
         habit: "Used to things just working with hooks, no extra setup needed"
 
@@ -57,9 +58,10 @@ steps:
     name: "Enable OTel Telemetry"
     action: "User configures Claude Code to export OTel data to Norbert"
     description: >
-      The user enables Claude Code telemetry export by setting two environment variables:
-      CLAUDE_CODE_ENABLE_TELEMETRY=1 and OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:3748.
-      This can be done manually or via a setup wizard in Norbert.
+      The user enables Claude Code telemetry export by setting environment variables:
+      CLAUDE_CODE_ENABLE_TELEMETRY=1, OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:3748,
+      and OTEL_EXPORTER_OTLP_PROTOCOL=http/json. The norbert-cc-plugin already configures
+      these in its settings.json, making this automatic for plugin users.
 
     shared_artifacts:
       - name: hook_port
@@ -74,7 +76,7 @@ steps:
         displayed_as: "${OTEL_ENDPOINT}"
         consumers:
           - "Claude Code OTEL_EXPORTER_OTLP_ENDPOINT"
-          - "Setup wizard display"
+          - "norbert-cc-plugin settings.json"
           - "Connection status indicator"
 
     emotional_state:
@@ -83,7 +85,7 @@ steps:
 
     integration_checkpoint: |
       - HOOK_PORT in domain/mod.rs matches the port in OTEL_EXPORTER_OTLP_ENDPOINT
-      - Claude Code process has both env vars set before starting
+      - Claude Code process has env vars set (via norbert-cc-plugin or manually)
       - Norbert hook receiver is running and listening on HOOK_PORT
 
     gherkin: |
@@ -93,28 +95,28 @@ steps:
         When Marco sets CLAUDE_CODE_ENABLE_TELEMETRY=1
         And Marco sets OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:3748
         And Marco starts a new Claude Code session
-        Then Claude Code begins exporting OTel trace data to Norbert
+        Then Claude Code begins exporting OTel log data to Norbert
 
   - id: 2
-    name: "Receive OTLP Trace Data"
-    action: "Hook receiver accepts POST /v1/traces with OTLP JSON payload"
+    name: "Receive OTLP Log Data"
+    action: "Hook receiver accepts POST /v1/logs with OTLP JSON payload"
     description: >
-      Claude Code sends OTLP/HTTP trace data to POST /v1/traces on port 3748.
-      The hook receiver parses the ExportTraceServiceRequest JSON, extracts
-      claude_code.api_request spans, and acknowledges with 200 OK.
+      Claude Code sends OTLP/HTTP log data to POST /v1/logs on port 3748.
+      The hook receiver parses the ExportLogsServiceRequest JSON, extracts
+      log records with recognized claude_code event names, and acknowledges with 200 OK.
 
     shared_artifacts:
       - name: otlp_route
         source: "Hook receiver router configuration"
-        displayed_as: "/v1/traces"
+        displayed_as: "/v1/logs"
         consumers:
-          - "Claude Code OTLP exporter"
+          - "Claude Code OTLP logs exporter"
           - "Hook receiver route table"
-      - name: span_name
+      - name: event_name
         source: "Claude Code OTel instrumentation"
-        displayed_as: "claude_code.api_request"
+        displayed_as: "claude_code.{api_request,user_prompt,tool_result,api_error,tool_decision}"
         consumers:
-          - "OTLP parser span filter"
+          - "OTLP log record parser event filter"
           - "Event type mapping logic"
 
     emotional_state:
@@ -122,34 +124,38 @@ steps:
       exit: "N/A -- user does not directly observe this step"
 
     integration_checkpoint: |
-      - POST /v1/traces route exists on the hook receiver
-      - Route accepts both application/json and application/x-protobuf content types
-      - Response is 200 OK with empty ExportTraceServiceResponse
-      - Non-claude_code.api_request spans are silently ignored (not rejected)
+      - POST /v1/logs route exists on the hook receiver
+      - Route accepts application/json content type
+      - Response is 200 OK with empty body
+      - Unrecognized event names are silently ignored (not rejected)
+      - All 5 Claude Code event types are routed to appropriate handlers
 
     gherkin: |
-      Scenario: OTLP HTTP endpoint receives trace data
+      Scenario: OTLP HTTP endpoint receives log data
         Given Norbert hook receiver is listening on port 3748
-        When Claude Code sends a POST request to /v1/traces
-        With an ExportTraceServiceRequest containing a claude_code.api_request span
+        When Claude Code sends a POST request to /v1/logs
+        With an ExportLogsServiceRequest containing a claude_code.api_request log record
         Then the hook receiver responds with 200 OK
-        And the span data is queued for processing
+        And the log record data is queued for processing
 
   - id: 3
-    name: "Extract Token Usage from OTel Span"
-    action: "Parse claude_code.api_request span attributes into canonical token fields"
+    name: "Extract Event Data from OTel Log Records"
+    action: "Parse log record attributes by event type into canonical fields"
     description: >
-      The OTLP parser extracts token usage attributes from the span:
-      input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens,
-      cost_usd, and model. These are mapped to the canonical Event payload
-      shape that the existing tokenExtractor understands.
+      The OTLP parser routes log records by event name to type-specific extractors:
+      - api_request: input_tokens, output_tokens, cache tokens, cost_usd, model, duration_ms, speed
+      - user_prompt: prompt_length, prompt (when opted in)
+      - tool_result: tool_name, success, duration_ms, error, tool_result_size_bytes
+      - api_error: model, error, status_code, duration_ms, attempt, speed
+      - tool_decision: tool_name, decision, source
+      All events share: session.id, prompt.id, event.timestamp, event.sequence
 
     shared_artifacts:
       - name: otel_token_fields
-        source: "Claude Code OTel span attributes"
+        source: "Claude Code OTel log record attributes"
         displayed_as: "input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, model"
         consumers:
-          - "OTLP span attribute parser"
+          - "OTLP log record attribute parser"
           - "Event payload normalizer"
       - name: canonical_usage_shape
         source: "tokenExtractor.ts expected payload shape"
@@ -158,22 +164,29 @@ steps:
           - "tokenExtractor.ts extractTokenUsage()"
           - "metricsAggregator.ts"
           - "pricingModel.ts"
+      - name: session_id_attribute
+        source: "Claude Code OTel standard attribute on all log records"
+        displayed_as: "session.id (dot-separated)"
+        consumers:
+          - "OTLP parser session extraction"
+          - "Session unification logic"
 
     emotional_state:
       entry: "N/A -- invisible processing step"
       exit: "N/A -- invisible processing step"
 
     integration_checkpoint: |
-      - OTel span attribute names map correctly to canonical usage field names
+      - OTel log record attribute names map correctly to canonical field names
       - cache_read_tokens -> cache_read_input_tokens in canonical payload
       - cache_creation_tokens -> cache_creation_input_tokens in canonical payload
-      - cost_usd is preserved as-is for authoritative cost (bypasses pricingModel estimates)
+      - cost_usd is preserved as-is (OTel-reported estimated cost)
       - model attribute value matches pricingModel.ts model patterns
+      - session.id (dot-separated) extracted from log record attributes, not resource attributes
 
     gherkin: |
-      Scenario: OTel span attributes mapped to canonical usage payload
-        Given the OTLP parser has received a claude_code.api_request span
-        And the span has attributes input_tokens=1500, output_tokens=800, cache_read_tokens=500, cache_creation_tokens=200, cost_usd=0.042, model="claude-sonnet-4-20250514"
+      Scenario: OTel log record attributes mapped to canonical usage payload
+        Given the OTLP parser has received a claude_code.api_request log record
+        And the log record has attributes input_tokens=1500, output_tokens=800, cache_read_tokens=500, cache_creation_tokens=200, cost_usd=0.042, model="claude-sonnet-4-20250514"
         When the parser extracts token usage
         Then it produces a canonical payload with usage.input_tokens=1500
         And usage.output_tokens=800
@@ -186,10 +199,10 @@ steps:
     name: "Persist as Canonical Event"
     action: "Write normalized event to EventStore via existing write_event()"
     description: >
-      The normalized OTel data is wrapped in a canonical Event with
-      event_type: ApiRequest, provider: "claude_code", and the mapped
-      usage payload. It is persisted via EventStore.write_event(), the
-      same path used by hook events.
+      The normalized OTel data is wrapped in a canonical Event with the appropriate
+      event_type (ApiRequest, UserPrompt, ToolResult, ApiError, or ToolDecision),
+      provider: "claude_code", and the mapped payload. It is persisted via
+      EventStore.write_event(), the same path used by hook events.
 
     shared_artifacts:
       - name: event_type_api_request
@@ -199,6 +212,13 @@ steps:
           - "EventStore write path"
           - "Frontend event poller"
           - "tokenExtractor.ts event filtering"
+      - name: event_type_new_variants
+        source: "domain/mod.rs EventType enum"
+        displayed_as: "UserPrompt, ToolResult, ApiError, ToolDecision"
+        consumers:
+          - "EventStore write path"
+          - "Frontend event poller"
+          - "Event type filtering"
       - name: provider_name
         source: "ClaudeCodeProvider.provider_name()"
         displayed_as: "claude_code"
@@ -211,15 +231,15 @@ steps:
       exit: "N/A -- invisible persistence step"
 
     integration_checkpoint: |
-      - New ApiRequest variant added to EventType enum
-      - Serializes to "api_request" in snake_case
-      - EventStore schema accepts the new event type without migration
-      - session_id in OTel event maps correctly to existing session tracking
+      - All new EventType variants added to enum
+      - Each serializes to snake_case (api_request, user_prompt, tool_result, api_error, tool_decision)
+      - EventStore schema accepts the new event types without migration
+      - session.id in OTel event maps correctly to existing session tracking
 
     gherkin: |
       Scenario: OTel event persisted as canonical ApiRequest
-        Given the OTLP parser has extracted token usage from a claude_code.api_request span
-        And the span belongs to session "sess-marco-2026-03-20"
+        Given the OTLP parser has extracted token usage from a claude_code.api_request log record
+        And the log record has session.id "sess-marco-2026-03-20"
         When the event is persisted to the EventStore
         Then a new Event record exists with event_type "api_request"
         And provider "claude_code"
@@ -231,7 +251,7 @@ steps:
     action: "Existing event poller retrieves new events and feeds tokenExtractor"
     description: >
       The frontend event poller (which already polls EventStore for hook events)
-      retrieves the new ApiRequest events. The tokenExtractor.ts extracts
+      retrieves the new events. For ApiRequest events, tokenExtractor.ts extracts
       token usage from the canonical payload shape. The metricsAggregator
       updates session metrics. Charts refresh with real-time data.
 
@@ -261,7 +281,7 @@ steps:
         And his Claude Code session is sending OTel data to Norbert
         When Claude Code completes an API request using claude-sonnet-4-20250514
         Then the token rate chart updates within 500 milliseconds
-        And the cost ticker shows the authoritative cost from cost_usd
+        And the cost ticker shows the OTel-reported cost from cost_usd
         And the context window gauge reflects the new token counts
 
   - id: 6
@@ -326,3 +346,7 @@ integration_validation:
     - artifact: "session_data_source"
       must_match_across: [5, 6]
       failure_message: "OTel-active flag must correctly suppress transcript polling without data loss"
+
+    - artifact: "session_id_attribute"
+      must_match_across: [3, 4]
+      failure_message: "session.id (dot-separated) from log records must map to internal session_id consistently"

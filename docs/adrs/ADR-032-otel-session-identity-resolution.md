@@ -2,41 +2,38 @@
 
 ## Status
 
-Accepted
+Accepted (updated 2026-03-23: corrected attribute name from `session_id` to `session.id` and location from span/resource to log record standard attributes, per research findings)
 
 ## Context
 
-Hook events carry `session_id` as a top-level field in the JSON payload. OTel spans carry attributes in a different structure (`attributes` array with key-value objects). For a single Claude Code session, both hooks and OTel data must map to the same session_id so the frontend displays unified metrics.
+Hook events carry `session_id` (underscore) as a top-level field in the JSON payload. OTel log records carry the session identifier as `session.id` (dot-separated) in their attributes array. For a single Claude Code session, both hooks and OTel data must map to the same session_id so the frontend displays unified metrics.
 
-The exact location of session_id in Claude Code OTel spans requires investigation. It may appear as a span attribute, a resource attribute, or potentially both.
+**Research confirmation (2026-03-23)**: The attribute name is `session.id` (dot, not underscore) and it is a **standard attribute on all Claude Code log records** (not a resource attribute). See `docs/research/claude-code-otel-telemetry-actual-emissions.md`.
 
 ## Decision
 
-Extract session_id from OTel data using a priority-ordered search:
-1. Span attributes: look for `session_id` key
-2. Resource attributes: look for `session_id` key
-3. If not found in either location: drop the span and log a warning
+Extract `session.id` from OTel log record attributes only (not resource attributes). Map the value to the internal `session_id` used by the EventStore. If `session.id` is absent, drop the log record and log a warning.
 
-This approach handles the uncertainty about where Claude Code places the session identifier without requiring a spike before implementation. The crafter should verify the actual attribute location during development and adjust the search order if needed.
+No fallback to resource attributes -- research confirmed `session.id` is always present on log records as a standard attribute.
 
 ## Alternatives Considered
 
-### A: Require spike before implementation
-- Run Claude Code with OTel enabled, capture raw spans, document exact attribute locations
-- **Rejected**: Delays implementation. The two-location fallback strategy handles all known possibilities. The parser can be refined during development when real data is available.
+### A: Search both log record attributes and resource attributes
+- Check log record attributes first, then resource attributes
+- **Rejected**: Research confirmed `session.id` is always a standard attribute on log records. Searching resource attributes adds unnecessary complexity and could match a wrong value if resource attributes change.
 
-### B: Generate session_id from OTel trace_id
-- Use the OTel trace_id as a session identifier
-- **Rejected**: trace_id is per-trace (potentially per-request), not per-session. Would create many small sessions instead of one session per Claude Code session.
+### B: Generate session_id from other attributes
+- Derive from `organization.id` + `user.id` or similar
+- **Rejected**: `session.id` is the exact value that matches the hook event `session_id`. Deriving from other attributes risks creating mismatched session identifiers.
 
-### C: Priority-ordered attribute search (selected)
-- Check span attributes first, then resource attributes
-- Log what was found for observability
-- Drop span if no session_id found anywhere
+### C: Single-location lookup from log record attributes (selected)
+- Extract `session.id` (dot-separated) from log record attributes only
+- Use the value directly as the internal `session_id`
+- Drop log record if `session.id` not found
 
 ## Consequences
 
-- **Positive**: Handles both possible locations without prior knowledge of the exact placement.
-- **Positive**: Warning log when session_id is missing enables debugging without silent data loss.
-- **Negative**: If Claude Code uses a non-standard attribute name (not `session_id`), spans will be dropped. Mitigated: the warning log makes this quickly discoverable.
-- **Negative**: If session_id format differs between hooks and OTel (e.g., prefix differences), events may split across two sessions. Mitigated: this is detectable during development and a normalization function can be added.
+- **Positive**: Simple, single-location extraction. Research confirmed the exact attribute name and location.
+- **Positive**: `session.id` in OTel log records matches the `session_id` value from hook events for the same Claude Code session, enabling unified session view.
+- **Positive**: Warning log when `session.id` is missing enables debugging without silent data loss.
+- **Negative**: If Claude Code changes the attribute name, all log records will be dropped. Mitigated: the warning log makes this immediately discoverable. The attribute name is a documented standard.
