@@ -1,0 +1,112 @@
+{
+  "feature_id": "claude-otel-integration",
+  "paradigm": "functional",
+  "total_steps": 5,
+  "validation": {
+    "step_ratio": 1.0,
+    "step_ratio_limit": 2.5,
+    "status": "approved"
+  },
+  "steps": [
+    {
+      "step_id": "01-01",
+      "title": "New EventType variants in domain model",
+      "description": "Add 5 OTel event type variants to EventType enum: ApiRequest, UserPrompt, ToolResult, ApiError, ToolDecision. Update Display impl and all exhaustive matches.",
+      "story": "US-COI-004, US-COI-006, US-COI-007, US-COI-008, US-COI-009",
+      "acceptance_criteria": [
+        "All 5 variants serialize/deserialize to/from snake_case",
+        "Display trait outputs matching snake_case strings",
+        "Existing 6 event types serialize/deserialize unchanged",
+        "Compiler reports no unhandled match arms",
+        "New variants are NOT hook events; parse_event_type returns None for them",
+        "Test asserting variant count updates from 6 to 11"
+      ],
+      "files_to_modify": [
+        "src-tauri/src/domain/mod.rs"
+      ],
+      "domain_files_reused": []
+    },
+    {
+      "step_id": "01-02",
+      "title": "OTLP log record parser and event extractors",
+      "description": "Pure module parsing OTLP/HTTP JSON (ExportLogsServiceRequest). Generic envelope parser + per-event-type attribute extractors. Resolve session.id from log record attributes. All event attributes arrive as stringValue (parse to typed values). prompt.id preserved for cross-event correlation.",
+      "story": "US-COI-001, US-COI-005, US-COI-006, US-COI-007, US-COI-008, US-COI-009",
+      "acceptance_criteria": [
+        "Parses valid ExportLogsServiceRequest JSON into typed log record data",
+        "Routes log records by body.stringValue to type-specific extractors",
+        "api_request: maps cache_read_tokens to cache_read_input_tokens, cache_creation_tokens to cache_creation_input_tokens; requires input_tokens, output_tokens, model",
+        "user_prompt: requires prompt_length; prompt optional",
+        "tool_result: requires tool_name; success/duration/error optional",
+        "api_error: requires error; status_code/duration/attempt optional",
+        "tool_decision: requires tool_name; decision/source optional",
+        "All numeric attributes parsed from stringValue to typed values",
+        "Missing required attribute drops the log record with warning",
+        "session.id (dot-separated) extracted from log record attributes (not resource attributes)",
+        "Unrecognized event names silently ignored",
+        "prompt.id preserved in payload for cross-event correlation"
+      ],
+      "files_to_modify": [
+        "src-tauri/src/adapters/otel/mod.rs"
+      ],
+      "domain_files_reused": [
+        "src-tauri/src/domain/mod.rs"
+      ]
+    },
+    {
+      "step_id": "01-03",
+      "title": "OTLP HTTP handler and route",
+      "description": "Add POST /v1/logs handler to axum router. Deserialize body, delegate to parser/extractors, persist events via EventStore. Return 200 OK with {} for success.",
+      "story": "US-COI-001",
+      "acceptance_criteria": [
+        "POST /v1/logs returns 200 OK with {} body for valid OTLP JSON containing recognized events",
+        "Events persisted with correct event_type and provider claude_code",
+        "Returns 200 OK for valid OTLP with no recognized events (no events persisted)",
+        "Returns 400 Bad Request for malformed JSON",
+        "Existing /hooks/:type routes unaffected"
+      ],
+      "files_to_modify": [
+        "src-tauri/src/hook_receiver.rs"
+      ],
+      "domain_files_reused": [
+        "src-tauri/src/adapters/otel/mod.rs",
+        "src-tauri/src/domain/mod.rs"
+      ]
+    },
+    {
+      "step_id": "02-01",
+      "title": "OTel event handling in metrics aggregator with cost bypass",
+      "description": "Add all 5 event types to metricsAggregator dispatch table. api_request: extract tokens and use cost_usd when present (parse from string). Others: identity handlers (hookEventCount only).",
+      "story": "US-COI-002, US-COI-006, US-COI-007, US-COI-008, US-COI-009",
+      "acceptance_criteria": [
+        "api_request events with token usage update session metrics (tokens, cost)",
+        "cost_usd present: session cost increases by exact cost_usd value",
+        "cost_usd absent: session cost calculated via pricing model (existing behavior)",
+        "cost_usd = 0.0 treated as valid zero cost, not as missing",
+        "user_prompt, tool_result, api_error, tool_decision increment hookEventCount"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/domain/metricsAggregator.ts"
+      ],
+      "domain_files_reused": [
+        "src/plugins/norbert-usage/domain/tokenExtractor.ts",
+        "src/plugins/norbert-usage/domain/pricingModel.ts"
+      ]
+    },
+    {
+      "step_id": "02-02",
+      "title": "Transcript polling suppression for OTel-active sessions",
+      "description": "Before polling a session's transcript, check if that session has received any api_request events. Skip transcript polling for OTel-active sessions.",
+      "story": "US-COI-003",
+      "acceptance_criteria": [
+        "Sessions with api_request events skip transcript polling",
+        "Sessions without api_request events continue transcript polling",
+        "First api_request event triggers OTel-active detection for that session",
+        "Mixed sessions (some OTel, some transcript) handled independently"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/views/App.tsx"
+      ],
+      "domain_files_reused": []
+    }
+  ]
+}
