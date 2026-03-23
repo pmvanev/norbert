@@ -29,16 +29,11 @@ fn extract_string_from_value(value: &Value) -> Option<String> {
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
         .or_else(|| {
-            value
-                .get("intValue")
-                .and_then(|v| v.as_str().or_else(|| v.as_i64().map(|_| "")))
-                .map(|_| {
-                    value["intValue"]
-                        .as_str()
-                        .map(|s| s.to_string())
-                        .or_else(|| value["intValue"].as_i64().map(|n| n.to_string()))
-                        .unwrap_or_default()
-                })
+            value.get("intValue").and_then(|v| {
+                v.as_str()
+                    .map(|s| s.to_string())
+                    .or_else(|| v.as_i64().map(|n| n.to_string()))
+            })
         })
 }
 
@@ -279,8 +274,8 @@ fn extract_tool_decision_payload(attributes: &[Value]) -> Option<Value> {
         "tool_name": tool_name,
     });
 
-    if let Some(d) = get_string_attribute(attributes, "decision") {
-        decision["decision"] = serde_json::json!(d);
+    if let Some(decision_value) = get_string_attribute(attributes, "decision") {
+        decision["decision"] = serde_json::json!(decision_value);
     }
     if let Some(source) = get_string_attribute(attributes, "source") {
         decision["source"] = serde_json::json!(source);
@@ -393,10 +388,7 @@ fn parse_log_record(log_record: &Value, received_at: &str) -> Option<Event> {
     })?;
 
     // Route to type-specific extractor
-    let (event_type, mut payload) = route_event_name(event_name, &attributes).or_else(|| {
-        // Unrecognized event name — silently ignore
-        None
-    })?;
+    let (event_type, mut payload) = route_event_name(event_name, &attributes)?;
 
     // Add cross-event correlation fields
     if let Some(prompt_id) = get_string_attribute(&attributes, "prompt.id") {
