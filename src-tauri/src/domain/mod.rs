@@ -2,7 +2,6 @@
 ///
 /// This module contains no IO or framework imports.
 /// All functions are pure and testable in isolation.
-
 use chrono::DateTime;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -167,6 +166,16 @@ pub enum EventType {
     AgentComplete,
     /// The user has submitted a prompt.
     PromptSubmit,
+    /// An API request has been made (OTel span).
+    ApiRequest,
+    /// A user prompt has been received (OTel span).
+    UserPrompt,
+    /// A tool invocation result (OTel span).
+    ToolResult,
+    /// An API error occurred (OTel span).
+    ApiError,
+    /// A tool use decision has been made (OTel span).
+    ToolDecision,
 }
 
 impl fmt::Display for EventType {
@@ -178,6 +187,11 @@ impl fmt::Display for EventType {
             EventType::ToolCallEnd => "tool_call_end",
             EventType::AgentComplete => "agent_complete",
             EventType::PromptSubmit => "prompt_submit",
+            EventType::ApiRequest => "api_request",
+            EventType::UserPrompt => "user_prompt",
+            EventType::ToolResult => "tool_result",
+            EventType::ApiError => "api_error",
+            EventType::ToolDecision => "tool_decision",
         };
         write!(f, "{}", label)
     }
@@ -292,7 +306,7 @@ mod tests {
     // --- Canonical EventType tests ---
 
     #[test]
-    fn event_type_has_six_canonical_variants() {
+    fn event_type_has_eleven_canonical_variants() {
         let variants = vec![
             EventType::SessionStart,
             EventType::SessionEnd,
@@ -300,8 +314,13 @@ mod tests {
             EventType::ToolCallEnd,
             EventType::AgentComplete,
             EventType::PromptSubmit,
+            EventType::ApiRequest,
+            EventType::UserPrompt,
+            EventType::ToolResult,
+            EventType::ApiError,
+            EventType::ToolDecision,
         ];
-        assert_eq!(variants.len(), 6);
+        assert_eq!(variants.len(), 11);
     }
 
     #[test]
@@ -326,6 +345,77 @@ mod tests {
         assert_eq!(EventType::ToolCallEnd.to_string(), "tool_call_end");
         assert_eq!(EventType::AgentComplete.to_string(), "agent_complete");
         assert_eq!(EventType::PromptSubmit.to_string(), "prompt_submit");
+        assert_eq!(EventType::ApiRequest.to_string(), "api_request");
+        assert_eq!(EventType::UserPrompt.to_string(), "user_prompt");
+        assert_eq!(EventType::ToolResult.to_string(), "tool_result");
+        assert_eq!(EventType::ApiError.to_string(), "api_error");
+        assert_eq!(EventType::ToolDecision.to_string(), "tool_decision");
+    }
+
+    #[test]
+    fn otel_event_types_serialize_to_snake_case() {
+        assert_eq!(
+            serde_json::to_string(&EventType::ApiRequest).unwrap(),
+            "\"api_request\""
+        );
+        assert_eq!(
+            serde_json::to_string(&EventType::UserPrompt).unwrap(),
+            "\"user_prompt\""
+        );
+        assert_eq!(
+            serde_json::to_string(&EventType::ToolResult).unwrap(),
+            "\"tool_result\""
+        );
+        assert_eq!(
+            serde_json::to_string(&EventType::ApiError).unwrap(),
+            "\"api_error\""
+        );
+        assert_eq!(
+            serde_json::to_string(&EventType::ToolDecision).unwrap(),
+            "\"tool_decision\""
+        );
+    }
+
+    #[test]
+    fn otel_event_types_deserialize_from_snake_case() {
+        let cases = vec![
+            ("\"api_request\"", EventType::ApiRequest),
+            ("\"user_prompt\"", EventType::UserPrompt),
+            ("\"tool_result\"", EventType::ToolResult),
+            ("\"api_error\"", EventType::ApiError),
+            ("\"tool_decision\"", EventType::ToolDecision),
+        ];
+        for (json_str, expected) in cases {
+            let deserialized: EventType = serde_json::from_str(json_str).unwrap();
+            assert_eq!(deserialized, expected, "Failed to deserialize {}", json_str);
+        }
+    }
+
+    #[test]
+    fn existing_event_types_serialize_unchanged_after_otel_addition() {
+        // Verify the original 6 variants still serialize identically
+        let original_cases = vec![
+            (EventType::SessionStart, "\"session_start\""),
+            (EventType::SessionEnd, "\"session_end\""),
+            (EventType::ToolCallStart, "\"tool_call_start\""),
+            (EventType::ToolCallEnd, "\"tool_call_end\""),
+            (EventType::AgentComplete, "\"agent_complete\""),
+            (EventType::PromptSubmit, "\"prompt_submit\""),
+        ];
+        for (variant, expected_json) in original_cases {
+            assert_eq!(
+                serde_json::to_string(&variant).unwrap(),
+                expected_json,
+                "Serialization changed for {:?}",
+                variant
+            );
+            let roundtrip: EventType = serde_json::from_str(expected_json).unwrap();
+            assert_eq!(
+                roundtrip, variant,
+                "Deserialization changed for {}",
+                expected_json
+            );
+        }
     }
 
     #[test]
@@ -397,7 +487,10 @@ mod tests {
         assert_eq!(session.started_at, "2026-03-08T10:00:00Z");
         assert_eq!(session.ended_at, Some("2026-03-08T11:00:00Z".to_string()));
         assert_eq!(session.event_count, 5);
-        assert_eq!(session.last_event_at, Some("2026-03-08T10:59:00Z".to_string()));
+        assert_eq!(
+            session.last_event_at,
+            Some("2026-03-08T10:59:00Z".to_string())
+        );
 
         let json = serde_json::to_value(&session).unwrap();
         assert!(json.get("id").is_some());
@@ -432,8 +525,14 @@ mod tests {
 
     #[test]
     fn calculate_duration_seconds_returns_none_for_invalid_timestamps() {
-        assert_eq!(calculate_duration_seconds("not-a-date", "2026-03-08T10:00:00Z"), None);
-        assert_eq!(calculate_duration_seconds("2026-03-08T10:00:00Z", "not-a-date"), None);
+        assert_eq!(
+            calculate_duration_seconds("not-a-date", "2026-03-08T10:00:00Z"),
+            None
+        );
+        assert_eq!(
+            calculate_duration_seconds("2026-03-08T10:00:00Z", "not-a-date"),
+            None
+        );
     }
 
     #[test]
@@ -509,7 +608,10 @@ mod tests {
         assert_eq!(status.event_count, 5);
 
         // No plugin connected when zero counts
-        assert_eq!(build_status_with_session(0, 0, None).status, "No plugin connected");
+        assert_eq!(
+            build_status_with_session(0, 0, None).status,
+            "No plugin connected"
+        );
 
         // Listening when sessions exist but none active
         let ended = Session {
@@ -519,7 +621,10 @@ mod tests {
             event_count: 30,
             last_event_at: Some("2026-03-08T10:30:00Z".to_string()),
         };
-        assert_eq!(build_status_with_session(1, 30, Some(&ended)).status, "Listening");
+        assert_eq!(
+            build_status_with_session(1, 30, Some(&ended)).status,
+            "Listening"
+        );
     }
 
     // --- derive_connection_status tests ---
@@ -556,5 +661,4 @@ mod tests {
         let result = format_active_tooltip("Norbert", "0.1.0", "Active session", 15);
         assert_eq!(result, "Norbert v0.1.0 - Active session (15 events)");
     }
-
 }
