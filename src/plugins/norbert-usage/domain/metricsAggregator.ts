@@ -68,6 +68,40 @@ const applyTokenUsage = (
   };
 };
 
+/** Extract cost_usd from payload.usage if present as a number (including 0.0). */
+const extractCostUsd = (payload: unknown): number | undefined => {
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return undefined;
+  const record = payload as Record<string, unknown>;
+  const usageField = record["usage"];
+  if (typeof usageField !== "object" || usageField === null || Array.isArray(usageField)) return undefined;
+  const usage = usageField as Record<string, unknown>;
+  const costUsd = usage["cost_usd"];
+  return typeof costUsd === "number" ? costUsd : undefined;
+};
+
+/** Apply token and cost updates for api_request events (OTel).
+ *  Uses cost_usd directly when present (including 0.0); otherwise falls back to pricing model. */
+const applyApiRequestTokenUsage = (
+  metrics: SessionMetrics,
+  payload: unknown,
+  pricingTable: PricingTable,
+): SessionMetrics => {
+  const extraction = extractTokenUsage(payload);
+  if (extraction.tag === "absent") return metrics;
+
+  const { usage } = extraction;
+  const costUsd = extractCostUsd(payload);
+  const cost = costUsd !== undefined ? costUsd : calculateCost(usage, pricingTable).totalCost;
+
+  return {
+    ...metrics,
+    totalTokens: metrics.totalTokens + usage.inputTokens + usage.outputTokens,
+    inputTokens: metrics.inputTokens + usage.inputTokens,
+    outputTokens: metrics.outputTokens + usage.outputTokens,
+    sessionCost: Math.max(0, metrics.sessionCost + cost),
+  };
+};
+
 /** Increment tool call count. */
 const applyToolCallStart = (metrics: SessionMetrics): SessionMetrics => ({
   ...metrics,
@@ -136,6 +170,15 @@ const eventHandlers: Record<
 
   agent_complete: (metrics, event, pricingTable) =>
     applyAgentCompleteCount(applyTokenUsage(metrics, event.payload, pricingTable)),
+
+  // OTel event types
+  api_request: (metrics, event, pricingTable) =>
+    applyApiRequestTokenUsage(metrics, event.payload, pricingTable),
+
+  user_prompt: (metrics) => metrics,
+  tool_result: (metrics) => metrics,
+  api_error: (metrics) => metrics,
+  tool_decision: (metrics) => metrics,
 };
 
 /** Identity handler for unknown event types: only common fields updated. */
