@@ -31,6 +31,7 @@ import {
   Webhook,
   Monitor,
   Layout,
+  LayoutDashboard,
   Hexagon,
   ArrowLeft,
   SquareActivity,
@@ -75,6 +76,7 @@ const ICON_REGISTRY: Readonly<Record<string, FC<LucideProps>>> = {
   // Notification channel icons
   "monitor": Monitor,
   "layout": Layout,
+  "layout-dashboard": LayoutDashboard,
   "circle": Circle,
   "mail": Mail,
   "webhook": Webhook,
