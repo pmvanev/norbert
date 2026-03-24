@@ -62,6 +62,11 @@ pub trait MetricStore {
     ///
     /// Returns None when no metadata has been recorded for this session.
     fn get_session_metadata(&self, session_id: &str) -> Result<Option<SessionMetadata>, String>;
+
+    /// Retrieve session metadata for all sessions.
+    ///
+    /// Returns an empty Vec when no metadata has been recorded.
+    fn get_all_session_metadata(&self) -> Result<Vec<SessionMetadata>, String>;
 }
 
 /// Normalization contract for tool-specific event providers.

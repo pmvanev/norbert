@@ -4,12 +4,13 @@ pub mod ports;
 
 use std::sync::Mutex;
 
+use adapters::db::metric_store::SqliteMetricStore;
 use adapters::db::SqliteEventStore;
 use domain::{
-    build_status_with_session, format_tooltip, toggle_window_action, AppStatus,
-    Session, WindowAction, APP_NAME, VERSION,
+    build_status_with_session, format_tooltip, toggle_window_action, AccumulatedMetric,
+    AppStatus, Session, SessionMetadata, WindowAction, APP_NAME, VERSION,
 };
-use ports::EventStore;
+use ports::{EventStore, MetricStore};
 use rusqlite::Connection;
 use tauri::Manager;
 
@@ -20,6 +21,7 @@ use tauri::Manager;
 /// from multiple IPC calls.
 pub struct AppState {
     pub event_store: Mutex<SqliteEventStore>,
+    pub metric_store: Mutex<SqliteMetricStore>,
 }
 
 /// Greet command exposed to the frontend via Tauri IPC.
@@ -65,6 +67,39 @@ fn get_sessions(state: tauri::State<AppState>) -> Vec<Session> {
 fn get_session_events(state: tauri::State<AppState>, session_id: String) -> Vec<domain::Event> {
     let store = state.event_store.lock().unwrap();
     store.get_events_for_session(&session_id).unwrap_or_default()
+}
+
+/// Return accumulated metrics for a given session.
+///
+/// Returns an empty array when the session does not exist or has no metrics.
+#[tauri::command]
+fn get_metrics_for_session(
+    state: tauri::State<AppState>,
+    session_id: String,
+) -> Vec<AccumulatedMetric> {
+    let store = state.metric_store.lock().unwrap();
+    store.get_metrics_for_session(&session_id).unwrap_or_default()
+}
+
+/// Return session metadata (enrichment data) for a given session.
+///
+/// Returns null when no metadata has been recorded for this session.
+#[tauri::command]
+fn get_session_metadata(
+    state: tauri::State<AppState>,
+    session_id: String,
+) -> Option<SessionMetadata> {
+    let store = state.metric_store.lock().unwrap();
+    store.get_session_metadata(&session_id).unwrap_or(None)
+}
+
+/// Return session metadata for all sessions.
+///
+/// Returns an empty array when no metadata has been recorded.
+#[tauri::command]
+fn get_all_session_metadata(state: tauri::State<AppState>) -> Vec<SessionMetadata> {
+    let store = state.metric_store.lock().unwrap();
+    store.get_all_session_metadata().unwrap_or_default()
 }
 
 /// Aggregated token usage from a Claude Code transcript file.
@@ -736,6 +771,17 @@ fn initialize_event_store() -> Result<SqliteEventStore, String> {
     SqliteEventStore::new(connection)
 }
 
+/// Initialize the SQLite metric store from the platform data directory.
+///
+/// Opens a separate connection to the same database file. SQLite WAL mode
+/// allows concurrent readers/writers across connections.
+fn initialize_metric_store() -> Result<SqliteMetricStore, String> {
+    let db_path = adapters::db::resolve_database_path()?;
+    let connection = Connection::open(&db_path)
+        .map_err(|e| format!("Failed to open metric database: {}", e))?;
+    SqliteMetricStore::new(connection)
+}
+
 /// Build and configure the Tauri application.
 ///
 /// This is the composition root: initializes the database
@@ -753,8 +799,18 @@ pub fn run() {
         }
     };
 
+    // Initialize the metric store (separate connection, same database via WAL).
+    let metric_store = match initialize_metric_store() {
+        Ok(store) => store,
+        Err(e) => {
+            eprintln!("norbert: Fatal -- failed to initialize metric store: {}", e);
+            std::process::exit(1);
+        }
+    };
+
     let app_state = AppState {
         event_store: Mutex::new(event_store),
+        metric_store: Mutex::new(metric_store),
     };
 
     tauri::Builder::default()
@@ -828,7 +884,7 @@ pub fn run() {
                 .build(app)?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet, get_status, get_latest_session, get_sessions, get_session_events, get_transcript_usage, read_claude_config])
+        .invoke_handler(tauri::generate_handler![greet, get_status, get_latest_session, get_sessions, get_session_events, get_metrics_for_session, get_session_metadata, get_all_session_metadata, get_transcript_usage, read_claude_config])
         .run(tauri::generate_context!())
         .expect("error while running Norbert");
 }

@@ -65,6 +65,13 @@ const SELECT_SESSION_METADATA: &str = "
     WHERE session_id = ?1
 ";
 
+/// SQL to query all session metadata rows.
+const SELECT_ALL_SESSION_METADATA: &str = "
+    SELECT session_id, terminal_type, service_version, os_type, host_arch
+    FROM session_metadata
+    ORDER BY created_at DESC
+";
+
 /// SQLite-backed implementation of the MetricStore port.
 pub struct SqliteMetricStore {
     connection: Connection,
@@ -171,6 +178,29 @@ impl MetricStore for SqliteMetricStore {
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(format!("Failed to query session metadata: {}", e)),
         }
+    }
+
+    fn get_all_session_metadata(&self) -> Result<Vec<SessionMetadata>, String> {
+        let mut stmt = self
+            .connection
+            .prepare(SELECT_ALL_SESSION_METADATA)
+            .map_err(|e| format!("Failed to prepare all session metadata query: {}", e))?;
+
+        let metadata = stmt
+            .query_map([], |row| {
+                Ok(SessionMetadata {
+                    session_id: row.get(0)?,
+                    terminal_type: row.get(1)?,
+                    service_version: row.get(2)?,
+                    os_type: row.get(3)?,
+                    host_arch: row.get(4)?,
+                })
+            })
+            .map_err(|e| format!("Failed to query all session metadata: {}", e))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("Failed to read session metadata row: {}", e))?;
+
+        Ok(metadata)
     }
 }
 
@@ -338,6 +368,44 @@ mod tests {
         assert!(result.service_version.is_none());
         assert!(result.os_type.is_none());
         assert!(result.host_arch.is_none());
+    }
+
+    #[test]
+    fn get_all_session_metadata_returns_empty_when_no_data() {
+        let store = create_test_store();
+
+        let result = store.get_all_session_metadata().unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn get_all_session_metadata_returns_all_sessions() {
+        let store = create_test_store();
+
+        let meta1 = SessionMetadata {
+            session_id: "sess-1".to_string(),
+            terminal_type: Some("vscode".to_string()),
+            service_version: Some("1.0.0".to_string()),
+            os_type: Some("linux".to_string()),
+            host_arch: Some("x86_64".to_string()),
+        };
+        let meta2 = SessionMetadata {
+            session_id: "sess-2".to_string(),
+            terminal_type: Some("cursor".to_string()),
+            service_version: Some("2.0.0".to_string()),
+            os_type: Some("darwin".to_string()),
+            host_arch: Some("arm64".to_string()),
+        };
+
+        store.write_session_metadata(&meta1).unwrap();
+        store.write_session_metadata(&meta2).unwrap();
+
+        let result = store.get_all_session_metadata().unwrap();
+        assert_eq!(result.len(), 2);
+
+        let session_ids: Vec<&str> = result.iter().map(|m| m.session_id.as_str()).collect();
+        assert!(session_ids.contains(&"sess-1"));
+        assert!(session_ids.contains(&"sess-2"));
     }
 
     #[test]
