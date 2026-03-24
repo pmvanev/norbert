@@ -123,7 +123,7 @@ pub(crate) fn find_attribute<'a>(attributes: &'a [Value], key: &str) -> Option<&
 }
 
 /// Extract a string attribute by key.
-pub(crate) fn get_string_attribute(attributes: &[Value], key: &str) -> Option<String> {
+pub fn get_string_attribute(attributes: &[Value], key: &str) -> Option<String> {
     find_attribute(attributes, key).and_then(extract_string_from_value)
 }
 

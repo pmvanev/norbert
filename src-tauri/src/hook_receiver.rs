@@ -15,11 +15,13 @@ use axum::{
     routing::post,
     Json, Router,
 };
+use norbert_lib::adapters::db::metric_store::SqliteMetricStore;
 use norbert_lib::adapters::db::SqliteEventStore;
-use norbert_lib::adapters::otel::parse_export_logs_request;
+use norbert_lib::adapters::otel::metrics_parser::parse_export_metrics_request;
+use norbert_lib::adapters::otel::{get_string_attribute, parse_export_logs_request};
 use norbert_lib::adapters::providers::claude_code::ClaudeCodeProvider;
-use norbert_lib::domain::HOOK_PORT;
-use norbert_lib::ports::{EventProvider, EventStore};
+use norbert_lib::domain::{SessionMetadata, HOOK_PORT};
+use norbert_lib::ports::{EventProvider, EventStore, MetricStore};
 use rusqlite::Connection;
 
 /// Shared application state holding the event store and provider.
@@ -32,6 +34,7 @@ use rusqlite::Connection;
 /// canonical event types before storage.
 struct AppState {
     event_store: Mutex<SqliteEventStore>,
+    metric_store: Mutex<SqliteMetricStore>,
     provider: Box<dyn EventProvider + Send + Sync>,
 }
 
@@ -116,11 +119,91 @@ async fn handle_otlp_logs(
     (StatusCode::OK, "{}".to_string())
 }
 
+/// Extract resource attributes from an OTLP metrics request.
+///
+/// Pure function: traverses resourceMetrics[0].resource.attributes[]
+/// and extracts known resource attributes for session metadata.
+fn extract_resource_attributes(request: &serde_json::Value) -> (Option<String>, Option<String>, Option<String>) {
+    let resource_attrs = request
+        .get("resourceMetrics")
+        .and_then(|v| v.as_array())
+        .and_then(|arr| arr.first())
+        .and_then(|rm| rm.get("resource"))
+        .and_then(|r| r.get("attributes"))
+        .and_then(|v| v.as_array());
+
+    match resource_attrs {
+        Some(attrs) => {
+            let service_version = get_string_attribute(attrs, "service.version");
+            let os_type = get_string_attribute(attrs, "os.type");
+            let host_arch = get_string_attribute(attrs, "host.arch");
+            (service_version, os_type, host_arch)
+        }
+        None => (None, None, None),
+    }
+}
+
+/// Handle POST /v1/metrics (OTLP HTTP metric export).
+///
+/// Accepts an ExportMetricsServiceRequest JSON body, delegates parsing to
+/// the pure OTLP metrics parser, accumulates each data point via MetricStore,
+/// extracts resource attributes for session metadata enrichment,
+/// and returns 200 OK with {} per OTLP spec. Returns 400 for malformed JSON.
+async fn handle_otlp_metrics(
+    State(state): State<Arc<AppState>>,
+    body: axum::body::Bytes,
+) -> impl IntoResponse {
+    let json_body: serde_json::Value = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(_) => {
+            return (StatusCode::BAD_REQUEST, "malformed JSON".to_string());
+        }
+    };
+
+    let data_points = parse_export_metrics_request(&json_body);
+    let (service_version, os_type, host_arch) = extract_resource_attributes(&json_body);
+
+    let store = state.metric_store.lock().unwrap();
+
+    // Track which sessions we've seen to write metadata once per session
+    let mut enriched_sessions: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    for point in &data_points {
+        if let Err(e) = store.accumulate_delta(
+            &point.session_id,
+            &point.metric_name,
+            &point.attribute_key,
+            point.value,
+            &point.end_time_nano,
+        ) {
+            eprintln!("Failed to accumulate metric: {}", e);
+        }
+
+        // Write session metadata on first encounter of each session in this request
+        if !enriched_sessions.contains(&point.session_id) {
+            enriched_sessions.insert(point.session_id.clone());
+            let metadata = SessionMetadata {
+                session_id: point.session_id.clone(),
+                terminal_type: None,
+                service_version: service_version.clone(),
+                os_type: os_type.clone(),
+                host_arch: host_arch.clone(),
+            };
+            if let Err(e) = store.write_session_metadata(&metadata) {
+                eprintln!("Failed to write session metadata: {}", e);
+            }
+        }
+    }
+
+    (StatusCode::OK, "{}".to_string())
+}
+
 /// Build the axum router with hook routes and OTLP log receiver.
 fn build_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/hooks/:event_type", post(handle_hook_event))
         .route("/v1/logs", post(handle_otlp_logs))
+        .route("/v1/metrics", post(handle_otlp_metrics))
         .with_state(state)
 }
 
@@ -150,8 +233,26 @@ async fn main() {
         }
     };
 
+    // Open a separate connection for the metric store (SQLite WAL allows concurrent readers/writers)
+    let metric_connection = match Connection::open(&db_path) {
+        Ok(conn) => conn,
+        Err(e) => {
+            eprintln!("norbert-hook-receiver: Failed to open metric database: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let metric_store = match SqliteMetricStore::new(metric_connection) {
+        Ok(store) => store,
+        Err(e) => {
+            eprintln!("norbert-hook-receiver: Failed to initialize metric store: {}", e);
+            std::process::exit(1);
+        }
+    };
+
     let state = Arc::new(AppState {
         event_store: Mutex::new(event_store),
+        metric_store: Mutex::new(metric_store),
         provider: Box::new(ClaudeCodeProvider),
     });
     let app = build_router(state);
@@ -185,15 +286,20 @@ mod tests {
     };
     use tower::ServiceExt;
 
-    /// Create a test app state with an in-memory SQLite database
+    /// Create a test app state with in-memory SQLite databases
     /// and the ClaudeCodeProvider for normalization.
     fn test_state() -> Arc<AppState> {
         let conn =
             Connection::open_in_memory().expect("Failed to open in-memory database");
         let event_store =
             SqliteEventStore::new(conn).expect("Failed to initialize schema");
+        let metric_conn =
+            Connection::open_in_memory().expect("Failed to open in-memory metric database");
+        let metric_store =
+            SqliteMetricStore::new(metric_conn).expect("Failed to initialize metric schema");
         Arc::new(AppState {
             event_store: Mutex::new(event_store),
+            metric_store: Mutex::new(metric_store),
             provider: Box::new(ClaudeCodeProvider),
         })
     }
@@ -564,6 +670,271 @@ mod tests {
             response.status(),
             StatusCode::OK,
             "Existing /hooks/:type route must still work after adding /v1/logs"
+        );
+    }
+
+    // --- OTLP /v1/metrics handler tests ---
+
+    /// Build a minimal valid OTLP ExportMetricsServiceRequest with one cost.usage data point.
+    fn otlp_metrics_body(session_id: &str) -> serde_json::Value {
+        serde_json::json!({
+            "resourceMetrics": [{
+                "resource": {
+                    "attributes": [
+                        {"key": "service.name", "value": {"stringValue": "claude-code"}},
+                        {"key": "service.version", "value": {"stringValue": "2.1.81"}},
+                        {"key": "os.type", "value": {"stringValue": "linux"}},
+                        {"key": "host.arch", "value": {"stringValue": "x86_64"}}
+                    ]
+                },
+                "scopeMetrics": [{
+                    "scope": {"name": "com.anthropic.claude_code", "version": "2.1.81"},
+                    "metrics": [{
+                        "name": "claude_code.cost.usage",
+                        "description": "Cost tracking",
+                        "unit": "USD",
+                        "sum": {
+                            "aggregationTemporality": 1,
+                            "isMonotonic": true,
+                            "dataPoints": [{
+                                "attributes": [
+                                    {"key": "session.id", "value": {"stringValue": session_id}},
+                                    {"key": "model", "value": {"stringValue": "claude-opus-4-6[1m]"}}
+                                ],
+                                "startTimeUnixNano": "1774290634816000000",
+                                "timeUnixNano": "1774290637123000000",
+                                "asDouble": 0.144065
+                            }]
+                        }
+                    }]
+                }]
+            }]
+        })
+    }
+
+    #[tokio::test]
+    async fn metrics_valid_payload_returns_200_and_accumulates() {
+        let state = test_state();
+        let app = build_router(state.clone());
+
+        let body = otlp_metrics_body("sess-metrics-1");
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/v1/metrics")
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::to_string(&body).unwrap()))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Verify response body is {}
+        let response_body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(
+            std::str::from_utf8(&response_body).unwrap(),
+            "{}",
+            "OTLP metrics success response must be {{}}"
+        );
+
+        // Verify metric was accumulated
+        let metrics = state
+            .metric_store
+            .lock()
+            .unwrap()
+            .get_metrics_for_session("sess-metrics-1")
+            .unwrap();
+        assert_eq!(metrics.len(), 1, "One metric should be accumulated");
+        assert_eq!(metrics[0].metric_name, "cost.usage");
+        assert_eq!(metrics[0].attribute_key, "model=claude-opus-4-6");
+        assert!(
+            (metrics[0].value - 0.144065).abs() < f64::EPSILON,
+            "Metric value should match the data point"
+        );
+    }
+
+    #[tokio::test]
+    async fn metrics_malformed_json_returns_400() {
+        let state = test_state();
+        let app = build_router(state);
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/v1/metrics")
+            .header("content-type", "application/json")
+            .body(Body::from("not valid json {{{"))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn metrics_empty_resource_metrics_returns_200_no_data() {
+        let state = test_state();
+        let app = build_router(state.clone());
+
+        let body = serde_json::json!({"resourceMetrics": []});
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/v1/metrics")
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::to_string(&body).unwrap()))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let metrics = state
+            .metric_store
+            .lock()
+            .unwrap()
+            .get_metrics_for_session("any-session")
+            .unwrap();
+        assert!(metrics.is_empty(), "No metrics should be accumulated for empty resourceMetrics");
+    }
+
+    #[tokio::test]
+    async fn metrics_resource_attributes_written_as_session_metadata() {
+        let state = test_state();
+        let app = build_router(state.clone());
+
+        let body = otlp_metrics_body("sess-metadata-1");
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/v1/metrics")
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::to_string(&body).unwrap()))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Verify session metadata was written from resource attributes
+        let metadata = state
+            .metric_store
+            .lock()
+            .unwrap()
+            .get_session_metadata("sess-metadata-1")
+            .unwrap()
+            .expect("Session metadata should be written");
+
+        assert_eq!(metadata.session_id, "sess-metadata-1");
+        assert_eq!(metadata.service_version, Some("2.1.81".to_string()));
+        assert_eq!(metadata.os_type, Some("linux".to_string()));
+        assert_eq!(metadata.host_arch, Some("x86_64".to_string()));
+    }
+
+    #[tokio::test]
+    async fn metrics_multiple_data_points_all_accumulated() {
+        let state = test_state();
+        let app = build_router(state.clone());
+
+        let body = serde_json::json!({
+            "resourceMetrics": [{
+                "resource": {"attributes": []},
+                "scopeMetrics": [{
+                    "scope": {"name": "com.anthropic.claude_code"},
+                    "metrics": [
+                        {
+                            "name": "claude_code.cost.usage",
+                            "sum": {
+                                "aggregationTemporality": 1,
+                                "isMonotonic": true,
+                                "dataPoints": [{
+                                    "attributes": [
+                                        {"key": "session.id", "value": {"stringValue": "sess-multi"}},
+                                        {"key": "model", "value": {"stringValue": "claude-opus-4-6"}}
+                                    ],
+                                    "startTimeUnixNano": "1774290634816000000",
+                                    "timeUnixNano": "1774290637123000000",
+                                    "asDouble": 0.05
+                                }]
+                            }
+                        },
+                        {
+                            "name": "claude_code.token.usage",
+                            "sum": {
+                                "aggregationTemporality": 1,
+                                "isMonotonic": true,
+                                "dataPoints": [{
+                                    "attributes": [
+                                        {"key": "session.id", "value": {"stringValue": "sess-multi"}},
+                                        {"key": "model", "value": {"stringValue": "claude-opus-4-6"}},
+                                        {"key": "type", "value": {"stringValue": "input"}}
+                                    ],
+                                    "startTimeUnixNano": "1774290634816000000",
+                                    "timeUnixNano": "1774290637123000000",
+                                    "asDouble": 337.0
+                                }]
+                            }
+                        }
+                    ]
+                }]
+            }]
+        });
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/v1/metrics")
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::to_string(&body).unwrap()))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let metrics = state
+            .metric_store
+            .lock()
+            .unwrap()
+            .get_metrics_for_session("sess-multi")
+            .unwrap();
+        assert_eq!(metrics.len(), 2, "Both metrics should be accumulated");
+    }
+
+    #[tokio::test]
+    async fn metrics_route_does_not_affect_existing_routes() {
+        // Verify /hooks/:type and /v1/logs still work alongside /v1/metrics
+        let state = test_state();
+
+        // Test /hooks/:type
+        let app = build_router(state.clone());
+        let hook_body = serde_json::json!({
+            "session_id": "sess-coexist",
+            "tool": "bash"
+        });
+        let hook_request = Request::builder()
+            .method("POST")
+            .uri("/hooks/PreToolUse")
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::to_string(&hook_body).unwrap()))
+            .unwrap();
+        let hook_response = app.oneshot(hook_request).await.unwrap();
+        assert_eq!(
+            hook_response.status(),
+            StatusCode::OK,
+            "/hooks/:type must still work after adding /v1/metrics"
+        );
+
+        // Test /v1/logs
+        let app = build_router(state.clone());
+        let logs_body = otlp_api_request_body("sess-coexist-logs");
+        let logs_request = Request::builder()
+            .method("POST")
+            .uri("/v1/logs")
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::to_string(&logs_body).unwrap()))
+            .unwrap();
+        let logs_response = app.oneshot(logs_request).await.unwrap();
+        assert_eq!(
+            logs_response.status(),
+            StatusCode::OK,
+            "/v1/logs must still work after adding /v1/metrics"
         );
     }
 }
