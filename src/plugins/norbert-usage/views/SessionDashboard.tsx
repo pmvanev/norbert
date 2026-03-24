@@ -10,10 +10,13 @@ import type { ToolResultEvent } from "../domain/toolUsageAggregator";
 import type { ApiErrorEvent } from "../domain/apiHealthAggregator";
 import type { UserPromptEvent } from "../domain/promptActivityAggregator";
 import type { ToolDecisionEvent } from "../domain/permissionsAggregator";
+import type { AccumulatedMetric } from "../domain/activeTimeFormatter";
 import { ToolUsageCard } from "./ToolUsageCard";
 import { ApiHealthCard } from "./ApiHealthCard";
 import { PromptActivityCard } from "./PromptActivityCard";
 import { PermissionsCard } from "./PermissionsCard";
+import { ActiveTimeCard } from "./ActiveTimeCard";
+import { ProductivityCard } from "./ProductivityCard";
 
 // ---------------------------------------------------------------------------
 // Generic event shape from the backend
@@ -70,6 +73,7 @@ const toToolDecisionEvents = (events: ReadonlyArray<SessionEvent>): ReadonlyArra
 interface SessionDashboardProps {
   readonly sessionId: string;
   readonly events: ReadonlyArray<SessionEvent>;
+  readonly metrics: ReadonlyArray<AccumulatedMetric>;
   readonly totalApiRequests: number;
 }
 
@@ -80,6 +84,7 @@ interface SessionDashboardProps {
 export const SessionDashboard = ({
   sessionId,
   events,
+  metrics,
   totalApiRequests,
 }: SessionDashboardProps): JSX.Element => {
   const toolResultEvents = toToolResultEvents(events);
@@ -93,10 +98,12 @@ export const SessionDashboard = ({
         <h2>Session: {sessionId.slice(0, 8)}</h2>
       </div>
       <div className="dashboard-grid">
+        <ActiveTimeCard metrics={metrics} />
         <ToolUsageCard events={toolResultEvents} />
         <PromptActivityCard events={userPromptEvents} />
         <ApiHealthCard events={apiErrorEvents} totalApiRequests={totalApiRequests} />
         <PermissionsCard events={toolDecisionEvents} />
+        <ProductivityCard metrics={metrics} />
       </div>
     </div>
   );
