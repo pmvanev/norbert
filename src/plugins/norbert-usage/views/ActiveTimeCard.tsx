@@ -3,7 +3,7 @@
 /// Calls pure domain formatter and renders the result.
 /// No business logic in this component.
 
-import { formatActiveTime, type AccumulatedMetric, type ActiveTimeSummary } from "../domain/activeTimeFormatter";
+import { formatActiveTime, formatDuration, type AccumulatedMetric, type ActiveTimeSummary } from "../domain/activeTimeFormatter";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -53,11 +53,7 @@ const TimeRow = ({
 
 const TotalRow = ({ summary }: { readonly summary: ActiveTimeSummary }): JSX.Element => (
   <div className="time-total">
-    <span>Total: {summary.userSeconds + summary.cliSeconds > 0
-      ? `${Math.floor(summary.totalSeconds / 3600) > 0
-          ? `${Math.floor(summary.totalSeconds / 3600)}h `
-          : ""}${Math.floor((summary.totalSeconds % 3600) / 60)}m ${summary.totalSeconds % 60}s`
-      : "0s"}</span>
+    <span>Total: {formatDuration(summary.totalSeconds)}</span>
   </div>
 );
 

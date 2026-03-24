@@ -67,13 +67,15 @@ export const formatDuration = (totalSeconds: number): string => {
 // Metric extraction helpers (pure)
 // ---------------------------------------------------------------------------
 
-const findMetricValue = (
+export const findMetricValue = (
   metrics: ReadonlyArray<AccumulatedMetric>,
   metricName: string,
-  attributeKeyContains: string,
+  attributeKeyContains: string = "",
 ): number => {
   const match = metrics.find(
-    (m) => m.metricName === metricName && m.attributeKey.includes(attributeKeyContains),
+    (m) =>
+      m.metricName === metricName &&
+      (attributeKeyContains === "" ? true : m.attributeKey.includes(attributeKeyContains)),
   );
   return match?.value ?? 0;
 };

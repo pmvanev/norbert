@@ -317,6 +317,22 @@ fn route_event_name(event_name: &str, attributes: &[Value]) -> Option<(EventType
 // Session enrichment extractors: pure functions
 // ---------------------------------------------------------------
 
+/// Extract service.version, os.type, and host.arch from an OTLP resource block.
+///
+/// Pure function: traverses an array of resource attributes and extracts
+/// the three known enrichment attributes.
+fn extract_resource_attributes_from(resource_attrs: Option<&Vec<Value>>) -> (Option<String>, Option<String>, Option<String>) {
+    match resource_attrs {
+        Some(attrs) => {
+            let service_version = get_string_attribute(attrs, "service.version");
+            let os_type = get_string_attribute(attrs, "os.type");
+            let host_arch = get_string_attribute(attrs, "host.arch");
+            (service_version, os_type, host_arch)
+        }
+        None => (None, None, None),
+    }
+}
+
 /// Extract terminal.type from the first log record that has it.
 ///
 /// Pure function: traverses all log records in the request looking for
@@ -370,15 +386,23 @@ pub fn extract_log_resource_attributes(request: &Value) -> (Option<String>, Opti
         .and_then(|r| r.get("attributes"))
         .and_then(|v| v.as_array());
 
-    match resource_attrs {
-        Some(attrs) => {
-            let service_version = get_string_attribute(attrs, "service.version");
-            let os_type = get_string_attribute(attrs, "os.type");
-            let host_arch = get_string_attribute(attrs, "host.arch");
-            (service_version, os_type, host_arch)
-        }
-        None => (None, None, None),
-    }
+    extract_resource_attributes_from(resource_attrs)
+}
+
+/// Extract resource attributes from an OTLP metrics request.
+///
+/// Pure function: traverses resourceMetrics[0].resource.attributes[]
+/// and extracts known resource attributes for session metadata.
+pub fn extract_metrics_resource_attributes(request: &Value) -> (Option<String>, Option<String>, Option<String>) {
+    let resource_attrs = request
+        .get("resourceMetrics")
+        .and_then(|v| v.as_array())
+        .and_then(|arr| arr.first())
+        .and_then(|rm| rm.get("resource"))
+        .and_then(|r| r.get("attributes"))
+        .and_then(|v| v.as_array());
+
+    extract_resource_attributes_from(resource_attrs)
 }
 
 // ---------------------------------------------------------------

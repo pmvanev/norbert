@@ -19,8 +19,8 @@ use norbert_lib::adapters::db::metric_store::SqliteMetricStore;
 use norbert_lib::adapters::db::SqliteEventStore;
 use norbert_lib::adapters::otel::metrics_parser::parse_export_metrics_request;
 use norbert_lib::adapters::otel::{
-    extract_log_resource_attributes, extract_terminal_type_from_logs_request,
-    get_string_attribute, parse_export_logs_request,
+    extract_log_resource_attributes, extract_metrics_resource_attributes,
+    extract_terminal_type_from_logs_request, parse_export_logs_request,
 };
 use norbert_lib::adapters::providers::claude_code::ClaudeCodeProvider;
 use norbert_lib::domain::{SessionMetadata, HOOK_PORT};
@@ -39,6 +39,18 @@ struct AppState {
     event_store: Mutex<SqliteEventStore>,
     metric_store: Mutex<SqliteMetricStore>,
     provider: Box<dyn EventProvider + Send + Sync>,
+}
+
+/// Collect unique session IDs from an iterator, preserving first-seen order.
+fn collect_unique_session_ids<'a>(session_ids: impl Iterator<Item = &'a String>) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    let mut unique = Vec::new();
+    for id in session_ids {
+        if seen.insert(id.clone()) {
+            unique.push(id.clone());
+        }
+    }
+    unique
 }
 
 /// Handle POST /hooks/:event_type.
@@ -123,52 +135,23 @@ async fn handle_otlp_logs(
     if !events.is_empty() {
         let terminal_type = extract_terminal_type_from_logs_request(&json_body);
         let (service_version, os_type, host_arch) = extract_log_resource_attributes(&json_body);
-
-        let mut enriched_sessions: std::collections::HashSet<String> = std::collections::HashSet::new();
         let metric_store = state.metric_store.lock().unwrap();
-
-        for event in &events {
-            if !enriched_sessions.contains(&event.session_id) {
-                enriched_sessions.insert(event.session_id.clone());
-                let metadata = SessionMetadata {
-                    session_id: event.session_id.clone(),
-                    terminal_type: terminal_type.clone(),
-                    service_version: service_version.clone(),
-                    os_type: os_type.clone(),
-                    host_arch: host_arch.clone(),
-                };
-                if let Err(e) = metric_store.write_session_metadata(&metadata) {
-                    eprintln!("Failed to write session metadata from logs: {}", e);
-                }
+        let session_ids: Vec<String> = collect_unique_session_ids(events.iter().map(|e| &e.session_id));
+        for session_id in session_ids {
+            let metadata = SessionMetadata {
+                session_id,
+                terminal_type: terminal_type.clone(),
+                service_version: service_version.clone(),
+                os_type: os_type.clone(),
+                host_arch: host_arch.clone(),
+            };
+            if let Err(e) = metric_store.write_session_metadata(&metadata) {
+                eprintln!("Failed to write session metadata from logs: {}", e);
             }
         }
     }
 
     (StatusCode::OK, "{}".to_string())
-}
-
-/// Extract resource attributes from an OTLP metrics request.
-///
-/// Pure function: traverses resourceMetrics[0].resource.attributes[]
-/// and extracts known resource attributes for session metadata.
-fn extract_resource_attributes(request: &serde_json::Value) -> (Option<String>, Option<String>, Option<String>) {
-    let resource_attrs = request
-        .get("resourceMetrics")
-        .and_then(|v| v.as_array())
-        .and_then(|arr| arr.first())
-        .and_then(|rm| rm.get("resource"))
-        .and_then(|r| r.get("attributes"))
-        .and_then(|v| v.as_array());
-
-    match resource_attrs {
-        Some(attrs) => {
-            let service_version = get_string_attribute(attrs, "service.version");
-            let os_type = get_string_attribute(attrs, "os.type");
-            let host_arch = get_string_attribute(attrs, "host.arch");
-            (service_version, os_type, host_arch)
-        }
-        None => (None, None, None),
-    }
 }
 
 /// Handle POST /v1/metrics (OTLP HTTP metric export).
@@ -189,12 +172,9 @@ async fn handle_otlp_metrics(
     };
 
     let data_points = parse_export_metrics_request(&json_body);
-    let (service_version, os_type, host_arch) = extract_resource_attributes(&json_body);
+    let (service_version, os_type, host_arch) = extract_metrics_resource_attributes(&json_body);
 
     let store = state.metric_store.lock().unwrap();
-
-    // Track which sessions we've seen to write metadata once per session
-    let mut enriched_sessions: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     for point in &data_points {
         if let Err(e) = store.accumulate_delta(
@@ -206,20 +186,20 @@ async fn handle_otlp_metrics(
         ) {
             eprintln!("Failed to accumulate metric: {}", e);
         }
+    }
 
-        // Write session metadata on first encounter of each session in this request
-        if !enriched_sessions.contains(&point.session_id) {
-            enriched_sessions.insert(point.session_id.clone());
-            let metadata = SessionMetadata {
-                session_id: point.session_id.clone(),
-                terminal_type: None,
-                service_version: service_version.clone(),
-                os_type: os_type.clone(),
-                host_arch: host_arch.clone(),
-            };
-            if let Err(e) = store.write_session_metadata(&metadata) {
-                eprintln!("Failed to write session metadata: {}", e);
-            }
+    // Write session metadata once per unique session in this request
+    let session_ids = collect_unique_session_ids(data_points.iter().map(|p| &p.session_id));
+    for session_id in session_ids {
+        let metadata = SessionMetadata {
+            session_id,
+            terminal_type: None,
+            service_version: service_version.clone(),
+            os_type: os_type.clone(),
+            host_arch: host_arch.clone(),
+        };
+        if let Err(e) = store.write_session_metadata(&metadata) {
+            eprintln!("Failed to write session metadata: {}", e);
         }
     }
 

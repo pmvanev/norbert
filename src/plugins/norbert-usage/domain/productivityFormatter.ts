@@ -11,6 +11,7 @@
 
 export type { AccumulatedMetric } from "./activeTimeFormatter";
 import type { AccumulatedMetric } from "./activeTimeFormatter";
+import { findMetricValue } from "./activeTimeFormatter";
 
 // ---------------------------------------------------------------------------
 // Output shape
@@ -34,23 +35,6 @@ export const EMPTY_PRODUCTIVITY: ProductivitySummary = {
   netLines: 0,
   commits: 0,
   pullRequests: 0,
-};
-
-// ---------------------------------------------------------------------------
-// Metric extraction helper (pure)
-// ---------------------------------------------------------------------------
-
-const findMetricValue = (
-  metrics: ReadonlyArray<AccumulatedMetric>,
-  metricName: string,
-  attributeKeyContains: string = "",
-): number => {
-  const match = metrics.find(
-    (m) =>
-      m.metricName === metricName &&
-      (attributeKeyContains === "" ? true : m.attributeKey.includes(attributeKeyContains)),
-  );
-  return match?.value ?? 0;
 };
 
 // ---------------------------------------------------------------------------
