@@ -13,6 +13,8 @@
 /// - Unrecognized event names silently ignored
 /// - Missing required attributes drop the log record with warning
 
+pub mod metrics_parser;
+
 use crate::domain::{Event, EventType};
 use serde_json::Value;
 
@@ -110,7 +112,7 @@ fn extract_bool_from_value(value: &Value) -> Option<bool> {
 // ---------------------------------------------------------------
 
 /// Find an attribute by key in an OTel attributes array.
-fn find_attribute<'a>(attributes: &'a [Value], key: &str) -> Option<&'a Value> {
+pub(crate) fn find_attribute<'a>(attributes: &'a [Value], key: &str) -> Option<&'a Value> {
     attributes.iter().find_map(|attr| {
         if attr.get("key").and_then(|k| k.as_str()) == Some(key) {
             attr.get("value")
@@ -121,7 +123,7 @@ fn find_attribute<'a>(attributes: &'a [Value], key: &str) -> Option<&'a Value> {
 }
 
 /// Extract a string attribute by key.
-fn get_string_attribute(attributes: &[Value], key: &str) -> Option<String> {
+pub(crate) fn get_string_attribute(attributes: &[Value], key: &str) -> Option<String> {
     find_attribute(attributes, key).and_then(extract_string_from_value)
 }
 
