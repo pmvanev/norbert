@@ -13,31 +13,7 @@
  */
 
 import type { HoverState } from "../domain/types";
-
-// ---------------------------------------------------------------------------
-// Pure layout helpers
-// ---------------------------------------------------------------------------
-
-/** Tooltip width estimate for edge-flip calculation. */
-const TOOLTIP_WIDTH = 140;
-
-/** Offset from cursor position. */
-const TOOLTIP_OFFSET_X = 8;
-const TOOLTIP_OFFSET_Y = -8;
-
-/**
- * Compute tooltip left position, flipping to the left side of the
- * cursor when the tooltip would overflow the right edge.
- */
-const computeTooltipLeft = (
-  tooltipX: number,
-  containerWidth: number,
-): number => {
-  const wouldOverflowRight = tooltipX + TOOLTIP_OFFSET_X + TOOLTIP_WIDTH > containerWidth;
-  return wouldOverflowRight
-    ? tooltipX - TOOLTIP_OFFSET_X - TOOLTIP_WIDTH
-    : tooltipX + TOOLTIP_OFFSET_X;
-};
+import { computeTooltipLeft, computeTooltipTop } from "../domain/chartViewHelpers";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -61,7 +37,7 @@ export const PMTooltip = ({
   }
 
   const left = computeTooltipLeft(hoverState.tooltipX, containerWidth);
-  const top = hoverState.tooltipY + TOOLTIP_OFFSET_Y;
+  const top = computeTooltipTop(hoverState.tooltipY);
 
   return (
     <div

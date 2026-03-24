@@ -14,7 +14,7 @@
  * - Removing non-existent session is a no-op
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { createMultiSessionStore } from "../../../../../src/plugins/norbert-usage/adapters/multiSessionStore";
 import { createInitialMetrics } from "../../../../../src/plugins/norbert-usage/domain/metricsAggregator";
 import type { SessionMetrics } from "../../../../../src/plugins/norbert-usage/domain/types";
@@ -122,5 +122,123 @@ describe("multiSessionStore update and query", () => {
 
     const beta = store.getSession("beta");
     expect(beta!.burnRate).toBe(100);
+  });
+
+  it("updateSession on unknown ID is a no-op", () => {
+    const store = createMultiSessionStore();
+    store.addSession("session-a");
+
+    const before = store.getSession("session-a");
+    store.updateSession("unknown-id", makeMetrics("unknown-id", { burnRate: 999 }));
+
+    // Original session unchanged
+    const after = store.getSession("session-a");
+    expect(after).toEqual(before);
+
+    // Unknown session was not created
+    expect(store.getSession("unknown-id")).toBeUndefined();
+    expect(store.getSessions()).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Aggregate window buffer -- cross-session sum
+// ---------------------------------------------------------------------------
+
+describe("multiSessionStore aggregate window buffer", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("sums values across two sessions in the 1m window buffer", () => {
+    // Control timestamps to ensure the aggregate multi-window buffer accepts both samples.
+    // The 1m window has a 100ms sample interval, so timestamps must be >100ms apart.
+    let now = 1000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+
+    const store = createMultiSessionStore();
+    store.addSession("session-a");
+    store.addSession("session-b");
+
+    // First sample at t=1000
+    store.appendSessionSample("session-a", { tokens: 100, cost: 0, agents: 0, context: 0 });
+
+    // Advance time past the 1m window's 100ms sample interval
+    now = 1200;
+    store.appendSessionSample("session-b", { tokens: 250, cost: 0, agents: 0, context: 0 });
+
+    // tokens is aggregateApplicable, so the aggregate window should sum both
+    const aggregateBuffer = store.getAggregateWindowBuffer("tokens", "1m");
+    expect(aggregateBuffer.samples.length).toBeGreaterThan(0);
+
+    // The latest aggregate sample should reflect the sum of both sessions
+    const latestSample = aggregateBuffer.samples[aggregateBuffer.samples.length - 1];
+    expect(latestSample.tokenRate).toBe(350);
+  });
+
+  it("does not aggregate non-aggregatable categories (context)", () => {
+    let now = 1000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+
+    const store = createMultiSessionStore();
+    store.addSession("session-a");
+    store.addSession("session-b");
+
+    store.appendSessionSample("session-a", { tokens: 0, cost: 0, agents: 0, context: 60 });
+    now = 1200;
+    store.appendSessionSample("session-b", { tokens: 0, cost: 0, agents: 0, context: 80 });
+
+    // context is not aggregateApplicable -- aggregate window buffer should be empty
+    const aggregateBuffer = store.getAggregateWindowBuffer("context", "1m");
+    expect(aggregateBuffer.samples).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Null-fallback paths in buffer retrieval
+// ---------------------------------------------------------------------------
+
+describe("multiSessionStore buffer fallback paths", () => {
+  it("getSessionWindowBuffer returns undefined for unknown session", () => {
+    const store = createMultiSessionStore();
+    const result = store.getSessionWindowBuffer("unknown-session", "tokens", "1m");
+    expect(result).toBeUndefined();
+  });
+
+  it("getSessionWindowBuffer returns empty buffer for session with no samples", () => {
+    const store = createMultiSessionStore();
+    store.addSession("session-a");
+
+    // Session exists but no samples appended yet -- multi-window buffer exists with empty windows
+    const result = store.getSessionWindowBuffer("session-a", "tokens", "1m");
+    expect(result).toBeDefined();
+    expect(result!.samples).toHaveLength(0);
+  });
+
+  it("getAggregateWindowBuffer returns empty buffer for category with no samples", () => {
+    const store = createMultiSessionStore();
+
+    // No sessions added, no samples -- aggregate multi-window buffer should return empty
+    const result = store.getAggregateWindowBuffer("tokens", "1m");
+    expect(result).toBeDefined();
+    expect(result.samples).toHaveLength(0);
+  });
+
+  it("getSessionBuffer returns undefined for unknown session", () => {
+    const store = createMultiSessionStore();
+    const result = store.getSessionBuffer("unknown-session", "tokens");
+    expect(result).toBeUndefined();
+  });
+
+  it("appendSessionSample on unknown session is a no-op", () => {
+    const store = createMultiSessionStore();
+    store.addSession("session-a");
+
+    // Append to unknown session -- should not throw, should not affect existing
+    store.appendSessionSample("unknown-session", { tokens: 100, cost: 0, agents: 0, context: 0 });
+
+    const buffer = store.getSessionBuffer("session-a", "tokens");
+    expect(buffer).toBeDefined();
+    expect(buffer!.samples).toHaveLength(0);
   });
 });

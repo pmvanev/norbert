@@ -10,6 +10,7 @@ import {
   formatSessionTimestamp,
   deriveStatus,
   deriveConnectionStatus,
+  isSessionActive,
   formatActiveTooltip,
   type AppStatus,
   type SessionInfo,
@@ -184,6 +185,51 @@ describe("deriveConnectionStatus", () => {
 
   it("never returns 'No plugin connected' once events exist", () => {
     expect(deriveConnectionStatus(0, 1, null)).not.toBe("No plugin connected");
+  });
+});
+
+describe("isSessionActive — boundary mutant killers", () => {
+  function buildSession(overrides: Partial<SessionInfo> = {}): SessionInfo {
+    return {
+      id: "sess-1",
+      started_at: "2026-03-12T10:00:00Z",
+      ended_at: null,
+      event_count: 5,
+      last_event_at: "2026-03-12T10:00:00Z",
+      ...overrides,
+    };
+  }
+
+  it("returns false when now - lastEventTime equals exactly STALE_SESSION_MS (5 min boundary)", () => {
+    // STALE_SESSION_MS = 5 * 60 * 1000 = 300000ms
+    // When the difference is exactly 300000ms, < should return false.
+    // This kills the mutant that replaces < with <=.
+    const lastEventAt = "2026-03-12T10:00:00Z";
+    const lastEventTime = new Date(lastEventAt).getTime();
+    const now = lastEventTime + 5 * 60 * 1000; // exactly 300000ms later
+
+    const session = buildSession({ last_event_at: lastEventAt });
+    expect(isSessionActive(session, now)).toBe(false);
+  });
+
+  it("returns true when now - lastEventTime is one millisecond below STALE_SESSION_MS", () => {
+    const lastEventAt = "2026-03-12T10:00:00Z";
+    const lastEventTime = new Date(lastEventAt).getTime();
+    const now = lastEventTime + 5 * 60 * 1000 - 1; // 299999ms
+
+    const session = buildSession({ last_event_at: lastEventAt });
+    expect(isSessionActive(session, now)).toBe(true);
+  });
+});
+
+describe("deriveConnectionStatus — compound condition mutant killers", () => {
+  it("returns session-level status when sessions exist but events are zero", () => {
+    // sessionCount=1, eventCount=0, latestSession=null
+    // This kills the mutant that replaces (sessionCount === 0) with true
+    // in the compound condition (sessionCount === 0 && eventCount === 0).
+    // With sessionCount=1, eventCount=0: the real code falls through to deriveStatus.
+    // The mutant (true && eventCount === 0) would incorrectly return "No plugin connected".
+    expect(deriveConnectionStatus(1, 0, null)).toBe("Listening");
   });
 });
 

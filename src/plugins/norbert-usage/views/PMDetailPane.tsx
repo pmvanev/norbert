@@ -15,41 +15,16 @@
 import type { MultiSessionStore } from "../adapters/multiSessionStore";
 import type { MetricCategoryId, HoverState, TimeWindowId } from "../domain/types";
 import { getCategoryById, type MetricCategory } from "../domain/categoryConfig";
+import {
+  computeGridColumns,
+  shouldShowPerSessionGrid,
+  shouldShowAggregateGraph,
+  formatSessionLabel,
+  formatDurationLabel,
+} from "../domain/chartViewHelpers";
 import { PMChart, type HoverData, resolveThemeColor } from "./PMChart";
 import { PMStatsGrid } from "./PMStatsGrid";
 import { PMSessionTable, type SessionRowData } from "./PMSessionTable";
-
-// ---------------------------------------------------------------------------
-// Pure layout helpers
-// ---------------------------------------------------------------------------
-
-/** Determine grid column count based on session count. */
-const computeGridColumns = (sessionCount: number): number =>
-  sessionCount <= 4 ? 2 : 3;
-
-/** Determine whether to show the per-session grid. */
-const shouldShowPerSessionGrid = (sessionCount: number): boolean =>
-  sessionCount > 1;
-
-/** Determine whether to show the aggregate graph. */
-const shouldShowAggregateGraph = (category: MetricCategory): boolean =>
-  category.aggregateApplicable;
-
-/** Format a session display label from sessionLabel (project name from cwd). */
-const formatSessionLabel = (
-  session: { readonly sessionId: string; readonly sessionLabel: string },
-): string =>
-  session.sessionLabel || session.sessionId.slice(0, 8);
-
-/** Map a TimeWindowId to a human-readable duration label. */
-const formatDurationLabel = (windowId: TimeWindowId): string => {
-  switch (windowId) {
-    case "1m": return "60 seconds";
-    case "5m": return "5 minutes";
-    case "15m": return "15 minutes";
-    case "session": return "Full session";
-  }
-};
 
 /**
  * Derive stats grid metrics from the aggregate buffer for a category.

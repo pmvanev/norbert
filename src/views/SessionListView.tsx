@@ -8,6 +8,10 @@ import {
   EMPTY_STATE_MESSAGE,
   PLUGIN_INSTALL_COMMAND,
 } from "../domain/status";
+import {
+  deriveSessionRowClass,
+  deriveSessionDotClass,
+} from "../domain/sessionPresentation";
 
 /// Props for the SessionListView component.
 interface SessionListViewProps {
@@ -27,8 +31,8 @@ function SessionRow({
   readonly onSelect?: (sessionId: string) => void;
 }) {
   const active = isSessionActive(session);
-  const rowClassName = `srow${active ? " live-s" : ""}`;
-  const dotClassName = `sdot${active ? " live" : " done"}`;
+  const rowClassName = deriveSessionRowClass(active);
+  const dotClassName = deriveSessionDotClass(active);
 
   const handleClick = () => {
     onSelect?.(session.id);

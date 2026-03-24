@@ -12,6 +12,10 @@ import {
   formatEventLabel,
   formatPayloadSnippet,
 } from "../domain/eventDetail";
+import {
+  deriveStatusLabel,
+  deriveStatusClass,
+} from "../domain/sessionPresentation";
 
 /// Props for the EventDetailView component.
 interface EventDetailViewProps {
@@ -78,7 +82,8 @@ export function EventDetailView({ session, onBack }: EventDetailViewProps) {
   }, [session.id]);
 
   const active = isSessionActive(session);
-  const statusLabel = active ? "Active" : "Completed";
+  const statusLabel = deriveStatusLabel(active);
+  const statusClass = deriveStatusClass(active);
 
   return (
     <section className="event-detail">
@@ -107,7 +112,7 @@ export function EventDetailView({ session, onBack }: EventDetailViewProps) {
           </span>
           <span className="session-header-field">
             <span className="session-header-label">Status</span>
-            <span className={`session-header-value mono ${active ? "status-active" : "status-completed"}`}>
+            <span className={`session-header-value mono ${statusClass}`}>
               {statusLabel}
             </span>
           </span>

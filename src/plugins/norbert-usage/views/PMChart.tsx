@@ -21,6 +21,10 @@ import {
   computeHitTest,
   type FilledAreaPoint,
 } from "../domain/chartRenderer";
+import {
+  computeEffectiveYMax,
+  hexToRgba,
+} from "../domain/chartViewHelpers";
 
 // ---------------------------------------------------------------------------
 // Hover data emitted to parent
@@ -38,16 +42,7 @@ export interface HoverData {
 // Color utilities
 // ---------------------------------------------------------------------------
 
-const hexToRgba = (color: string, alpha: number): string => {
-  const match = color.match(/#([0-9a-f]{6})/i);
-  if (match) {
-    const r = parseInt(match[1].slice(0, 2), 16);
-    const g = parseInt(match[1].slice(2, 4), 16);
-    const b = parseInt(match[1].slice(4, 6), 16);
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-  }
-  return `rgba(255, 255, 255, ${alpha})`;
-};
+// hexToRgba extracted to domain/chartViewHelpers.ts
 
 /** Read a CSS custom property from :root, with fallback. */
 const getCssVar = (name: string, fallback: string): string => {
@@ -242,12 +237,11 @@ export const PMChart = ({
     padding: CANVAS_PADDING,
   });
 
-  // Autoscale Y-axis from data with 10% headroom
-  const effectiveYMax = useMemo(() => {
-    if (samples.length === 0) return yMax ?? 1;
-    const peak = samples.reduce((max, s) => Math.max(max, s[field]), 0);
-    return peak > 0 ? peak * 1.1 : (yMax ?? 1);
-  }, [yMax, samples, field]);
+  // Autoscale Y-axis from data with 10% headroom (pure logic in domain/chartViewHelpers)
+  const effectiveYMax = useMemo(
+    () => computeEffectiveYMax(samples, field, yMax),
+    [yMax, samples, field],
+  );
 
   // Convert RateSamples to ChartSample format for prepareFilledAreaPoints
   const chartSamples = useMemo(

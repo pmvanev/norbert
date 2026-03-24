@@ -73,10 +73,13 @@ describe("extractToolName", () => {
     expect(extractToolName(event)).toBe("Read");
   });
 
-  it("returns null for non-tool events", () => {
+  it("returns null for non-tool events even when payload has a tool field", () => {
+    // This test kills the mutant that replaces the TOOL_EVENT_TYPES guard
+    // with `if (false)` -- without the guard, a session_start event with
+    // a tool field would incorrectly return the tool name.
     const event = buildEvent({
       event_type: "session_start",
-      payload: {},
+      payload: { tool: "bash" },
     });
     expect(extractToolName(event)).toBeNull();
   });
@@ -93,6 +96,17 @@ describe("extractToolName", () => {
     const event = buildEvent({
       event_type: "tool_call_start",
       payload: "string-payload",
+    });
+    expect(extractToolName(event)).toBeNull();
+  });
+
+  it("returns null when payload is null for a tool event", () => {
+    // Kills the mutant that replaces (payload === null) with false
+    // in the compound condition. Without the null guard, accessing
+    // properties on null would throw.
+    const event = buildEvent({
+      event_type: "tool_call_start",
+      payload: null,
     });
     expect(extractToolName(event)).toBeNull();
   });
@@ -138,6 +152,17 @@ describe("formatPayloadSnippet", () => {
   it("handles null payload", () => {
     const snippet = formatPayloadSnippet(null, 80);
     expect(snippet).toBe("null");
+  });
+
+  it("returns full JSON when length equals exactly maxLength (boundary)", () => {
+    // Build a payload whose JSON serialization is exactly 10 characters.
+    // {"a":"bc"} = 10 chars. With maxLength=10, <= returns full, < would truncate.
+    const payload = { a: "bc" };
+    const json = JSON.stringify(payload); // '{"a":"bc"}'
+    expect(json.length).toBe(10); // verify our assumption
+    const snippet = formatPayloadSnippet(payload, 10);
+    expect(snippet).toBe(json);
+    expect(snippet).not.toContain("...");
   });
 });
 
