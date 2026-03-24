@@ -39,6 +39,7 @@ const TERMINAL_TYPE_MAP: Readonly<Record<string, string>> = {
   cursor: "Cursor",
   "iTerm.app": "iTerm",
   tmux: "tmux",
+  xterm: "xterm",
   "xterm-256color": "Terminal",
   alacritty: "Alacritty",
   WezTerm: "WezTerm",

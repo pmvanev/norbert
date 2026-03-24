@@ -178,6 +178,11 @@ describe("formatDuration", () => {
     expect(formatDuration(300)).toBe("5m 0s");
   });
 
+  it("floors fractional seconds", () => {
+    expect(formatDuration(90.5)).toBe("1m 30s");
+    expect(formatDuration(45.9)).toBe("45s");
+  });
+
   // -------------------------------------------------------------------------
   // Property: formatted string is non-empty for any non-negative input
   // -------------------------------------------------------------------------

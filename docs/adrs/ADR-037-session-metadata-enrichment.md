@@ -1,7 +1,7 @@
 # ADR-037: Session Metadata Enrichment Storage
 
 ## Status
-Proposed
+Accepted
 
 ## Context
 OTLP payloads contain resource attributes (service.version, os.type, host.arch) and standard attributes (terminal.type) that identify the environment of a Claude Code session. These attributes are stable within a session -- the first observation is sufficient. We need to decide where and how to store this enrichment data.

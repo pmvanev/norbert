@@ -53,12 +53,13 @@ describe("User sees Usage tab after norbert-usage loads", () => {
     // Then the plugin is loaded successfully
     expect(registry.loadedPluginIds).toContain("norbert-usage");
 
-    // And 3 views are registered: gauge-cluster, usage-dashboard, performance-monitor
+    // And 4 views are registered: gauge-cluster, usage-dashboard, session-dashboard, performance-monitor
     const views = getViewsByPlugin(registry, "norbert-usage");
-    expect(views).toHaveLength(3);
+    expect(views).toHaveLength(4);
     const viewIds = views.map((v) => v.id);
     expect(viewIds).toContain("gauge-cluster");
     expect(viewIds).toContain("usage-dashboard");
+    expect(viewIds).toContain("session-dashboard");
     expect(viewIds).toContain("performance-monitor");
 
     // And a sidebar tab "usage" is registered

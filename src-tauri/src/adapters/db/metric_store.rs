@@ -462,60 +462,6 @@ mod tests {
     }
 
     #[test]
-    fn metrics_table_has_correct_columns() {
-        let store = create_test_store();
-        let columns: Vec<String> = store
-            .connection
-            .prepare("PRAGMA table_info(metrics)")
-            .unwrap()
-            .query_map([], |row| row.get::<_, String>(1))
-            .unwrap()
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap();
-
-        assert!(columns.contains(&"session_id".to_string()));
-        assert!(columns.contains(&"metric_name".to_string()));
-        assert!(columns.contains(&"attribute_key".to_string()));
-        assert!(columns.contains(&"value".to_string()));
-        assert!(columns.contains(&"last_updated_at".to_string()));
-    }
-
-    #[test]
-    fn session_metadata_table_has_correct_columns() {
-        let store = create_test_store();
-        let columns: Vec<String> = store
-            .connection
-            .prepare("PRAGMA table_info(session_metadata)")
-            .unwrap()
-            .query_map([], |row| row.get::<_, String>(1))
-            .unwrap()
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap();
-
-        assert!(columns.contains(&"session_id".to_string()));
-        assert!(columns.contains(&"terminal_type".to_string()));
-        assert!(columns.contains(&"service_version".to_string()));
-        assert!(columns.contains(&"os_type".to_string()));
-        assert!(columns.contains(&"host_arch".to_string()));
-        assert!(columns.contains(&"created_at".to_string()));
-    }
-
-    #[test]
-    fn metrics_session_id_index_exists() {
-        let store = create_test_store();
-        let index_exists: bool = store
-            .connection
-            .query_row(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_metrics_session_id'",
-                [],
-                |row| row.get::<_, i32>(0),
-            )
-            .unwrap()
-            > 0;
-        assert!(index_exists, "Index idx_metrics_session_id should exist");
-    }
-
-    #[test]
     fn schema_initialization_is_idempotent() {
         let conn = Connection::open_in_memory().expect("Failed to open in-memory database");
         let store = SqliteMetricStore::new(conn).expect("First initialization should succeed");

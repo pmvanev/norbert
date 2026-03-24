@@ -124,19 +124,22 @@ async fn handle_otlp_logs(
     let received_at = chrono::Utc::now().to_rfc3339();
     let events = parse_export_logs_request(&json_body, &received_at);
 
-    let store = state.event_store.lock().unwrap();
-    for event in &events {
-        if let Err(e) = store.write_event(event) {
-            eprintln!("Failed to persist OTLP event: {}", e);
+    // Step 1: Lock event_store, write events, collect session_ids, then drop lock.
+    let session_ids: Vec<String> = {
+        let store = state.event_store.lock().unwrap();
+        for event in &events {
+            if let Err(e) = store.write_event(event) {
+                eprintln!("Failed to persist OTLP event: {}", e);
+            }
         }
-    }
+        collect_unique_session_ids(events.iter().map(|e| &e.session_id))
+    };
 
-    // Extract enrichment data and write session metadata on first log payload
+    // Step 2: Lock metric_store (event_store lock already dropped) to write metadata.
     if !events.is_empty() {
         let terminal_type = extract_terminal_type_from_logs_request(&json_body);
         let (service_version, os_type, host_arch) = extract_log_resource_attributes(&json_body);
         let metric_store = state.metric_store.lock().unwrap();
-        let session_ids: Vec<String> = collect_unique_session_ids(events.iter().map(|e| &e.session_id));
         for session_id in session_ids {
             let metadata = SessionMetadata {
                 session_id,

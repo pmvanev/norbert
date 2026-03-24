@@ -1,7 +1,7 @@
 # ADR-038: Model Name Normalization
 
 ## Status
-Proposed
+Accepted
 
 ## Context
 Claude Code reports model names differently in logs vs metrics:

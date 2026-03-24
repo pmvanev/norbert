@@ -89,14 +89,15 @@ describe("norbert-usage manifest", () => {
 // ---------------------------------------------------------------------------
 
 describe("norbert-usage onLoad view registrations", () => {
-  it("registers exactly 3 views: gauge-cluster, usage-dashboard, performance-monitor", () => {
+  it("registers exactly 4 views: gauge-cluster, usage-dashboard, session-dashboard, performance-monitor", () => {
     const { api, calls } = createStubApi();
     norbertUsagePlugin.onLoad(api);
 
-    expect(calls.views).toHaveLength(3);
+    expect(calls.views).toHaveLength(4);
     const viewIds = calls.views.map((v) => v.id);
     expect(viewIds).toContain("gauge-cluster");
     expect(viewIds).toContain("usage-dashboard");
+    expect(viewIds).toContain("session-dashboard");
     expect(viewIds).toContain("performance-monitor");
   });
 

@@ -31,6 +31,8 @@ import { GaugeClusterView } from "./plugins/norbert-usage/views/GaugeClusterView
 import { PerformanceMonitorView } from "./plugins/norbert-usage/views/PerformanceMonitorView";
 import { UsageDashboardView } from "./plugins/norbert-usage/views/UsageDashboardView";
 import { CostTicker } from "./plugins/norbert-usage/views/CostTicker";
+import { SessionDashboard, type SessionEvent as DashboardSessionEvent } from "./plugins/norbert-usage/views/SessionDashboard";
+import type { AccumulatedMetric as BackendAccumulatedMetric } from "./plugins/norbert-usage/domain/activeTimeFormatter";
 import { computeDashboardData } from "./plugins/norbert-usage/domain/dashboard";
 import { computeGaugeClusterData } from "./plugins/norbert-usage/domain/gaugeCluster";
 import { computeCostTickerData } from "./plugins/norbert-usage/domain/costTicker";
@@ -82,6 +84,40 @@ const createInitialLayout = (): TwoZoneLayoutState => {
   const withView = assignView(defaultLayout, "main", "session-list", "norbert-session");
   return { ...defaultLayout, ...withView };
 };
+
+/// Fetches session events and metrics via IPC and renders the SessionDashboard.
+///
+/// Extracted as a standalone component so React hooks work correctly
+/// (components inside useMemo read from refs, this component manages its own state).
+function SessionDashboardLoader({ sessionId }: { readonly sessionId: string }) {
+  const [events, setEvents] = useState<DashboardSessionEvent[]>([]);
+  const [metrics, setMetrics] = useState<BackendAccumulatedMetric[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchData = () => {
+      invoke<DashboardSessionEvent[]>("get_session_events", { sessionId })
+        .then((data) => { if (!cancelled) setEvents(data); })
+        .catch(() => {});
+      invoke<BackendAccumulatedMetric[]>("get_metrics_for_session", { sessionId })
+        .then((data) => { if (!cancelled) setMetrics(data); })
+        .catch(() => {});
+    };
+    fetchData();
+    const intervalId = setInterval(fetchData, POLL_INTERVAL_MS);
+    return () => { cancelled = true; clearInterval(intervalId); };
+  }, [sessionId]);
+
+  const totalApiRequests = events.filter((e) => e.event_type === "api_request").length;
+  return (
+    <SessionDashboard
+      sessionId={sessionId}
+      events={events}
+      metrics={metrics}
+      totalApiRequests={totalApiRequests}
+    />
+  );
+}
 
 function App() {
   const [status, setStatus] = useState<AppStatus | null>(null);
@@ -136,7 +172,7 @@ function App() {
       const withSecondary = isSecondaryVisible(currentLayout)
         ? currentLayout
         : toggleSecondaryZone(currentLayout);
-      const assigned = assignView(withSecondary, "secondary", "session-detail", "norbert-session");
+      const assigned = assignView(withSecondary, "secondary", "session-dashboard", "norbert-usage");
       return { ...withSecondary, ...assigned };
     });
   }, []);
@@ -420,6 +456,17 @@ function App() {
     registry.set("usage-dashboard", UsageDashboardWrapper);
     registry.set("cost-ticker", CostTickerWrapper);
     registry.set("performance-monitor", PerformanceMonitorWrapper);
+
+    // Session Dashboard: wraps the SessionDashboard component.
+    // Data fetching is handled by the SessionDashboardLoader component
+    // defined outside the useMemo to allow proper hook usage.
+    const SessionDashboardWrapperInner: FC = () => {
+      const sid = selectedSessionIdRef.current;
+      if (sid === null) return null;
+      return <SessionDashboardLoader sessionId={sid} />;
+    };
+    SessionDashboardWrapperInner.displayName = "SessionDashboardWrapper";
+    registry.set("session-dashboard", SessionDashboardWrapperInner);
 
     // norbert-config views: list view in main zone, detail view in secondary.
     const ConfigViewerWrapper: FC = () => (

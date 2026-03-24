@@ -56,6 +56,7 @@ describe("mapTerminalType", () => {
     expect(mapTerminalType("cursor")).toBe("Cursor");
     expect(mapTerminalType("iTerm.app")).toBe("iTerm");
     expect(mapTerminalType("tmux")).toBe("tmux");
+    expect(mapTerminalType("xterm")).toBe("xterm");
     expect(mapTerminalType("xterm-256color")).toBe("Terminal");
     expect(mapTerminalType("alacritty")).toBe("Alacritty");
     expect(mapTerminalType("WezTerm")).toBe("WezTerm");

@@ -127,7 +127,13 @@ fn parse_data_point(
     let value = data_point
         .get("asDouble")
         .and_then(|v| v.as_f64())
-        .unwrap_or(0.0);
+        .unwrap_or_else(|| {
+            eprintln!(
+                "Warning: metric data point missing asDouble, defaulting to 0.0: {}",
+                metric_name
+            );
+            0.0
+        });
 
     let start_time_nano = data_point
         .get("startTimeUnixNano")

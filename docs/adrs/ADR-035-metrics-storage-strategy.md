@@ -1,7 +1,7 @@
 # ADR-035: Metrics Storage Strategy
 
 ## Status
-Proposed
+Accepted
 
 ## Context
 Claude Code sends `POST /v1/metrics` with `ExportMetricsServiceRequest` containing 8 metric types. All use delta temporality (each data point is an increment, not a total). Data points have compound identity: session_id + metric_name + discriminating attributes (model, type, etc.).

@@ -43,6 +43,10 @@ const USAGE_DASHBOARD_VIEW_ID = "usage-dashboard";
 const USAGE_DASHBOARD_VIEW_LABEL = "Usage Dashboard";
 const USAGE_DASHBOARD_VIEW_ICON = "bar-chart"; // usage dashboard
 
+const SESSION_DASHBOARD_VIEW_ID = "session-dashboard";
+const SESSION_DASHBOARD_VIEW_LABEL = "Session Dashboard";
+const SESSION_DASHBOARD_VIEW_ICON = "layout-dashboard";
+
 const PERFORMANCE_MONITOR_VIEW_ID = "performance-monitor";
 const PERFORMANCE_MONITOR_VIEW_LABEL = "Performance Monitor";
 
@@ -93,6 +97,17 @@ const onLoad = (api: NorbertAPI): void => {
     label: USAGE_DASHBOARD_VIEW_LABEL,
     icon: USAGE_DASHBOARD_VIEW_ICON,
     primaryView: true,
+    minWidth: 400,
+    minHeight: 300,
+    floatMetric: null,
+  });
+
+  // Register Session Dashboard view (per-session OTel metrics detail)
+  api.ui.registerView({
+    id: SESSION_DASHBOARD_VIEW_ID,
+    label: SESSION_DASHBOARD_VIEW_LABEL,
+    icon: SESSION_DASHBOARD_VIEW_ICON,
+    primaryView: false,
     minWidth: 400,
     minHeight: 300,
     floatMetric: null,

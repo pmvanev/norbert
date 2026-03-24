@@ -1,7 +1,7 @@
 # ADR-036: Delta Accumulation Location
 
 ## Status
-Proposed
+Accepted
 
 ## Context
 All 8 Claude Code metrics use delta temporality: each data point represents the change since the last export. To display totals (e.g., total cost, total lines of code), deltas must be accumulated. The accumulation can happen in the backend (on write) or frontend (on read).

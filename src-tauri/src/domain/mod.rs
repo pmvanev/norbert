@@ -240,6 +240,7 @@ pub struct Session {
 /// Represents the running total for a specific metric series identified
 /// by the compound key (session_id, metric_name, attribute_key).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AccumulatedMetric {
     /// Metric name (e.g., "cost.usage", "token.usage").
     pub metric_name: String,
