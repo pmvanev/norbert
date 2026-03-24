@@ -1,3 +1,5 @@
+pub mod metric_store;
+
 /// SQLite adapter implementing the EventStore port.
 ///
 /// Schema SQL and pragma constants are defined here as pure data.

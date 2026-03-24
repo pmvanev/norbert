@@ -4,7 +4,7 @@
 /// Each port is a trait with pure function signatures.
 /// Adapter implementations live in separate modules -- not here.
 
-use crate::domain::{Event, Session};
+use crate::domain::{AccumulatedMetric, Event, Session, SessionMetadata};
 
 /// Storage abstraction for events and sessions.
 ///
@@ -27,6 +27,41 @@ pub trait EventStore {
     ///
     /// Returns an empty Vec when the session does not exist or has no events.
     fn get_events_for_session(&self, session_id: &str) -> Result<Vec<Event>, String>;
+}
+
+/// Storage abstraction for accumulated metric data points and session metadata.
+///
+/// Driven port: the metrics ingestion handler tells the adapter what to store.
+/// Implementations may use SQLite, in-memory storage, or any other backend.
+pub trait MetricStore {
+    /// Accumulate a delta value for a metric series.
+    ///
+    /// The compound key (session_id, metric_name, attribute_key) identifies the series.
+    /// If the series exists, the delta is added atomically to the existing value.
+    /// If not, a new series is created with the delta as the initial value.
+    fn accumulate_delta(
+        &self,
+        session_id: &str,
+        metric_name: &str,
+        attribute_key: &str,
+        delta: f64,
+        timestamp: &str,
+    ) -> Result<(), String>;
+
+    /// Retrieve all accumulated metrics for a given session.
+    ///
+    /// Returns an empty Vec when the session has no metrics.
+    fn get_metrics_for_session(&self, session_id: &str) -> Result<Vec<AccumulatedMetric>, String>;
+
+    /// Write session metadata (INSERT OR IGNORE — first-write wins).
+    ///
+    /// If metadata already exists for this session, the call is a no-op.
+    fn write_session_metadata(&self, metadata: &SessionMetadata) -> Result<(), String>;
+
+    /// Retrieve session metadata for a given session.
+    ///
+    /// Returns None when no metadata has been recorded for this session.
+    fn get_session_metadata(&self, session_id: &str) -> Result<Option<SessionMetadata>, String>;
 }
 
 /// Normalization contract for tool-specific event providers.

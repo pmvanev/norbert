@@ -1,0 +1,174 @@
+{
+  "project_id": "otel-rich-dashboard",
+  "feature_id": "otel-rich-dashboard",
+  "paradigm": "functional",
+  "created_at": "2026-03-24T12:00:00Z",
+  "total_steps": 8,
+  "phases": [
+    {"id": "01", "name": "Backend Infrastructure", "steps": ["01-01"]},
+    {"id": "02", "name": "Ingestion and Enrichment", "steps": ["02-01", "02-02", "02-03"]},
+    {"id": "03", "name": "IPC and Event-Based Cards", "steps": ["03-01", "03-02", "03-03"]},
+    {"id": "04", "name": "Metric-Based Cards", "steps": ["04-01"]}
+  ],
+  "validation": {
+    "step_ratio": 0.44,
+    "step_ratio_limit": 2.5,
+    "status": "approved"
+  },
+  "steps": [
+    {
+      "step_id": "01-01",
+      "title": "MetricStore Port and SQLite Adapter",
+      "description": "Define MetricStore driven port with delta accumulation and session metadata. Implement SQLite adapter with metrics and session_metadata tables.",
+      "story": "US-001",
+      "acceptance_criteria": [
+        "MetricStore trait defines accumulate_delta and get_metrics_for_session",
+        "MetricStore trait defines write_session_metadata and get_session_metadata",
+        "SQLite adapter creates metrics table with compound primary key (session_id, metric_name, attribute_key)",
+        "SQLite adapter creates session_metadata table",
+        "Upsert accumulation adds delta to existing value atomically"
+      ],
+      "files_to_modify": [
+        "src-tauri/src/ports/mod.rs",
+        "src-tauri/src/adapters/db/metric_store.rs"
+      ],
+      "domain_files_reused": ["src-tauri/src/domain/mod.rs"]
+    },
+    {
+      "step_id": "02-01",
+      "title": "OTLP Metrics Parser and Model Normalizer",
+      "description": "Parse ExportMetricsServiceRequest payloads. Extract metric name, data point attributes, session.id, and value. Normalize model names by stripping bracket suffix.",
+      "story": "US-001, US-008",
+      "acceptance_criteria": [
+        "Parser traverses resourceMetrics/scopeMetrics/metrics/dataPoints hierarchy",
+        "session.id extracted from data point attributes",
+        "Model name suffix [...] stripped before output",
+        "Data points without session.id dropped with warning",
+        "Parser is pure (no IO)"
+      ],
+      "files_to_modify": [
+        "src-tauri/src/adapters/otel/metrics_parser.rs"
+      ],
+      "domain_files_reused": ["src-tauri/src/adapters/otel/mod.rs"]
+    },
+    {
+      "step_id": "02-02",
+      "title": "OTLP Metrics HTTP Handler",
+      "description": "Add POST /v1/metrics route to axum router. Parse body, delegate to metrics parser, accumulate via MetricStore. Extract resource attributes for session enrichment.",
+      "story": "US-001, US-005",
+      "acceptance_criteria": [
+        "POST /v1/metrics returns HTTP 200 {} on valid payload",
+        "POST /v1/metrics returns HTTP 400 on malformed JSON",
+        "All 8 metric types parsed and accumulated",
+        "Resource attributes extracted and written to session_metadata",
+        "Existing /v1/logs and /hooks/:type routes unaffected"
+      ],
+      "files_to_modify": [
+        "src-tauri/src/hook_receiver.rs"
+      ],
+      "domain_files_reused": [
+        "src-tauri/src/adapters/otel/metrics_parser.rs",
+        "src-tauri/src/ports/mod.rs"
+      ]
+    },
+    {
+      "step_id": "02-03",
+      "title": "Session Metadata Enrichment from Log Records",
+      "description": "Extract terminal.type standard attribute from OTLP log records and resource attributes. Write session metadata on first log payload per session.",
+      "story": "US-005",
+      "acceptance_criteria": [
+        "terminal.type extracted from log record standard attributes",
+        "Resource attributes (service.version, os.type, host.arch) extracted",
+        "Session metadata written via MetricStore on first payload",
+        "Missing attributes produce null fields, not errors",
+        "Existing OTLP log handler behavior unchanged"
+      ],
+      "files_to_modify": [
+        "src-tauri/src/adapters/otel/mod.rs",
+        "src-tauri/src/hook_receiver.rs"
+      ],
+      "domain_files_reused": ["src-tauri/src/ports/mod.rs"]
+    },
+    {
+      "step_id": "03-01",
+      "title": "IPC Commands for Metrics and Metadata",
+      "description": "Add Tauri IPC commands for get_metrics_for_session, get_session_metadata, and get_all_session_metadata. Wire to MetricStore port.",
+      "story": "US-001, US-005",
+      "acceptance_criteria": [
+        "get_metrics_for_session returns accumulated metrics for a session",
+        "get_session_metadata returns enrichment data for a session",
+        "get_all_session_metadata returns enrichment for all sessions",
+        "Nonexistent session returns empty array / null"
+      ],
+      "files_to_modify": [
+        "src-tauri/src/lib.rs"
+      ],
+      "domain_files_reused": ["src-tauri/src/ports/mod.rs"]
+    },
+    {
+      "step_id": "03-02",
+      "title": "Session List Enrichment",
+      "description": "Enrich session list with IDE badge, Claude Code version, and platform from session metadata.",
+      "story": "US-005",
+      "acceptance_criteria": [
+        "terminal.type mapped to human-readable IDE badge",
+        "service.version displayed as Claude Code {version}",
+        "os.type + host.arch displayed as {OS} {arch}",
+        "Missing metadata produces no badge/text, not error",
+        "Session list load time unaffected (<200ms)"
+      ],
+      "files_to_modify": [
+        "src/domain/sessionPresentation.ts",
+        "src/views/SessionListView.tsx"
+      ],
+      "domain_files_reused": []
+    },
+    {
+      "step_id": "03-03",
+      "title": "Session Dashboard Shell and Event-Based Cards",
+      "description": "Create session dashboard view with layout shell. Build Tool Usage, API Health, Prompt Activity, and Permissions cards. Each card has pure domain aggregator + thin view wrapper.",
+      "story": "US-002, US-003, US-006, US-007",
+      "acceptance_criteria": [
+        "Dashboard shell renders all cards for a selected session",
+        "Tool Usage shows call count, success rate, per-tool breakdown",
+        "API Health shows error rate, error groups by status code",
+        "Prompt Activity shows count, rate, avg length",
+        "Permissions shows auto/user/rejected breakdown",
+        "Zero events for a type shows informational empty state"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/domain/toolUsageAggregator.ts",
+        "src/plugins/norbert-usage/domain/apiHealthAggregator.ts",
+        "src/plugins/norbert-usage/domain/promptActivityAggregator.ts",
+        "src/plugins/norbert-usage/domain/permissionsAggregator.ts",
+        "src/plugins/norbert-usage/views/SessionDashboard.tsx",
+        "src/plugins/norbert-usage/views/ToolUsageCard.tsx",
+        "src/plugins/norbert-usage/views/ApiHealthCard.tsx",
+        "src/plugins/norbert-usage/views/PromptActivityCard.tsx",
+        "src/plugins/norbert-usage/views/PermissionsCard.tsx"
+      ],
+      "domain_files_reused": []
+    },
+    {
+      "step_id": "04-01",
+      "title": "Active Time and Productivity Cards",
+      "description": "Build Active Time card (user/CLI split) and Productivity card (LOC, commits, PRs) from accumulated metric data.",
+      "story": "US-004",
+      "acceptance_criteria": [
+        "Active Time displays user and CLI time in human-readable format",
+        "Active Time shows percentage split",
+        "Productivity shows lines added, removed, net change",
+        "Git Activity shows commit count and PR count",
+        "Empty state with guidance when no metric data available",
+        "All values from pre-accumulated backend data"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/domain/activeTimeFormatter.ts",
+        "src/plugins/norbert-usage/domain/productivityFormatter.ts",
+        "src/plugins/norbert-usage/views/ActiveTimeCard.tsx",
+        "src/plugins/norbert-usage/views/ProductivityCard.tsx"
+      ],
+      "domain_files_reused": []
+    }
+  ]
+}

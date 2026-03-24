@@ -235,6 +235,38 @@ pub struct Session {
     pub last_event_at: Option<String>,
 }
 
+/// An accumulated metric data point stored in the metrics table.
+///
+/// Represents the running total for a specific metric series identified
+/// by the compound key (session_id, metric_name, attribute_key).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AccumulatedMetric {
+    /// Metric name (e.g., "cost.usage", "token.usage").
+    pub metric_name: String,
+    /// Compound key from sorted non-session attributes (e.g., "model=claude-opus-4-6,type=input").
+    pub attribute_key: String,
+    /// Accumulated total value.
+    pub value: f64,
+}
+
+/// Session metadata extracted from OTLP resource and standard attributes.
+///
+/// Populated on first OTLP payload per session. All fields except session_id
+/// are optional for graceful degradation when attributes are missing.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SessionMetadata {
+    /// Unique session identifier.
+    pub session_id: String,
+    /// Terminal type (e.g., "vscode", "cursor", "iTerm.app").
+    pub terminal_type: Option<String>,
+    /// Claude Code version (from resource attribute service.version).
+    pub service_version: Option<String>,
+    /// Operating system type (from resource attribute os.type).
+    pub os_type: Option<String>,
+    /// Host architecture (from resource attribute host.arch).
+    pub host_arch: Option<String>,
+}
+
 /// Calculate the duration in seconds between two ISO 8601 timestamps.
 ///
 /// Pure function: returns None if either timestamp cannot be parsed.
