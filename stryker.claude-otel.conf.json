@@ -1,0 +1,14 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stryker-mutator/stryker/master/packages/core/schema/stryker-schema.json",
+  "mutate": [
+    "src/plugins/norbert-usage/domain/metricsAggregator.ts",
+    "src/domain/otelDetection.ts"
+  ],
+  "testRunner": "vitest",
+  "reporters": ["clear-text", "json"],
+  "jsonReporter": { "fileName": "docs/feature/claude-otel-integration/deliver/mutation/stryker-report.json" },
+  "vitest": {
+    "configFile": "vitest.config.ts"
+  },
+  "tempDirName": ".stryker-tmp"
+}

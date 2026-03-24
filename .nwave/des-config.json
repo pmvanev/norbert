@@ -1,6 +1,6 @@
 {
   "update_check": {
-    "last_checked": "2026-03-17T14:16:44.725800+00:00",
+    "last_checked": "2026-03-23T14:15:23.550204+00:00",
     "skipped_versions": [],
     "frequency": "daily"
   },
@@ -18,6 +18,6 @@
       "COMMIT"
     ],
     "refactor_pass": true,
-    "mutation_enabled": false
+    "mutation_enabled": true
   }
 }
