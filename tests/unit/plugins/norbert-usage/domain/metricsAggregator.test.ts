@@ -96,6 +96,10 @@ describe("createInitialMetrics", () => {
         expect(metrics.activeAgentCount).toBe(0);
         expect(metrics.hookEventCount).toBe(0);
         expect(metrics.burnRate).toBe(0);
+        expect(metrics.sessionLabel).toBe("");
+        expect(metrics.contextWindowModel).toBe("");
+        expect(metrics.sessionStartedAt).toBe("");
+        expect(metrics.lastEventAt).toBe("");
       }),
     );
   });
@@ -412,6 +416,177 @@ describe("OTel identity event types increment hookEventCount only", () => {
       expect(updated.lastEventAt).toBe("2025-06-15T10:03:00Z");
     },
   );
+});
+
+// ---------------------------------------------------------------------------
+// Immutability: aggregator never mutates previous metrics
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// extractCostUsd guard clauses: malformed payloads (Category 1 + 2 mutants)
+// ---------------------------------------------------------------------------
+
+describe("api_request with malformed payload falls back gracefully", () => {
+  it("non-object payload (string) produces no cost or token change", () => {
+    const initial = createInitialMetrics("malformed-test");
+    const event = {
+      eventType: "api_request" as const,
+      payload: "not-an-object",
+      receivedAt: "2025-06-15T10:00:00Z",
+    };
+    const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE);
+
+    // Token extractor also sees no tokens, so metrics unchanged except bookkeeping
+    expect(updated.sessionCost).toBe(0);
+    expect(updated.totalTokens).toBe(0);
+    expect(updated.hookEventCount).toBe(1);
+  });
+
+  it("array payload produces no cost or token change", () => {
+    const initial = createInitialMetrics("malformed-test");
+    const event = {
+      eventType: "api_request" as const,
+      payload: [1, 2, 3],
+      receivedAt: "2025-06-15T10:00:00Z",
+    };
+    const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE);
+
+    expect(updated.sessionCost).toBe(0);
+    expect(updated.totalTokens).toBe(0);
+  });
+
+  it("null payload produces no cost or token change", () => {
+    const initial = createInitialMetrics("malformed-test");
+    const event = {
+      eventType: "api_request" as const,
+      payload: null,
+      receivedAt: "2025-06-15T10:00:00Z",
+    };
+    const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE);
+
+    expect(updated.sessionCost).toBe(0);
+    expect(updated.totalTokens).toBe(0);
+  });
+
+  it("usage field as array falls back to pricing model", () => {
+    const initial = createInitialMetrics("malformed-test");
+    const event = {
+      eventType: "api_request" as const,
+      payload: {
+        usage: [1, 2, 3],
+      },
+      receivedAt: "2025-06-15T10:00:00Z",
+    };
+    const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE);
+
+    // Token extractor sees no valid usage, so no token/cost change
+    expect(updated.sessionCost).toBe(0);
+    expect(updated.totalTokens).toBe(0);
+  });
+
+  it("usage field as null falls back to pricing model", () => {
+    const initial = createInitialMetrics("malformed-test");
+    const event = {
+      eventType: "api_request" as const,
+      payload: {
+        usage: null,
+      },
+      receivedAt: "2025-06-15T10:00:00Z",
+    };
+    const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE);
+
+    expect(updated.sessionCost).toBe(0);
+    expect(updated.totalTokens).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// extractCostUsd type check: non-number cost_usd (Category 2 mutant)
+// ---------------------------------------------------------------------------
+
+describe("api_request with non-number cost_usd falls back to pricing model", () => {
+  it("cost_usd as string falls back to pricing model calculation", () => {
+    const initial = createInitialMetrics("string-cost-test");
+    const event = {
+      eventType: "api_request" as const,
+      payload: {
+        usage: {
+          input_tokens: 1000,
+          output_tokens: 500,
+          cache_read_input_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cost_usd: "not-a-number",
+          model: "claude-sonnet-4-20250514",
+          duration_ms: 1200,
+          speed: "normal",
+        },
+        prompt_id: "string-cost-test",
+        event_sequence: 1,
+      },
+      receivedAt: "2025-06-15T10:04:00Z",
+    };
+    const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE);
+
+    // Should fall back to pricing model: Sonnet input=0.003/1k, output=0.015/1k
+    // (1000/1000)*0.003 + (500/1000)*0.015 = 0.0105
+    expect(updated.sessionCost).toBeCloseTo(0.0105, 6);
+    expect(updated.totalTokens).toBe(1500);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// applyApiRequestTokenUsage absent-tag check (Category 3 mutants)
+// ---------------------------------------------------------------------------
+
+describe("api_request with empty payload returns unchanged metrics", () => {
+  it("empty object payload produces no token or cost change", () => {
+    const initial: SessionMetrics = {
+      ...createInitialMetrics("absent-tag-test"),
+      sessionCost: 1.5,
+      totalTokens: 5000,
+    };
+    const event = {
+      eventType: "api_request" as const,
+      payload: {},
+      receivedAt: "2025-06-15T10:05:00Z",
+    };
+    const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE);
+
+    // Tokens and cost unchanged (extraction.tag === "absent")
+    expect(updated.sessionCost).toBe(1.5);
+    expect(updated.totalTokens).toBe(5000);
+    // Bookkeeping still applied
+    expect(updated.hookEventCount).toBe(initial.hookEventCount + 1);
+    expect(updated.lastEventAt).toBe("2025-06-15T10:05:00Z");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// sessionStartedAt preservation on second session_start (Category 4 mutant)
+// ---------------------------------------------------------------------------
+
+describe("sessionStartedAt is preserved after first session_start", () => {
+  it("second session_start does not overwrite sessionStartedAt", () => {
+    const initial = createInitialMetrics("preserve-test");
+    const firstEvent = {
+      eventType: "session_start" as const,
+      payload: {},
+      receivedAt: "2025-06-15T10:00:00Z",
+    };
+    const afterFirst = aggregateEvent(initial, firstEvent, DEFAULT_PRICING_TABLE);
+    expect(afterFirst.sessionStartedAt).toBe("2025-06-15T10:00:00Z");
+
+    const secondEvent = {
+      eventType: "session_start" as const,
+      payload: {},
+      receivedAt: "2025-06-15T11:00:00Z",
+    };
+    const afterSecond = aggregateEvent(afterFirst, secondEvent, DEFAULT_PRICING_TABLE);
+
+    // sessionStartedAt must remain the first event's timestamp
+    expect(afterSecond.sessionStartedAt).toBe("2025-06-15T10:00:00Z");
+    expect(afterSecond.activeAgentCount).toBe(2);
+  });
 });
 
 // ---------------------------------------------------------------------------
