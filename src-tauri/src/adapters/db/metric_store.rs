@@ -215,7 +215,60 @@ mod tests {
         SqliteMetricStore::new(conn).expect("Failed to initialize schema")
     }
 
-    // --- Acceptance test: accumulate delta, read back, verify ---
+    // --- Acceptance tests ---
+
+    /// Acceptance test for step 03-01: IPC queries for metrics and session metadata.
+    ///
+    /// Exercises the three query paths that back the IPC commands:
+    /// - get_metrics_for_session returns accumulated metrics
+    /// - get_session_metadata returns enrichment data for a session
+    /// - get_all_session_metadata returns enrichment for all sessions
+    /// - Nonexistent session returns empty vec / None
+    #[test]
+    fn ipc_query_paths_return_correct_data_for_populated_and_empty_sessions() {
+        let store = create_test_store();
+
+        // Populate two sessions with metrics and metadata
+        store.accumulate_delta("sess-A", "cost.usage", "model=claude-opus-4-6", 0.10, "2026-03-24T10:00:00Z").unwrap();
+        store.accumulate_delta("sess-A", "token.usage", "model=claude-opus-4-6,type=input", 500.0, "2026-03-24T10:00:01Z").unwrap();
+        store.accumulate_delta("sess-B", "cost.usage", "model=claude-sonnet-4", 0.03, "2026-03-24T10:01:00Z").unwrap();
+
+        store.write_session_metadata(&SessionMetadata {
+            session_id: "sess-A".to_string(),
+            terminal_type: Some("vscode".to_string()),
+            service_version: Some("1.0.0".to_string()),
+            os_type: Some("linux".to_string()),
+            host_arch: Some("x86_64".to_string()),
+        }).unwrap();
+        store.write_session_metadata(&SessionMetadata {
+            session_id: "sess-B".to_string(),
+            terminal_type: Some("cursor".to_string()),
+            service_version: Some("2.0.0".to_string()),
+            os_type: None,
+            host_arch: None,
+        }).unwrap();
+
+        // AC: get_metrics_for_session returns accumulated metrics for a session
+        let metrics_a = store.get_metrics_for_session("sess-A").unwrap();
+        assert_eq!(metrics_a.len(), 2, "sess-A should have 2 metric series");
+        let metrics_b = store.get_metrics_for_session("sess-B").unwrap();
+        assert_eq!(metrics_b.len(), 1, "sess-B should have 1 metric series");
+
+        // AC: get_session_metadata returns enrichment data for a session
+        let meta_a = store.get_session_metadata("sess-A").unwrap();
+        assert!(meta_a.is_some(), "sess-A should have metadata");
+        assert_eq!(meta_a.unwrap().terminal_type, Some("vscode".to_string()));
+
+        // AC: get_all_session_metadata returns enrichment for all sessions
+        let all_meta = store.get_all_session_metadata().unwrap();
+        assert_eq!(all_meta.len(), 2, "Should have metadata for both sessions");
+
+        // AC: Nonexistent session returns empty array / null
+        let metrics_missing = store.get_metrics_for_session("nonexistent").unwrap();
+        assert!(metrics_missing.is_empty(), "Nonexistent session metrics should be empty");
+        let meta_missing = store.get_session_metadata("nonexistent").unwrap();
+        assert!(meta_missing.is_none(), "Nonexistent session metadata should be None");
+    }
 
     #[test]
     fn accumulate_delta_and_read_back_returns_correct_value() {
