@@ -18,7 +18,10 @@ use axum::{
 use norbert_lib::adapters::db::metric_store::SqliteMetricStore;
 use norbert_lib::adapters::db::SqliteEventStore;
 use norbert_lib::adapters::otel::metrics_parser::parse_export_metrics_request;
-use norbert_lib::adapters::otel::{get_string_attribute, parse_export_logs_request};
+use norbert_lib::adapters::otel::{
+    extract_log_resource_attributes, extract_terminal_type_from_logs_request,
+    get_string_attribute, parse_export_logs_request,
+};
 use norbert_lib::adapters::providers::claude_code::ClaudeCodeProvider;
 use norbert_lib::domain::{SessionMetadata, HOOK_PORT};
 use norbert_lib::ports::{EventProvider, EventStore, MetricStore};
@@ -113,6 +116,31 @@ async fn handle_otlp_logs(
     for event in &events {
         if let Err(e) = store.write_event(event) {
             eprintln!("Failed to persist OTLP event: {}", e);
+        }
+    }
+
+    // Extract enrichment data and write session metadata on first log payload
+    if !events.is_empty() {
+        let terminal_type = extract_terminal_type_from_logs_request(&json_body);
+        let (service_version, os_type, host_arch) = extract_log_resource_attributes(&json_body);
+
+        let mut enriched_sessions: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let metric_store = state.metric_store.lock().unwrap();
+
+        for event in &events {
+            if !enriched_sessions.contains(&event.session_id) {
+                enriched_sessions.insert(event.session_id.clone());
+                let metadata = SessionMetadata {
+                    session_id: event.session_id.clone(),
+                    terminal_type: terminal_type.clone(),
+                    service_version: service_version.clone(),
+                    os_type: os_type.clone(),
+                    host_arch: host_arch.clone(),
+                };
+                if let Err(e) = metric_store.write_session_metadata(&metadata) {
+                    eprintln!("Failed to write session metadata from logs: {}", e);
+                }
+            }
         }
     }
 
@@ -936,5 +964,136 @@ mod tests {
             StatusCode::OK,
             "/v1/logs must still work after adding /v1/metrics"
         );
+    }
+
+    // --- Session metadata enrichment from /v1/logs ---
+
+    /// Build an OTLP logs request with terminal.type on log record and resource attributes.
+    fn otlp_logs_with_terminal_type(session_id: &str) -> serde_json::Value {
+        serde_json::json!({
+            "resourceLogs": [{
+                "resource": {
+                    "attributes": [
+                        {"key": "service.name", "value": {"stringValue": "claude-code"}},
+                        {"key": "service.version", "value": {"stringValue": "2.1.81"}},
+                        {"key": "os.type", "value": {"stringValue": "linux"}},
+                        {"key": "host.arch", "value": {"stringValue": "x86_64"}}
+                    ]
+                },
+                "scopeLogs": [{
+                    "scope": {"name": "com.anthropic.claude_code.events"},
+                    "logRecords": [{
+                        "timeUnixNano": "1774290633104000000",
+                        "observedTimeUnixNano": "1774290633104000000",
+                        "body": {"stringValue": "claude_code.api_request"},
+                        "attributes": [
+                            {"key": "session.id", "value": {"stringValue": session_id}},
+                            {"key": "event.name", "value": {"stringValue": "api_request"}},
+                            {"key": "event.timestamp", "value": {"stringValue": "2026-03-23T18:30:33Z"}},
+                            {"key": "event.sequence", "value": {"intValue": "1"}},
+                            {"key": "prompt.id", "value": {"stringValue": "prompt-1"}},
+                            {"key": "model", "value": {"stringValue": "claude-opus-4-6"}},
+                            {"key": "input_tokens", "value": {"stringValue": "337"}},
+                            {"key": "output_tokens", "value": {"stringValue": "12"}},
+                            {"key": "terminal.type", "value": {"stringValue": "vscode"}}
+                        ],
+                        "droppedAttributesCount": 0
+                    }]
+                }]
+            }]
+        })
+    }
+
+    #[tokio::test]
+    async fn logs_with_terminal_type_writes_session_metadata() {
+        let state = test_state();
+        let app = build_router(state.clone());
+
+        let body = otlp_logs_with_terminal_type("sess-enrich-1");
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/v1/logs")
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::to_string(&body).unwrap()))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Verify session metadata was written with terminal_type and resource attributes
+        let metadata = state
+            .metric_store
+            .lock()
+            .unwrap()
+            .get_session_metadata("sess-enrich-1")
+            .unwrap()
+            .expect("Session metadata should be written from /v1/logs");
+
+        assert_eq!(metadata.session_id, "sess-enrich-1");
+        assert_eq!(metadata.terminal_type, Some("vscode".to_string()));
+        assert_eq!(metadata.service_version, Some("2.1.81".to_string()));
+        assert_eq!(metadata.os_type, Some("linux".to_string()));
+        assert_eq!(metadata.host_arch, Some("x86_64".to_string()));
+    }
+
+    #[tokio::test]
+    async fn logs_missing_terminal_type_writes_metadata_with_null_terminal() {
+        let state = test_state();
+        let app = build_router(state.clone());
+
+        // Use the existing helper which has no terminal.type attribute
+        let body = otlp_api_request_body("sess-enrich-no-term");
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/v1/logs")
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::to_string(&body).unwrap()))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Metadata should be written but with terminal_type = None
+        let metadata = state
+            .metric_store
+            .lock()
+            .unwrap()
+            .get_session_metadata("sess-enrich-no-term")
+            .unwrap()
+            .expect("Session metadata should be written even without terminal.type");
+
+        assert_eq!(metadata.session_id, "sess-enrich-no-term");
+        assert!(metadata.terminal_type.is_none(), "Missing terminal.type should produce None, not error");
+    }
+
+    #[tokio::test]
+    async fn logs_enrichment_does_not_break_existing_event_persistence() {
+        let state = test_state();
+        let app = build_router(state.clone());
+
+        let body = otlp_logs_with_terminal_type("sess-enrich-events");
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/v1/logs")
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::to_string(&body).unwrap()))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Existing behavior: events still persisted
+        let count = state.event_store.lock().unwrap().get_event_count().unwrap();
+        assert_eq!(count, 1, "Event persistence must not be broken by enrichment");
+
+        let stored_type: String = {
+            let store = state.event_store.lock().unwrap();
+            store.get_stored_event_type("sess-enrich-events")
+                .expect("should find stored event")
+        };
+        assert_eq!(stored_type, "api_request");
     }
 }

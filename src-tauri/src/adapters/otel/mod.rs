@@ -314,6 +314,74 @@ fn route_event_name(event_name: &str, attributes: &[Value]) -> Option<(EventType
 }
 
 // ---------------------------------------------------------------
+// Session enrichment extractors: pure functions
+// ---------------------------------------------------------------
+
+/// Extract terminal.type from the first log record that has it.
+///
+/// Pure function: traverses all log records in the request looking for
+/// a `terminal.type` attribute. Returns the first value found, or None.
+pub fn extract_terminal_type_from_logs_request(request: &Value) -> Option<String> {
+    let empty_array = Vec::new();
+    let resource_logs = request
+        .get("resourceLogs")
+        .and_then(|v| v.as_array())
+        .unwrap_or(&empty_array);
+
+    for resource_log in resource_logs {
+        let scope_logs = resource_log
+            .get("scopeLogs")
+            .and_then(|v| v.as_array())
+            .unwrap_or(&empty_array);
+
+        for scope_log in scope_logs {
+            let log_records = scope_log
+                .get("logRecords")
+                .and_then(|v| v.as_array())
+                .unwrap_or(&empty_array);
+
+            for log_record in log_records {
+                let attributes = log_record
+                    .get("attributes")
+                    .and_then(|v| v.as_array())
+                    .cloned()
+                    .unwrap_or_default();
+
+                if let Some(terminal_type) = get_string_attribute(&attributes, "terminal.type") {
+                    return Some(terminal_type);
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// Extract resource attributes from an OTLP logs request.
+///
+/// Pure function: traverses resourceLogs[0].resource.attributes[]
+/// and extracts service.version, os.type, host.arch.
+pub fn extract_log_resource_attributes(request: &Value) -> (Option<String>, Option<String>, Option<String>) {
+    let resource_attrs = request
+        .get("resourceLogs")
+        .and_then(|v| v.as_array())
+        .and_then(|arr| arr.first())
+        .and_then(|rl| rl.get("resource"))
+        .and_then(|r| r.get("attributes"))
+        .and_then(|v| v.as_array());
+
+    match resource_attrs {
+        Some(attrs) => {
+            let service_version = get_string_attribute(attrs, "service.version");
+            let os_type = get_string_attribute(attrs, "os.type");
+            let host_arch = get_string_attribute(attrs, "host.arch");
+            (service_version, os_type, host_arch)
+        }
+        None => (None, None, None),
+    }
+}
+
+// ---------------------------------------------------------------
 // Envelope parser: top-level public function
 // ---------------------------------------------------------------
 
@@ -933,6 +1001,78 @@ mod tests {
     // ---------------------------------------------------------------
     // UNIT: bool parsing from stringValue
     // ---------------------------------------------------------------
+
+    // ---------------------------------------------------------------
+    // UNIT: terminal.type extraction from log records
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn extracts_terminal_type_from_log_record_attributes() {
+        let log_record = make_log_record("claude_code.api_request", vec![
+            serde_json::json!({"key": "model", "value": {"stringValue": "claude-opus-4-6"}}),
+            serde_json::json!({"key": "input_tokens", "value": {"stringValue": "3"}}),
+            serde_json::json!({"key": "output_tokens", "value": {"stringValue": "13"}}),
+            serde_json::json!({"key": "terminal.type", "value": {"stringValue": "vscode"}}),
+        ]);
+        let request = wrap_in_export_request(vec![log_record]);
+
+        let terminal_type = super::extract_terminal_type_from_logs_request(&request);
+        assert_eq!(terminal_type, Some("vscode".to_string()));
+    }
+
+    #[test]
+    fn terminal_type_none_when_missing_from_all_log_records() {
+        let log_record = make_log_record("claude_code.api_request", vec![
+            serde_json::json!({"key": "model", "value": {"stringValue": "claude-opus-4-6"}}),
+            serde_json::json!({"key": "input_tokens", "value": {"stringValue": "3"}}),
+            serde_json::json!({"key": "output_tokens", "value": {"stringValue": "13"}}),
+        ]);
+        let request = wrap_in_export_request(vec![log_record]);
+
+        let terminal_type = super::extract_terminal_type_from_logs_request(&request);
+        assert_eq!(terminal_type, None);
+    }
+
+    #[test]
+    fn terminal_type_extracted_from_empty_resource_logs() {
+        let request = serde_json::json!({"resourceLogs": []});
+        let terminal_type = super::extract_terminal_type_from_logs_request(&request);
+        assert_eq!(terminal_type, None);
+    }
+
+    // ---------------------------------------------------------------
+    // UNIT: resource attribute extraction from log requests
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn extracts_resource_attributes_from_logs_request() {
+        let request = serde_json::json!({
+            "resourceLogs": [{
+                "resource": {
+                    "attributes": [
+                        {"key": "service.version", "value": {"stringValue": "2.1.81"}},
+                        {"key": "os.type", "value": {"stringValue": "linux"}},
+                        {"key": "host.arch", "value": {"stringValue": "x86_64"}}
+                    ]
+                },
+                "scopeLogs": []
+            }]
+        });
+
+        let (sv, os, arch) = super::extract_log_resource_attributes(&request);
+        assert_eq!(sv, Some("2.1.81".to_string()));
+        assert_eq!(os, Some("linux".to_string()));
+        assert_eq!(arch, Some("x86_64".to_string()));
+    }
+
+    #[test]
+    fn missing_resource_attributes_returns_none_tuple() {
+        let request = serde_json::json!({"resourceLogs": []});
+        let (sv, os, arch) = super::extract_log_resource_attributes(&request);
+        assert_eq!(sv, None);
+        assert_eq!(os, None);
+        assert_eq!(arch, None);
+    }
 
     #[test]
     fn tool_result_parses_success_from_string_value() {
