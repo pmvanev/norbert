@@ -119,4 +119,19 @@ describe("aggregatePermissions", () => {
       ),
     );
   });
+
+  it("autoRate is exactly 0 (not NaN) when all decisions are user-approved", () => {
+    const events: ToolDecisionEvent[] = [
+      buildToolDecisionEvent({ decision: "user" }),
+      buildToolDecisionEvent({ decision: "user" }),
+    ];
+    const result = aggregatePermissions(events);
+    expect(result.autoRate).toBe(0);
+    expect(Number.isNaN(result.autoRate)).toBe(false);
+  });
+
+  it("empty array returns reference-equal EMPTY_PERMISSIONS_SUMMARY sentinel", () => {
+    const result = aggregatePermissions([]);
+    expect(result).toBe(EMPTY_PERMISSIONS_SUMMARY);
+  });
 });

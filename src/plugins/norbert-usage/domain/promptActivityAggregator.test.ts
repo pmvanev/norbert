@@ -120,4 +120,27 @@ describe("aggregatePromptActivity", () => {
       }),
     );
   });
+
+  it("computes non-zero promptsPerMinute for exactly 2 events with distinct timestamps", () => {
+    const events: UserPromptEvent[] = [
+      buildUserPromptEvent({ prompt_length: 100 }, "2026-03-24T10:00:00Z"),
+      buildUserPromptEvent({ prompt_length: 200 }, "2026-03-24T10:02:00Z"),
+    ];
+    const result = aggregatePromptActivity(events);
+    expect(result.totalPrompts).toBe(2);
+    expect(result.promptsPerMinute).toBeCloseTo(1.0, 5);
+  });
+
+  it("time span is 0 for a single event so promptsPerMinute is 0 (< 2 guard)", () => {
+    const events: UserPromptEvent[] = [
+      buildUserPromptEvent({ prompt_length: 500 }, "2026-03-24T10:00:00Z"),
+    ];
+    const result = aggregatePromptActivity(events);
+    expect(result.promptsPerMinute).toBe(0);
+  });
+
+  it("empty array returns reference-equal EMPTY_PROMPT_ACTIVITY_SUMMARY sentinel", () => {
+    const result = aggregatePromptActivity([]);
+    expect(result).toBe(EMPTY_PROMPT_ACTIVITY_SUMMARY);
+  });
 });

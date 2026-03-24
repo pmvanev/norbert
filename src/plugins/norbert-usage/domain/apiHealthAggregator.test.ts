@@ -133,4 +133,17 @@ describe("aggregateApiHealth", () => {
       }),
     );
   });
+
+  it("returns computed result (not empty sentinel) when events=0 but totalApiRequests>0", () => {
+    const result = aggregateApiHealth([], 50);
+    expect(result.totalApiRequests).toBe(50);
+    expect(result.totalErrors).toBe(0);
+    expect(result.errorRate).toBe(0);
+    expect(result).not.toBe(EMPTY_API_HEALTH_SUMMARY);
+  });
+
+  it("empty events with 0 requests returns reference-equal EMPTY_API_HEALTH_SUMMARY", () => {
+    const result = aggregateApiHealth([], 0);
+    expect(result).toBe(EMPTY_API_HEALTH_SUMMARY);
+  });
 });

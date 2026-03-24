@@ -144,4 +144,44 @@ describe("formatProductivity", () => {
       }),
     );
   });
+
+  it("detects productivity metrics when mixed with non-productivity metrics", () => {
+    const metrics = [
+      buildMetric("active_time.total", "type=user", 3600),
+      buildMetric("commit.count", "", 3),
+    ];
+    const result = formatProductivity(metrics);
+    expect(result.commits).toBe(3);
+  });
+
+  it("returns empty when ALL metrics are non-productivity (not just some)", () => {
+    const metrics = [
+      buildMetric("active_time.total", "type=user", 3600),
+      buildMetric("active_time.total", "type=cli", 1800),
+    ];
+    const result = formatProductivity(metrics);
+    expect(result).toEqual(EMPTY_PRODUCTIVITY);
+  });
+
+  it("distinguishes linesAdded from linesRemoved by attributeKey", () => {
+    const metrics = buildProductivityMetrics({ linesAdded: 500, linesRemoved: 200 });
+    const result = formatProductivity(metrics);
+    expect(result.linesAdded).toBe(500);
+    expect(result.linesRemoved).toBe(200);
+  });
+
+  it("recognises pull_request.count as a productivity metric and extracts it", () => {
+    const metrics = buildProductivityMetrics({ pullRequests: 4 });
+    const result = formatProductivity(metrics);
+    expect(result.pullRequests).toBe(4);
+    expect(result).not.toEqual(EMPTY_PRODUCTIVITY);
+  });
+
+  it("pull_request.count alone yields non-empty result with correct PR count", () => {
+    const metrics = [buildMetric("pull_request.count", "", 2)];
+    const result = formatProductivity(metrics);
+    expect(result.pullRequests).toBe(2);
+    expect(result.linesAdded).toBe(0);
+    expect(result.commits).toBe(0);
+  });
 });

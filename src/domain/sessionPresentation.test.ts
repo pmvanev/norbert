@@ -110,4 +110,22 @@ describe("formatPlatform", () => {
   it("returns null when both OS and arch are null", () => {
     expect(formatPlatform(null, null)).toBeNull();
   });
+
+  it("returns arch-only string when osType is null and arch is non-null", () => {
+    expect(formatPlatform(null, "arm64")).toBe("arm64");
+  });
+
+  it("returns OS-only string when arch is null (not null from arch guard)", () => {
+    expect(formatPlatform("linux", null)).toBe("Linux");
+  });
+});
+
+describe("mapTerminalType (null-guard coverage)", () => {
+  it("returns null for null input without error", () => {
+    expect(mapTerminalType(null)).toBeNull();
+  });
+
+  it("returns null for unknown terminal types after null check", () => {
+    expect(mapTerminalType("completely-unknown")).toBeNull();
+  });
 });

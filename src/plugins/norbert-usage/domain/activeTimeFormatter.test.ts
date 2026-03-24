@@ -3,6 +3,7 @@ import fc from "fast-check";
 import {
   formatActiveTime,
   formatDuration,
+  findMetricValue,
   EMPTY_ACTIVE_TIME,
   type AccumulatedMetric,
 } from "./activeTimeFormatter";
@@ -147,6 +148,26 @@ describe("formatActiveTime", () => {
       }),
     );
   });
+
+  it("returns zero-value summary (not empty sentinel) when active_time metrics are present but both zero", () => {
+    const metrics = buildActiveTimeMetrics(0, 0);
+    const result = formatActiveTime(metrics);
+    expect(result.userSeconds).toBe(0);
+    expect(result.cliSeconds).toBe(0);
+    expect(result.totalSeconds).toBe(0);
+    expect(result.userPercent).toBe(0);
+    expect(result.cliPercent).toBe(0);
+    expect(result.userFormatted).toBe("0s");
+    expect(result.cliFormatted).toBe("0s");
+  });
+
+  it("distinguishes user and cli seconds by attributeKey filter", () => {
+    const metrics = buildActiveTimeMetrics(600, 200);
+    const result = formatActiveTime(metrics);
+    expect(result.userSeconds).toBe(600);
+    expect(result.cliSeconds).toBe(200);
+    expect(result.totalSeconds).toBe(800);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -194,5 +215,61 @@ describe("formatDuration", () => {
         expect(result.length).toBeGreaterThan(0);
       }),
     );
+  });
+
+  it("returns '0s' for exactly 0 seconds (boundary: <= 0 not < 0)", () => {
+    expect(formatDuration(0)).toBe("0s");
+  });
+
+  it("returns '0s' for negative seconds (treated as non-positive)", () => {
+    expect(formatDuration(-1)).toBe("0s");
+    expect(formatDuration(-100)).toBe("0s");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// findMetricValue (pure helper)
+// ---------------------------------------------------------------------------
+
+describe("findMetricValue", () => {
+  const buildMetric = (
+    metricName: string,
+    attributeKey: string,
+    value: number,
+  ): AccumulatedMetric => ({ metricName, attributeKey, value });
+
+  it("returns value when metricName matches and no attributeKey filter", () => {
+    const metrics = [buildMetric("commit.count", "", 7)];
+    expect(findMetricValue(metrics, "commit.count")).toBe(7);
+  });
+
+  it("returns value when metricName and attributeKey both match", () => {
+    const metrics = [
+      buildMetric("active_time.total", "type=user", 300),
+      buildMetric("active_time.total", "type=cli", 100),
+    ];
+    expect(findMetricValue(metrics, "active_time.total", "type=user")).toBe(300);
+    expect(findMetricValue(metrics, "active_time.total", "type=cli")).toBe(100);
+  });
+
+  it("returns 0 when metricName is not found", () => {
+    const metrics = [buildMetric("other.metric", "", 99)];
+    expect(findMetricValue(metrics, "active_time.total")).toBe(0);
+  });
+
+  it("returns 0 when attributeKey filter does not match", () => {
+    const metrics = [buildMetric("active_time.total", "type=cli", 500)];
+    expect(findMetricValue(metrics, "active_time.total", "type=user")).toBe(0);
+  });
+
+  it("does not conflate user and cli when filtering by attributeKey", () => {
+    const metrics = [
+      buildMetric("active_time.total", "type=user", 1000),
+      buildMetric("active_time.total", "type=cli", 2000),
+    ];
+    const userVal = findMetricValue(metrics, "active_time.total", "type=user");
+    const cliVal = findMetricValue(metrics, "active_time.total", "type=cli");
+    expect(userVal).toBe(1000);
+    expect(cliVal).toBe(2000);
   });
 });

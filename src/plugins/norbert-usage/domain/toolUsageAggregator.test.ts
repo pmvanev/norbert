@@ -170,4 +170,38 @@ describe("aggregateToolUsage", () => {
       ),
     );
   });
+
+  it("per-tool successRate is exactly 0 (not NaN) when tool has only failures", () => {
+    const events: ToolResultEvent[] = [
+      buildToolResultEvent({ tool_name: "Bash", success: false, duration_ms: 0 }),
+    ];
+    const result = aggregateToolUsage(events);
+    const stats = result.perToolBreakdown.get("Bash")!;
+    expect(stats.successRate).toBe(0);
+    expect(Number.isNaN(stats.successRate)).toBe(false);
+  });
+
+  it("per-tool avgDurationMs is exactly 0 (not NaN) when duration is 0", () => {
+    const events: ToolResultEvent[] = [
+      buildToolResultEvent({ tool_name: "Read", success: true, duration_ms: 0 }),
+    ];
+    const result = aggregateToolUsage(events);
+    const stats = result.perToolBreakdown.get("Read")!;
+    expect(stats.avgDurationMs).toBe(0);
+    expect(Number.isNaN(stats.avgDurationMs)).toBe(false);
+  });
+
+  it("overall successRate is exactly 0 (not NaN) for an all-failure run", () => {
+    const events: ToolResultEvent[] = [
+      buildToolResultEvent({ success: false }),
+    ];
+    const result = aggregateToolUsage(events);
+    expect(result.successRate).toBe(0);
+    expect(Number.isNaN(result.successRate)).toBe(false);
+  });
+
+  it("empty array returns reference-equal EMPTY_TOOL_USAGE_SUMMARY sentinel", () => {
+    const result = aggregateToolUsage([]);
+    expect(result).toBe(EMPTY_TOOL_USAGE_SUMMARY);
+  });
 });
