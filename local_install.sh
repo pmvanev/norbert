@@ -109,6 +109,19 @@ case "$PLATFORM" in
       " 2>/dev/null || echo "Warning: Could not create Start Menu shortcut."
     fi
 
+    # Notify the Windows shell that the exe icon has changed so Explorer/taskbar refresh immediately.
+    # Without this, Windows serves the old icon from its cache even after the exe is replaced.
+    echo "Notifying shell of icon change..."
+    powershell.exe -NoProfile -Command "
+      Add-Type -TypeDefinition '
+        using System; using System.Runtime.InteropServices;
+        public class Shell32 {
+          [DllImport(\"shell32.dll\")] public static extern void SHChangeNotify(int e, int f, IntPtr a, IntPtr b);
+        }
+      ' -ErrorAction SilentlyContinue
+      [Shell32]::SHChangeNotify(0x08000000, 0, [IntPtr]::Zero, [IntPtr]::Zero)
+    " 2>/dev/null && echo "  Shell notified." || echo "  Warning: SHChangeNotify failed (non-fatal)."
+
     # Startup shortcut for hook receiver
     echo "Creating startup shortcut for hook receiver..."
     WIN_RECEIVER=$(cygpath -w "$INSTALL_DIR/$RECEIVER_BIN" 2>/dev/null || echo "$INSTALL_DIR/$RECEIVER_BIN")
