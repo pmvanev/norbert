@@ -138,7 +138,7 @@ function App() {
   /// as a navigation target, not a standalone sidebar entry.
   const sidebarState = useMemo(
     () => createDefaultSidebarState(
-      getAllViews(pluginRegistry).filter((v) => v.id !== "session-detail" && v.id !== "config-detail"),
+      getAllViews(pluginRegistry).filter((v) => v.id !== "session-detail" && v.id !== "config-detail" && v.id !== "session-dashboard"),
       [],
     ),
     [pluginRegistry]
@@ -462,7 +462,7 @@ function App() {
     // defined outside the useMemo to allow proper hook usage.
     const SessionDashboardWrapperInner: FC = () => {
       const sid = selectedSessionIdRef.current;
-      if (sid === null) return null;
+      if (sid === null) return <div className="empty-state">Select a session to view its dashboard.</div>;
       return <SessionDashboardLoader sessionId={sid} />;
     };
     SessionDashboardWrapperInner.displayName = "SessionDashboardWrapper";
