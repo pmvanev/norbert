@@ -209,6 +209,30 @@ struct AppState {
     writes_in_flight: AtomicUsize,
 }
 
+/// Parse a JSON body from raw bytes, returning 400 on malformed input.
+fn parse_json_body(body: &[u8]) -> Result<serde_json::Value, (StatusCode, String)> {
+    serde_json::from_slice(body)
+        .map_err(|_| (StatusCode::BAD_REQUEST, "malformed JSON".to_string()))
+}
+
+/// Write a batch of events to the store, incrementing the event counter for each success.
+fn persist_events(
+    store: &dyn EventStore,
+    events: &[norbert_lib::domain::Event],
+    event_counter: &AtomicU64,
+) {
+    for event in events {
+        match store.write_event(event) {
+            Ok(()) => {
+                event_counter.fetch_add(1, Ordering::Relaxed);
+            }
+            Err(e) => {
+                eprintln!("Failed to persist OTLP event: {}", e);
+            }
+        }
+    }
+}
+
 /// Collect unique session IDs from an iterator, preserving first-seen order.
 fn collect_unique_session_ids<'a>(session_ids: impl Iterator<Item = &'a String>) -> Vec<String> {
     let mut seen = std::collections::HashSet::new();
@@ -289,11 +313,9 @@ async fn handle_otlp_logs(
     State(state): State<Arc<AppState>>,
     body: axum::body::Bytes,
 ) -> impl IntoResponse {
-    let json_body: serde_json::Value = match serde_json::from_slice(&body) {
+    let json_body = match parse_json_body(&body) {
         Ok(v) => v,
-        Err(_) => {
-            return (StatusCode::BAD_REQUEST, "malformed JSON".to_string());
-        }
+        Err(err) => return err,
     };
 
     let received_at = chrono::Utc::now().to_rfc3339();
@@ -303,16 +325,7 @@ async fn handle_otlp_logs(
     state.writes_in_flight.fetch_add(1, Ordering::Release);
     let session_ids: Vec<String> = {
         let store = state.event_store.lock().unwrap();
-        for event in &events {
-            match store.write_event(event) {
-                Ok(()) => {
-                    state.event_counter.fetch_add(1, Ordering::Relaxed);
-                }
-                Err(e) => {
-                    eprintln!("Failed to persist OTLP event: {}", e);
-                }
-            }
-        }
+        persist_events(&*store, &events, &state.event_counter);
         collect_unique_session_ids(events.iter().map(|e| &e.session_id))
     };
 
@@ -349,11 +362,9 @@ async fn handle_otlp_metrics(
     State(state): State<Arc<AppState>>,
     body: axum::body::Bytes,
 ) -> impl IntoResponse {
-    let json_body: serde_json::Value = match serde_json::from_slice(&body) {
+    let json_body = match parse_json_body(&body) {
         Ok(v) => v,
-        Err(_) => {
-            return (StatusCode::BAD_REQUEST, "malformed JSON".to_string());
-        }
+        Err(err) => return err,
     };
 
     let data_points = parse_export_metrics_request(&json_body);

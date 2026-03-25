@@ -6,6 +6,16 @@ struct VersionInfoMetadata {
     product_name: &'static str,
 }
 
+/// Format a four-part version string from the crate version (major.minor.patch.0).
+fn crate_version_quad() -> String {
+    format!(
+        "{}.{}.{}.0",
+        env!("CARGO_PKG_VERSION_MAJOR"),
+        env!("CARGO_PKG_VERSION_MINOR"),
+        env!("CARGO_PKG_VERSION_PATCH"),
+    )
+}
+
 /// Determine VERSIONINFO metadata for a given binary name.
 ///
 /// Returns `Some(metadata)` when the binary should receive a custom VERSIONINFO
@@ -37,26 +47,11 @@ fn main() {
     if let Ok(bin_name) = std::env::var("CARGO_BIN_NAME") {
         if let Some(metadata) = versioninfo_for_binary(&bin_name) {
             let mut res = tauri_winres::WindowsResource::new();
+            let version = crate_version_quad();
             res.set("FileDescription", metadata.file_description);
             res.set("ProductName", metadata.product_name);
-            res.set(
-                "FileVersion",
-                &format!(
-                    "{}.{}.{}.0",
-                    env!("CARGO_PKG_VERSION_MAJOR"),
-                    env!("CARGO_PKG_VERSION_MINOR"),
-                    env!("CARGO_PKG_VERSION_PATCH"),
-                ),
-            );
-            res.set(
-                "ProductVersion",
-                &format!(
-                    "{}.{}.{}.0",
-                    env!("CARGO_PKG_VERSION_MAJOR"),
-                    env!("CARGO_PKG_VERSION_MINOR"),
-                    env!("CARGO_PKG_VERSION_PATCH"),
-                ),
-            );
+            res.set("FileVersion", &version);
+            res.set("ProductVersion", &version);
             res.compile().expect("failed to compile VERSIONINFO resource for hook receiver");
         }
     }
