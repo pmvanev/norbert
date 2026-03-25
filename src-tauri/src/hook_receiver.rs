@@ -9,6 +9,8 @@ use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
+use tokio_util::sync::CancellationToken;
+
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -27,6 +29,146 @@ use norbert_lib::adapters::providers::claude_code::ClaudeCodeProvider;
 use norbert_lib::domain::{SessionMetadata, HOOK_PORT};
 use norbert_lib::ports::{EventProvider, EventStore, MetricStore};
 use rusqlite::Connection;
+
+// ---------------------------------------------------------------------------
+// Pure tray formatting functions (no IO, no side effects)
+// ---------------------------------------------------------------------------
+
+/// Format the port display label.
+///
+/// Returns "Port: unavailable" when port is 0 (bind-failure sentinel),
+/// otherwise "Port: {port}".
+fn format_port_label(port: u32) -> String {
+    if port == 0 {
+        "Port: unavailable".to_string()
+    } else {
+        format!("Port: {}", port)
+    }
+}
+
+/// Format the event count display label.
+fn format_event_count_label(event_count: u64) -> String {
+    format!("Events: {}", event_count)
+}
+
+/// Return the tray menu title label.
+fn menu_title_label() -> &'static str {
+    "Norbert Hook Receiver"
+}
+
+/// Build the tray icon tooltip string from current port and event count.
+///
+/// The tooltip contains three lines:
+/// 1. "Norbert Hook Receiver"
+/// 2. Port label (or "unavailable" if port=0)
+/// 3. Event count
+fn format_tray_tooltip(port: u32, event_count: u64) -> String {
+    format!(
+        "{}\n{}\n{}",
+        menu_title_label(),
+        format_port_label(port),
+        format_event_count_label(event_count),
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Tray icon lifecycle (Windows only, dedicated OS thread)
+// ---------------------------------------------------------------------------
+
+/// Graceful shutdown drain timeout in seconds.
+const DRAIN_TIMEOUT_SECS: u64 = 2;
+
+/// Spawn the tray icon on a dedicated OS thread.
+///
+/// The thread creates a TrayIcon with tooltip and context menu, then runs
+/// a tick loop (16ms sleep) to process Win32 messages. State is read
+/// on-demand from `Arc<AppState>` when tooltip or menu events fire.
+/// Clicking "Quit" cancels the `CancellationToken`.
+///
+/// This function is a no-op on non-Windows platforms.
+#[cfg(target_os = "windows")]
+fn spawn_tray_thread(state: Arc<AppState>, cancel_token: CancellationToken) {
+    use muda::{Menu, MenuItem, PredefinedMenuItem, MenuEvent};
+    use tray_icon::{TrayIconBuilder, Icon as TrayIconIcon};
+
+    std::thread::spawn(move || {
+        // Decode the embedded PNG into RGBA pixels for the tray icon
+        let icon_bytes = include_bytes!("../icons/icon.png");
+        let decoder = png::Decoder::new(std::io::Cursor::new(icon_bytes));
+        let mut reader = decoder.read_info().expect("Failed to read PNG info");
+        let mut buf = vec![0u8; reader.output_buffer_size()];
+        let info = reader.next_frame(&mut buf).expect("Failed to decode PNG frame");
+        buf.truncate(info.buffer_size());
+        let icon = TrayIconIcon::from_rgba(buf, info.width, info.height)
+            .expect("Failed to create tray icon from RGBA data");
+
+        // Build initial tooltip from current state
+        let initial_port = state.bound_port.load(Ordering::Relaxed);
+        let initial_count = state.event_counter.load(Ordering::Relaxed);
+        let initial_tooltip = format_tray_tooltip(initial_port, initial_count);
+
+        // Build context menu
+        let menu = Menu::new();
+        let title_item = MenuItem::new(menu_title_label(), false, None);
+        let port_item = MenuItem::new(format_port_label(initial_port), false, None);
+        let event_count_item = MenuItem::new(
+            format_event_count_label(initial_count),
+            false,
+            None,
+        );
+        let quit_item = MenuItem::new("Quit", true, None);
+        let quit_item_id = quit_item.id().clone();
+
+        menu.append(&title_item).expect("Failed to add title menu item");
+        menu.append(&PredefinedMenuItem::separator()).expect("Failed to add separator");
+        menu.append(&port_item).expect("Failed to add port menu item");
+        menu.append(&event_count_item).expect("Failed to add event count menu item");
+        menu.append(&PredefinedMenuItem::separator()).expect("Failed to add separator");
+        menu.append(&quit_item).expect("Failed to add quit menu item");
+
+        let tray_icon = TrayIconBuilder::new()
+            .with_tooltip(&initial_tooltip)
+            .with_menu(Box::new(menu))
+            .with_icon(icon)
+            .build()
+            .expect("Failed to build tray icon");
+
+        let menu_receiver = MenuEvent::receiver();
+        let cancel = cancel_token.clone();
+
+        // Track last-seen values to avoid redundant updates
+        let mut last_port = initial_port;
+        let mut last_count = initial_count;
+
+        // Tick loop: refresh tooltip/menu on state change, process quit, sleep 16ms
+        loop {
+            // Refresh tooltip and menu items when state changes (on-demand read)
+            let current_port = state.bound_port.load(Ordering::Relaxed);
+            let current_count = state.event_counter.load(Ordering::Relaxed);
+            if current_port != last_port || current_count != last_count {
+                let tooltip = format_tray_tooltip(current_port, current_count);
+                let _ = tray_icon.set_tooltip(Some(&tooltip));
+                let _ = port_item.set_text(&format_port_label(current_port));
+                let _ = event_count_item.set_text(&format_event_count_label(current_count));
+                last_port = current_port;
+                last_count = current_count;
+            }
+
+            if let Ok(event) = menu_receiver.try_recv() {
+                if event.id() == &quit_item_id {
+                    cancel.cancel();
+                    break;
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(16));
+        }
+    });
+}
+
+#[cfg(not(target_os = "windows"))]
+fn spawn_tray_thread(_state: Arc<AppState>, _cancel_token: CancellationToken) {
+    // No-op on non-Windows platforms
+}
 
 /// Shared application state holding the event store and provider.
 ///
@@ -284,6 +426,13 @@ async fn main() {
         event_counter: AtomicU64::new(0),
         bound_port: AtomicU32::new(0),
     });
+
+    // Create cancellation token for coordinated shutdown
+    let cancel_token = CancellationToken::new();
+
+    // Spawn tray icon on dedicated OS thread (Windows only, no-op elsewhere)
+    spawn_tray_thread(state.clone(), cancel_token.clone());
+
     let app = build_router(state.clone());
 
     let addr = SocketAddr::from(([127, 0, 0, 1], HOOK_PORT));
@@ -305,10 +454,18 @@ async fn main() {
         }
     };
 
-    if let Err(e) = axum::serve(listener, app).await {
+    // Run server until cancellation (tray Quit) or server error
+    let server = axum::serve(listener, app)
+        .with_graceful_shutdown(cancel_token.cancelled_owned());
+
+    if let Err(e) = server.await {
         eprintln!("norbert-hook-receiver: Server error: {}", e);
         std::process::exit(1);
     }
+
+    // Allow in-flight requests to drain
+    tokio::time::sleep(std::time::Duration::from_secs(DRAIN_TIMEOUT_SECS)).await;
+    eprintln!("norbert-hook-receiver: shutting down gracefully");
 }
 
 #[cfg(test)]
@@ -1210,6 +1367,77 @@ mod tests {
             counter_value, 0,
             "Event counter must not change when writes return errors"
         );
+    }
+
+    // --- Tray formatting acceptance tests (step 03-01) ---
+
+    #[test]
+    fn tooltip_contains_port_and_event_count_for_active_server() {
+        let tooltip = format_tray_tooltip(3748, 42);
+        assert!(
+            tooltip.contains("Port: 3748"),
+            "Tooltip should contain 'Port: 3748', got: {}",
+            tooltip
+        );
+        assert!(
+            tooltip.contains("Events: 42"),
+            "Tooltip should contain 'Events: 42', got: {}",
+            tooltip
+        );
+        assert!(
+            tooltip.contains("Norbert Hook Receiver"),
+            "Tooltip should contain 'Norbert Hook Receiver', got: {}",
+            tooltip
+        );
+    }
+
+    #[test]
+    fn tooltip_shows_port_unavailable_when_port_is_zero() {
+        let tooltip = format_tray_tooltip(0, 5);
+        assert!(
+            tooltip.contains("Port: unavailable"),
+            "Tooltip should contain 'Port: unavailable' when port=0, got: {}",
+            tooltip
+        );
+        assert!(
+            tooltip.contains("Events: 5"),
+            "Tooltip should contain 'Events: 5', got: {}",
+            tooltip
+        );
+    }
+
+    #[test]
+    fn format_port_label_shows_number_for_nonzero_port() {
+        assert_eq!(format_port_label(3748), "Port: 3748");
+        assert_eq!(format_port_label(8080), "Port: 8080");
+        assert_eq!(format_port_label(1), "Port: 1");
+    }
+
+    #[test]
+    fn format_port_label_shows_unavailable_for_zero() {
+        assert_eq!(format_port_label(0), "Port: unavailable");
+    }
+
+    #[test]
+    fn format_event_count_label_shows_count() {
+        assert_eq!(format_event_count_label(0), "Events: 0");
+        assert_eq!(format_event_count_label(1), "Events: 1");
+        assert_eq!(format_event_count_label(999999), "Events: 999999");
+    }
+
+    #[test]
+    fn tooltip_contains_all_three_lines() {
+        let tooltip = format_tray_tooltip(3748, 0);
+        let lines: Vec<&str> = tooltip.lines().collect();
+        assert_eq!(lines.len(), 3, "Tooltip should have exactly 3 lines, got: {:?}", lines);
+        assert_eq!(lines[0], "Norbert Hook Receiver");
+        assert_eq!(lines[1], "Port: 3748");
+        assert_eq!(lines[2], "Events: 0");
+    }
+
+    #[test]
+    fn menu_title_label_is_norbert_hook_receiver() {
+        assert_eq!(menu_title_label(), "Norbert Hook Receiver");
     }
 
     #[tokio::test]
