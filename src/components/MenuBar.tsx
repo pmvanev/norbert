@@ -1,6 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import type { MenuEntry, MenuItem, MenuAction, SubMenu } from "../domain/menu";
-import { Icon } from "./Icon";
 
 type MenuBarProps = {
   readonly entries: ReadonlyArray<MenuEntry>;
@@ -78,7 +77,6 @@ export const MenuBar = ({ entries }: MenuBarProps) => {
 
   return (
     <div className="menu-bar" ref={barRef} onClick={handleBarClick}>
-      <div className="tb-logo"><Icon name="activity" size={14} /></div>
       {entries.map((entry) => (
         <div
           key={entry.label}
