@@ -537,9 +537,6 @@ function App() {
       <MenuBar entries={menuEntries} />
       <div className="app-body">
         <nav className="sidebar" data-testid="sidebar">
-          <div className="sidebar-logo">
-            <Icon name="square-activity" size={20} />
-          </div>
           {visibleSidebarItems.map((item) => (
             <button
               key={item.id}

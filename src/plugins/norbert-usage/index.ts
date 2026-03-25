@@ -37,7 +37,7 @@ const GAUGE_CLUSTER_VIEW_ID = "gauge-cluster";
 const GAUGE_CLUSTER_VIEW_LABEL = "Gauge Cluster";
 const GAUGE_CLUSTER_VIEW_ICON = "gauge"; // gauge cluster
 
-const PERFORMANCE_MONITOR_VIEW_ICON = "activity"; // waveform trace
+const PERFORMANCE_MONITOR_VIEW_ICON = "square-activity";
 
 const USAGE_DASHBOARD_VIEW_ID = "usage-dashboard";
 const USAGE_DASHBOARD_VIEW_LABEL = "Usage Dashboard";
