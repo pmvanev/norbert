@@ -1,0 +1,229 @@
+journey:
+  name: "Hook Receiver Clarity"
+  goal: "Danielle can identify, monitor, and gracefully stop the hook receiver without confusion or guesswork"
+  persona: "Danielle Reyes — developer using Norbert on Windows daily"
+  feature_id: "hook-receiver-clarity"
+
+  emotional_arc:
+    start: "Anxious and confused — two processes both named 'Norbert' in Task Manager"
+    middle: "Orienting — distinct label visible; tray icon present; status readable"
+    end: "Confident and reassured — process identity clear, health visible, clean shutdown available"
+  arc_pattern: "Problem Relief"
+
+steps:
+  - id: 1
+    name: "Startup — Hook Receiver Launches"
+    trigger: "Windows Startup folder shortcut runs norbert-hook-receiver.exe at login"
+
+    tui_mockup: |
+      (no visible UI at this step — process starts headlessly)
+      Tray icon [N] appears in Windows system tray within 2 seconds of launch.
+
+    shared_artifacts:
+      - name: file_description
+        source: "norbert-hook-receiver/build.rs or Cargo.toml package metadata"
+        displayed_as: "${file_description}"
+        consumers:
+          - "Windows Task Manager — Description column"
+          - "Tray tooltip title"
+          - "Tray context menu title row"
+      - name: port
+        source: "runtime — TcpListener::local_addr() result after bind"
+        displayed_as: "${port}"
+        consumers:
+          - "Tray tooltip"
+          - "Tray context menu"
+      - name: event_count
+        source: "runtime — atomic counter incremented per captured telemetry event"
+        displayed_as: "${event_count}"
+        consumers:
+          - "Tray tooltip"
+          - "Tray context menu"
+
+    emotional_state:
+      entry: "Unaware — Danielle is not thinking about the hook receiver yet"
+      exit: "Subconsciously reassured — tray icon is present as expected"
+
+    integration_checkpoint: |
+      Verify: tray icon appears within 2 seconds of process start.
+      Verify: ${port} reflects actual bound port, not hard-coded constant.
+      Verify: ${event_count} starts at 0.
+
+    gherkin: |
+      Scenario: Hook receiver displays tray icon on startup
+        Given Danielle's machine starts up and the Startup shortcut runs norbert-hook-receiver.exe
+        When the hook receiver successfully binds to port 3748
+        Then a tray icon labeled "Norbert Hook Receiver" appears in the Windows system tray within 2 seconds
+        And the tray tooltip shows ":3748 | 0 events"
+
+  - id: 2
+    name: "Task Manager — Process Identification"
+    trigger: "Danielle opens Task Manager while investigating something; sees multiple Norbert processes"
+
+    tui_mockup: |
+      +-- Task Manager ────────────────────────────────────────────────────────────+
+      | Name                          PID   CPU   Memory   Description             |
+      | ─────────────────────────────────────────────────────────────────────────  |
+      | norbert.exe                   4521  0.1%  128 MB   Norbert                 |
+      | norbert-hook-receiver.exe     4892  0.0%   24 MB   ${file_description}     |
+      +────────────────────────────────────────────────────────────────────────────+
+
+    shared_artifacts:
+      - name: file_description
+        source: "norbert-hook-receiver/build.rs or Cargo.toml package metadata"
+        displayed_as: "${file_description}"
+        consumers:
+          - "Windows Task Manager — Description column (this step)"
+
+    emotional_state:
+      entry: "Confused — sees two 'Norbert' entries (current state without fix)"
+      exit: "Relieved — Description column immediately distinguishes the two processes"
+
+    integration_checkpoint: |
+      Verify: norbert-hook-receiver.exe Description column reads "Norbert Hook Receiver".
+      Verify: norbert.exe Description column reads "Norbert" (unchanged from current).
+      Verify: distinction is visible without expanding columns or checking Command Line.
+
+    gherkin: |
+      Scenario: Task Manager shows distinct FileDescription for hook receiver
+        Given norbert.exe and norbert-hook-receiver.exe are both running
+        When Danielle opens Windows Task Manager and views the Details or Processes tab
+        Then norbert-hook-receiver.exe shows "Norbert Hook Receiver" in the Description column
+        And norbert.exe shows "Norbert" in the Description column
+        And Danielle can distinguish the two processes without clicking on either
+
+  - id: 3
+    name: "Tray Icon — Status Check"
+    trigger: "Danielle glances at system tray to confirm hook receiver is alive"
+
+    tui_mockup: |
+      Hover over [N] tray icon:
+      +────────────────────────────────────────────+
+      |  Norbert Hook Receiver                     |
+      |  :${port}  |  ${event_count} events        |
+      +────────────────────────────────────────────+
+
+    shared_artifacts:
+      - name: port
+        source: "runtime — TcpListener::local_addr()"
+        displayed_as: ":${port}"
+        consumers:
+          - "Tray tooltip (this step)"
+          - "Tray context menu (step 4)"
+      - name: event_count
+        source: "runtime — atomic counter"
+        displayed_as: "${event_count} events"
+        consumers:
+          - "Tray tooltip (this step)"
+          - "Tray context menu (step 4)"
+
+    emotional_state:
+      entry: "Mildly uncertain — wants confirmation the sidecar is running"
+      exit: "Reassured — sees port and live event count confirming it is alive and capturing"
+
+    integration_checkpoint: |
+      Verify: tooltip updates event_count to reflect current in-memory count (not stale).
+      Verify: tooltip shows actual bound port, not assumed value.
+      Verify: tooltip is readable (sufficient contrast, not clipped by taskbar edge).
+
+    gherkin: |
+      Scenario: Tray tooltip shows live status
+        Given norbert-hook-receiver.exe is running and has captured 42 telemetry events
+        When Danielle hovers over the tray icon
+        Then the tooltip displays "Norbert Hook Receiver"
+        And the tooltip displays ":3748" (the bound port)
+        And the tooltip displays "42 events"
+
+  - id: 4
+    name: "Tray Context Menu — Full Status"
+    trigger: "Danielle right-clicks the tray icon for more detail or to quit"
+
+    tui_mockup: |
+      +──────────────────────────────────+
+      |  Norbert Hook Receiver           |  <- title row (disabled, non-clickable)
+      |  ─────────────────────────────   |
+      |  Port: ${port}                   |
+      |  Events captured: ${event_count} |
+      |  ─────────────────────────────   |
+      |  Quit                            |
+      +──────────────────────────────────+
+
+    shared_artifacts:
+      - name: port
+        source: "runtime — TcpListener::local_addr()"
+        displayed_as: "Port: ${port}"
+        consumers:
+          - "Tray context menu (this step)"
+      - name: event_count
+        source: "runtime — atomic counter"
+        displayed_as: "Events captured: ${event_count}"
+        consumers:
+          - "Tray context menu (this step)"
+
+    emotional_state:
+      entry: "Curious or action-oriented — wants more detail or to shut down"
+      exit: "In control — has clear status and a clean shutdown option"
+
+    integration_checkpoint: |
+      Verify: context menu title row is non-clickable (disabled menu item).
+      Verify: Port and event_count values match tooltip values (same source).
+      Verify: "Quit" item is clickable and triggers graceful shutdown sequence.
+
+    gherkin: |
+      Scenario: Tray context menu shows status and quit option
+        Given norbert-hook-receiver.exe is running on port 3748 with 42 events captured
+        When Danielle right-clicks the tray icon
+        Then a context menu appears with title "Norbert Hook Receiver"
+        And the menu shows "Port: 3748"
+        And the menu shows "Events captured: 42"
+        And the menu contains a "Quit" item
+
+  - id: 5
+    name: "Graceful Shutdown"
+    trigger: "Danielle clicks Quit in the tray context menu"
+
+    tui_mockup: |
+      (no visible UI — process exits cleanly)
+      Tray icon [N] disappears from system tray.
+      norbert-hook-receiver.exe no longer appears in Task Manager.
+
+    shared_artifacts: []
+
+    emotional_state:
+      entry: "Decided — intentionally quitting"
+      exit: "Satisfied — clean exit, icon gone, no lingering port usage"
+
+    integration_checkpoint: |
+      Verify: pending SQLite writes are flushed before exit (WAL checkpoint or journal sync).
+      Verify: TcpListener is closed; port 3748 is available immediately after exit.
+      Verify: tray icon is removed from system tray before process exits.
+      Verify: process exit code is 0 on clean quit.
+      Verify: if drain exceeds 2 seconds, forced exit occurs with warning log entry.
+
+    gherkin: |
+      Scenario: Graceful shutdown via tray Quit
+        Given norbert-hook-receiver.exe is running with pending SQLite writes
+        When Danielle clicks "Quit" in the tray context menu
+        Then the process flushes pending SQLite writes before exiting
+        And the tray icon disappears from the system tray
+        And port 3748 is released within 1 second
+        And the process exits with code 0
+
+      Scenario: Forced exit on slow drain
+        Given norbert-hook-receiver.exe is running and a SQLite write is taking longer than 2 seconds
+        When Danielle clicks "Quit" in the tray context menu
+        Then the process waits up to 2 seconds for the write to complete
+        And if the write does not complete within 2 seconds the process exits anyway
+        And a warning is written to the log indicating incomplete drain
+
+integration_validation:
+  shared_artifact_consistency:
+    - artifact: "file_description"
+      must_match_across: [1, 2, 3, 4]
+      failure_message: "FileDescription mismatch — Task Manager and tray show different process labels"
+    - artifact: "port"
+      must_match_across: [1, 3, 4]
+      failure_message: "Port mismatch — tooltip and menu show different port than actually bound"
+    - artifact: "event_count"
+      must_match_across: [3, 4]
+      failure_message: "Event count mismatch between tooltip and context menu (different reads of same counter)"

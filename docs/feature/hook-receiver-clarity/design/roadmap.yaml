@@ -1,0 +1,121 @@
+roadmap:
+  feature: hook-receiver-clarity
+  paradigm: functional
+  estimated_production_files: 2
+  total_steps: 4
+  step_ratio: 2.0  # 4 steps / 2 files — within 2.5 limit
+
+phases:
+  - id: "01"
+    title: "Process Identity (VERSIONINFO)"
+    steps:
+      - id: "01-01"
+        title: "Per-binary VERSIONINFO in build.rs"
+        description: >
+          Extend build.rs to detect CARGO_BIN_NAME and emit distinct VERSIONINFO for
+          norbert-hook-receiver (FileDescription = "Norbert Hook Receiver") while leaving
+          the Tauri binary's resource embedding unchanged.
+        type: infrastructure
+        acceptance_criteria:
+          - "norbert-hook-receiver.exe FileDescription reads 'Norbert Hook Receiver' in Windows file Properties > Details"
+          - "norbert.exe FileDescription remains 'Norbert' — no regression"
+          - "Both binaries produced from a single cargo build without manual steps"
+          - "CARGO_BIN_NAME gate prevents hook-receiver resource from contaminating GUI binary"
+        architectural_constraints:
+          - "Use tauri-winres (already in dep graph) — no new build-dependency"
+          - "tauri_build::build() call retained unchanged for the norbert binary path"
+          - "Resource file emitted to OUT_DIR — not committed to VCS"
+
+  - id: "02"
+    title: "Tray Shared State"
+    steps:
+      - id: "02-01"
+        title: "Event counter and bound port on AppState"
+        description: >
+          Add event_counter (AtomicU64) and bound_port (AtomicU32) fields to AppState.
+          HTTP handlers increment counter after each confirmed write. main() stores bound port
+          after successful TcpListener::bind; stores 0 on bind failure.
+        acceptance_criteria:
+          - "Counter value increases by 1 for each successful hook, OTLP log, and OTLP metric write"
+          - "Counter does not increment when a write returns an error"
+          - "bound_port reads the actual port from TcpListener::local_addr() after successful bind"
+          - "bound_port is 0 (unavailable sentinel) when TcpListener::bind fails"
+          - "Both values readable from a shared Arc without acquiring a Mutex"
+        architectural_constraints:
+          - "AtomicU64 / AtomicU32 only — no Mutex for these two fields"
+          - "Increment at effect boundary: inside handler, after confirmed Ok(()) from store"
+          - "AppState remains the single source of truth; no separate state struct"
+
+  - id: "03"
+    title: "Tray Icon and Context Menu"
+    steps:
+      - id: "03-01"
+        title: "TrayManager: icon, tooltip, context menu"
+        description: >
+          Implement tray icon lifecycle on a dedicated OS thread. On startup: show icon with
+          tooltip. On hover: refresh tooltip from AppState. On right-click: build context menu
+          from AppState. On Quit click: cancel the CancellationToken.
+        acceptance_criteria:
+          - "Tray icon appears in Windows system tray within 2 seconds of process start"
+          - "Tooltip displays 'Norbert Hook Receiver', bound port, and event count — read on-demand"
+          - "Context menu shows non-clickable title, port, event count, and a clickable Quit item"
+          - "Event count in tooltip reflects actual AtomicU64 value at the moment the tooltip renders"
+          - "When bound_port is 0, tooltip and menu display 'Port: unavailable'"
+        architectural_constraints:
+          - "Tray runs on a dedicated std::thread — not inside the tokio runtime"
+          - "Use tray-icon 0.21.3 + muda (both already in Cargo.lock) — no new runtime deps"
+          - "TrayManager reads AppState via Arc clone — no channel or IPC"
+          - "No background polling timer — state read only when tooltip or menu event fires"
+
+  - id: "04"
+    title: "Graceful Shutdown"
+    steps:
+      - id: "04-01"
+        title: "Shutdown coordinator with drain timeout"
+        description: >
+          Wire CancellationToken from tray Quit action to tokio main task. On cancellation:
+          stop accepting new requests, await SQLite drain with timeout, remove tray icon, exit 0.
+        acceptance_criteria:
+          - "Quit menu click causes process to exit with code 0 within 3 seconds"
+          - "Port 3748 is released within 1 second of clean exit (no pending connections)"
+          - "When no SQLite write is in flight, process exits immediately after drain gate check"
+          - "When a write is in flight completing within 2s, exit waits for completion then exits 0"
+          - "When drain exceeds DRAIN_TIMEOUT_SECS, process exits with a stderr warning indicating incomplete drain"
+        architectural_constraints:
+          - "DRAIN_TIMEOUT_SECS is a named constant (default 2) — not a magic number"
+          - "CancellationToken used as tray-to-tokio signal — no channel, no shared bool"
+          - "Tray icon removal happens after tokio server task cancels — not before"
+          - "Process exit code is 0 for both clean drain and forced drain-timeout exits"
+
+implementation_scope:
+  files_modified:
+    - "src-tauri/build.rs"
+    - "src-tauri/src/hook_receiver.rs"
+  files_created: []
+  adrs:
+    - "docs/adrs/ADR-039-hook-receiver-versioninfo-strategy.md"
+    - "docs/adrs/ADR-040-hook-receiver-tray-icon-architecture.md"
+
+validation:
+  integration_checkpoints:
+    - id: IC-01
+      check: "norbert-hook-receiver.exe FileDescription == 'Norbert Hook Receiver'"
+      method: "PowerShell: (Get-ItemProperty 'norbert-hook-receiver.exe').VersionInfo.FileDescription"
+    - id: IC-02
+      check: "norbert.exe FileDescription unchanged"
+      method: "PowerShell: (Get-ItemProperty 'norbert.exe').VersionInfo.FileDescription"
+    - id: IC-03
+      check: "Tray icon appears within 2s"
+      method: "Manual: start process, observe system tray"
+    - id: IC-04
+      check: "Displayed port matches actual listening port"
+      method: "netstat -ano | findstr 3748 vs tray tooltip"
+    - id: IC-05
+      check: "Event count increments on hook receipt"
+      method: "POST to /hooks/PreToolUse; check tray tooltip count"
+    - id: IC-06
+      check: "Graceful quit: port released, exit code 0"
+      method: "Click Quit; verify Task Manager process gone; netstat confirms port released"
+    - id: IC-07
+      check: "Drain timeout emits stderr warning"
+      method: "Inject slow write; click Quit; observe stderr for warning line"
