@@ -284,7 +284,7 @@ async fn handle_hook_event(
         }
     };
 
-    state.writes_in_flight.fetch_add(1, Ordering::Release);
+    state.writes_in_flight.fetch_add(1, Ordering::Relaxed);
     let store = state.event_store.lock().unwrap();
     let result = match store.write_event(&canonical_event) {
         Ok(()) => {
@@ -322,7 +322,7 @@ async fn handle_otlp_logs(
     let events = parse_export_logs_request(&json_body, &received_at);
 
     // Step 1: Lock event_store, write events, collect session_ids, then drop lock.
-    state.writes_in_flight.fetch_add(1, Ordering::Release);
+    state.writes_in_flight.fetch_add(1, Ordering::Relaxed);
     let session_ids: Vec<String> = {
         let store = state.event_store.lock().unwrap();
         persist_events(&*store, &events, &state.event_counter);
@@ -370,7 +370,7 @@ async fn handle_otlp_metrics(
     let data_points = parse_export_metrics_request(&json_body);
     let (service_version, os_type, host_arch) = extract_metrics_resource_attributes(&json_body);
 
-    state.writes_in_flight.fetch_add(1, Ordering::Release);
+    state.writes_in_flight.fetch_add(1, Ordering::Relaxed);
     let store = state.metric_store.lock().unwrap();
 
     for point in &data_points {
@@ -1342,44 +1342,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn bound_port_stores_actual_port_on_successful_bind() {
-        let state = test_state();
-
-        // Bind to port 0 (OS assigns an available port)
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-            .await
-            .expect("should bind to an available port");
-        let actual_port = listener.local_addr().unwrap().port();
-
-        state
-            .bound_port
-            .store(actual_port as u32, std::sync::atomic::Ordering::Relaxed);
-
-        let stored_port = state.bound_port.load(std::sync::atomic::Ordering::Relaxed);
-        assert_eq!(
-            stored_port, actual_port as u32,
-            "bound_port should store the actual port from local_addr()"
-        );
-        assert_ne!(stored_port, 0, "bound_port should not be 0 after successful bind");
-    }
-
-    #[tokio::test]
-    async fn bound_port_stores_zero_on_bind_failure() {
-        let state = test_state();
-
-        // Simulate bind failure: store 0 as the unavailable sentinel
-        state
-            .bound_port
-            .store(0, std::sync::atomic::Ordering::Relaxed);
-
-        let stored_port = state.bound_port.load(std::sync::atomic::Ordering::Relaxed);
-        assert_eq!(
-            stored_port, 0,
-            "bound_port should be 0 (unavailable sentinel) when bind fails"
-        );
-    }
-
-    #[tokio::test]
     async fn event_counter_unchanged_on_write_error() {
         let state = test_state();
 
@@ -1615,7 +1577,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn drain_timeout_exceeded_produces_warning() {
+    async fn drain_timeout_warning_message_has_expected_format() {
         let warning_message = format_drain_timeout_warning();
         assert_eq!(
             warning_message,
