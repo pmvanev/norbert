@@ -6,6 +6,7 @@
 /// This is a separate binary target sharing the same crate as the Tauri app.
 
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use axum::{
@@ -39,6 +40,8 @@ struct AppState {
     event_store: Mutex<SqliteEventStore>,
     metric_store: Mutex<SqliteMetricStore>,
     provider: Box<dyn EventProvider + Send + Sync>,
+    event_counter: AtomicU64,
+    bound_port: AtomicU32,
 }
 
 /// Collect unique session IDs from an iterator, preserving first-seen order.
@@ -94,7 +97,10 @@ async fn handle_hook_event(
 
     let store = state.event_store.lock().unwrap();
     match store.write_event(&canonical_event) {
-        Ok(()) => (StatusCode::OK, "OK".to_string()),
+        Ok(()) => {
+            state.event_counter.fetch_add(1, Ordering::Relaxed);
+            (StatusCode::OK, "OK".to_string())
+        }
         Err(e) => {
             eprintln!("Failed to persist event: {}", e);
             (
@@ -128,8 +134,13 @@ async fn handle_otlp_logs(
     let session_ids: Vec<String> = {
         let store = state.event_store.lock().unwrap();
         for event in &events {
-            if let Err(e) = store.write_event(event) {
-                eprintln!("Failed to persist OTLP event: {}", e);
+            match store.write_event(event) {
+                Ok(()) => {
+                    state.event_counter.fetch_add(1, Ordering::Relaxed);
+                }
+                Err(e) => {
+                    eprintln!("Failed to persist OTLP event: {}", e);
+                }
             }
         }
         collect_unique_session_ids(events.iter().map(|e| &e.session_id))
@@ -180,14 +191,19 @@ async fn handle_otlp_metrics(
     let store = state.metric_store.lock().unwrap();
 
     for point in &data_points {
-        if let Err(e) = store.accumulate_delta(
+        match store.accumulate_delta(
             &point.session_id,
             &point.metric_name,
             &point.attribute_key,
             point.value,
             &point.end_time_nano,
         ) {
-            eprintln!("Failed to accumulate metric: {}", e);
+            Ok(()) => {
+                state.event_counter.fetch_add(1, Ordering::Relaxed);
+            }
+            Err(e) => {
+                eprintln!("Failed to accumulate metric: {}", e);
+            }
         }
     }
 
@@ -265,15 +281,22 @@ async fn main() {
         event_store: Mutex::new(event_store),
         metric_store: Mutex::new(metric_store),
         provider: Box::new(ClaudeCodeProvider),
+        event_counter: AtomicU64::new(0),
+        bound_port: AtomicU32::new(0),
     });
-    let app = build_router(state);
+    let app = build_router(state.clone());
 
     let addr = SocketAddr::from(([127, 0, 0, 1], HOOK_PORT));
     eprintln!("norbert-hook-receiver: listening on {}", addr);
 
     let listener = match tokio::net::TcpListener::bind(addr).await {
-        Ok(l) => l,
+        Ok(l) => {
+            let actual_port = l.local_addr().map(|a| a.port() as u32).unwrap_or(0);
+            state.bound_port.store(actual_port, Ordering::Relaxed);
+            l
+        }
         Err(e) => {
+            state.bound_port.store(0, Ordering::Relaxed);
             eprintln!(
                 "norbert-hook-receiver: Port {} unavailable: {}",
                 HOOK_PORT, e
@@ -312,6 +335,8 @@ mod tests {
             event_store: Mutex::new(event_store),
             metric_store: Mutex::new(metric_store),
             provider: Box::new(ClaudeCodeProvider),
+            event_counter: AtomicU64::new(0),
+            bound_port: AtomicU32::new(0),
         })
     }
 
@@ -1049,6 +1074,142 @@ mod tests {
 
         assert_eq!(metadata.session_id, "sess-enrich-no-term");
         assert!(metadata.terminal_type.is_none(), "Missing terminal.type should produce None, not error");
+    }
+
+    // --- Event counter acceptance tests (step 02-01) ---
+
+    #[tokio::test]
+    async fn event_counter_equals_total_successful_writes_across_all_endpoints() {
+        let state = test_state();
+
+        // 1 hook write
+        let app = build_router(state.clone());
+        let hook_body = serde_json::json!({
+            "session_id": "sess-counter-accept",
+            "tool": "bash"
+        });
+        let request = Request::builder()
+            .method("POST")
+            .uri("/hooks/PreToolUse")
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::to_string(&hook_body).unwrap()))
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // 1 OTLP log write (contains 1 log record)
+        let app = build_router(state.clone());
+        let logs_body = otlp_api_request_body("sess-counter-accept-log");
+        let request = Request::builder()
+            .method("POST")
+            .uri("/v1/logs")
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::to_string(&logs_body).unwrap()))
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // 1 OTLP metric write (contains 1 data point)
+        let app = build_router(state.clone());
+        let metrics_body = otlp_metrics_body("sess-counter-accept-metric");
+        let request = Request::builder()
+            .method("POST")
+            .uri("/v1/metrics")
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::to_string(&metrics_body).unwrap()))
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Total successful writes: 1 hook + 1 log + 1 metric = 3
+        let counter_value = state.event_counter.load(std::sync::atomic::Ordering::Relaxed);
+        assert_eq!(
+            counter_value, 3,
+            "Event counter should equal total successful writes across all endpoints"
+        );
+    }
+
+    #[tokio::test]
+    async fn bound_port_stores_actual_port_on_successful_bind() {
+        let state = test_state();
+
+        // Bind to port 0 (OS assigns an available port)
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("should bind to an available port");
+        let actual_port = listener.local_addr().unwrap().port();
+
+        state
+            .bound_port
+            .store(actual_port as u32, std::sync::atomic::Ordering::Relaxed);
+
+        let stored_port = state.bound_port.load(std::sync::atomic::Ordering::Relaxed);
+        assert_eq!(
+            stored_port, actual_port as u32,
+            "bound_port should store the actual port from local_addr()"
+        );
+        assert_ne!(stored_port, 0, "bound_port should not be 0 after successful bind");
+    }
+
+    #[tokio::test]
+    async fn bound_port_stores_zero_on_bind_failure() {
+        let state = test_state();
+
+        // Simulate bind failure: store 0 as the unavailable sentinel
+        state
+            .bound_port
+            .store(0, std::sync::atomic::Ordering::Relaxed);
+
+        let stored_port = state.bound_port.load(std::sync::atomic::Ordering::Relaxed);
+        assert_eq!(
+            stored_port, 0,
+            "bound_port should be 0 (unavailable sentinel) when bind fails"
+        );
+    }
+
+    #[tokio::test]
+    async fn event_counter_unchanged_on_write_error() {
+        let state = test_state();
+
+        // Send a request that returns an error (unknown event type -> no write happens)
+        let app = build_router(state.clone());
+        let body = serde_json::json!({"session_id": "sess-err"});
+        let request = Request::builder()
+            .method("POST")
+            .uri("/hooks/InvalidEventType")
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::to_string(&body).unwrap()))
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        // Send malformed JSON to /v1/logs (returns 400, no write)
+        let app = build_router(state.clone());
+        let request = Request::builder()
+            .method("POST")
+            .uri("/v1/logs")
+            .header("content-type", "application/json")
+            .body(Body::from("not valid json"))
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        // Send malformed JSON to /v1/metrics (returns 400, no write)
+        let app = build_router(state.clone());
+        let request = Request::builder()
+            .method("POST")
+            .uri("/v1/metrics")
+            .header("content-type", "application/json")
+            .body(Body::from("not valid json"))
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let counter_value = state.event_counter.load(std::sync::atomic::Ordering::Relaxed);
+        assert_eq!(
+            counter_value, 0,
+            "Event counter must not change when writes return errors"
+        );
     }
 
     #[tokio::test]
