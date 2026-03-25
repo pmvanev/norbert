@@ -6,7 +6,7 @@
 /// This is a separate binary target sharing the same crate as the Tauri app.
 
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use tokio_util::sync::CancellationToken;
@@ -72,11 +72,33 @@ fn format_tray_tooltip(port: u32, event_count: u64) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// Tray icon lifecycle (Windows only, dedicated OS thread)
+// Graceful shutdown drain functions (pure, no IO)
 // ---------------------------------------------------------------------------
 
 /// Graceful shutdown drain timeout in seconds.
 const DRAIN_TIMEOUT_SECS: u64 = 2;
+
+/// Format the drain timeout warning message for stderr output.
+fn format_drain_timeout_warning() -> &'static str {
+    "warn: drain timeout exceeded \u{2014} some writes may be incomplete"
+}
+
+/// Wait until the in-flight write counter reaches zero.
+///
+/// Polls the counter every 10ms. Intended to be wrapped in
+/// `tokio::time::timeout` to enforce the drain deadline.
+async fn wait_for_drain(writes_in_flight: &AtomicUsize) {
+    loop {
+        if writes_in_flight.load(Ordering::Acquire) == 0 {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tray icon lifecycle (Windows only, dedicated OS thread)
+// ---------------------------------------------------------------------------
 
 /// Spawn the tray icon on a dedicated OS thread.
 ///
@@ -184,6 +206,7 @@ struct AppState {
     provider: Box<dyn EventProvider + Send + Sync>,
     event_counter: AtomicU64,
     bound_port: AtomicU32,
+    writes_in_flight: AtomicUsize,
 }
 
 /// Collect unique session IDs from an iterator, preserving first-seen order.
@@ -237,8 +260,9 @@ async fn handle_hook_event(
         }
     };
 
+    state.writes_in_flight.fetch_add(1, Ordering::Release);
     let store = state.event_store.lock().unwrap();
-    match store.write_event(&canonical_event) {
+    let result = match store.write_event(&canonical_event) {
         Ok(()) => {
             state.event_counter.fetch_add(1, Ordering::Relaxed);
             (StatusCode::OK, "OK".to_string())
@@ -250,7 +274,10 @@ async fn handle_hook_event(
                 format!("Failed to persist event: {}", e),
             )
         }
-    }
+    };
+    drop(store);
+    state.writes_in_flight.fetch_sub(1, Ordering::Release);
+    result
 }
 
 /// Handle POST /v1/logs (OTLP HTTP log export).
@@ -273,6 +300,7 @@ async fn handle_otlp_logs(
     let events = parse_export_logs_request(&json_body, &received_at);
 
     // Step 1: Lock event_store, write events, collect session_ids, then drop lock.
+    state.writes_in_flight.fetch_add(1, Ordering::Release);
     let session_ids: Vec<String> = {
         let store = state.event_store.lock().unwrap();
         for event in &events {
@@ -307,6 +335,7 @@ async fn handle_otlp_logs(
         }
     }
 
+    state.writes_in_flight.fetch_sub(1, Ordering::Release);
     (StatusCode::OK, "{}".to_string())
 }
 
@@ -330,6 +359,7 @@ async fn handle_otlp_metrics(
     let data_points = parse_export_metrics_request(&json_body);
     let (service_version, os_type, host_arch) = extract_metrics_resource_attributes(&json_body);
 
+    state.writes_in_flight.fetch_add(1, Ordering::Release);
     let store = state.metric_store.lock().unwrap();
 
     for point in &data_points {
@@ -364,6 +394,8 @@ async fn handle_otlp_metrics(
         }
     }
 
+    drop(store);
+    state.writes_in_flight.fetch_sub(1, Ordering::Release);
     (StatusCode::OK, "{}".to_string())
 }
 
@@ -425,6 +457,7 @@ async fn main() {
         provider: Box::new(ClaudeCodeProvider),
         event_counter: AtomicU64::new(0),
         bound_port: AtomicU32::new(0),
+        writes_in_flight: AtomicUsize::new(0),
     });
 
     // Create cancellation token for coordinated shutdown
@@ -463,9 +496,19 @@ async fn main() {
         std::process::exit(1);
     }
 
-    // Allow in-flight requests to drain
-    tokio::time::sleep(std::time::Duration::from_secs(DRAIN_TIMEOUT_SECS)).await;
+    // Wait for in-flight SQLite writes to drain (with timeout)
+    let drain_result = tokio::time::timeout(
+        std::time::Duration::from_secs(DRAIN_TIMEOUT_SECS),
+        wait_for_drain(&state.writes_in_flight),
+    )
+    .await;
+
+    if drain_result.is_err() {
+        eprintln!("{}", format_drain_timeout_warning());
+    }
+
     eprintln!("norbert-hook-receiver: shutting down gracefully");
+    std::process::exit(0);
 }
 
 #[cfg(test)]
@@ -494,6 +537,7 @@ mod tests {
             provider: Box::new(ClaudeCodeProvider),
             event_counter: AtomicU64::new(0),
             bound_port: AtomicU32::new(0),
+            writes_in_flight: AtomicUsize::new(0),
         })
     }
 
@@ -1438,6 +1482,151 @@ mod tests {
     #[test]
     fn menu_title_label_is_norbert_hook_receiver() {
         assert_eq!(menu_title_label(), "Norbert Hook Receiver");
+    }
+
+    // --- Graceful shutdown acceptance tests (step 04-01) ---
+
+    #[tokio::test]
+    async fn server_exits_within_3_seconds_after_cancellation_with_no_inflight_writes() {
+        let state = test_state();
+        let cancel_token = CancellationToken::new();
+
+        let app = build_router(state.clone());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("should bind to an available port");
+        let actual_port = listener.local_addr().unwrap().port();
+        state
+            .bound_port
+            .store(actual_port as u32, Ordering::Relaxed);
+
+        let server_handle = tokio::spawn({
+            let token = cancel_token.clone();
+            async move {
+                axum::serve(listener, app)
+                    .with_graceful_shutdown(token.cancelled_owned())
+                    .await
+            }
+        });
+
+        // Cancel immediately -- no in-flight writes
+        cancel_token.cancel();
+
+        // Server task must complete within 3 seconds
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(3),
+            server_handle,
+        )
+        .await;
+
+        assert!(
+            result.is_ok(),
+            "Server should exit within 3 seconds after cancellation"
+        );
+    }
+
+    #[tokio::test]
+    async fn port_released_after_server_shutdown() {
+        let state = test_state();
+        let cancel_token = CancellationToken::new();
+
+        let app = build_router(state.clone());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("should bind to an available port");
+        let bound_addr = listener.local_addr().unwrap();
+        state
+            .bound_port
+            .store(bound_addr.port() as u32, Ordering::Relaxed);
+
+        let server_handle = tokio::spawn({
+            let token = cancel_token.clone();
+            async move {
+                axum::serve(listener, app)
+                    .with_graceful_shutdown(token.cancelled_owned())
+                    .await
+            }
+        });
+
+        cancel_token.cancel();
+        let _ = server_handle.await;
+
+        // Port should be released -- we should be able to rebind
+        let rebind_result = tokio::net::TcpListener::bind(bound_addr).await;
+        assert!(
+            rebind_result.is_ok(),
+            "Port should be released within 1 second of clean exit"
+        );
+    }
+
+    #[tokio::test]
+    async fn drain_completes_immediately_when_no_writes_inflight() {
+        let writes_in_flight = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+
+        // No writes in flight -- drain should complete immediately
+        let drain_start = std::time::Instant::now();
+        let drain_result = tokio::time::timeout(
+            std::time::Duration::from_secs(DRAIN_TIMEOUT_SECS),
+            wait_for_drain(&writes_in_flight),
+        )
+        .await;
+        let drain_duration = drain_start.elapsed();
+
+        assert!(drain_result.is_ok(), "Drain should complete when counter is 0");
+        assert!(
+            drain_duration.as_millis() < 200,
+            "Drain should complete nearly immediately when no writes in flight, took {}ms",
+            drain_duration.as_millis()
+        );
+    }
+
+    #[tokio::test]
+    async fn drain_waits_for_inflight_write_to_complete() {
+        let writes_in_flight = Arc::new(std::sync::atomic::AtomicUsize::new(1));
+
+        // Simulate a write completing after 500ms
+        let counter_clone = writes_in_flight.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            counter_clone.fetch_sub(1, Ordering::Release);
+        });
+
+        let drain_result = tokio::time::timeout(
+            std::time::Duration::from_secs(DRAIN_TIMEOUT_SECS),
+            wait_for_drain(&writes_in_flight),
+        )
+        .await;
+
+        assert!(
+            drain_result.is_ok(),
+            "Drain should wait for in-flight write to complete within timeout"
+        );
+    }
+
+    #[tokio::test]
+    async fn drain_timeout_exceeded_produces_warning() {
+        let warning_message = format_drain_timeout_warning();
+        assert_eq!(
+            warning_message,
+            "warn: drain timeout exceeded \u{2014} some writes may be incomplete"
+        );
+    }
+
+    #[tokio::test]
+    async fn drain_timeout_fires_when_write_exceeds_timeout() {
+        let writes_in_flight = Arc::new(std::sync::atomic::AtomicUsize::new(1));
+
+        // Write never completes -- counter stays at 1
+        let drain_result = tokio::time::timeout(
+            std::time::Duration::from_secs(DRAIN_TIMEOUT_SECS),
+            wait_for_drain(&writes_in_flight),
+        )
+        .await;
+
+        assert!(
+            drain_result.is_err(),
+            "Drain should timeout when writes exceed DRAIN_TIMEOUT_SECS"
+        );
     }
 
     #[tokio::test]
