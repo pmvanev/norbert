@@ -293,8 +293,8 @@ async fn tray_02_tooltip_shows_live_port_and_event_count() {
         "Tooltip must show bound port"
     );
     assert!(
-        tooltip.contains("42 events"),
-        "Tooltip must show event count as '42 events'"
+        tooltip.contains("Events: 42"),
+        "Tooltip must show event count as 'Events: 42'"
     );
 }
 
@@ -304,7 +304,7 @@ async fn tray_02_tooltip_shows_live_port_and_event_count() {
 /// When Danielle right-clicks the tray icon
 /// Then the context menu shows "Norbert Hook Receiver" as a non-clickable header
 /// And the menu shows "Port: 3748"
-/// And the menu shows "Events captured: 42"
+/// And the menu shows "Events: 42"
 /// And the menu contains a clickable "Quit" item
 #[cfg(target_os = "windows")]
 #[tokio::test]
@@ -326,8 +326,8 @@ async fn tray_03_context_menu_shows_status_and_quit_item() {
         "Context menu must show bound port as 'Port: 3748'"
     );
     assert!(
-        menu.contains_item("Events captured: 42"),
-        "Context menu must show event count as 'Events captured: 42'"
+        menu.contains_item("Events: 42"),
+        "Context menu must show event count as 'Events: 42'"
     );
     assert!(
         menu.contains_clickable_item("Quit"),
@@ -350,7 +350,7 @@ async fn tray_04_event_count_live_updates_in_tooltip() {
 
     post_hook_events(42).await;
     let tooltip_before = read_tray_tooltip("Norbert Hook Receiver").await;
-    assert!(tooltip_before.contains("42 events"), "Baseline: tooltip shows 42 events");
+    assert!(tooltip_before.contains("Events: 42"), "Baseline: tooltip shows Events: 42");
 
     // WHEN: 3 more events arrive
     post_hook_events(3).await;
@@ -358,8 +358,8 @@ async fn tray_04_event_count_live_updates_in_tooltip() {
     // THEN: tooltip now shows 45
     let tooltip_after = read_tray_tooltip("Norbert Hook Receiver").await;
     assert!(
-        tooltip_after.contains("45 events"),
-        "Tooltip must reflect the live counter: 42 + 3 = 45 events"
+        tooltip_after.contains("Events: 45"),
+        "Tooltip must reflect the live counter: 42 + 3 = Events: 45"
     );
 }
 
@@ -561,7 +561,7 @@ async fn error_03_event_count_not_incremented_when_hook_write_fails() {
     // GIVEN: baseline count is 0
     let tooltip_before = read_tray_tooltip("Norbert Hook Receiver").await;
     assert!(
-        tooltip_before.contains("0 events"),
+        tooltip_before.contains("Events: 0"),
         "Baseline event count must be 0 — got: {}",
         tooltip_before
     );
@@ -575,7 +575,7 @@ async fn error_03_event_count_not_incremented_when_hook_write_fails() {
     // THEN: event count is still 0
     let tooltip_after = read_tray_tooltip("Norbert Hook Receiver").await;
     assert!(
-        tooltip_after.contains("0 events"),
+        tooltip_after.contains("Events: 0"),
         "Event count must not increment when write fails — got: {}",
         tooltip_after
     );
@@ -618,7 +618,7 @@ async fn error_04_process_exits_code_zero_after_forced_drain_timeout() {
 ///
 /// Given norbert-hook-receiver.exe has previously captured 50 events and exited
 /// When norbert-hook-receiver.exe is started fresh
-/// Then the tray tooltip shows "0 events"
+/// Then the tray tooltip shows "Events: 0"
 #[cfg(target_os = "windows")]
 #[tokio::test]
 #[ignore]
@@ -639,7 +639,7 @@ async fn error_05_event_count_resets_to_zero_on_fresh_process_start() {
     // THEN: event count starts at 0
     let tooltip = read_tray_tooltip("Norbert Hook Receiver").await;
     assert!(
-        tooltip.contains("0 events"),
+        tooltip.contains("Events: 0"),
         "Event count must reset to 0 on fresh process start — got: {}",
         tooltip
     );

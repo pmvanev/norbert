@@ -16,7 +16,7 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
     routing::post,
-    Json, Router,
+    Router,
 };
 use norbert_lib::adapters::db::metric_store::SqliteMetricStore;
 use norbert_lib::adapters::db::SqliteEventStore;
@@ -72,7 +72,7 @@ fn format_tray_tooltip(port: u32, event_count: u64) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// Graceful shutdown drain functions (pure, no IO)
+// Graceful shutdown drain logic
 // ---------------------------------------------------------------------------
 
 /// Graceful shutdown drain timeout in seconds.
@@ -109,87 +109,97 @@ async fn wait_for_drain(writes_in_flight: &AtomicUsize) {
 ///
 /// This function is a no-op on non-Windows platforms.
 #[cfg(target_os = "windows")]
-fn spawn_tray_thread(state: Arc<AppState>, cancel_token: CancellationToken) {
+fn spawn_tray_thread(state: Arc<AppState>, cancel_token: CancellationToken) -> std::thread::JoinHandle<()> {
     use muda::{Menu, MenuItem, PredefinedMenuItem, MenuEvent};
     use tray_icon::{TrayIconBuilder, Icon as TrayIconIcon};
 
+    let cancel_for_panic = cancel_token.clone();
     std::thread::spawn(move || {
-        // Decode the embedded PNG into RGBA pixels for the tray icon
-        let icon_bytes = include_bytes!("../icons/icon.png");
-        let decoder = png::Decoder::new(std::io::Cursor::new(icon_bytes));
-        let mut reader = decoder.read_info().expect("Failed to read PNG info");
-        let mut buf = vec![0u8; reader.output_buffer_size()];
-        let info = reader.next_frame(&mut buf).expect("Failed to decode PNG frame");
-        buf.truncate(info.buffer_size());
-        let icon = TrayIconIcon::from_rgba(buf, info.width, info.height)
-            .expect("Failed to create tray icon from RGBA data");
+        // Wrap tray logic in catch_unwind so a panic signals shutdown instead of
+        // leaving the process unkillable with no tray icon.
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            // Decode the embedded PNG into RGBA pixels for the tray icon
+            let icon_bytes = include_bytes!("../icons/icon.png");
+            let decoder = png::Decoder::new(std::io::Cursor::new(icon_bytes));
+            let mut reader = decoder.read_info().expect("Failed to read PNG info");
+            let mut buf = vec![0u8; reader.output_buffer_size()];
+            let info = reader.next_frame(&mut buf).expect("Failed to decode PNG frame");
+            buf.truncate(info.buffer_size());
+            let icon = TrayIconIcon::from_rgba(buf, info.width, info.height)
+                .expect("Failed to create tray icon from RGBA data");
 
-        // Build initial tooltip from current state
-        let initial_port = state.bound_port.load(Ordering::Relaxed);
-        let initial_count = state.event_counter.load(Ordering::Relaxed);
-        let initial_tooltip = format_tray_tooltip(initial_port, initial_count);
+            // Build initial tooltip from current state
+            let initial_port = state.bound_port.load(Ordering::Relaxed);
+            let initial_count = state.event_counter.load(Ordering::Relaxed);
+            let initial_tooltip = format_tray_tooltip(initial_port, initial_count);
 
-        // Build context menu
-        let menu = Menu::new();
-        let title_item = MenuItem::new(menu_title_label(), false, None);
-        let port_item = MenuItem::new(format_port_label(initial_port), false, None);
-        let event_count_item = MenuItem::new(
-            format_event_count_label(initial_count),
-            false,
-            None,
-        );
-        let quit_item = MenuItem::new("Quit", true, None);
-        let quit_item_id = quit_item.id().clone();
+            // Build context menu
+            let menu = Menu::new();
+            let title_item = MenuItem::new(menu_title_label(), false, None);
+            let port_item = MenuItem::new(format_port_label(initial_port), false, None);
+            let event_count_item = MenuItem::new(
+                format_event_count_label(initial_count),
+                false,
+                None,
+            );
+            let quit_item = MenuItem::new("Quit", true, None);
+            let quit_item_id = quit_item.id().clone();
 
-        menu.append(&title_item).expect("Failed to add title menu item");
-        menu.append(&PredefinedMenuItem::separator()).expect("Failed to add separator");
-        menu.append(&port_item).expect("Failed to add port menu item");
-        menu.append(&event_count_item).expect("Failed to add event count menu item");
-        menu.append(&PredefinedMenuItem::separator()).expect("Failed to add separator");
-        menu.append(&quit_item).expect("Failed to add quit menu item");
+            menu.append(&title_item).expect("Failed to add title menu item");
+            menu.append(&PredefinedMenuItem::separator()).expect("Failed to add separator");
+            menu.append(&port_item).expect("Failed to add port menu item");
+            menu.append(&event_count_item).expect("Failed to add event count menu item");
+            menu.append(&PredefinedMenuItem::separator()).expect("Failed to add separator");
+            menu.append(&quit_item).expect("Failed to add quit menu item");
 
-        let tray_icon = TrayIconBuilder::new()
-            .with_tooltip(&initial_tooltip)
-            .with_menu(Box::new(menu))
-            .with_icon(icon)
-            .build()
-            .expect("Failed to build tray icon");
+            let tray_icon = TrayIconBuilder::new()
+                .with_tooltip(&initial_tooltip)
+                .with_menu(Box::new(menu))
+                .with_icon(icon)
+                .build()
+                .expect("Failed to build tray icon");
 
-        let menu_receiver = MenuEvent::receiver();
-        let cancel = cancel_token.clone();
+            let menu_receiver = MenuEvent::receiver();
+            let cancel = cancel_token.clone();
 
-        // Track last-seen values to avoid redundant updates
-        let mut last_port = initial_port;
-        let mut last_count = initial_count;
+            // Track last-seen values to avoid redundant updates
+            let mut last_port = initial_port;
+            let mut last_count = initial_count;
 
-        // Tick loop: refresh tooltip/menu on state change, process quit, sleep 16ms
-        loop {
-            // Refresh tooltip and menu items when state changes (on-demand read)
-            let current_port = state.bound_port.load(Ordering::Relaxed);
-            let current_count = state.event_counter.load(Ordering::Relaxed);
-            if current_port != last_port || current_count != last_count {
-                let tooltip = format_tray_tooltip(current_port, current_count);
-                let _ = tray_icon.set_tooltip(Some(&tooltip));
-                let _ = port_item.set_text(&format_port_label(current_port));
-                let _ = event_count_item.set_text(&format_event_count_label(current_count));
-                last_port = current_port;
-                last_count = current_count;
-            }
-
-            if let Ok(event) = menu_receiver.try_recv() {
-                if event.id() == &quit_item_id {
-                    cancel.cancel();
-                    break;
+            // Tick loop: refresh tooltip/menu on state change, process quit, sleep 16ms
+            loop {
+                // Refresh tooltip and menu items when state changes (on-demand read)
+                let current_port = state.bound_port.load(Ordering::Relaxed);
+                let current_count = state.event_counter.load(Ordering::Relaxed);
+                if current_port != last_port || current_count != last_count {
+                    let tooltip = format_tray_tooltip(current_port, current_count);
+                    let _ = tray_icon.set_tooltip(Some(&tooltip));
+                    let _ = port_item.set_text(&format_port_label(current_port));
+                    let _ = event_count_item.set_text(&format_event_count_label(current_count));
+                    last_port = current_port;
+                    last_count = current_count;
                 }
+
+                if let Ok(event) = menu_receiver.try_recv() {
+                    if event.id() == &quit_item_id {
+                        cancel.cancel();
+                        break;
+                    }
+                }
+                std::thread::sleep(std::time::Duration::from_millis(16));
             }
-            std::thread::sleep(std::time::Duration::from_millis(16));
+            // TrayIcon dropped here — Shell_NotifyIcon(NIM_DELETE) called by destructor
+        }));
+        if result.is_err() {
+            eprintln!("norbert-hook-receiver: tray thread panicked — initiating graceful shutdown");
+            cancel_for_panic.cancel();
         }
-    });
+    })
 }
 
 #[cfg(not(target_os = "windows"))]
-fn spawn_tray_thread(_state: Arc<AppState>, _cancel_token: CancellationToken) {
-    // No-op on non-Windows platforms
+fn spawn_tray_thread(_state: Arc<AppState>, _cancel_token: CancellationToken) -> std::thread::JoinHandle<()> {
+    std::thread::spawn(|| {}) // No-op on non-Windows platforms
 }
 
 /// Shared application state holding the event store and provider.
@@ -254,8 +264,12 @@ fn collect_unique_session_ids<'a>(session_ids: impl Iterator<Item = &'a String>)
 async fn handle_hook_event(
     State(state): State<Arc<AppState>>,
     Path(event_type_name): Path<String>,
-    Json(payload): Json<serde_json::Value>,
+    body: axum::body::Bytes,
 ) -> impl IntoResponse {
+    let payload = match parse_json_body(&body) {
+        Ok(v) => v,
+        Err(err) => return err,
+    };
     let session_id = match payload.get("session_id").and_then(|v| v.as_str()) {
         Some(id) => id.to_string(),
         None => {
@@ -411,11 +425,16 @@ async fn handle_otlp_metrics(
 }
 
 /// Build the axum router with hook routes and OTLP log receiver.
+///
+/// A 1 MB body size limit is applied globally to all routes. The `Bytes`
+/// extractor used by /v1/logs and /v1/metrics has no built-in limit, so
+/// `DefaultBodyLimit` must be set explicitly to prevent unbounded memory use.
 fn build_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/hooks/:event_type", post(handle_hook_event))
         .route("/v1/logs", post(handle_otlp_logs))
         .route("/v1/metrics", post(handle_otlp_metrics))
+        .layer(axum::extract::DefaultBodyLimit::max(1 * 1024 * 1024))
         .with_state(state)
 }
 
@@ -474,8 +493,10 @@ async fn main() {
     // Create cancellation token for coordinated shutdown
     let cancel_token = CancellationToken::new();
 
-    // Spawn tray icon on dedicated OS thread (Windows only, no-op elsewhere)
-    spawn_tray_thread(state.clone(), cancel_token.clone());
+    // Spawn tray icon on dedicated OS thread (Windows only, no-op elsewhere).
+    // Store the handle so we can join before process::exit to ensure the TrayIcon
+    // destructor runs (Shell_NotifyIcon NIM_DELETE), preventing ghost tray icons.
+    let tray_handle = spawn_tray_thread(state.clone(), cancel_token.clone());
 
     let app = build_router(state.clone());
 
@@ -517,6 +538,11 @@ async fn main() {
     if drain_result.is_err() {
         eprintln!("{}", format_drain_timeout_warning());
     }
+
+    // Join tray thread before exit so the TrayIcon destructor runs cleanly.
+    // The tray loop breaks as soon as cancel_token is cancelled, so this join
+    // returns quickly (typically within one 16ms tick).
+    let _ = tray_handle.join();
 
     eprintln!("norbert-hook-receiver: shutting down gracefully");
     std::process::exit(0);
@@ -834,6 +860,44 @@ mod tests {
 
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn hook_malformed_json_returns_400() {
+        // Verifies handle_hook_event returns 400 (not 422) for invalid JSON,
+        // consistent with the OTLP routes' parse_json_body behaviour.
+        let state = test_state();
+        let app = build_router(state);
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/hooks/PreToolUse")
+            .header("content-type", "application/json")
+            .body(Body::from("not valid json {{{"))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn oversized_body_returns_413() {
+        // Verifies the 1 MB DefaultBodyLimit rejects large payloads on the
+        // /v1/logs route where the Bytes extractor has no built-in limit.
+        let state = test_state();
+        let app = build_router(state);
+
+        let big_body = vec![b'a'; 2 * 1024 * 1024]; // 2 MB
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/v1/logs")
+            .header("content-type", "application/json")
+            .body(Body::from(big_body))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
     }
 
     #[tokio::test]
