@@ -21,7 +21,7 @@ import { CONFIG_SUB_TABS } from "../../../../../src/plugins/norbert-config/domai
 // ---------------------------------------------------------------------------
 
 describe("CONFIG_SUB_TABS const array", () => {
-  it("contains all 8 expected sub-tab values", () => {
+  it("contains all 9 expected sub-tab values", () => {
     expect(CONFIG_SUB_TABS).toEqual([
       "agents",
       "commands",
@@ -31,11 +31,12 @@ describe("CONFIG_SUB_TABS const array", () => {
       "mcp",
       "plugins",
       "docs",
+      "env",
     ]);
   });
 
-  it("is readonly and has exactly 8 entries", () => {
-    expect(CONFIG_SUB_TABS).toHaveLength(8);
+  it("is readonly and has exactly 9 entries", () => {
+    expect(CONFIG_SUB_TABS).toHaveLength(9);
   });
 });
 

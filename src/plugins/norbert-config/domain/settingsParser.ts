@@ -10,6 +10,7 @@
 import type {
   ConfigScope,
   EnvVar,
+  EnvVarEntry,
   HookConfig,
   McpServerConfig,
   PluginInfo,
@@ -154,6 +155,29 @@ function extractEnvVars(envRaw: unknown): readonly EnvVar[] {
 }
 
 // ---------------------------------------------------------------------------
+// Top-level env var extraction
+// ---------------------------------------------------------------------------
+
+function extractTopLevelEnvVars(envRaw: unknown, scope: ConfigScope): readonly EnvVarEntry[] {
+  if (typeof envRaw !== "object" || envRaw === null || Array.isArray(envRaw)) {
+    return [];
+  }
+
+  const envObj = envRaw as Record<string, unknown>;
+
+  return Object.entries(envObj)
+    .filter(([, value]) => typeof value === "string")
+    .map(([key, value]) => ({
+      key,
+      value: value as string,
+      scope,
+      source: "settings.json",
+      filePath: "",
+    }))
+    .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+}
+
+// ---------------------------------------------------------------------------
 // Rules extraction
 // ---------------------------------------------------------------------------
 
@@ -214,6 +238,7 @@ export function parseSettings(content: string, scope: ConfigScope = "user"): Set
     mcpServers: extractMcpServers(settings.mcpServers, scope),
     rules: extractRules(settings.rules, scope),
     plugins: extractPlugins(settings.plugins, scope),
+    envVars: extractTopLevelEnvVars(settings.env, scope),
   };
 }
 

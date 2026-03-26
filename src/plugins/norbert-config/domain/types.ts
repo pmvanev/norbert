@@ -24,6 +24,18 @@ export interface EnvVar {
 }
 
 // ---------------------------------------------------------------------------
+// EnvVarEntry -- top-level environment variable with scope attribution
+// ---------------------------------------------------------------------------
+
+export interface EnvVarEntry {
+  readonly key: string;
+  readonly value: string;
+  readonly scope: ConfigScope;
+  readonly source: string;
+  readonly filePath: string;
+}
+
+// ---------------------------------------------------------------------------
 // AgentDefinition -- parsed agent metadata from .md file
 // ---------------------------------------------------------------------------
 
@@ -163,6 +175,7 @@ export type SettingsParseResult =
       readonly mcpServers: readonly McpServerConfig[];
       readonly rules: readonly RuleEntry[];
       readonly plugins: readonly PluginInfo[];
+      readonly envVars: readonly EnvVarEntry[];
     }
   | { readonly tag: "error"; readonly message: string };
 
@@ -202,7 +215,8 @@ export type SelectedConfigItem =
   | { readonly tag: "skill"; readonly skill: SkillDefinition }
   | { readonly tag: "rule"; readonly rule: RuleEntry }
   | { readonly tag: "plugin"; readonly plugin: PluginInfo }
-  | { readonly tag: "doc"; readonly doc: DocFile };
+  | { readonly tag: "doc"; readonly doc: DocFile }
+  | { readonly tag: "env"; readonly envVar: EnvVarEntry };
 
 // ---------------------------------------------------------------------------
 // CONFIG_SUB_TABS -- const array and derived union type for tab navigation
@@ -217,6 +231,7 @@ export const CONFIG_SUB_TABS = [
   "mcp",
   "plugins",
   "docs",
+  "env",
 ] as const;
 
 export type ConfigSubTab = (typeof CONFIG_SUB_TABS)[number];
