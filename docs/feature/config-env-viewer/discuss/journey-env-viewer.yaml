@@ -1,0 +1,168 @@
+journey:
+  name: "Environment Variable Viewer"
+  goal: "Verify and inspect Claude Code environment variables from settings.json"
+  persona: "Reiko Tanaka -- Senior Developer, Claude Code Power User"
+  feature_id: "config-env-viewer"
+
+  emotional_arc:
+    start: "Hopeful but uncertain -- did /norbert:setup work?"
+    middle: "Focused scanning -- checking each variable"
+    end: "Confident -- configuration verified, or informed -- found the issue"
+
+steps:
+  - id: 1
+    name: "Open Config Viewer"
+    action: "Navigate to Config Viewer plugin in Norbert"
+
+    shared_artifacts:
+      - name: "settings_file_path"
+        source: "~/.claude/settings.json"
+        displayed_as: "${settingsPath}"
+        consumers:
+          - "Environment tab source attribution"
+          - "Detail panel source field"
+          - "Error indicator file path"
+
+    emotional_state:
+      entry: "Hopeful -- wants to verify setup"
+      exit: "Oriented -- familiar interface, knows where to look"
+
+    integration_checkpoint: |
+      Config Viewer loads successfully via read_claude_config IPC call.
+      Settings.json is read and available for parsing.
+
+  - id: 2
+    name: "Click Environment Tab"
+    action: "Select the Environment sub-tab from the tab navigation"
+
+    tui_mockup: |
+      +-- Configuration Viewer ----------------------------------[reload]--+
+      |                                                                     |
+      | [Agents] [Commands] [Hooks] [MCP Servers] [Skills] [Rules]        |
+      | [Plugins] [Docs] [*Environment*]                                   |
+      +--------------------------------------------------------------------+
+
+    shared_artifacts:
+      - name: "env_var_count"
+        source: "settings.json env block parsed by settingsParser"
+        displayed_as: "${envVarCount}"
+        consumers:
+          - "Tab header: Environment Variables (${envVarCount})"
+
+    emotional_state:
+      entry: "Oriented -- navigating to the right place"
+      exit: "Focused -- tab found, ready to inspect"
+
+    integration_checkpoint: |
+      Environment tab appears in CONFIG_SUB_TABS navigation.
+      Tab renders the environment variable list from AggregatedConfig.
+
+  - id: 3
+    name: "Scan Environment Variables"
+    action: "Read through list of key-value pairs"
+
+    tui_mockup: |
+      +-- Environment Variables (5) -- user ---------------------------+
+      |                                                                 |
+      |  CLAUDE_CODE_ENABLE_TELEMETRY        1                         |
+      |  OTEL_EXPORTER_OTLP_ENDPOINT         http://127.0.0.1:3748    |
+      |  OTEL_EXPORTER_OTLP_PROTOCOL         http/json                |
+      |  OTEL_LOGS_EXPORTER                  otlp                     |
+      |  OTEL_METRICS_EXPORTER               otlp                     |
+      +-----------------------------------------------------------------+
+
+    shared_artifacts:
+      - name: "env_vars"
+        source: "~/.claude/settings.json -> env block"
+        displayed_as: "${key}: ${value}"
+        consumers:
+          - "Environment list panel"
+          - "Environment detail panel"
+
+      - name: "env_scope"
+        source: "settings.json file location (user vs project)"
+        displayed_as: "${scope}"
+        consumers:
+          - "Scope tag in list header"
+          - "Detail panel scope field"
+
+    emotional_state:
+      entry: "Focused -- scanning the list"
+      exit: "Confident -- all expected vars present, or Informed -- identified missing/wrong var"
+
+    integration_checkpoint: |
+      Each env var key-value pair from settings.json env block
+      is displayed with correct value. Alphabetically sorted.
+      Scope tag matches the file source (user or project).
+
+    gherkin: |
+      Scenario: Display environment variables from settings.json
+        Given Reiko has run /norbert:setup configuring 5 OpenTelemetry env vars
+        And ~/.claude/settings.json contains an env block with those 5 variables
+        When Reiko opens Config Viewer and clicks the Environment tab
+        Then 5 environment variables are displayed in alphabetical order
+        And each variable shows its key and value
+        And the header shows "Environment Variables (5)"
+        And the scope tag shows "user"
+
+  - id: 4
+    name: "Select Variable for Detail"
+    action: "Click on an environment variable to view its detail"
+
+    tui_mockup: |
+      +-- Detail: OTEL_EXPORTER_OTLP_PROTOCOL -----+
+      |  Key:    OTEL_EXPORTER_OTLP_PROTOCOL        |
+      |  Value:  http/json                           |
+      |  Source: ~/.claude/settings.json             |
+      |  Scope:  user                                |
+      +----------------------------------------------+
+
+    emotional_state:
+      entry: "Curious -- wants more context on a specific variable"
+      exit: "Informed -- sees source file and scope"
+
+    integration_checkpoint: |
+      Clicking an env var opens the detail in the app secondary zone.
+      Detail shows key, value, source file path, and scope.
+
+    gherkin: |
+      Scenario: View environment variable detail
+        Given the Environment tab is showing 5 variables
+        When Reiko clicks on OTEL_EXPORTER_OTLP_PROTOCOL
+        Then the detail panel shows Key as "OTEL_EXPORTER_OTLP_PROTOCOL"
+        And Value as "http/json"
+        And Source as "~/.claude/settings.json"
+        And Scope as "user"
+
+integration_validation:
+  shared_artifact_consistency:
+    - artifact: "env_vars"
+      must_match_across: [3, 4]
+      failure_message: "Env var displayed in list must match value shown in detail panel"
+
+    - artifact: "settings_file_path"
+      must_match_across: [1, 4]
+      failure_message: "Source file path in detail must match the file actually read by backend"
+
+    - artifact: "env_scope"
+      must_match_across: [3, 4]
+      failure_message: "Scope tag in list header must match scope in detail panel"
+
+error_paths:
+  - id: "E1"
+    name: "No settings.json"
+    trigger: "~/.claude/settings.json does not exist"
+    display: "Existing ErrorIndicator with file path"
+    recovery: "Run /norbert:setup or create settings.json manually"
+
+  - id: "E2"
+    name: "No env block"
+    trigger: "settings.json exists but has no env key"
+    display: "Empty state: 'No environment variables configured. Run /norbert:setup to configure OpenTelemetry.'"
+    recovery: "Run /norbert:setup"
+
+  - id: "E3"
+    name: "Non-string env values"
+    trigger: "env block contains nested objects or non-string values"
+    display: "Only valid string key-value pairs shown; malformed entries silently skipped"
+    recovery: "Edit settings.json to fix malformed entries"
