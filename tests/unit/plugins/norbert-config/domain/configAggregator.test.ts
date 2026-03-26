@@ -125,7 +125,7 @@ describe("configAggregator properties", () => {
     );
   });
 
-  it("null settings produces empty hooks, mcpServers, rules, plugins", () => {
+  it("null settings produces empty hooks, mcpServers, rules, plugins, envVars", () => {
     const rawConfig: RawClaudeConfig = {
       agents: [],
       commands: [],
@@ -140,6 +140,46 @@ describe("configAggregator properties", () => {
     expect(result.mcpServers).toEqual([]);
     expect(result.rules).toEqual([]);
     expect(result.plugins).toEqual([]);
+    expect(result.envVars).toEqual([]);
+  });
+
+  it("envVars from settings receive filePath annotation from FileEntry.path", () => {
+    fc.assert(
+      fc.property(
+        fc.dictionary(
+          fc.string({ minLength: 1, maxLength: 20 }).filter((s) => /^[A-Z_][A-Z0-9_]*$/.test(s)),
+          fc.string({ maxLength: 50 }),
+          { minKeys: 0, maxKeys: 10 },
+        ),
+        scopeArb,
+        fc.constantFrom("~/.claude/settings.json", "./.claude/settings.json"),
+        (envBlock, scope, settingsPath) => {
+          const settingsJson = JSON.stringify({ env: envBlock });
+          const rawConfig: RawClaudeConfig = {
+            agents: [],
+            commands: [],
+            skills: [],
+            settings: { path: settingsPath, content: settingsJson, scope, source: scope },
+            claudeMdFiles: [],
+            errors: [],
+            scope: "both",
+          };
+          const result = aggregateConfig(rawConfig);
+
+          // envVars count matches input env block string entries
+          const expectedCount = Object.values(envBlock).filter(
+            (v) => typeof v === "string",
+          ).length;
+          expect(result.envVars).toHaveLength(expectedCount);
+
+          // Every envVar has filePath set to the settings FileEntry.path
+          for (const entry of result.envVars) {
+            expect(entry.filePath).toBe(settingsPath);
+          }
+        },
+      ),
+      { numRuns: 100 },
+    );
   });
 
   it("agent scope is preserved from FileEntry, not hardcoded", () => {

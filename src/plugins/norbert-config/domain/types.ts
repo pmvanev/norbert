@@ -191,6 +191,7 @@ export interface AggregatedConfig {
   readonly skills: readonly SkillDefinition[];
   readonly rules: readonly RuleEntry[];
   readonly plugins: readonly PluginInfo[];
+  readonly envVars: readonly EnvVarEntry[];
   readonly docs: readonly DocFile[];
   readonly errors: readonly ReadErrorInfo[];
 }

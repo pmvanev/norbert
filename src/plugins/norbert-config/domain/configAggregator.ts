@@ -13,6 +13,7 @@ import type {
   CommandDefinition,
   ConfigScope,
   DocFile,
+  EnvVarEntry,
   HookConfig,
   McpServerConfig,
   PluginInfo,
@@ -147,6 +148,7 @@ interface ParsedSettings {
   readonly mcpServers: readonly McpServerConfig[];
   readonly rules: readonly RuleEntry[];
   readonly plugins: readonly PluginInfo[];
+  readonly envVars: readonly EnvVarEntry[];
 }
 
 const EMPTY_SETTINGS: ParsedSettings = {
@@ -154,6 +156,7 @@ const EMPTY_SETTINGS: ParsedSettings = {
   mcpServers: [],
   rules: [],
   plugins: [],
+  envVars: [],
 };
 
 function aggregateSettings(settingsEntry: FileEntry | null): ParsedSettings {
@@ -172,6 +175,7 @@ function aggregateSettings(settingsEntry: FileEntry | null): ParsedSettings {
     mcpServers: annotateFilePath(result.mcpServers, settingsEntry),
     rules: annotateFilePath(result.rules, settingsEntry),
     plugins: annotateFilePath(result.plugins, settingsEntry),
+    envVars: annotateFilePath(result.envVars, settingsEntry),
   };
 }
 
@@ -337,6 +341,7 @@ export function aggregateConfig(rawConfig: RawClaudeConfig): AggregatedConfig {
     mcpServers: settings.mcpServers,
     rules: allRules,
     plugins: allPlugins,
+    envVars: settings.envVars,
     docs,
     errors,
   };
