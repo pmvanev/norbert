@@ -19,7 +19,7 @@ import { Icon } from "../../../components/Icon";
 // Sub-tab display labels -- maps domain ids to human-readable labels
 // ---------------------------------------------------------------------------
 
-const SUB_TAB_LABELS: Record<ConfigSubTab, string> = {
+export const SUB_TAB_LABELS: Record<ConfigSubTab, string> = {
   agents: "Agents",
   commands: "Commands",
   hooks: "Hooks",
@@ -28,13 +28,14 @@ const SUB_TAB_LABELS: Record<ConfigSubTab, string> = {
   rules: "Rules",
   plugins: "Plugins",
   docs: "Docs",
+  env: "Environment",
 };
 
 // ---------------------------------------------------------------------------
 // Sub-tab icons -- lucide-react icon names
 // ---------------------------------------------------------------------------
 
-const SUB_TAB_ICONS: Record<ConfigSubTab, string> = {
+export const SUB_TAB_ICONS: Record<ConfigSubTab, string> = {
   agents: "bot",
   commands: "terminal",
   hooks: "anchor",
@@ -43,6 +44,7 @@ const SUB_TAB_ICONS: Record<ConfigSubTab, string> = {
   rules: "list",
   plugins: "package",
   docs: "file-text",
+  env: "key",
 };
 
 /// Default active sub-tab on mount.

@@ -19,6 +19,7 @@ import type {
   RuleEntry,
   PluginInfo,
   DocFile,
+  EnvVarEntry,
   SelectedConfigItem,
 } from "../domain/types";
 import { EmptyState } from "./EmptyState";
@@ -329,6 +330,23 @@ const DocRow: FC<{
   </button>
 );
 
+const EnvVarRow: FC<{
+  readonly envVar: EnvVarEntry;
+  readonly active: boolean;
+  readonly onSelect: () => void;
+}> = ({ envVar, active, onSelect }) => (
+  <button
+    className={`config-list-row${active ? " active" : ""}`}
+    onClick={onSelect}
+    type="button"
+    aria-label={envVar.key}
+  >
+    <span className="config-list-name">{envVar.key}</span>
+    <ScopeBadge scope={envVar.scope} />
+    <span className="config-list-meta" data-mono="">{envVar.value}</span>
+  </button>
+);
+
 // ---------------------------------------------------------------------------
 // Key derivation -- stable keys for each item type
 // ---------------------------------------------------------------------------
@@ -353,6 +371,8 @@ const pluginKey = (p: PluginInfo): string =>
   `${p.name}-${p.filePath}`;
 
 const docKey = (d: DocFile): string => d.filePath;
+
+const envVarKey = (e: EnvVarEntry): string => `${e.key}-${e.filePath}`;
 
 // ---------------------------------------------------------------------------
 // Component
@@ -590,6 +610,28 @@ export const ConfigListPanel: FC<ConfigListPanelProps> = ({
                 doc={doc}
                 active={selectedKey === key}
                 onSelect={() => onSelect({ tag: "doc", doc }, key)}
+              />
+            );
+          })}
+        </div>
+      );
+    }
+
+    case "env": {
+      if (config.envVars.length === 0) {
+        return <EmptyState category="environment variables" guidance="Run /norbert:setup to configure OpenTelemetry environment variables, or add env vars to settings.json manually." />;
+      }
+      const sorted = [...config.envVars].sort((a, b) => a.key.localeCompare(b.key));
+      return (
+        <div className="config-list" role="listbox" aria-label="Environment Variables">
+          {sorted.map((envVar) => {
+            const key = envVarKey(envVar);
+            return (
+              <EnvVarRow
+                key={key}
+                envVar={envVar}
+                active={selectedKey === key}
+                onSelect={() => onSelect({ tag: "env", envVar }, key)}
               />
             );
           })}

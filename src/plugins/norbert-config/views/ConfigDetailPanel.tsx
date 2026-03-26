@@ -17,6 +17,7 @@ import type {
   PluginInfo,
   DocFile,
   EnvVar,
+  EnvVarEntry,
 } from "../domain/types";
 
 // ---------------------------------------------------------------------------
@@ -294,6 +295,23 @@ const PluginDetail: FC<{ readonly plugin: PluginInfo }> = ({ plugin }) => (
   </div>
 );
 
+const EnvVarDetail: FC<{ readonly envVar: EnvVarEntry }> = ({ envVar }) => (
+  <div className="config-detail-content">
+    <div className="config-detail-header">
+      <span className="config-detail-title">{envVar.key}</span>
+      <ScopeBadge scope={envVar.scope} />
+    </div>
+    <div className="config-card-section">
+      <span className="config-card-section-label">Value</span>
+      <span className="config-card-source" data-mono="">{envVar.value}</span>
+    </div>
+    <div className="config-card-section">
+      <span className="config-card-section-label">Source</span>
+      <span className="config-card-source" data-mono="">{envVar.filePath}</span>
+    </div>
+  </div>
+);
+
 const DocDetail: FC<{ readonly doc: DocFile }> = ({ doc }) => (
   <div className="config-detail-content">
     <div className="config-detail-header">
@@ -341,6 +359,8 @@ export const ConfigDetailPanel: FC<ConfigDetailPanelProps> = ({ selection }) => 
         return <PluginDetail plugin={selection.plugin} />;
       case "doc":
         return <DocDetail doc={selection.doc} />;
+      case "env":
+        return <EnvVarDetail envVar={selection.envVar} />;
     }
   })();
 
