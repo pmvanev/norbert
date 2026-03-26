@@ -34,6 +34,7 @@ norbert-v*.tar.gz
 src-tauri/.nwave/
 
 # Mutation testing output
+.stryker-tmp/
 mutants.out/
 mutants.out.old/
 src-tauri/mutants.out/
