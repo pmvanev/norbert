@@ -35,7 +35,15 @@ From inside Claude Code:
 /plugin install norbert@pmvanev-plugins
 ```
 
-This registers hooks so Claude Code sends session events to Norbert. The app and plugin are independent — Norbert runs fine without the plugin (it just won't receive events), and the plugin can be installed or removed without affecting the app or its data.
+Then run the setup command to configure OpenTelemetry:
+
+```
+/norbert:setup
+```
+
+This merges the required OTel environment variables into your `~/.claude/settings.json`. Restart Claude Code after running it for the settings to take effect. The command is idempotent — safe to re-run.
+
+The plugin registers hooks so Claude Code sends session events to Norbert. The app and plugin are independent — Norbert runs fine without the plugin (it just won't receive events), and the plugin can be installed or removed without affecting the app or its data.
 
 ## Development install
 
