@@ -1,0 +1,74 @@
+{
+  "roadmap": {
+    "project_id": "hook-receiver-clarity",
+    "created_at": "2026-03-25T22:00:00Z",
+    "total_steps": 4,
+    "validation_status": "approved"
+  },
+  "phases": [
+    {
+      "id": "01",
+      "name": "Per-binary VERSIONINFO",
+      "steps": [
+        {
+          "id": "01-01",
+          "name": "VERSIONINFO in build.rs",
+          "criteria": [
+            "norbert-hook-receiver.exe FileDescription reads 'Norbert Hook Receiver'",
+            "norbert.exe FileDescription unchanged — no regression",
+            "Both binaries produced from a single cargo build"
+          ],
+          "files_to_modify": ["src-tauri/build.rs"]
+        }
+      ]
+    },
+    {
+      "id": "02",
+      "name": "AppState counters",
+      "steps": [
+        {
+          "id": "02-01",
+          "name": "Event counter and bound port",
+          "criteria": [
+            "Counter equals N after N successful writes across all three endpoints",
+            "Counter unchanged when a write returns an error",
+            "bound_port reads actual port from TcpListener::local_addr() after bind"
+          ],
+          "files_to_modify": ["src-tauri/src/hook_receiver.rs"]
+        }
+      ]
+    },
+    {
+      "id": "03",
+      "name": "Tray icon",
+      "steps": [
+        {
+          "id": "03-01",
+          "name": "TrayManager icon tooltip menu",
+          "criteria": [
+            "Tray icon appears in Windows system tray within 2 seconds of start",
+            "Tooltip displays 'Norbert Hook Receiver', bound port, and event count",
+            "Context menu shows title, port, event count, and a clickable Quit item"
+          ],
+          "files_to_modify": ["src-tauri/src/hook_receiver.rs"]
+        }
+      ]
+    },
+    {
+      "id": "04",
+      "name": "Graceful shutdown",
+      "steps": [
+        {
+          "id": "04-01",
+          "name": "Shutdown coordinator drain timeout",
+          "criteria": [
+            "Quit menu click causes process to exit code 0 within 3 seconds",
+            "When no SQLite write is in flight, process exits immediately",
+            "Drain timeout produces stderr warning indicating incomplete drain"
+          ],
+          "files_to_modify": ["src-tauri/src/hook_receiver.rs"]
+        }
+      ]
+    }
+  ]
+}

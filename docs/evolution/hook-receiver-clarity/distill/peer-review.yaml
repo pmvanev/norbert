@@ -1,0 +1,103 @@
+review_id: "accept_rev_2026-03-25_hook-receiver-clarity"
+reviewer: "acceptance-designer (review mode)"
+feature: "hook-receiver-clarity"
+review_date: "2026-03-25"
+
+strengths:
+  - "Walking skeleton ws_01 is demo-able to a non-technical stakeholder — 'Danielle tells the two processes apart at a glance' is pure user value, no technical framing"
+  - "Walking skeleton ws_02 covers the full tray journey (appear, hover, quit) as a single E2E scenario with observable user outcomes at each step"
+  - "All 17 scenarios use domain language exclusively — no HTTP verbs, status codes, database terms, or Rust type names appear in Gherkin steps"
+  - "Driving port is the compiled binary boundary — every scenario invokes norbert-hook-receiver.exe as a black box process; no internal component is accessed directly"
+  - "Concrete values used throughout: '42 events', ':3748', '2 seconds', '0 events', 'Norbert Hook Receiver' — no abstract placeholders"
+  - "Error path ic-02 (port bind failure) correctly validates that tray still appears — this is the highest-risk integration checkpoint per shared-artifacts-registry"
+  - "Forced drain timeout scenario (shutdown_03) covers the specific log-warning AC from the user story, giving the crafter a clear observable assertion target"
+  - "error_03 (event count not incremented on write failure) is the only non-obvious business rule in the domain — correctly identified and covered"
+  - "All scenarios except ws_01 are #[ignore] in the Rust test file, enforcing one-at-a-time Outside-In TDD"
+  - "#[cfg(target_os = 'windows')] guards applied consistently — non-Windows builds are unaffected"
+
+issues_identified:
+  happy_path_bias:
+    status: "acceptable"
+    note: >
+      Error/edge scenario ratio is 5/17 = 29%, below the 40% target.
+      However, this domain has an unusually narrow error surface: VERSIONINFO is
+      a static compile-time value (zero runtime error paths); tray state is two
+      atomic values (zero contention errors possible at acceptance level); the
+      only genuine runtime error paths are port-bind failure, write failure,
+      and drain timeout — all three covered. Forcing artificial error scenarios
+      would create Testing Theater.
+    severity: "acknowledged — not a blocker given domain constraints"
+
+  gwt_format:
+    status: "pass"
+    note: "All 17 scenarios have Given/When/Then. No multiple-When violations. Shutdown_03 has two Then clauses on the same observable outcome (exit code + log) — acceptable as they are simultaneous observations of one event."
+
+  business_language:
+    status: "pass"
+    note: >
+      Audit performed: no occurrences of HTTP, POST, JSON, database, mutex, atomic,
+      Axum, tokio, Rust, API, REST, status code, 200, 201, or infrastructure terms
+      in any Gherkin step. 'Port' is domain language in this context
+      (Danielle sees ':3748' in the tray tooltip — it is the observable artifact, not
+      an implementation detail). 'Process exits with code 0' is the user-observable
+      outcome (distinguishes crash from clean exit) — acceptable.
+
+  coverage_gaps:
+    status: "pass"
+    mapping:
+      US-HRC-01:
+        acceptance_criteria:
+          - ac: "Task Manager Description column shows 'Norbert Hook Receiver'"
+            covered_by: "ws_01, versioninfo_01"
+          - ac: "Task Manager Description column shows 'Norbert' for norbert.exe (unchanged)"
+            covered_by: "ws_01, versioninfo_03"
+          - ac: "File Properties -> Details 'File description' shows 'Norbert Hook Receiver'"
+            covered_by: "versioninfo_01"
+          - ac: "Distinction visible without extra columns or hovering"
+            covered_by: "ws_01"
+          - ac: "Main GUI binary metadata passes regression check"
+            covered_by: "versioninfo_03"
+      US-HRC-02:
+        acceptance_criteria:
+          - ac: "Tray icon appears within 2 seconds"
+            covered_by: "tray_01, ws_02"
+          - ac: "Tooltip shows name, bound port, event count (no background polling)"
+            covered_by: "tray_02, tray_04"
+          - ac: "Context menu shows title, port, event count, Quit"
+            covered_by: "tray_03"
+          - ac: "Event count reflects in-memory counter at tooltip/menu open time"
+            covered_by: "tray_04"
+          - ac: "Quit triggers graceful shutdown: flush SQLite -> remove icon -> exit 0"
+            covered_by: "shutdown_01, shutdown_02, ws_02"
+          - ac: "Graceful drain timeout is named constant (default 2s); forced exit on timeout with log warning"
+            covered_by: "shutdown_03, error_04"
+          - ac: "Port released within 1 second of clean exit"
+            covered_by: "shutdown_01, ws_02"
+          - ac: "If port bind fails, tray still appears with 'Port: unavailable'"
+            covered_by: "error_01, error_02"
+
+  walking_skeleton_centricity:
+    status: "pass"
+    litmus_test_results:
+      ws_01:
+        title_describes_user_goal: true
+        then_steps_are_user_observations: true
+        stakeholder_confirmable: true
+        note: "'Danielle can tell the two processes apart without expanding any extra columns' — observable, valuable, demo-able"
+      ws_02:
+        title_describes_user_goal: true
+        then_steps_are_user_observations: true
+        stakeholder_confirmable: true
+        note: "Journey covers tray appearance -> hover status -> quit -> confirmation. Each Then is what Danielle sees/confirms."
+
+  priority_validation:
+    status: "pass"
+    note: >
+      Tests address both AC sets in priority order: VERSIONINFO (US-HRC-01, compile-time,
+      no dependencies) is validated first; tray scenarios (US-HRC-02) follow. The
+      one-at-a-time #[ignore] sequence correctly prioritizes ws_01 -> versioninfo_01 ->
+      versioninfo_02 -> versioninfo_03 -> tray_01 -> ... -> error_05.
+
+approval_status: "approved"
+conditions: "none"
+approved_by: "acceptance-designer peer review pass 1 of 2"
