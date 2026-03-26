@@ -24,6 +24,7 @@ import type {
 } from "../domain/types";
 import { EmptyState } from "./EmptyState";
 import { ErrorIndicator } from "./ErrorIndicator";
+import { ScopeBadge, formatAgentDisplayName, deriveFilename } from "./shared";
 
 // ---------------------------------------------------------------------------
 // Source label extraction -- unified across all filterable entity types
@@ -158,20 +159,8 @@ export interface ConfigListPanelProps {
 }
 
 // ---------------------------------------------------------------------------
-// Scope badge (shared)
-// ---------------------------------------------------------------------------
-
-const ScopeBadge: FC<{ readonly scope: string; readonly source?: string }> = ({ scope, source }) => (
-  <span className="config-scope-badge">{scope === "plugin" && source ? source : scope}</span>
-);
-
-// ---------------------------------------------------------------------------
 // List row components
 // ---------------------------------------------------------------------------
-
-/** Format agent display name: "Persona, name" if persona exists, otherwise just name. */
-const formatAgentDisplayName = (agent: { readonly persona: string; readonly name: string }): string =>
-  agent.persona ? `${agent.persona}, ${agent.name}` : agent.name;
 
 const AgentRow: FC<{
   readonly result: AgentParseResult;
@@ -272,11 +261,8 @@ const SkillRow: FC<{
 );
 
 /** Derive a short display name from the file path. */
-const deriveRuleName = (rule: RuleEntry): string => {
-  const segments = rule.filePath.split(/[/\\]/);
-  const filename = segments[segments.length - 1] ?? rule.source;
-  return filename.replace(/\.md$/, "");
-};
+const deriveRuleName = (rule: RuleEntry): string =>
+  deriveFilename(rule.filePath, rule.source).replace(/\.md$/, "");
 
 const RuleRow: FC<{
   readonly rule: RuleEntry;
@@ -310,10 +296,8 @@ const PluginRow: FC<{
 );
 
 /** Derive a short display name from the doc file path. */
-const deriveDocName = (doc: DocFile): string => {
-  const segments = doc.filePath.split(/[/\\]/);
-  return segments[segments.length - 1] ?? doc.filePath;
-};
+const deriveDocName = (doc: DocFile): string =>
+  deriveFilename(doc.filePath);
 
 const DocRow: FC<{
   readonly doc: DocFile;

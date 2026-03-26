@@ -19,14 +19,7 @@ import type {
   EnvVar,
   EnvVarEntry,
 } from "../domain/types";
-
-// ---------------------------------------------------------------------------
-// Scope badge
-// ---------------------------------------------------------------------------
-
-const ScopeBadge: FC<{ readonly scope: string; readonly source?: string }> = ({ scope, source }) => (
-  <span className="config-scope-badge">{scope === "plugin" && source ? source : scope}</span>
-);
+import { ScopeBadge, formatAgentDisplayName, deriveFilename } from "./shared";
 
 // ---------------------------------------------------------------------------
 // Masked env var row (MCP detail)
@@ -55,10 +48,6 @@ const EnvVarRow: FC<{ readonly envVar: EnvVar }> = ({ envVar }) => {
 // ---------------------------------------------------------------------------
 // Detail renderers
 // ---------------------------------------------------------------------------
-
-/** Format agent display name: "Persona, name" if persona exists, otherwise just name. */
-const formatAgentDisplayName = (agent: { readonly persona: string; readonly name: string }): string =>
-  agent.persona ? `${agent.persona}, ${agent.name}` : agent.name;
 
 const AgentDetail: FC<{ readonly agent: AgentDefinition }> = ({ agent }) => (
   <div className="config-detail-content">
@@ -202,8 +191,7 @@ const SkillDetail: FC<{ readonly skill: SkillDefinition }> = ({ skill }) => (
 );
 
 const RuleDetail: FC<{ readonly rule: RuleEntry }> = ({ rule }) => {
-  const segments = rule.filePath.split(/[/\\]/);
-  const name = (segments[segments.length - 1] ?? rule.source).replace(/\.md$/, "");
+  const name = deriveFilename(rule.filePath, rule.source).replace(/\.md$/, "");
 
   return (
     <div className="config-detail-content">
