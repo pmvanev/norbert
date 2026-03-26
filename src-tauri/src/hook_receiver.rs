@@ -884,10 +884,12 @@ mod tests {
     async fn oversized_body_returns_413() {
         // Verifies the 1 MB DefaultBodyLimit rejects large payloads on the
         // /v1/logs route where the Bytes extractor has no built-in limit.
+        // Uses exactly 1 byte over the limit to catch arithmetic mutations on
+        // DefaultBodyLimit::max(1 * 1024 * 1024) (e.g. `* → +` or `* → /`).
         let state = test_state();
         let app = build_router(state);
 
-        let big_body = vec![b'a'; 2 * 1024 * 1024]; // 2 MB
+        let big_body = vec![b'a'; 1 * 1024 * 1024 + 1]; // one byte over 1 MB
 
         let request = Request::builder()
             .method("POST")
@@ -898,6 +900,28 @@ mod tests {
 
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    }
+
+    #[tokio::test]
+    async fn body_at_half_limit_is_not_rejected_for_size() {
+        // A 512 KB body is well within the 1 MB limit and must not return 413.
+        // Catches `* → +` arithmetic mutation that would lower the limit to 2048
+        // bytes, turning a legitimate request into a 413 rejection.
+        let state = test_state();
+        let app = build_router(state);
+
+        let body = vec![b'{'; 512 * 1024]; // 512 KB, invalid JSON
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/v1/logs")
+            .header("content-type", "application/json")
+            .body(Body::from(body))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        // 400 (malformed JSON), not 413 (body too large)
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]
