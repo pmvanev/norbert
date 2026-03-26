@@ -31,3 +31,13 @@ norbert-v*.tar.gz
 
 # nWave runtime data
 .nwave/des/logs/
+src-tauri/.nwave/
+
+# Mutation testing output
+mutants.out/
+mutants.out.old/
+src-tauri/mutants.out/
+src-tauri/mutants.out.old/
+
+# Claude Code local settings
+.claude/
