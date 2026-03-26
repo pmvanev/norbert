@@ -90,8 +90,8 @@
     {
       "sid": "02-01",
       "p": "RED_UNIT",
-      "s": "EXECUTED",
-      "d": "NOT_APPLICABLE - acceptance tests cover view rendering directly",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: acceptance tests cover view rendering directly, no separate unit tests needed",
       "t": "2026-03-26T21:48:54Z"
     },
     {
@@ -100,6 +100,13 @@
       "s": "EXECUTED",
       "d": "PASS",
       "t": "2026-03-26T21:49:17Z"
+    },
+    {
+      "sid": "02-01",
+      "p": "COMMIT",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-26T21:51:59Z"
     }
   ]
 }
