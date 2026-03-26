@@ -22,6 +22,7 @@ import {
   List,
   Package,
   FileText,
+  Key,
   RefreshCw,
   ChevronDown,
   ChevronRight,
@@ -66,6 +67,7 @@ const ICON_REGISTRY: Readonly<Record<string, FC<LucideProps>>> = {
   "list": List,
   "package": Package,
   "file-text": FileText,
+  "key": Key,
 
   // Action icons
   "refresh": RefreshCw,
