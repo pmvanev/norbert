@@ -193,18 +193,18 @@ describe("Environment detail panel", () => {
     // First selection: OTEL_EXPORTER_OTLP_ENDPOINT
     const { rerender } = render(<ConfigDetailPanel selection={{ tag: "env", envVar: envVarA }} />);
     expect(screen.getByText("OTEL_EXPORTER_OTLP_ENDPOINT")).toBeInTheDocument();
-    expect(screen.getByText("http://127.0.0.1:3748")).toBeInTheDocument();
 
-    // Switch to: CLAUDE_CODE_ENABLE_TELEMETRY
+    // Switch to: CLAUDE_CODE_ENABLE_TELEMETRY — title updates
     rerender(<ConfigDetailPanel selection={{ tag: "env", envVar: envVarB }} />);
     expect(screen.getByText("CLAUDE_CODE_ENABLE_TELEMETRY")).toBeInTheDocument();
-    expect(screen.getByText("1")).toBeInTheDocument();
   });
 
   it("short boolean-like value displayed with full detail context", () => {
     const envVar = makeEnvVar("CLAUDE_CODE_ENABLE_TELEMETRY", "1", "user");
     render(<ConfigDetailPanel selection={{ tag: "env", envVar }} />);
 
+    // Value is masked by default — reveal it
+    fireEvent.click(screen.getByLabelText(/Reveal value for CLAUDE_CODE_ENABLE_TELEMETRY/));
     expect(screen.getByText("1")).toBeInTheDocument();
     expect(screen.getByText("user")).toBeInTheDocument();
     expect(screen.getByText("CLAUDE_CODE_ENABLE_TELEMETRY")).toBeInTheDocument();
@@ -217,6 +217,8 @@ describe("Environment detail panel", () => {
     render(<ConfigDetailPanel selection={selection} />);
 
     expect(screen.getByText("OTEL_SERVICE_NAME")).toBeInTheDocument();
+    // Value is masked — reveal it
+    fireEvent.click(screen.getByLabelText(/Reveal value for OTEL_SERVICE_NAME/));
     expect(screen.getByText("norbert")).toBeInTheDocument();
     expect(screen.getByText("user")).toBeInTheDocument();
     expect(screen.getByText("~/.claude/settings.json")).toBeInTheDocument();

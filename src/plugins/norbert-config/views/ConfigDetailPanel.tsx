@@ -283,6 +283,20 @@ const PluginDetail: FC<{ readonly plugin: PluginInfo }> = ({ plugin }) => (
   </div>
 );
 
+const MaskedValue: FC<{ readonly label: string; readonly value: string }> = ({ label, value }) => {
+  const [revealed, setRevealed] = useState(false);
+  return (
+    <button
+      className="config-env-value-btn"
+      onClick={() => setRevealed((c) => !c)}
+      type="button"
+      aria-label={revealed ? `Hide value for ${label}` : `Reveal value for ${label}`}
+    >
+      <span data-mono="">{revealed ? value : MASK}</span>
+    </button>
+  );
+};
+
 const EnvVarDetail: FC<{ readonly envVar: EnvVarEntry }> = ({ envVar }) => (
   <div className="config-detail-content">
     <div className="config-detail-header">
@@ -291,7 +305,7 @@ const EnvVarDetail: FC<{ readonly envVar: EnvVarEntry }> = ({ envVar }) => (
     </div>
     <div className="config-card-section">
       <span className="config-card-section-label">Value</span>
-      <span className="config-card-source" data-mono="">{envVar.value}</span>
+      <MaskedValue label={envVar.key} value={envVar.value} />
     </div>
     <div className="config-card-section">
       <span className="config-card-section-label">Source</span>

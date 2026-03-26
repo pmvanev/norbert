@@ -59,7 +59,7 @@ describe("extractTopLevelEnvVars via parseSettings", () => {
         if (result.tag !== "parsed") return;
 
         const keys = result.envVars.map((e) => e.key);
-        const sorted = [...keys].sort();
+        const sorted = [...keys].sort((a, b) => a.localeCompare(b));
         expect(keys).toEqual(sorted);
       }),
       { numRuns: 100 },

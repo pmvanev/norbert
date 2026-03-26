@@ -327,7 +327,7 @@ const EnvVarRow: FC<{
   >
     <span className="config-list-name">{envVar.key}</span>
     <ScopeBadge scope={envVar.scope} />
-    <span className="config-list-meta" data-mono="">{envVar.value}</span>
+    <span className="config-list-meta" data-mono="">{"\u2022\u2022\u2022\u2022"}</span>
   </button>
 );
 

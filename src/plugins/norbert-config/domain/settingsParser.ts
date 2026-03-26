@@ -174,7 +174,7 @@ function extractTopLevelEnvVars(envRaw: unknown, scope: ConfigScope): readonly E
       source: "settings.json",
       filePath: "",
     }))
-    .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+    .sort((a, b) => a.key.localeCompare(b.key));
 }
 
 // ---------------------------------------------------------------------------

@@ -231,7 +231,7 @@ describe("User views environment variables from settings", () => {
 
         // Always sorted alphabetically by key
         const keys = result.envVars.map((e) => e.key);
-        const sortedKeys = [...keys].sort();
+        const sortedKeys = [...keys].sort((a, b) => a.localeCompare(b));
         expect(keys).toEqual(sortedKeys);
       }),
       { numRuns: 100 },
