@@ -1,7 +1,10 @@
 {
   "roadmap": {
     "feature_id": "config-env-viewer",
+    "project_id": "config-env-viewer",
     "title": "Config Environment Viewer",
+    "created_at": "2026-03-26T00:00:00Z",
+    "total_steps": 3,
     "paradigm": "functional",
     "mutation_strategy": "per-feature",
     "estimated_production_files": 6,
@@ -11,15 +14,24 @@
   "phases": [
     {
       "id": "01",
+      "name": "Domain Types and Parsing",
       "title": "Domain Types and Parsing",
       "steps": [
         {
           "id": "01-01",
+          "name": "EnvVarEntry type and settings parser extraction",
           "title": "EnvVarEntry type and settings parser extraction",
           "description": "Extend domain types with EnvVarEntry algebraic type. Add top-level env block extraction to settingsParser. Extend CONFIG_SUB_TABS and SelectedConfigItem union.",
           "files": [
             "src/plugins/norbert-config/domain/types.ts",
             "src/plugins/norbert-config/domain/settingsParser.ts"
+          ],
+          "criteria": [
+            "EnvVarEntry type includes key, value, scope, source, filePath (all required)",
+            "SettingsParseResult parsed variant includes envVars field",
+            "CONFIG_SUB_TABS includes 'env' entry; ConfigSubTab union derives it",
+            "SelectedConfigItem union includes { tag: 'env' } variant",
+            "Non-string env values filtered out; missing env block produces empty array"
           ],
           "acceptance_criteria": [
             "EnvVarEntry type includes key, value, scope, source, filePath (all required)",
@@ -27,37 +39,37 @@
             "CONFIG_SUB_TABS includes 'env' entry; ConfigSubTab union derives it",
             "SelectedConfigItem union includes { tag: 'env' } variant",
             "Non-string env values filtered out; missing env block produces empty array"
-          ],
-          "architectural_constraints": [
-            "Pure types and pure extraction functions only (no IO)",
-            "Reuse extraction pattern from existing extractEnvVars for MCP servers"
           ]
         },
         {
           "id": "01-02",
+          "name": "Aggregator env var passthrough",
           "title": "Aggregator env var passthrough",
           "description": "Extend configAggregator to thread env vars from settings parse result into AggregatedConfig with filePath annotation.",
           "files": [
             "src/plugins/norbert-config/domain/configAggregator.ts"
           ],
-          "acceptance_criteria": [
+          "criteria": [
             "AggregatedConfig includes envVars field populated from settings parse",
             "ParsedSettings internal type includes env vars",
             "Env vars receive filePath annotation from FileEntry.path"
           ],
-          "architectural_constraints": [
-            "Pure aggregation function with no IO",
-            "Follow annotateFilePath pattern for source attribution"
+          "acceptance_criteria": [
+            "AggregatedConfig includes envVars field populated from settings parse",
+            "ParsedSettings internal type includes env vars",
+            "Env vars receive filePath annotation from FileEntry.path"
           ]
         }
       ]
     },
     {
       "id": "02",
+      "name": "View Layer",
       "title": "View Layer",
       "steps": [
         {
           "id": "02-01",
+          "name": "Environment tab rendering with list and detail",
           "title": "Environment tab rendering with list and detail",
           "description": "Register Environment tab in ConfigViewerView. Add env var list rendering in ConfigListPanel. Add env var detail in ConfigDetailPanel.",
           "files": [
@@ -65,45 +77,25 @@
             "src/plugins/norbert-config/views/ConfigListPanel.tsx",
             "src/plugins/norbert-config/views/ConfigDetailPanel.tsx"
           ],
-          "acceptance_criteria": [
+          "criteria": [
             "Environment tab appears in sub-tab navigation with label and icon",
             "Tab displays env var key-value pairs sorted alphabetically",
             "Header shows count badge and scope tag",
             "Empty state shows guidance when no env vars configured",
             "Clicking env var opens detail panel with key, value, source, scope"
           ],
-          "architectural_constraints": [
-            "Follow existing tab registration pattern (SUB_TAB_LABELS, SUB_TAB_ICONS)",
-            "Follow existing list row and detail panel rendering patterns",
-            "Empty state uses existing EmptyState component"
+          "acceptance_criteria": [
+            "Environment tab appears in sub-tab navigation with label and icon",
+            "Tab displays env var key-value pairs sorted alphabetically",
+            "Header shows count badge and scope tag",
+            "Empty state shows guidance when no env vars configured",
+            "Clicking env var opens detail panel with key, value, source, scope"
           ]
         }
       ]
     }
   ],
-  "implementation_scope": {
-    "in_scope": [
-      "EnvVarEntry type definition",
-      "Top-level env block extraction in settingsParser",
-      "Aggregator extension for envVars",
-      "Environment tab in ConfigViewerView",
-      "Env var list rendering in ConfigListPanel",
-      "Env var detail rendering in ConfigDetailPanel",
-      "Empty state for missing/empty env block"
-    ],
-    "out_of_scope": [
-      "Rust backend changes (settings.json already read as-is)",
-      "Env var editing or creation",
-      "Env var validation against expected OTEL vars",
-      "Project-scope env var merging (display per-scope as-is)"
-    ]
-  },
   "validation": {
-    "quality_gates": [
-      "All AC verified via TDD (unit tests for pure functions, component tests for views)",
-      "No Rust backend changes required",
-      "Existing Config Viewer functionality unaffected (regression check)",
-      "Empty state renders correctly when env block missing"
-    ]
+    "status": "approved"
   }
 }

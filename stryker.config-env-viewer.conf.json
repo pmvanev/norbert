@@ -1,0 +1,14 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stryker-mutator/stryker/master/packages/core/schema/stryker-schema.json",
+  "mutate": [
+    "src/plugins/norbert-config/domain/settingsParser.ts:161-178",
+    "src/plugins/norbert-config/domain/configAggregator.ts:145-176"
+  ],
+  "testRunner": "vitest",
+  "reporters": ["clear-text", "json"],
+  "jsonReporter": { "fileName": "docs/feature/config-env-viewer/deliver/mutation/stryker-report.json" },
+  "vitest": {
+    "configFile": "vitest.mutation.config.ts"
+  },
+  "tempDirName": ".stryker-tmp"
+}
