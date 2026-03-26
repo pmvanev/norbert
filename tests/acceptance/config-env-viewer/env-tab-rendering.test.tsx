@@ -13,7 +13,7 @@
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, cleanup, screen, within, fireEvent } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import React from "react";
@@ -184,6 +184,30 @@ describe("Environment detail panel", () => {
     const [item] = onSelect.mock.calls[0];
     expect(item.tag).toBe("env");
     expect(item.envVar.key).toBe("MY_KEY");
+  });
+
+  it("switching selection updates detail to the newly selected variable", () => {
+    const envVarA = makeEnvVar("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:3748", "user");
+    const envVarB = makeEnvVar("CLAUDE_CODE_ENABLE_TELEMETRY", "1", "user");
+
+    // First selection: OTEL_EXPORTER_OTLP_ENDPOINT
+    const { rerender } = render(<ConfigDetailPanel selection={{ tag: "env", envVar: envVarA }} />);
+    expect(screen.getByText("OTEL_EXPORTER_OTLP_ENDPOINT")).toBeInTheDocument();
+    expect(screen.getByText("http://127.0.0.1:3748")).toBeInTheDocument();
+
+    // Switch to: CLAUDE_CODE_ENABLE_TELEMETRY
+    rerender(<ConfigDetailPanel selection={{ tag: "env", envVar: envVarB }} />);
+    expect(screen.getByText("CLAUDE_CODE_ENABLE_TELEMETRY")).toBeInTheDocument();
+    expect(screen.getByText("1")).toBeInTheDocument();
+  });
+
+  it("short boolean-like value displayed with full detail context", () => {
+    const envVar = makeEnvVar("CLAUDE_CODE_ENABLE_TELEMETRY", "1", "user");
+    render(<ConfigDetailPanel selection={{ tag: "env", envVar }} />);
+
+    expect(screen.getByText("1")).toBeInTheDocument();
+    expect(screen.getByText("user")).toBeInTheDocument();
+    expect(screen.getByText("CLAUDE_CODE_ENABLE_TELEMETRY")).toBeInTheDocument();
   });
 
   it("renders env var detail with key, value, scope, and source", () => {
