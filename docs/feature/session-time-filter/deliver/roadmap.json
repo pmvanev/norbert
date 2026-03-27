@@ -1,0 +1,55 @@
+{
+  "feature_id": "session-time-filter",
+  "title": "Session Time Filter",
+  "description": "Filter sessions list by activity recency: Active Now, Last 15 min, Last hour, Last 24 hrs, All",
+  "paradigm": "functional",
+  "steps": [
+    {
+      "step_id": "01-01",
+      "title": "Domain filter module",
+      "description": "Create SessionFilterId type, SESSION_FILTER_PRESETS const array, filterSessions function, and isWithinWindow helper. All pure functions with now parameter for deterministic testing. Active Now delegates to existing isSessionActive. Time window filters check last_event_at. All passthrough returns everything.",
+      "acceptance_criteria": [
+        "filterSessions('all', sessions, now) returns all sessions",
+        "filterSessions('active-now', sessions, now) returns only sessions where isSessionActive is true",
+        "filterSessions('last-15m', sessions, now) includes sessions with last_event_at within 15 minutes",
+        "filterSessions('last-1h', sessions, now) includes sessions with last_event_at within 1 hour",
+        "filterSessions('last-24h', sessions, now) includes sessions with last_event_at within 24 hours",
+        "Session started before window but active within it is included",
+        "Session with null last_event_at excluded from time window filters",
+        "SESSION_FILTER_PRESETS has 5 entries with unique IDs and labels",
+        "Empty sessions array returns empty for any filter"
+      ],
+      "files_to_modify": [
+        "src/domain/sessionFilter.ts"
+      ],
+      "test_files": [
+        "tests/acceptance/session-time-filter/session-filter.test.ts"
+      ],
+      "depends_on": [],
+      "traces_to": ["US-1", "US-2", "AC-1", "AC-2", "AC-5", "AC-6"]
+    },
+    {
+      "step_id": "02-01",
+      "title": "Filter control in SessionListView",
+      "description": "Add useState<SessionFilterId>('all') for filter selection. Render segmented filter buttons in sec-hdr area. Apply filterSessions before mapping rows. Update header count to reflect filtered result length. Show empty state message when no sessions match the filter.",
+      "acceptance_criteria": [
+        "Filter defaults to 'all' showing all sessions",
+        "Selecting a filter updates the displayed session list",
+        "Header count reflects filtered session count",
+        "Empty filter shows 'No sessions in this time window'",
+        "Filter control renders in the sec-hdr area with all 5 options"
+      ],
+      "files_to_modify": [
+        "src/views/SessionListView.tsx"
+      ],
+      "test_files": [],
+      "depends_on": ["01-01"],
+      "traces_to": ["US-3", "US-4", "AC-3", "AC-4", "AC-5"]
+    }
+  ],
+  "validation": {
+    "status": "approved",
+    "approved_at": "2026-03-26T20:45:00Z",
+    "notes": "Styling merged into step 02-01 (CSS changes within same view file). 2 steps, 2 files, ratio 1.0."
+  }
+}
