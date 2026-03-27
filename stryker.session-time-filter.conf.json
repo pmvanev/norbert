@@ -1,0 +1,13 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stryker-mutator/stryker/master/packages/core/schema/stryker-schema.json",
+  "mutate": [
+    "src/domain/sessionFilter.ts"
+  ],
+  "testRunner": "vitest",
+  "reporters": ["clear-text", "json"],
+  "jsonReporter": { "fileName": "docs/feature/session-time-filter/deliver/mutation/stryker-report.json" },
+  "vitest": {
+    "configFile": "vitest.config.ts"
+  },
+  "tempDirName": ".stryker-tmp"
+}
