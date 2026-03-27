@@ -379,15 +379,14 @@ describe("api_request with cost_usd=0.0 treats zero as valid cost", () => {
 // OTel identity event types: user_prompt, tool_result, api_error, tool_decision
 // ---------------------------------------------------------------------------
 
-describe("OTel identity event types increment totalEventCount only", () => {
-  const identityEventTypes = [
+describe("Non-metric event types increment totalEventCount only (hook mode)", () => {
+  const nonMetricEventTypes = [
     "user_prompt",
     "tool_result",
-    "api_error",
     "tool_decision",
   ] as const;
 
-  it.each(identityEventTypes)(
+  it.each(nonMetricEventTypes)(
     "%s increments totalEventCount and does not affect tokens or cost",
     (eventType) => {
       const initial: SessionMetrics = {
@@ -412,6 +411,31 @@ describe("OTel identity event types increment totalEventCount only", () => {
       expect(updated.lastEventAt).toBe("2025-06-15T10:03:00Z");
     },
   );
+
+  it("api_error increments apiErrorCount in addition to totalEventCount", () => {
+    const initial: SessionMetrics = {
+      ...createInitialMetrics("api-error-identity-test"),
+      sessionCost: 1.5,
+      totalTokens: 5000,
+      toolCallCount: 3,
+      activeAgentCount: 1,
+      apiErrorCount: 2,
+    };
+    const event = {
+      eventType: "api_error" as const,
+      payload: { status_code: 429, error: "rate_limit_exceeded" },
+      receivedAt: "2025-06-15T10:03:00Z",
+    };
+    const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE);
+
+    expect(updated.totalEventCount).toBe(initial.totalEventCount + 1);
+    expect(updated.apiErrorCount).toBe(3);
+    expect(updated.sessionCost).toBe(1.5);
+    expect(updated.totalTokens).toBe(5000);
+    expect(updated.toolCallCount).toBe(3);
+    expect(updated.activeAgentCount).toBe(1);
+    expect(updated.lastEventAt).toBe("2025-06-15T10:03:00Z");
+  });
 });
 
 // ---------------------------------------------------------------------------

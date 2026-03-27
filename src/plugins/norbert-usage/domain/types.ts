@@ -77,6 +77,7 @@ export interface SessionMetrics {
   readonly totalEventCount: number;
   readonly apiErrorCount: number;
   readonly apiRequestCount: number;
+  readonly apiErrorRate: number;
   readonly sessionStartedAt: string;
   readonly lastEventAt: string;
   readonly burnRate: number;

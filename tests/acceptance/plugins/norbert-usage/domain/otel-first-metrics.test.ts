@@ -198,28 +198,8 @@ describe("Walking Skeleton: operator sees accurate session cost when OTel is act
   });
 });
 
-describe("Walking Skeleton: operator sees per-tool breakdown from OTel tool results", () => {
-  it.skip("tool result events provide count, success rate, and duration breakdown", () => {
-    // Given: session is receiving OTel data
-    // And: tool result events with varying outcomes
-    const toolEvents = [
-      buildToolResultEvent({ toolName: "Read", success: true, durationMs: 120 }),
-      buildToolResultEvent({ toolName: "Bash", success: false, durationMs: 5200 }),
-      buildToolResultEvent({ toolName: "Grep", success: true, durationMs: 210 }),
-    ];
-
-    // When: session metrics are computed
-    const result = foldEvents(toolEvents, undefined, true);
-
-    // Then: tool call count is 3
-    expect(result.toolCallCount).toBe(3);
-
-    // NOTE: Per-tool breakdown verification requires calling aggregateToolUsage
-    // on filtered tool_result events -- the software-crafter will wire this
-    // into the pipeline. The acceptance test above verifies the count flows
-    // through the driving port (aggregateEvent).
-  });
-});
+// Walking Skeleton: per-tool breakdown from OTel tool results
+// Out of scope for OTel-first-metrics feature. Tool count is covered by US-OFM-02.
 
 describe("Walking Skeleton: operator sees healthy data pipeline", () => {
   it("data health shows healthy when OTel events are flowing recently", () => {
@@ -574,10 +554,7 @@ describe("US-OFM-03: API error visibility", () => {
       expect(result.apiErrorCount).toBe(3);
       expect(result.apiRequestCount).toBe(8);
       // apiErrorRate = 3 / (3 + 8) = 0.2727...
-      const errorRate =
-        result.apiErrorCount /
-        (result.apiErrorCount + result.apiRequestCount);
-      expect(errorRate).toBeCloseTo(0.27, 1);
+      expect(result.apiErrorRate).toBeCloseTo(0.2727, 3);
     });
 
     it("healthy session shows zero errors", () => {
@@ -589,6 +566,7 @@ describe("US-OFM-03: API error visibility", () => {
 
       expect(result.apiErrorCount).toBe(0);
       expect(result.apiRequestCount).toBe(12);
+      expect(result.apiErrorRate).toBe(0);
     });
   });
 
@@ -599,6 +577,7 @@ describe("US-OFM-03: API error visibility", () => {
 
       expect(result.apiErrorCount).toBe(0);
       expect(result.apiRequestCount).toBe(0);
+      expect(result.apiErrorRate).toBe(0);
       // Convention: 0/0 => 0 error rate (not NaN)
     });
 
@@ -620,17 +599,23 @@ describe("US-OFM-03: API error visibility", () => {
 
   describe("property: error rate invariants", () => {
 
-    it("API error rate is always between 0 and 1 when requests exceed errors", () => {
+    it("API error rate is always between 0 and 1 for any mix of api_error and api_request events", () => {
+      const apiEventArb = fc.oneof(
+        fc.constant(buildApiErrorEvent()),
+        fc.constant(buildApiRequestEvent({ costUsd: 0.01 })),
+      );
+
       fc.assert(
         fc.property(
-          fc.integer({ min: 1, max: 100 }),
-          fc.integer({ min: 0, max: 50 }),
-          (requestCount, errorCount) => {
-            // Ensure requests > errors
-            const totalRequests = requestCount + errorCount;
-            const rate = errorCount / (errorCount + totalRequests);
-            expect(rate).toBeGreaterThanOrEqual(0);
-            expect(rate).toBeLessThanOrEqual(1);
+          fc.array(apiEventArb, { minLength: 1, maxLength: 30 }),
+          (events) => {
+            const result = foldEvents(events, undefined, true);
+            const totalInteractions = result.apiErrorCount + result.apiRequestCount;
+
+            if (totalInteractions > 0) {
+              expect(result.apiErrorRate).toBeGreaterThanOrEqual(0);
+              expect(result.apiErrorRate).toBeLessThanOrEqual(1);
+            }
           },
         ),
       );

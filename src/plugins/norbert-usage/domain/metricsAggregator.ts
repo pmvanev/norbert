@@ -40,6 +40,7 @@ export const createInitialMetrics = (sessionId: string, sessionLabel = ""): Sess
   totalEventCount: 0,
   apiErrorCount: 0,
   apiRequestCount: 0,
+  apiErrorRate: 0,
   sessionStartedAt: "",
   lastEventAt: "",
   burnRate: 0,
@@ -135,17 +136,29 @@ const applySessionStartedAtIfEmpty = (
     ? { ...metrics, sessionStartedAt: receivedAt }
     : metrics;
 
-/** Increment apiErrorCount. */
-const applyApiErrorCount = (metrics: SessionMetrics): SessionMetrics => ({
-  ...metrics,
-  apiErrorCount: metrics.apiErrorCount + 1,
-});
+/** Compute error rate: errors / (errors + requests), convention 0/0 = 0. */
+const computeErrorRate = (errors: number, requests: number): number =>
+  (errors + requests) === 0 ? 0 : errors / (errors + requests);
 
-/** Increment apiRequestCount. */
-const applyApiRequestCount = (metrics: SessionMetrics): SessionMetrics => ({
-  ...metrics,
-  apiRequestCount: metrics.apiRequestCount + 1,
-});
+/** Increment apiErrorCount and recompute apiErrorRate. */
+const applyApiErrorCount = (metrics: SessionMetrics): SessionMetrics => {
+  const newErrorCount = metrics.apiErrorCount + 1;
+  return {
+    ...metrics,
+    apiErrorCount: newErrorCount,
+    apiErrorRate: computeErrorRate(newErrorCount, metrics.apiRequestCount),
+  };
+};
+
+/** Increment apiRequestCount and recompute apiErrorRate. */
+const applyApiRequestCount = (metrics: SessionMetrics): SessionMetrics => {
+  const newRequestCount = metrics.apiRequestCount + 1;
+  return {
+    ...metrics,
+    apiRequestCount: newRequestCount,
+    apiErrorRate: computeErrorRate(metrics.apiErrorCount, newRequestCount),
+  };
+};
 
 /** Apply common bookkeeping: increment totalEventCount, update lastEventAt. */
 const applyCommonFields = (
