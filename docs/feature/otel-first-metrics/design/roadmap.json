@@ -1,0 +1,121 @@
+{
+  "feature_id": "otel-first-metrics",
+  "project_id": "otel-first-metrics",
+  "title": "OTel-First Metrics Pipeline",
+  "description": "Migrate metrics aggregation from hook-first to OTel-first data sourcing. Dual dispatch table, cost suppression, error/tool enrichment, source-agnostic health.",
+  "paradigm": "functional",
+  "created_at": "2026-03-27T18:00:00Z",
+  "total_steps": 6,
+  "phases": ["PREPARE", "RED_ACCEPTANCE", "RED_UNIT", "GREEN", "COMMIT"],
+  "steps": [
+    {
+      "step_id": "01-01",
+      "title": "SessionMetrics type foundation",
+      "description": "Rename hookEventCount to totalEventCount in SessionMetrics. Add apiErrorCount, apiRequestCount fields (default 0). Update createInitialMetrics and applyCommonFields to use totalEventCount.",
+      "acceptance_criteria": [
+        "SessionMetrics has totalEventCount field (not hookEventCount)",
+        "SessionMetrics has apiErrorCount and apiRequestCount fields defaulting to 0",
+        "createInitialMetrics produces metrics with all new fields at zero",
+        "applyCommonFields increments totalEventCount (not hookEventCount)",
+        "All existing tests pass with renamed field"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/domain/types.ts",
+        "src/plugins/norbert-usage/domain/metricsAggregator.ts"
+      ],
+      "depends_on": [],
+      "traces_to": ["US-OFM-03", "US-OFM-04"]
+    },
+    {
+      "step_id": "02-01",
+      "title": "Dual dispatch table with cost suppression",
+      "description": "Add isOtelActive parameter to aggregateEvent. Create otelEventHandlers table where prompt_submit, tool_call_end, tool_call_start are identity and agent_complete updates count only (no token/cost). Select table based on flag. Update hookProcessor to pass isOtelActive.",
+      "acceptance_criteria": [
+        "When OTel active, prompt_submit/tool_call_end do not contribute to sessionCost or totalTokens",
+        "When OTel active, agent_complete updates activeAgentCount but not sessionCost",
+        "When OTel not active, all hook events contribute as before (backward compatible)",
+        "Mid-session OTel activation preserves pre-OTel accumulated cost",
+        "api_request without cost_usd falls back to pricing model"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/domain/metricsAggregator.ts",
+        "src/plugins/norbert-usage/hookProcessor.ts"
+      ],
+      "depends_on": ["01-01"],
+      "traces_to": ["US-OFM-01"]
+    },
+    {
+      "step_id": "03-01",
+      "title": "API error and request count tracking",
+      "description": "In otelEventHandlers, api_error increments apiErrorCount. In both tables, api_request increments apiRequestCount. apiErrorRate computed on read as apiErrorCount / (apiErrorCount + apiRequestCount).",
+      "acceptance_criteria": [
+        "api_error events increment apiErrorCount in SessionMetrics",
+        "api_request events increment apiRequestCount in SessionMetrics",
+        "apiErrorRate derivable as apiErrorCount / (apiErrorCount + apiRequestCount)",
+        "Zero errors yields apiErrorCount 0",
+        "Common fields (totalEventCount, lastEventAt) updated on api_error"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/domain/metricsAggregator.ts"
+      ],
+      "depends_on": ["01-01"],
+      "traces_to": ["US-OFM-03"]
+    },
+    {
+      "step_id": "04-01",
+      "title": "Rich tool tracking from tool_result",
+      "description": "In otelEventHandlers, tool_result increments toolCallCount. In otelEventHandlers, tool_call_start is identity. When OTel not active, tool_call_start increments toolCallCount as before.",
+      "acceptance_criteria": [
+        "When OTel active, tool_result increments toolCallCount",
+        "When OTel active, tool_call_start does not increment toolCallCount",
+        "When OTel not active, tool_call_start increments toolCallCount as before",
+        "toolCallCount reflects only the active source's tool events"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/domain/metricsAggregator.ts"
+      ],
+      "depends_on": ["02-01"],
+      "traces_to": ["US-OFM-02"]
+    },
+    {
+      "step_id": "05-01",
+      "title": "OTel session timing preference",
+      "description": "api_request handler sets sessionStartedAt when empty (first OTel event). session_start sets sessionStartedAt only if not already set. Ensures earliest meaningful timestamp wins.",
+      "acceptance_criteria": [
+        "First api_request sets sessionStartedAt when OTel active",
+        "session_start does not overwrite sessionStartedAt if already set by api_request",
+        "When OTel not active, session_start sets sessionStartedAt as before",
+        "sessionStartedAt reflects earliest meaningful timestamp"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/domain/metricsAggregator.ts"
+      ],
+      "depends_on": ["02-01"],
+      "traces_to": ["US-OFM-05"]
+    },
+    {
+      "step_id": "06-01",
+      "title": "Source-agnostic data health indicator",
+      "description": "Replace WarningClusterData.hookHealth with dataHealth ('healthy'|'degraded'|'no-data'). buildWarningCluster uses totalEventCount + lastEventAt + now + threshold. Update gaugeCluster, dashboard, GaugeClusterView, UsageDashboardView.",
+      "acceptance_criteria": [
+        "dataHealth shows 'healthy' when events flowing and recent (any source)",
+        "dataHealth shows 'degraded' when last event older than staleness threshold",
+        "dataHealth shows 'no-data' when no events received",
+        "Hook-only sessions show 'healthy' when events flow (backward compatible)",
+        "buildWarningCluster is pure function with now parameter"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/domain/gaugeCluster.ts",
+        "src/plugins/norbert-usage/domain/dashboard.ts",
+        "src/plugins/norbert-usage/views/GaugeClusterView.tsx",
+        "src/plugins/norbert-usage/views/UsageDashboardView.tsx"
+      ],
+      "depends_on": ["01-01"],
+      "traces_to": ["US-OFM-04"]
+    }
+  ],
+  "validation": {
+    "status": "pending",
+    "notes": "6 steps, 7 production files, ratio 0.86. Steps 03-01, 04-01, 05-01 can parallel after 02-01. Step 06-01 can parallel after 01-01."
+  }
+}
