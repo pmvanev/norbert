@@ -98,8 +98,8 @@ const buildRpmCounter = (activeAgentCount: number): RpmCounterData => ({
 /** Determine hook health from event count.
  *  "degraded" when no events received (hooks may not be configured),
  *  "normal" when events are flowing. */
-const buildWarningCluster = (hookEventCount: number): WarningClusterData => ({
-  hookHealth: hookEventCount === 0 ? "degraded" : "normal",
+const buildWarningCluster = (totalEventCount: number): WarningClusterData => ({
+  hookHealth: totalEventCount === 0 ? "degraded" : "normal",
 });
 
 // ---------------------------------------------------------------------------
@@ -120,5 +120,5 @@ export const computeGaugeClusterData = (
   fuelGauge: buildFuelGauge(metrics.contextWindowPct, metrics.contextWindowTokens, metrics.contextWindowMaxTokens, thresholds),
   odometer: buildOdometer(metrics.sessionCost),
   rpmCounter: buildRpmCounter(metrics.activeAgentCount),
-  warningCluster: buildWarningCluster(metrics.hookEventCount),
+  warningCluster: buildWarningCluster(metrics.totalEventCount),
 });

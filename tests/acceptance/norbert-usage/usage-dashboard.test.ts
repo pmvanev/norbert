@@ -47,7 +47,7 @@ describe("User opens Usage Dashboard and sees session health at a glance", () =>
       activeAgentCount: 1,
       toolCallCount: 89,
       contextWindowPct: 56,
-      hookEventCount: 200,
+      totalEventCount: 200,
     });
 
     // When the dashboard data is computed
@@ -148,7 +148,7 @@ describe("Dashboard shows onboarding state for new user", () => {
 describe("Hook health card shows amber for newly started session", () => {
   it("zero hook events produce 'No Events' with amber urgency", () => {
     // Given a newly started session with no hook events
-    const metrics = createMetricsSnapshot({ hookEventCount: 0 });
+    const metrics = createMetricsSnapshot({ totalEventCount: 0 });
 
     // When dashboard data is computed
     const dashboard = computeDashboardData(metrics);

@@ -31,7 +31,7 @@ describe("Event-to-view pipeline", () => {
 
   it("delivering a session-event updates the shared metricsStore", () => {
     const before = usageMetricsStore.getMetrics();
-    expect(before.hookEventCount).toBe(0);
+    expect(before.totalEventCount).toBe(0);
 
     deliverHookEvent("session-event", {
       event_type: "prompt_submit",
@@ -42,12 +42,12 @@ describe("Event-to-view pipeline", () => {
     });
 
     const after = usageMetricsStore.getMetrics();
-    expect(after.hookEventCount).toBe(1);
+    expect(after.totalEventCount).toBe(1);
   });
 
   it("hook bridge has a registered processor after plugin load", () => {
     // If no processor is registered, deliverHookEvent is a no-op
-    // and hookEventCount stays at 0.
+    // and totalEventCount stays at 0.
     deliverHookEvent("session-event", {
       event_type: "session_start",
       session_id: "test-sess-2",
@@ -56,7 +56,7 @@ describe("Event-to-view pipeline", () => {
       provider: "test",
     });
 
-    expect(usageMetricsStore.getMetrics().hookEventCount).toBeGreaterThan(0);
+    expect(usageMetricsStore.getMetrics().totalEventCount).toBeGreaterThan(0);
   });
 
   it("tool_call_start event increments tool call count", () => {

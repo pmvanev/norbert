@@ -138,15 +138,15 @@ describe("Context Window card urgency", () => {
 
 describe("Hook Health card", () => {
   it("shows OK with normal urgency when events are flowing", () => {
-    const dashboard = computeDashboardData(createMetrics({ hookEventCount: 200 }));
+    const dashboard = computeDashboardData(createMetrics({ totalEventCount: 200 }));
     expect(dashboard.hookHealth.label).toBe("Hook Health");
     expect(dashboard.hookHealth.value).toBe("OK");
     expect(dashboard.hookHealth.urgency).toBe("normal");
     expect(dashboard.hookHealth.subtitle).toBe("200 events");
   });
 
-  it("shows 'No Events' with amber urgency when hookEventCount is 0", () => {
-    const dashboard = computeDashboardData(createMetrics({ hookEventCount: 0 }));
+  it("shows 'No Events' with amber urgency when totalEventCount is 0", () => {
+    const dashboard = computeDashboardData(createMetrics({ totalEventCount: 0 }));
     expect(dashboard.hookHealth.value).toBe("No Events");
     expect(dashboard.hookHealth.urgency).toBe("amber");
     expect(dashboard.hookHealth.subtitle).toBe("");

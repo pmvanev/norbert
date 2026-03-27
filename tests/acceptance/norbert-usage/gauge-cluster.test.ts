@@ -46,7 +46,7 @@ describe("Gauge Cluster displays all instrument data for active session", () => 
       contextWindowPct: 25,
       sessionCost: 0.83,
       activeAgentCount: 1,
-      hookEventCount: 50,
+      totalEventCount: 50,
       lastEventAt: "2025-01-01T00:12:30Z",
     });
 

@@ -67,7 +67,7 @@ const isOnboardingSession = (metrics: SessionMetrics): boolean =>
   metrics.sessionCost === 0 &&
   metrics.toolCallCount === 0 &&
   metrics.activeAgentCount === 0 &&
-  metrics.hookEventCount === 0;
+  metrics.totalEventCount === 0;
 
 // ---------------------------------------------------------------------------
 // Card builders (pure)
@@ -112,9 +112,9 @@ const buildContextWindowCard = (metrics: SessionMetrics): MetricCardData => ({
 
 const buildHookHealthCard = (metrics: SessionMetrics): MetricCardData => ({
   label: "Hook Health",
-  value: metrics.hookEventCount > 0 ? "OK" : "No Events",
-  subtitle: metrics.hookEventCount > 0 ? `${metrics.hookEventCount} events` : "",
-  urgency: metrics.hookEventCount > 0 ? "normal" : "amber",
+  value: metrics.totalEventCount > 0 ? "OK" : "No Events",
+  subtitle: metrics.totalEventCount > 0 ? `${metrics.totalEventCount} events` : "",
+  urgency: metrics.totalEventCount > 0 ? "normal" : "amber",
 });
 
 // ---------------------------------------------------------------------------

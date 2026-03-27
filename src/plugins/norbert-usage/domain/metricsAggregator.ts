@@ -37,7 +37,9 @@ export const createInitialMetrics = (sessionId: string, sessionLabel = ""): Sess
   contextWindowTokens: 0,
   contextWindowMaxTokens: 0,
   contextWindowModel: "",
-  hookEventCount: 0,
+  totalEventCount: 0,
+  apiErrorCount: 0,
+  apiRequestCount: 0,
   sessionStartedAt: "",
   lastEventAt: "",
   burnRate: 0,
@@ -124,13 +126,13 @@ const applyAgentCompleteCount = (metrics: SessionMetrics): SessionMetrics => ({
   activeAgentCount: Math.max(0, metrics.activeAgentCount - 1),
 });
 
-/** Apply common bookkeeping: increment hookEventCount, update lastEventAt. */
+/** Apply common bookkeeping: increment totalEventCount, update lastEventAt. */
 const applyCommonFields = (
   metrics: SessionMetrics,
   receivedAt: string,
 ): SessionMetrics => ({
   ...metrics,
-  hookEventCount: metrics.hookEventCount + 1,
+  totalEventCount: metrics.totalEventCount + 1,
   lastEventAt: receivedAt,
 });
 
@@ -149,7 +151,7 @@ const applyCommonFields = (
  * - agent_complete: extract tokens + compute cost if present, decrement agent count
  * - tool_call_start: increment tool call count only
  * - session_start: increment active agent count
- * - All events: increment hookEventCount, update lastEventAt
+ * - All events: increment totalEventCount, update lastEventAt
  */
 /** Dispatch table: event type -> metrics transformation. */
 const eventHandlers: Record<

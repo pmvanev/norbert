@@ -591,18 +591,18 @@ describe("US-OFM-03: API error visibility", () => {
 
   describe("error rate handles edge cases gracefully", () => {
 
-    it.skip("error rate is zero when no API interactions have occurred", () => {
+    it("error rate is zero when no API interactions have occurred", () => {
       const result = createInitialMetrics("empty-session");
 
-      expect((result as any).apiErrorCount).toBe(0);
-      expect((result as any).apiRequestCount).toBe(0);
+      expect(result.apiErrorCount).toBe(0);
+      expect(result.apiRequestCount).toBe(0);
       // Convention: 0/0 => 0 error rate (not NaN)
     });
 
-    it.skip("API error events update common tracking fields", () => {
+    it("API error events update common tracking fields", () => {
       const initial: SessionMetrics = {
         ...createInitialMetrics("common-fields-test"),
-        hookEventCount: 5,
+        totalEventCount: 5,
       };
       const errorEvent = buildApiErrorEvent("2026-03-27T10:05:00Z");
 
@@ -610,7 +610,7 @@ describe("US-OFM-03: API error visibility", () => {
 
       // totalEventCount (renamed from hookEventCount) should be 6
       // lastEventAt should be the error event timestamp
-      expect(result.hookEventCount).toBe(6); // Will be renamed to totalEventCount in step 01-01
+      expect(result.totalEventCount).toBe(6);
       expect(result.lastEventAt).toBe("2026-03-27T10:05:00Z");
     });
   });

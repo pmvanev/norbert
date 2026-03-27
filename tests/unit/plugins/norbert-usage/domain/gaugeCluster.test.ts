@@ -7,7 +7,7 @@
  * - Fuel gauge urgency transitions: normal < 70%, amber >= 70%, red >= 90%
  * - Tachometer urgency transitions: normal < 400, amber >= 400, red >= 500
  * - All numeric values are non-negative
- * - Hook health derives from hookEventCount
+ * - Hook health derives from totalEventCount
  * - Zero metrics produce safe defaults
  *
  * Behaviors: 6 (fuel zones, tacho zones, odometer passthrough, rpm passthrough,
@@ -40,7 +40,7 @@ const sessionMetricsArb = fc.record({
   contextWindowTokens: fc.nat({ max: 1_000_000 }),
   contextWindowMaxTokens: fc.nat({ max: 1_000_000 }),
   contextWindowModel: fc.string(),
-  hookEventCount: fc.nat({ max: 100_000 }),
+  totalEventCount: fc.nat({ max: 100_000 }),
   sessionStartedAt: fc.constant("2025-01-01T00:00:00Z"),
   lastEventAt: fc.constant("2025-01-01T00:10:00Z"),
   burnRate: fc.integer({ min: 0, max: 2000 }),
@@ -222,13 +222,13 @@ describe("Fuel gauge token label", () => {
 // ---------------------------------------------------------------------------
 
 describe("Warning cluster hook health", () => {
-  it("reports normal when hookEventCount > 0 (events flowing)", () => {
-    const result = computeGaugeClusterData(createSnapshot({ hookEventCount: 50 }));
+  it("reports normal when totalEventCount > 0 (events flowing)", () => {
+    const result = computeGaugeClusterData(createSnapshot({ totalEventCount: 50 }));
     expect(result.warningCluster.hookHealth).toBe("normal");
   });
 
-  it("reports degraded when hookEventCount is 0 (no events received)", () => {
-    const result = computeGaugeClusterData(createSnapshot({ hookEventCount: 0 }));
+  it("reports degraded when totalEventCount is 0 (no events received)", () => {
+    const result = computeGaugeClusterData(createSnapshot({ totalEventCount: 0 }));
     expect(result.warningCluster.hookHealth).toBe("degraded");
   });
 });

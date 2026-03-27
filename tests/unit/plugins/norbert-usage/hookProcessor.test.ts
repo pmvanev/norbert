@@ -5,9 +5,9 @@
  *
  * Behaviors tested:
  * - Events with token data update metrics store with tokens and cost
- * - Events without token data update non-cost counters only (hookEventCount, toolCallCount, etc.)
+ * - Events without token data update non-cost counters only (totalEventCount, toolCallCount, etc.)
  * - Pipeline: payload -> extract event_type -> build AggregatorEvent -> aggregateEvent -> update store
- * - Unknown/malformed payloads still increment hookEventCount
+ * - Unknown/malformed payloads still increment totalEventCount
  * - No internal Norbert module imports (verified by import structure)
  */
 
@@ -88,7 +88,7 @@ describe("hookProcessor with token-bearing events", () => {
     expect(metrics.inputTokens).toBe(1000);
     expect(metrics.outputTokens).toBe(500);
     expect(metrics.sessionCost).toBeGreaterThan(0);
-    expect(metrics.hookEventCount).toBe(1);
+    expect(metrics.totalEventCount).toBe(1);
   });
 
   it("tool_call_end with tokens updates totalTokens and sessionCost", () => {
@@ -148,7 +148,7 @@ describe("hookProcessor with non-token events", () => {
     expect(metrics.toolCallCount).toBe(1);
     expect(metrics.totalTokens).toBe(0);
     expect(metrics.sessionCost).toBe(0);
-    expect(metrics.hookEventCount).toBe(1);
+    expect(metrics.totalEventCount).toBe(1);
   });
 
   it("session_start increments activeAgentCount and sets sessionStartedAt", () => {
@@ -165,10 +165,10 @@ describe("hookProcessor with non-token events", () => {
     expect(metrics.sessionStartedAt).not.toBe("");
     expect(metrics.totalTokens).toBe(0);
     expect(metrics.sessionCost).toBe(0);
-    expect(metrics.hookEventCount).toBe(1);
+    expect(metrics.totalEventCount).toBe(1);
   });
 
-  it("unknown event type still increments hookEventCount", () => {
+  it("unknown event type still increments totalEventCount", () => {
     const store = createSpyStore();
     const processor = createHookProcessor({
       updateMetrics: store.updateMetrics,
@@ -178,7 +178,7 @@ describe("hookProcessor with non-token events", () => {
     processor(makeNonTokenPayload("some_unknown_event"));
 
     const metrics = store.getMetrics();
-    expect(metrics.hookEventCount).toBe(1);
+    expect(metrics.totalEventCount).toBe(1);
     expect(metrics.totalTokens).toBe(0);
     expect(metrics.sessionCost).toBe(0);
   });
@@ -223,7 +223,7 @@ describe("hookProcessor with DB event wrapper", () => {
     expect(metrics.inputTokens).toBe(800);
     expect(metrics.outputTokens).toBe(200);
     expect(metrics.sessionCost).toBeGreaterThan(0);
-    expect(metrics.hookEventCount).toBe(1);
+    expect(metrics.totalEventCount).toBe(1);
   });
 
   it("session_start wrapped event increments activeAgentCount", () => {
@@ -245,7 +245,7 @@ describe("hookProcessor with DB event wrapper", () => {
 
     const metrics = store.getMetrics();
     expect(metrics.activeAgentCount).toBe(1);
-    expect(metrics.hookEventCount).toBe(1);
+    expect(metrics.totalEventCount).toBe(1);
   });
 });
 
@@ -254,7 +254,7 @@ describe("hookProcessor with DB event wrapper", () => {
 // ---------------------------------------------------------------------------
 
 describe("hookProcessor with malformed payloads", () => {
-  it("null payload does not throw and increments hookEventCount", () => {
+  it("null payload does not throw and increments totalEventCount", () => {
     const store = createSpyStore();
     const processor = createHookProcessor({
       updateMetrics: store.updateMetrics,
@@ -262,10 +262,10 @@ describe("hookProcessor with malformed payloads", () => {
     });
 
     expect(() => processor(null)).not.toThrow();
-    expect(store.getMetrics().hookEventCount).toBe(1);
+    expect(store.getMetrics().totalEventCount).toBe(1);
   });
 
-  it("undefined payload does not throw and increments hookEventCount", () => {
+  it("undefined payload does not throw and increments totalEventCount", () => {
     const store = createSpyStore();
     const processor = createHookProcessor({
       updateMetrics: store.updateMetrics,
@@ -273,7 +273,7 @@ describe("hookProcessor with malformed payloads", () => {
     });
 
     expect(() => processor(undefined)).not.toThrow();
-    expect(store.getMetrics().hookEventCount).toBe(1);
+    expect(store.getMetrics().totalEventCount).toBe(1);
   });
 
   it("payload missing event_type field treats as unknown event", () => {
@@ -286,7 +286,7 @@ describe("hookProcessor with malformed payloads", () => {
     processor({ some_field: "value" });
 
     const metrics = store.getMetrics();
-    expect(metrics.hookEventCount).toBe(1);
+    expect(metrics.totalEventCount).toBe(1);
     expect(metrics.totalTokens).toBe(0);
   });
 });
@@ -311,10 +311,10 @@ describe("hookProcessor pipeline accumulation", () => {
 
     expect(afterSecond.totalTokens).toBe(1800);
     expect(afterSecond.sessionCost).toBeGreaterThan(afterFirst.sessionCost);
-    expect(afterSecond.hookEventCount).toBe(2);
+    expect(afterSecond.totalEventCount).toBe(2);
   });
 
-  it("mixed token and non-token events both increment hookEventCount", () => {
+  it("mixed token and non-token events both increment totalEventCount", () => {
     const store = createSpyStore();
     const processor = createHookProcessor({
       updateMetrics: store.updateMetrics,
@@ -326,7 +326,7 @@ describe("hookProcessor pipeline accumulation", () => {
     processor(makeNonTokenPayload("session_start"));
 
     const metrics = store.getMetrics();
-    expect(metrics.hookEventCount).toBe(3);
+    expect(metrics.totalEventCount).toBe(3);
     expect(metrics.totalTokens).toBe(150);
     expect(metrics.toolCallCount).toBe(1);
     expect(metrics.activeAgentCount).toBe(1);

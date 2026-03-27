@@ -120,7 +120,7 @@ describe("Event pipeline integration: DB event → hookBridge → metricsStore",
     expect(after.inputTokens - before.inputTokens).toBe(1200);
     expect(after.outputTokens - before.outputTokens).toBe(400);
     expect(after.sessionCost).toBeGreaterThan(before.sessionCost);
-    expect(after.hookEventCount).toBeGreaterThan(before.hookEventCount);
+    expect(after.totalEventCount).toBeGreaterThan(before.totalEventCount);
   });
 
   it("session_start event increments activeAgentCount without adding tokens", () => {
@@ -133,7 +133,7 @@ describe("Event pipeline integration: DB event → hookBridge → metricsStore",
     expect(after.activeAgentCount).toBe(before.activeAgentCount + 1);
     expect(after.totalTokens).toBe(before.totalTokens); // no change
     expect(after.sessionCost).toBe(before.sessionCost); // no change
-    expect(after.hookEventCount).toBe(before.hookEventCount + 1);
+    expect(after.totalEventCount).toBe(before.totalEventCount + 1);
   });
 
   it("tool_call_start increments toolCallCount without adding tokens", () => {

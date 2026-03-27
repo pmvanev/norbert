@@ -8,7 +8,7 @@
  * - tool_call_start increments tool count without affecting cost or tokens
  * - session_start increments active agent count
  * - agent_complete decrements active agent count (floor at 0)
- * - Every event increments hookEventCount and updates lastEventAt
+ * - Every event increments totalEventCount and updates lastEventAt
  * - Session cost is never negative regardless of event sequence
  * - Aggregator never mutates previous metrics
  */
@@ -94,7 +94,7 @@ describe("createInitialMetrics", () => {
         expect(metrics.sessionCost).toBe(0);
         expect(metrics.toolCallCount).toBe(0);
         expect(metrics.activeAgentCount).toBe(0);
-        expect(metrics.hookEventCount).toBe(0);
+        expect(metrics.totalEventCount).toBe(0);
         expect(metrics.burnRate).toBe(0);
         expect(metrics.sessionLabel).toBe("");
         expect(metrics.contextWindowModel).toBe("");
@@ -226,19 +226,19 @@ describe("agent_complete decrements active agent count", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Every event increments hookEventCount and updates lastEventAt
+// Every event increments totalEventCount and updates lastEventAt
 // ---------------------------------------------------------------------------
 
-describe("every event increments hookEventCount and updates lastEventAt", () => {
-  it("hookEventCount increments by one for any event type", () => {
+describe("every event increments totalEventCount and updates lastEventAt", () => {
+  it("totalEventCount increments by one for any event type", () => {
     fc.assert(
       fc.property(anyEventArb, (event) => {
         const initial: SessionMetrics = {
           ...createInitialMetrics("test"),
-          hookEventCount: 7,
+          totalEventCount: 7,
         };
         const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE);
-        expect(updated.hookEventCount).toBe(8);
+        expect(updated.totalEventCount).toBe(8);
       }),
     );
   });
@@ -309,7 +309,7 @@ describe("api_request event with cost_usd updates session cost by exact cost_usd
     expect(updated.totalTokens).toBe(337 + 12);
     expect(updated.inputTokens).toBe(337);
     expect(updated.outputTokens).toBe(12);
-    expect(updated.hookEventCount).toBe(1);
+    expect(updated.totalEventCount).toBe(1);
   });
 });
 
@@ -383,7 +383,7 @@ describe("api_request with cost_usd=0.0 treats zero as valid cost", () => {
 // OTel identity event types: user_prompt, tool_result, api_error, tool_decision
 // ---------------------------------------------------------------------------
 
-describe("OTel identity event types increment hookEventCount only", () => {
+describe("OTel identity event types increment totalEventCount only", () => {
   const identityEventTypes = [
     "user_prompt",
     "tool_result",
@@ -392,7 +392,7 @@ describe("OTel identity event types increment hookEventCount only", () => {
   ] as const;
 
   it.each(identityEventTypes)(
-    "%s increments hookEventCount and does not affect tokens or cost",
+    "%s increments totalEventCount and does not affect tokens or cost",
     (eventType) => {
       const initial: SessionMetrics = {
         ...createInitialMetrics("identity-test"),
@@ -408,7 +408,7 @@ describe("OTel identity event types increment hookEventCount only", () => {
       };
       const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE);
 
-      expect(updated.hookEventCount).toBe(initial.hookEventCount + 1);
+      expect(updated.totalEventCount).toBe(initial.totalEventCount + 1);
       expect(updated.sessionCost).toBe(1.5);
       expect(updated.totalTokens).toBe(5000);
       expect(updated.toolCallCount).toBe(3);
@@ -439,7 +439,7 @@ describe("api_request with malformed payload falls back gracefully", () => {
     // Token extractor also sees no tokens, so metrics unchanged except bookkeeping
     expect(updated.sessionCost).toBe(0);
     expect(updated.totalTokens).toBe(0);
-    expect(updated.hookEventCount).toBe(1);
+    expect(updated.totalEventCount).toBe(1);
   });
 
   it("array payload produces no cost or token change", () => {
@@ -556,7 +556,7 @@ describe("api_request with empty payload returns unchanged metrics", () => {
     expect(updated.sessionCost).toBe(1.5);
     expect(updated.totalTokens).toBe(5000);
     // Bookkeeping still applied
-    expect(updated.hookEventCount).toBe(initial.hookEventCount + 1);
+    expect(updated.totalEventCount).toBe(initial.totalEventCount + 1);
     expect(updated.lastEventAt).toBe("2025-06-15T10:05:00Z");
   });
 });

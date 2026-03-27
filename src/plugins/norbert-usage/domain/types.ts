@@ -74,7 +74,9 @@ export interface SessionMetrics {
   readonly contextWindowTokens: number;
   readonly contextWindowMaxTokens: number;
   readonly contextWindowModel: string;
-  readonly hookEventCount: number;
+  readonly totalEventCount: number;
+  readonly apiErrorCount: number;
+  readonly apiRequestCount: number;
   readonly sessionStartedAt: string;
   readonly lastEventAt: string;
   readonly burnRate: number;

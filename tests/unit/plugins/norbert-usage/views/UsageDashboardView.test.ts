@@ -60,7 +60,7 @@ describe("UsageDashboardView renders 6 metric cards", () => {
       activeAgentCount: 1,
       toolCallCount: 89,
       contextWindowPct: 56,
-      hookEventCount: 200,
+      totalEventCount: 200,
     });
     const dashboard = computeDashboardData(metrics);
 

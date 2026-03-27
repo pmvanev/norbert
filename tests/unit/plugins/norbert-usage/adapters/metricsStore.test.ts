@@ -44,7 +44,7 @@ describe("metricsStore initial state", () => {
     expect(metrics.sessionId).toBe("my-session");
     expect(metrics.totalTokens).toBe(0);
     expect(metrics.sessionCost).toBe(0);
-    expect(metrics.hookEventCount).toBe(0);
+    expect(metrics.totalEventCount).toBe(0);
   });
 
   it("returns empty time series buffer", () => {
