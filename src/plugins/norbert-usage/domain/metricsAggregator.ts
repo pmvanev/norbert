@@ -126,6 +126,18 @@ const applyAgentCompleteCount = (metrics: SessionMetrics): SessionMetrics => ({
   activeAgentCount: Math.max(0, metrics.activeAgentCount - 1),
 });
 
+/** Increment apiErrorCount. */
+const applyApiErrorCount = (metrics: SessionMetrics): SessionMetrics => ({
+  ...metrics,
+  apiErrorCount: metrics.apiErrorCount + 1,
+});
+
+/** Increment apiRequestCount. */
+const applyApiRequestCount = (metrics: SessionMetrics): SessionMetrics => ({
+  ...metrics,
+  apiRequestCount: metrics.apiRequestCount + 1,
+});
+
 /** Apply common bookkeeping: increment totalEventCount, update lastEventAt. */
 const applyCommonFields = (
   metrics: SessionMetrics,
@@ -180,11 +192,11 @@ const hookEventHandlers: Record<string, EventHandler> = {
     applyAgentCompleteCount(applyTokenUsage(metrics, event.payload, pricingTable)),
 
   api_request: (metrics, event, pricingTable) =>
-    applyApiRequestTokenUsage(metrics, event.payload, pricingTable),
+    applyApiRequestCount(applyApiRequestTokenUsage(metrics, event.payload, pricingTable)),
 
   user_prompt: identityHandler,
   tool_result: identityHandler,
-  api_error: identityHandler,
+  api_error: (metrics) => applyApiErrorCount(metrics),
   tool_decision: identityHandler,
 };
 
@@ -204,11 +216,11 @@ const otelEventHandlers: Record<string, EventHandler> = {
     applyAgentCompleteCount(metrics),
 
   api_request: (metrics, event, pricingTable) =>
-    applyApiRequestTokenUsage(metrics, event.payload, pricingTable),
+    applyApiRequestCount(applyApiRequestTokenUsage(metrics, event.payload, pricingTable)),
 
   user_prompt: identityHandler,
   tool_result: identityHandler,
-  api_error: identityHandler,
+  api_error: (metrics) => applyApiErrorCount(metrics),
   tool_decision: identityHandler,
 };
 

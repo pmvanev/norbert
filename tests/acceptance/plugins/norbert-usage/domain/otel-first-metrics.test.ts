@@ -554,7 +554,7 @@ describe("US-OFM-03: API error visibility", () => {
 
   describe("API error events are tracked for error visibility", () => {
 
-    it.skip("API errors increment error count", () => {
+    it("API errors increment error count", () => {
       // 8 api_request events + 3 api_error events
       const apiRequests = Array.from({ length: 8 }, () =>
         buildApiRequestEvent({ costUsd: 0.10 }),
@@ -563,26 +563,24 @@ describe("US-OFM-03: API error visibility", () => {
 
       const result = foldEvents([...apiRequests, ...apiErrors], undefined, true);
 
-      // apiErrorCount and apiRequestCount are new fields on SessionMetrics
-      // They will be added in step 01-01 and wired in step 03-01.
-      expect((result as any).apiErrorCount).toBe(3);
-      expect((result as any).apiRequestCount).toBe(8);
+      expect(result.apiErrorCount).toBe(3);
+      expect(result.apiRequestCount).toBe(8);
       // apiErrorRate = 3 / (3 + 8) = 0.2727...
       const errorRate =
-        (result as any).apiErrorCount /
-        ((result as any).apiErrorCount + (result as any).apiRequestCount);
+        result.apiErrorCount /
+        (result.apiErrorCount + result.apiRequestCount);
       expect(errorRate).toBeCloseTo(0.27, 1);
     });
 
-    it.skip("healthy session shows zero errors", () => {
+    it("healthy session shows zero errors", () => {
       const apiRequests = Array.from({ length: 12 }, () =>
         buildApiRequestEvent({ costUsd: 0.05 }),
       );
 
       const result = foldEvents(apiRequests, undefined, true);
 
-      expect((result as any).apiErrorCount).toBe(0);
-      expect((result as any).apiRequestCount).toBe(12);
+      expect(result.apiErrorCount).toBe(0);
+      expect(result.apiRequestCount).toBe(12);
     });
   });
 
@@ -614,7 +612,7 @@ describe("US-OFM-03: API error visibility", () => {
 
   describe("property: error rate invariants", () => {
 
-    it.skip("API error rate is always between 0 and 1 when requests exceed errors", () => {
+    it("API error rate is always between 0 and 1 when requests exceed errors", () => {
       fc.assert(
         fc.property(
           fc.integer({ min: 1, max: 100 }),

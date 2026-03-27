@@ -607,6 +607,116 @@ describe("aggregator produces new object without mutating previous", () => {
 });
 
 // ---------------------------------------------------------------------------
+// api_error increments apiErrorCount (Step 03-01)
+// ---------------------------------------------------------------------------
+
+describe("api_error increments apiErrorCount", () => {
+  it("each api_error event increments apiErrorCount by one", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 0, max: 100 }),
+        timestampArb,
+        (startingErrorCount, receivedAt) => {
+          const initial: SessionMetrics = {
+            ...createInitialMetrics("error-count-test"),
+            apiErrorCount: startingErrorCount,
+          };
+          const event = {
+            eventType: "api_error" as const,
+            payload: { status_code: 429, error: "rate_limit_exceeded" },
+            receivedAt,
+          };
+          const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE, true);
+
+          expect(updated.apiErrorCount).toBe(startingErrorCount + 1);
+        },
+      ),
+    );
+  });
+
+  it("api_error in hook-only mode also increments apiErrorCount", () => {
+    const initial: SessionMetrics = {
+      ...createInitialMetrics("hook-error-test"),
+      apiErrorCount: 2,
+    };
+    const event = {
+      eventType: "api_error" as const,
+      payload: { status_code: 500 },
+      receivedAt: "2026-03-27T10:00:00Z",
+    };
+    const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE, false);
+
+    expect(updated.apiErrorCount).toBe(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// api_request increments apiRequestCount (Step 03-01)
+// ---------------------------------------------------------------------------
+
+describe("api_request increments apiRequestCount", () => {
+  it("each api_request event increments apiRequestCount by one", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 0, max: 100 }),
+        fc.double({ min: 0, max: 10, noNaN: true }),
+        (startingRequestCount, costUsd) => {
+          const initial: SessionMetrics = {
+            ...createInitialMetrics("request-count-test"),
+            apiRequestCount: startingRequestCount,
+          };
+          const event = {
+            eventType: "api_request" as const,
+            payload: {
+              usage: {
+                input_tokens: 100,
+                output_tokens: 50,
+                cache_read_input_tokens: 0,
+                cache_creation_input_tokens: 0,
+                cost_usd: costUsd,
+                model: "claude-sonnet-4-20250514",
+                duration_ms: 1000,
+                speed: "normal",
+              },
+            },
+            receivedAt: "2026-03-27T10:00:00Z",
+          };
+          const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE, true);
+
+          expect(updated.apiRequestCount).toBe(startingRequestCount + 1);
+        },
+      ),
+    );
+  });
+
+  it("api_request in hook-only mode also increments apiRequestCount", () => {
+    const initial: SessionMetrics = {
+      ...createInitialMetrics("hook-request-test"),
+      apiRequestCount: 5,
+    };
+    const event = {
+      eventType: "api_request" as const,
+      payload: {
+        usage: {
+          input_tokens: 100,
+          output_tokens: 50,
+          cache_read_input_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cost_usd: 0.01,
+          model: "claude-sonnet-4-20250514",
+          duration_ms: 1000,
+          speed: "normal",
+        },
+      },
+      receivedAt: "2026-03-27T10:00:00Z",
+    };
+    const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE, false);
+
+    expect(updated.apiRequestCount).toBe(6);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Dual dispatch: OTel-active suppresses hook cost/token contribution
 // ---------------------------------------------------------------------------
 
