@@ -1,0 +1,65 @@
+journey:
+  name: session-time-filter
+  actor: norbert-user
+  goal: Filter sessions by recency to focus on relevant activity
+
+  steps:
+    - id: open-sessions
+      action: Open Sessions view
+      input: sidebar click or navigation
+      output: Full session list with filter control visible
+      emotion: neutral
+      artifacts_read: []
+      artifacts_written: [sessions]
+
+    - id: select-filter
+      action: Select a time window from filter control
+      input: Click filter option
+      output: Session list filters to matching sessions; count updates
+      emotion: control
+      artifacts_read: [sessions, selectedFilter]
+      artifacts_written: [filteredSessions, filteredCount]
+
+    - id: work-with-filtered
+      action: Click a session row to open detail
+      input: Click on session row
+      output: Session detail view opens; filter persists on return
+      emotion: confidence
+      artifacts_read: [filteredSessions]
+      artifacts_written: []
+
+  filter_options:
+    - id: active-now
+      label: "Active Now"
+      logic: "isSessionActive(session) === true"
+      traces_to: J1
+
+    - id: last-15m
+      label: "Last 15 min"
+      logic: "session.last_event_at >= now - 15min OR isSessionActive(session)"
+      traces_to: J2
+
+    - id: last-1h
+      label: "Last hour"
+      logic: "session.last_event_at >= now - 1hr OR isSessionActive(session)"
+      traces_to: J2
+
+    - id: last-24h
+      label: "Last 24 hrs"
+      logic: "session.last_event_at >= now - 24hr OR isSessionActive(session)"
+      traces_to: J2
+
+    - id: all
+      label: "All"
+      logic: "no filter applied"
+      traces_to: null
+
+  edge_cases:
+    - id: empty-filter
+      condition: No sessions match the selected filter
+      display: "No sessions in this time window"
+      recovery: Select broader window or "All"
+
+    - id: session-spans-boundary
+      condition: Session started before window but was active within it
+      rule: Include if last_event_at falls within the window
