@@ -38,7 +38,7 @@ const isWithinWindow = (
 ): boolean => {
   if (session.last_event_at === null) return false;
   const lastEventTime = new Date(session.last_event_at).getTime();
-  return now - lastEventTime < windowMs;
+  return now - lastEventTime <= windowMs;
 };
 
 // ---------------------------------------------------------------------------
@@ -95,6 +95,6 @@ export function filterSessions(
   now: number,
 ): readonly SessionInfo[] {
   const preset = SESSION_FILTER_PRESETS.find((p) => p.id === filterId);
-  if (preset === undefined) return [];
+  if (preset === undefined) return sessions;
   return sessions.filter((session) => preset.predicate(session, now));
 }

@@ -141,7 +141,7 @@ export function SessionListView({ sessions, onSessionSelect }: SessionListViewPr
             </button>
           ))}
         </div>
-        <span className="sec-a">{filteredSessions.length} total</span>
+        <span className="sec-a">{filteredSessions.length} sessions</span>
       </div>
       {sortedSessions.length === 0 ? (
         <p className="session-filter-empty">No sessions in this time window</p>
