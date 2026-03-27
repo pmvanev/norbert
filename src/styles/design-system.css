@@ -297,6 +297,14 @@ code, pre, .mono,
   padding: 4px 8px;
 }
 
+.session-filter-empty {
+  font-size: 11px;
+  color: var(--text-s);
+  font-family: var(--font-mono);
+  text-align: center;
+  padding: 24px 12px;
+}
+
 /* ═══ SESSION ROW ═══ */
 
 .srow {

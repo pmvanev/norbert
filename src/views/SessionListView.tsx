@@ -17,6 +17,11 @@ import {
   formatClaudeVersion,
   formatPlatform,
 } from "../domain/sessionPresentation";
+import {
+  filterSessions,
+  SESSION_FILTER_PRESETS,
+  type SessionFilterId,
+} from "../domain/sessionFilter";
 
 /// Session metadata returned from the Tauri backend.
 /// Fields are nullable because metadata may not be available for all sessions.
@@ -89,6 +94,7 @@ function SessionRow({
 /// Each row displays start timestamp, duration, and event count.
 export function SessionListView({ sessions, onSessionSelect }: SessionListViewProps) {
   const [metadataMap, setMetadataMap] = useState<ReadonlyMap<string, SessionMetadata>>(new Map());
+  const [selectedFilter, setSelectedFilter] = useState<SessionFilterId>("all");
 
   /// Fetch session metadata once when sessions change.
   /// Builds a lookup map keyed by session_id for O(1) access per row.
@@ -116,22 +122,39 @@ export function SessionListView({ sessions, onSessionSelect }: SessionListViewPr
     );
   }
 
-  const sortedSessions = sortSessionsMostRecentFirst(sessions);
+  const filteredSessions = filterSessions(sessions, selectedFilter, Date.now());
+  const sortedSessions = sortSessionsMostRecentFirst(filteredSessions);
 
   return (
     <section className="session-list">
       <div className="sec-hdr">
         <span className="sec-t">Sessions</span>
-        <span className="sec-a">{sessions.length} total</span>
+        <div className="pm-time-window-selector">
+          {SESSION_FILTER_PRESETS.map((preset) => (
+            <button
+              key={preset.id}
+              type="button"
+              className={`pm-tw-btn${selectedFilter === preset.id ? " pm-tw-btn--active" : ""}`}
+              onClick={() => setSelectedFilter(preset.id)}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
+        <span className="sec-a">{filteredSessions.length} total</span>
       </div>
-      {sortedSessions.map((session) => (
-        <SessionRow
-          key={session.id}
-          session={session}
-          metadata={metadataMap.get(session.id)}
-          onSelect={onSessionSelect}
-        />
-      ))}
+      {sortedSessions.length === 0 ? (
+        <p className="session-filter-empty">No sessions in this time window</p>
+      ) : (
+        sortedSessions.map((session) => (
+          <SessionRow
+            key={session.id}
+            session={session}
+            metadata={metadataMap.get(session.id)}
+            onSelect={onSessionSelect}
+          />
+        ))
+      )}
     </section>
   );
 }
