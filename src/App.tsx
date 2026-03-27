@@ -89,7 +89,7 @@ const createInitialLayout = (): TwoZoneLayoutState => {
 ///
 /// Extracted as a standalone component so React hooks work correctly
 /// (components inside useMemo read from refs, this component manages its own state).
-function SessionDashboardLoader({ sessionId }: { readonly sessionId: string }) {
+function SessionDashboardLoader({ sessionId, onClose }: { readonly sessionId: string; readonly onClose?: () => void }) {
   const [events, setEvents] = useState<DashboardSessionEvent[]>([]);
   const [metrics, setMetrics] = useState<BackendAccumulatedMetric[]>([]);
 
@@ -115,6 +115,7 @@ function SessionDashboardLoader({ sessionId }: { readonly sessionId: string }) {
       events={events}
       metrics={metrics}
       totalApiRequests={totalApiRequests}
+      onClose={onClose}
     />
   );
 }
@@ -463,7 +464,7 @@ function App() {
     const SessionDashboardWrapperInner: FC = () => {
       const sid = selectedSessionIdRef.current;
       if (sid === null) return <div className="empty-state">Select a session to view its dashboard.</div>;
-      return <SessionDashboardLoader sessionId={sid} />;
+      return <SessionDashboardLoader sessionId={sid} onClose={handleBackToSessionsRef.current} />;
     };
     SessionDashboardWrapperInner.displayName = "SessionDashboardWrapper";
     registry.set("session-dashboard", SessionDashboardWrapperInner);

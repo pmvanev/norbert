@@ -94,7 +94,7 @@ function SessionRow({
 /// Each row displays start timestamp, duration, and event count.
 export function SessionListView({ sessions, onSessionSelect }: SessionListViewProps) {
   const [metadataMap, setMetadataMap] = useState<ReadonlyMap<string, SessionMetadata>>(new Map());
-  const [selectedFilter, setSelectedFilter] = useState<SessionFilterId>("all");
+  const [selectedFilter, setSelectedFilter] = useState<SessionFilterId>("active-now");
 
   /// Fetch session metadata once when sessions change.
   /// Builds a lookup map keyed by session_id for O(1) access per row.
@@ -129,18 +129,17 @@ export function SessionListView({ sessions, onSessionSelect }: SessionListViewPr
     <section className="session-list">
       <div className="sec-hdr">
         <span className="sec-t">Sessions</span>
-        <div className="pm-time-window-selector">
+        <select
+          className="glass-dropdown"
+          value={selectedFilter}
+          onChange={(e) => setSelectedFilter(e.target.value as SessionFilterId)}
+        >
           {SESSION_FILTER_PRESETS.map((preset) => (
-            <button
-              key={preset.id}
-              type="button"
-              className={`pm-tw-btn${selectedFilter === preset.id ? " pm-tw-btn--active" : ""}`}
-              onClick={() => setSelectedFilter(preset.id)}
-            >
+            <option key={preset.id} value={preset.id}>
               {preset.label}
-            </button>
+            </option>
           ))}
-        </div>
+        </select>
         <span className="sec-a">{filteredSessions.length} sessions</span>
       </div>
       {sortedSessions.length === 0 ? (

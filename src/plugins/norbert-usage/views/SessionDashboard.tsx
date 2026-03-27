@@ -75,6 +75,7 @@ interface SessionDashboardProps {
   readonly events: ReadonlyArray<SessionEvent>;
   readonly metrics: ReadonlyArray<AccumulatedMetric>;
   readonly totalApiRequests: number;
+  readonly onClose?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -86,6 +87,7 @@ export const SessionDashboard = ({
   events,
   metrics,
   totalApiRequests,
+  onClose,
 }: SessionDashboardProps): JSX.Element => {
   const toolResultEvents = toToolResultEvents(events);
   const apiErrorEvents = toApiErrorEvents(events);
@@ -96,6 +98,16 @@ export const SessionDashboard = ({
     <div className="session-dashboard">
       <div className="sec-hdr">
         <h2>Session: {sessionId.slice(0, 8)}</h2>
+        {onClose && (
+          <button
+            type="button"
+            className="zone-close-btn"
+            onClick={onClose}
+            aria-label="Close panel"
+          >
+            &#x2715;
+          </button>
+        )}
       </div>
       <div className="dashboard-grid">
         <ActiveTimeCard metrics={metrics} />
