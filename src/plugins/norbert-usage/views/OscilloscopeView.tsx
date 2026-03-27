@@ -223,11 +223,13 @@ export const OscilloscopeView = ({ store }: OscilloscopeViewProps) => {
       samples,
       canvasDimensions,
       "tokenRate",
+      buffer.capacity,
     );
     const costRatePoints = prepareWaveformPoints(
       samples,
       canvasDimensions,
       "costRate",
+      buffer.capacity,
     );
 
     const currentStats = computeStats(buffer);

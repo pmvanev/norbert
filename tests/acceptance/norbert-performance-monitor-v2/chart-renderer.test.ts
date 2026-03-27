@@ -248,6 +248,84 @@ describe("Filled-area chart with all zero values produces flat baseline", () => 
 });
 
 // ---------------------------------------------------------------------------
+// FOCUSED SCENARIOS: Sliding Window (data slides left, constant time width)
+// Traces to: Design spec "plots slide left off the screen, not compact"
+// ---------------------------------------------------------------------------
+
+describe("Partially filled buffer right-aligns data so it slides in from the right", () => {
+  it("newest sample is at the right edge regardless of fill level", () => {
+    // Given a buffer with capacity 60 but only 10 samples collected so far
+    const samples = createSamples(Array.from({ length: 10 }, (_, i) => i * 10));
+    const bufferCapacity = 60;
+
+    // When filled-area points are prepared with the buffer capacity
+    const points = prepareFilledAreaPoints(samples, STANDARD_DIMENSIONS, 100, bufferCapacity);
+
+    // Then the newest sample (last point) is at the right edge of the drawable area
+    const rightEdge = STANDARD_DIMENSIONS.width - STANDARD_DIMENSIONS.padding;
+    expect(points[points.length - 1].x).toBeCloseTo(rightEdge, 1);
+    // And the oldest sample is NOT at the left edge (empty space on the left)
+    const leftEdge = STANDARD_DIMENSIONS.padding;
+    expect(points[0].x).toBeGreaterThan(leftEdge + 100);
+  });
+});
+
+describe("Sample spacing stays constant as buffer fills", () => {
+  it("distance between consecutive samples is the same at 10 and 30 samples", () => {
+    // Given two snapshots of a filling buffer (capacity 60)
+    const bufferCapacity = 60;
+    const samples10 = createSamples(Array.from({ length: 10 }, () => 50));
+    const samples30 = createSamples(Array.from({ length: 30 }, () => 50));
+
+    // When points are prepared for both snapshots
+    const points10 = prepareFilledAreaPoints(samples10, STANDARD_DIMENSIONS, 100, bufferCapacity);
+    const points30 = prepareFilledAreaPoints(samples30, STANDARD_DIMENSIONS, 100, bufferCapacity);
+
+    // Then the spacing between consecutive samples is the same
+    const spacing10 = points10[1].x - points10[0].x;
+    const spacing30 = points30[1].x - points30[0].x;
+    expect(spacing10).toBeCloseTo(spacing30, 1);
+  });
+});
+
+describe("Full buffer spans the entire drawable width", () => {
+  it("when buffer is full, first sample is at left edge and last at right edge", () => {
+    // Given a full buffer (60 samples, capacity 60)
+    const samples = createSamples(Array.from({ length: 60 }, (_, i) => i));
+    const bufferCapacity = 60;
+
+    // When filled-area points are prepared
+    const points = prepareFilledAreaPoints(samples, STANDARD_DIMENSIONS, 100, bufferCapacity);
+
+    // Then the first sample is at the left edge
+    expect(points[0].x).toBeCloseTo(STANDARD_DIMENSIONS.padding, 1);
+    // And the last sample is at the right edge
+    expect(points[points.length - 1].x).toBeCloseTo(
+      STANDARD_DIMENSIONS.width - STANDARD_DIMENSIONS.padding, 1,
+    );
+  });
+});
+
+describe("Hit-test returns no-hit in the empty left region of a partial buffer", () => {
+  it("hovering in empty space before any data returns sampleIndex -1", () => {
+    // Given a buffer with capacity 60 but only 10 samples
+    const bufferCapacity = 60;
+
+    // When the mouse is at the far left (in the empty region)
+    const result = computeHitTest(
+      STANDARD_DIMENSIONS.padding + 1,
+      STANDARD_DIMENSIONS.width,
+      10,
+      STANDARD_DIMENSIONS.padding,
+      bufferCapacity,
+    );
+
+    // Then no sample is hit
+    expect(result.sampleIndex).toBe(-1);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // FOCUSED SCENARIOS: Sparkline Points
 // Traces to: Design spec Section 6 "Sidebar Mini-Sparklines"
 // ---------------------------------------------------------------------------

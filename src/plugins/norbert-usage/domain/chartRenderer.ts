@@ -57,6 +57,10 @@ const clamp = (value: number, min: number, max: number): number =>
  * Uses the drawable width (canvas width minus padding on both sides)
  * to compute a ratio, then scales to the buffer length.
  *
+ * When bufferCapacity is provided and exceeds bufferLength, the samples
+ * are right-aligned (sliding window). Mouse positions in the empty left
+ * region return sampleIndex = -1.
+ *
  * Returns sampleIndex = -1 when the buffer is empty.
  */
 export const computeHitTest = (
@@ -64,6 +68,7 @@ export const computeHitTest = (
   canvasWidth: number,
   bufferLength: number,
   padding: number,
+  bufferCapacity?: number,
 ): HitTestResult => {
   if (bufferLength <= 0) {
     return { sampleIndex: -1 };
@@ -73,10 +78,20 @@ export const computeHitTest = (
     return { sampleIndex: 0 };
   }
 
+  const effectiveCapacity = bufferCapacity ?? bufferLength;
+  const slots = Math.max(effectiveCapacity, bufferLength);
   const drawableWidth = canvasWidth - 2 * padding;
   const clampedX = clamp(mouseX - padding, 0, drawableWidth);
   const ratio = clampedX / drawableWidth;
-  const rawIndex = ratio * (bufferLength - 1);
+  const rawSlot = ratio * (slots - 1);
+  const offset = slots - bufferLength;
+
+  // Mouse is in the empty left region before any data
+  if (rawSlot < offset - 0.5) {
+    return { sampleIndex: -1 };
+  }
+
+  const rawIndex = rawSlot - offset;
   const sampleIndex = clamp(Math.round(rawIndex), 0, bufferLength - 1);
 
   return { sampleIndex };
@@ -150,7 +165,11 @@ const mapValueToCanvasY = (
 /**
  * Map an array of samples to canvas coordinates for a filled-area line chart.
  *
- * X coordinates are evenly distributed across the drawable width.
+ * X coordinates are distributed across the drawable width relative to
+ * bufferCapacity (sliding window). When the buffer is partially filled,
+ * samples are right-aligned so new data enters from the right edge and
+ * old data slides left off screen.
+ *
  * Y coordinates are normalized against yMax: yMax maps to the top padding,
  * zero maps to the bottom (height - padding). Canvas Y-axis is inverted.
  */
@@ -158,6 +177,7 @@ export const prepareFilledAreaPoints = (
   samples: ReadonlyArray<ChartSample>,
   dimensions: CanvasDimensions,
   yMax: number,
+  bufferCapacity?: number,
 ): ReadonlyArray<FilledAreaPoint> => {
   if (samples.length === 0) return [];
 
@@ -165,10 +185,13 @@ export const prepareFilledAreaPoints = (
   const drawableWidth = width - 2 * padding;
   const topY = padding;
   const bottomY = height - padding;
-  const lastIndex = samples.length - 1;
+  const effectiveCapacity = bufferCapacity ?? samples.length;
+  const slots = Math.max(effectiveCapacity, samples.length);
+  const offset = slots - samples.length;
 
   return samples.map((sample, index) => {
-    const xRatio = lastIndex === 0 ? 0 : index / lastIndex;
+    const slot = offset + index;
+    const xRatio = slots <= 1 ? 0 : slot / (slots - 1);
     const x = padding + xRatio * drawableWidth;
     const y = mapValueToCanvasY(sample.value, yMax, topY, bottomY);
     return { x, y };
@@ -183,22 +206,27 @@ export const prepareFilledAreaPoints = (
  * Map samples to canvas coordinates for a sparkline rendering.
  *
  * Unlike filled-area points, sparkline X coordinates span the full width
- * (no padding). This produces a compact line suited for 80x20px canvases.
+ * (no padding). When bufferCapacity is provided, samples are right-aligned
+ * for sliding window display.
  */
 export const prepareSparklinePoints = (
   samples: ReadonlyArray<ChartSample>,
   dimensions: CanvasDimensions,
   yMax: number,
+  bufferCapacity?: number,
 ): ReadonlyArray<FilledAreaPoint> => {
   if (samples.length === 0) return [];
 
   const { width, height, padding } = dimensions;
   const topY = padding;
   const bottomY = height - padding;
-  const lastIndex = samples.length - 1;
+  const effectiveCapacity = bufferCapacity ?? samples.length;
+  const slots = Math.max(effectiveCapacity, samples.length);
+  const offset = slots - samples.length;
 
   return samples.map((sample, index) => {
-    const xRatio = lastIndex === 0 ? 0 : index / lastIndex;
+    const slot = offset + index;
+    const xRatio = slots <= 1 ? 0 : slot / (slots - 1);
     const x = xRatio * width;
     const y = mapValueToCanvasY(sample.value, yMax, topY, bottomY);
     return { x, y };
@@ -213,7 +241,8 @@ export const prepareSparklinePoints = (
  * Compute the crosshair vertical line X position and dot Y position
  * for a hovered sample in the chart.
  *
- * X is computed from the sample index within the drawable width.
+ * X is computed from the sample index within the drawable width,
+ * right-aligned when bufferCapacity exceeds bufferLength.
  * dotY is computed from the sample value within the drawable height.
  */
 export const computeCrosshairPosition = (
@@ -222,14 +251,19 @@ export const computeCrosshairPosition = (
   bufferLength: number,
   yMax: number,
   dimensions: CanvasDimensions,
+  bufferCapacity?: number,
 ): CrosshairPosition => {
   const { width, height, padding } = dimensions;
   const drawableWidth = width - 2 * padding;
   const topY = padding;
   const bottomY = height - padding;
 
-  const lastIndex = bufferLength <= 1 ? 1 : bufferLength - 1;
-  const xRatio = sampleIndex / lastIndex;
+  const effectiveCapacity = bufferCapacity ?? bufferLength;
+  const slots = Math.max(effectiveCapacity, bufferLength);
+  const offset = slots - bufferLength;
+  const slot = offset + sampleIndex;
+  const lastSlot = slots <= 1 ? 1 : slots - 1;
+  const xRatio = slot / lastSlot;
   const x = padding + xRatio * drawableWidth;
   const dotY = mapValueToCanvasY(sampleValue, yMax, topY, bottomY);
 

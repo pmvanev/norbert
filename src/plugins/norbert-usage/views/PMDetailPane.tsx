@@ -265,6 +265,7 @@ export const PMDetailPane = ({
             }
             onHover={handleAggregateHover}
             onHoverEnd={handleHoverEnd}
+            bufferCapacity={aggregateBuffer.capacity}
           />
           <span className="pm-detail-duration-label">
             {formatDurationLabel(selectedWindow)}
@@ -311,6 +312,7 @@ export const PMDetailPane = ({
                   }
                   onHover={createHoverHandler(`session-${session.sessionId}-${selectedCategory}`)}
                   onHoverEnd={handleHoverEnd}
+                  bufferCapacity={sessionBuffer?.capacity}
                 />
               </div>
             );

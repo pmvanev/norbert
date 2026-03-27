@@ -109,6 +109,7 @@ const SparklineCanvas = ({
       samples,
       SPARKLINE_DIMENSIONS,
       category.yMax,
+      buffer.capacity,
     );
 
     drawSparkline(ctx, points, resolveThemeColor(category.cssVar, category.color));

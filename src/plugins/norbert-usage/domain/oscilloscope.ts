@@ -69,7 +69,10 @@ const normalizeY = (
 /**
  * Map an array of RateSamples to canvas WaveformPoints.
  *
- * X coordinates are evenly distributed across the drawable width.
+ * X coordinates are distributed across the drawable width relative to
+ * bufferCapacity (sliding window). When the buffer is partially filled,
+ * samples are right-aligned so new data enters from the right edge.
+ *
  * Y coordinates are normalized: peak value maps to top padding,
  * zero maps to bottom (height - padding). Canvas y-axis is inverted.
  */
@@ -77,6 +80,7 @@ export const prepareWaveformPoints = (
   samples: ReadonlyArray<RateSample>,
   dimensions: CanvasDimensions,
   field: RateField,
+  bufferCapacity?: number,
 ): ReadonlyArray<WaveformPoint> => {
   if (samples.length === 0) return [];
 
@@ -85,10 +89,13 @@ export const prepareWaveformPoints = (
   const topY = padding;
   const bottomY = height - padding;
   const peakRate = findPeakRate(samples, field);
-  const lastIndex = samples.length - 1;
+  const effectiveCapacity = bufferCapacity ?? samples.length;
+  const slots = Math.max(effectiveCapacity, samples.length);
+  const offset = slots - samples.length;
 
   return samples.map((sample, index) => {
-    const xRatio = lastIndex === 0 ? 0 : index / lastIndex;
+    const slot = offset + index;
+    const xRatio = slots <= 1 ? 0 : slot / (slots - 1);
     const x = padding + xRatio * drawableWidth;
     const y = normalizeY(extractRate(sample, field), peakRate, topY, bottomY);
     return { x, y };

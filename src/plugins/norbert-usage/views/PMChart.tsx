@@ -72,6 +72,7 @@ interface PMChartProps {
   readonly hoverIndex?: number;
   readonly onHover?: (data: HoverData) => void;
   readonly onHoverEnd?: () => void;
+  readonly bufferCapacity?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -215,6 +216,7 @@ export const PMChart = ({
   hoverIndex: _hoverIndex,
   onHover,
   onHoverEnd,
+  bufferCapacity,
 }: PMChartProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -290,8 +292,8 @@ export const PMChart = ({
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
 
-    // Compute chart points from domain function
-    const points = prepareFilledAreaPoints(chartSamples, canvasDimensions, effectiveYMax);
+    // Compute chart points from domain function (right-aligned sliding window)
+    const points = prepareFilledAreaPoints(chartSamples, canvasDimensions, effectiveYMax, bufferCapacity);
 
     // Draw pipeline: clear -> grid -> filled area -> line trace
     clearCanvas(ctx, canvasDimensions);
@@ -308,7 +310,7 @@ export const PMChart = ({
     if (crosshairX !== null) {
       drawCrosshair(ctx, crosshairX, canvasDimensions, color);
     }
-  }, [canvasDimensions, chartSamples, effectiveYMax, color, isAggregate]);
+  }, [canvasDimensions, chartSamples, effectiveYMax, color, isAggregate, bufferCapacity]);
 
   // Mouse interaction: hit-test and hover callbacks
   useEffect(() => {
@@ -338,6 +340,7 @@ export const PMChart = ({
         canvasDimensions.width,
         chartSamples.length,
         canvasDimensions.padding,
+        bufferCapacity,
       );
 
       if (sampleIndex < 0) return;
