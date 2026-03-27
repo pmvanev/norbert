@@ -153,11 +153,17 @@ const applyCommonFields = (
  * - session_start: increment active agent count
  * - All events: increment totalEventCount, update lastEventAt
  */
-/** Dispatch table: event type -> metrics transformation. */
-const eventHandlers: Record<
-  string,
-  (metrics: SessionMetrics, event: AggregatorEvent, pricingTable: PricingTable) => SessionMetrics
-> = {
+// ---------------------------------------------------------------------------
+// Dispatch tables: hook-only vs OTel-active sessions
+// ---------------------------------------------------------------------------
+
+type EventHandler = (metrics: SessionMetrics, event: AggregatorEvent, pricingTable: PricingTable) => SessionMetrics;
+
+/** Identity handler for unknown event types: only common fields updated. */
+const identityHandler: EventHandler = (metrics) => metrics;
+
+/** Hook-only dispatch table: all hook events contribute tokens and cost. */
+const hookEventHandlers: Record<string, EventHandler> = {
   prompt_submit: (metrics, event, pricingTable) =>
     applyTokenUsage(metrics, event.payload, pricingTable),
 
@@ -173,25 +179,47 @@ const eventHandlers: Record<
   agent_complete: (metrics, event, pricingTable) =>
     applyAgentCompleteCount(applyTokenUsage(metrics, event.payload, pricingTable)),
 
-  // OTel event types
   api_request: (metrics, event, pricingTable) =>
     applyApiRequestTokenUsage(metrics, event.payload, pricingTable),
 
-  user_prompt: (metrics) => metrics,
-  tool_result: (metrics) => metrics,
-  api_error: (metrics) => metrics,
-  tool_decision: (metrics) => metrics,
+  user_prompt: identityHandler,
+  tool_result: identityHandler,
+  api_error: identityHandler,
+  tool_decision: identityHandler,
 };
 
-/** Identity handler for unknown event types: only common fields updated. */
-const identityHandler = (metrics: SessionMetrics): SessionMetrics => metrics;
+/** OTel-active dispatch table: hook cost/token events suppressed.
+ *  prompt_submit, tool_call_end, tool_call_start -> identity (no cost/token contribution).
+ *  agent_complete -> count only (no token/cost).
+ *  api_request -> full cost_usd + token processing (same as hook table). */
+const otelEventHandlers: Record<string, EventHandler> = {
+  prompt_submit: identityHandler,
+  tool_call_end: identityHandler,
+  tool_call_start: identityHandler,
+
+  session_start: (metrics, event) =>
+    applySessionStart(metrics, event.receivedAt),
+
+  agent_complete: (metrics) =>
+    applyAgentCompleteCount(metrics),
+
+  api_request: (metrics, event, pricingTable) =>
+    applyApiRequestTokenUsage(metrics, event.payload, pricingTable),
+
+  user_prompt: identityHandler,
+  tool_result: identityHandler,
+  api_error: identityHandler,
+  tool_decision: identityHandler,
+};
 
 export const aggregateEvent = (
   previous: SessionMetrics,
   event: AggregatorEvent,
   pricingTable: PricingTable,
+  isOtelActive: boolean = false,
 ): SessionMetrics => {
-  const handler = eventHandlers[event.eventType] ?? identityHandler;
+  const handlers = isOtelActive ? otelEventHandlers : hookEventHandlers;
+  const handler = handlers[event.eventType] ?? identityHandler;
   const updated = handler(previous, event, pricingTable);
   return applyCommonFields(updated, event.receivedAt);
 };

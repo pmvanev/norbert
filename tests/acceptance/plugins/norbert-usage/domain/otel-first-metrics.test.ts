@@ -156,10 +156,7 @@ const foldEvents = (
 ): SessionMetrics => {
   let metrics = initial ?? createInitialMetrics("acceptance-test");
   for (const event of events) {
-    // NOTE: isOtelActive parameter does not exist yet on aggregateEvent.
-    // The software-crafter will add it as part of step 02-01.
-    // Until then, this calls the current 3-arg signature.
-    metrics = aggregateEvent(metrics, event, DEFAULT_PRICING_TABLE);
+    metrics = aggregateEvent(metrics, event, DEFAULT_PRICING_TABLE, isOtelActive ?? false);
   }
   return metrics;
 };
@@ -169,7 +166,7 @@ const foldEvents = (
 // ===========================================================================
 
 describe("Walking Skeleton: operator sees accurate session cost when OTel is active", () => {
-  it.skip("pre-OTel cost preserved plus OTel cost_usd, hook token data excluded", () => {
+  it("pre-OTel cost preserved plus OTel cost_usd, hook token data excluded", () => {
     // Given: session accumulated $1.20 from hook events before OTel activated
     const preOtelMetrics: SessionMetrics = {
       ...createInitialMetrics("ws-cost"),
@@ -242,7 +239,7 @@ describe("US-OFM-01: Cost single source of truth", () => {
 
   describe("when OTel is active, only API request cost_usd contributes to cost", () => {
 
-    it.skip("API request cost_usd values are summed as session cost", () => {
+    it("API request cost_usd values are summed as session cost", () => {
       const events = [
         buildApiRequestEvent({ costUsd: 0.42 }),
         buildApiRequestEvent({ costUsd: 1.15 }),
@@ -254,7 +251,7 @@ describe("US-OFM-01: Cost single source of truth", () => {
       expect(result.sessionCost).toBeCloseTo(2.40, 2);
     });
 
-    it.skip("prompt submit does not contribute to cost when OTel is active", () => {
+    it("prompt submit does not contribute to cost when OTel is active", () => {
       const initial: SessionMetrics = {
         ...createInitialMetrics("suppress-test"),
         sessionCost: 1.00,
@@ -269,7 +266,7 @@ describe("US-OFM-01: Cost single source of truth", () => {
       expect(result.sessionCost).toBe(1.00);
     });
 
-    it.skip("agent complete updates agent count but not cost when OTel is active", () => {
+    it("agent complete updates agent count but not cost when OTel is active", () => {
       const initial: SessionMetrics = {
         ...createInitialMetrics("agent-test"),
         activeAgentCount: 1,
@@ -286,7 +283,7 @@ describe("US-OFM-01: Cost single source of truth", () => {
       expect(result.sessionCost).toBe(2.00);
     });
 
-    it.skip("tool call end does not contribute to cost when OTel is active", () => {
+    it("tool call end does not contribute to cost when OTel is active", () => {
       const initial: SessionMetrics = {
         ...createInitialMetrics("tce-test"),
         sessionCost: 2.50,
@@ -304,7 +301,7 @@ describe("US-OFM-01: Cost single source of truth", () => {
 
   describe("when OTel is not active, hook events contribute to cost as before", () => {
 
-    it.skip("hook-only session calculates cost via pricing model", () => {
+    it("hook-only session calculates cost via pricing model", () => {
       const events = [
         buildPromptSubmitEvent({
           inputTokens: 1500,
@@ -321,7 +318,7 @@ describe("US-OFM-01: Cost single source of truth", () => {
       expect(result.totalTokens).toBe(2300);
     });
 
-    it.skip("hook-only session counts tools from tool call start events", () => {
+    it("hook-only session counts tools from tool call start events", () => {
       const events = [
         buildToolCallStartEvent(),
         buildToolCallStartEvent(),
@@ -336,7 +333,7 @@ describe("US-OFM-01: Cost single source of truth", () => {
 
   describe("API request without cost_usd falls back to pricing model", () => {
 
-    it.skip("missing cost_usd triggers pricing model fallback", () => {
+    it("missing cost_usd triggers pricing model fallback", () => {
       const events = [
         buildApiRequestEvent({
           inputTokens: 2000,
@@ -353,7 +350,7 @@ describe("US-OFM-01: Cost single source of truth", () => {
       expect(result.totalTokens).toBe(3000);
     });
 
-    it.skip("cost_usd of zero is treated as valid zero cost", () => {
+    it("cost_usd of zero is treated as valid zero cost", () => {
       const events = [
         buildApiRequestEvent({
           inputTokens: 500,
@@ -371,7 +368,7 @@ describe("US-OFM-01: Cost single source of truth", () => {
 
   describe("mid-session OTel activation preserves pre-OTel cost", () => {
 
-    it.skip("pre-OTel cost preserved when first API request arrives", () => {
+    it("pre-OTel cost preserved when first API request arrives", () => {
       // Simulate: hook events contributed $1.20 before OTel
       const preOtelMetrics: SessionMetrics = {
         ...createInitialMetrics("mid-session"),
@@ -380,12 +377,12 @@ describe("US-OFM-01: Cost single source of truth", () => {
 
       // First api_request makes session OTel-active
       const apiRequest = buildApiRequestEvent({ costUsd: 0.55 });
-      const afterApi = aggregateEvent(preOtelMetrics, apiRequest, DEFAULT_PRICING_TABLE);
+      const afterApi = aggregateEvent(preOtelMetrics, apiRequest, DEFAULT_PRICING_TABLE, true);
 
       // Subsequent hook events should be suppressed
       const hookEvent = buildPromptSubmitEvent({ inputTokens: 1000, outputTokens: 500 });
-      // NOTE: isOtelActive=true for this call (after api_request arrived)
-      const afterHook = aggregateEvent(afterApi, hookEvent, DEFAULT_PRICING_TABLE);
+      // isOtelActive=true for this call (after api_request arrived)
+      const afterHook = aggregateEvent(afterApi, hookEvent, DEFAULT_PRICING_TABLE, true);
 
       // $1.20 (pre-OTel) + $0.55 (api_request) = $1.75
       expect(afterHook.sessionCost).toBeCloseTo(1.75, 2);
@@ -394,7 +391,7 @@ describe("US-OFM-01: Cost single source of truth", () => {
 
   describe("property: session cost invariants", () => {
 
-    it.skip("session cost is never negative regardless of event sequence", () => {
+    it("session cost is never negative regardless of event sequence", () => {
       const anyEventArb = fc.oneof(
         fc.record({
           eventType: fc.constantFrom("prompt_submit", "tool_call_end", "agent_complete"),
@@ -436,7 +433,7 @@ describe("US-OFM-01: Cost single source of truth", () => {
       );
     });
 
-    it.skip("OTel session cost equals sum of API request cost_usd values", () => {
+    it("OTel session cost equals sum of API request cost_usd values", () => {
       const costUsdArb = fc.double({ min: 0, max: 50, noNaN: true });
 
       fc.assert(

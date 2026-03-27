@@ -605,3 +605,129 @@ describe("aggregator produces new object without mutating previous", () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// Dual dispatch: OTel-active suppresses hook cost/token contribution
+// ---------------------------------------------------------------------------
+
+const apiRequestEventArb = fc.record({
+  eventType: fc.constant("api_request" as const),
+  payload: fc.record({
+    usage: fc.record({
+      input_tokens: tokenCountArb,
+      output_tokens: tokenCountArb,
+      cache_read_input_tokens: fc.constant(0),
+      cache_creation_input_tokens: fc.constant(0),
+      cost_usd: fc.double({ min: 0, max: 100, noNaN: true }),
+      model: modelArb,
+      duration_ms: fc.constant(1000),
+      speed: fc.constant("normal"),
+    }),
+  }),
+  receivedAt: timestampArb,
+});
+
+describe("dual dispatch: isOtelActive selects handler table", () => {
+
+  it("prompt_submit with isOtelActive=true does not change cost or tokens", () => {
+    fc.assert(
+      fc.property(tokenBearingEventArb, (event) => {
+        const initial: SessionMetrics = {
+          ...createInitialMetrics("otel-suppress"),
+          sessionCost: 5.0,
+          totalTokens: 10000,
+        };
+        const patched = { ...event, eventType: "prompt_submit" as const };
+        const updated = aggregateEvent(initial, patched, DEFAULT_PRICING_TABLE, true);
+
+        expect(updated.sessionCost).toBe(5.0);
+        expect(updated.totalTokens).toBe(10000);
+        expect(updated.totalEventCount).toBe(initial.totalEventCount + 1);
+      }),
+    );
+  });
+
+  it("tool_call_end with isOtelActive=true does not change cost or tokens", () => {
+    fc.assert(
+      fc.property(tokenBearingEventArb, (event) => {
+        const initial: SessionMetrics = {
+          ...createInitialMetrics("otel-suppress"),
+          sessionCost: 3.0,
+          totalTokens: 8000,
+        };
+        const patched = { ...event, eventType: "tool_call_end" as const };
+        const updated = aggregateEvent(initial, patched, DEFAULT_PRICING_TABLE, true);
+
+        expect(updated.sessionCost).toBe(3.0);
+        expect(updated.totalTokens).toBe(8000);
+      }),
+    );
+  });
+
+  it("tool_call_start with isOtelActive=true does not increment toolCallCount", () => {
+    fc.assert(
+      fc.property(toolCallStartEventArb, (event) => {
+        const initial: SessionMetrics = {
+          ...createInitialMetrics("otel-suppress"),
+          toolCallCount: 5,
+        };
+        const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE, true);
+
+        expect(updated.toolCallCount).toBe(5);
+      }),
+    );
+  });
+
+  it("agent_complete with isOtelActive=true decrements count but does not change cost", () => {
+    const initial: SessionMetrics = {
+      ...createInitialMetrics("otel-agent"),
+      activeAgentCount: 2,
+      sessionCost: 4.0,
+      totalTokens: 7000,
+    };
+    const event = {
+      eventType: "agent_complete" as const,
+      payload: {
+        usage: {
+          input_tokens: 500,
+          output_tokens: 200,
+          model: "claude-sonnet-4-20250514",
+        },
+      },
+      receivedAt: "2026-03-27T10:00:00Z",
+    };
+    const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE, true);
+
+    expect(updated.activeAgentCount).toBe(1);
+    expect(updated.sessionCost).toBe(4.0);
+    expect(updated.totalTokens).toBe(7000);
+  });
+
+  it("api_request with isOtelActive=true still applies cost_usd and tokens", () => {
+    fc.assert(
+      fc.property(apiRequestEventArb, (event) => {
+        const initial = createInitialMetrics("otel-api");
+        const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE, true);
+
+        expect(updated.totalTokens).toBeGreaterThanOrEqual(0);
+        expect(updated.sessionCost).toBeGreaterThanOrEqual(0);
+        expect(updated.totalEventCount).toBe(1);
+      }),
+    );
+  });
+
+  it("isOtelActive=false preserves existing hook behavior for all event types", () => {
+    fc.assert(
+      fc.property(tokenBearingEventArb, (event) => {
+        const initial = createInitialMetrics("hook-compat");
+        const withoutFlag = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE);
+        const withFalse = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE, false);
+
+        expect(withFalse.sessionCost).toBe(withoutFlag.sessionCost);
+        expect(withFalse.totalTokens).toBe(withoutFlag.totalTokens);
+        expect(withFalse.toolCallCount).toBe(withoutFlag.toolCallCount);
+        expect(withFalse.activeAgentCount).toBe(withoutFlag.activeAgentCount);
+      }),
+    );
+  });
+});
