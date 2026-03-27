@@ -826,6 +826,54 @@ describe("dual dispatch: isOtelActive selects handler table", () => {
     );
   });
 
+  it("api_request with isOtelActive=true sets sessionStartedAt when empty", () => {
+    fc.assert(
+      fc.property(apiRequestEventArb, (event) => {
+        const initial = createInitialMetrics("otel-timing");
+        const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE, true);
+
+        expect(updated.sessionStartedAt).toBe(event.receivedAt);
+      }),
+    );
+  });
+
+  it("api_request with isOtelActive=true does not overwrite sessionStartedAt when already set", () => {
+    fc.assert(
+      fc.property(apiRequestEventArb, (event) => {
+        const initial: SessionMetrics = {
+          ...createInitialMetrics("otel-timing-preserve"),
+          sessionStartedAt: "2026-01-01T00:00:00Z",
+        };
+        const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE, true);
+
+        expect(updated.sessionStartedAt).toBe("2026-01-01T00:00:00Z");
+      }),
+    );
+  });
+
+  it("api_request with isOtelActive=false does not set sessionStartedAt", () => {
+    const initial = createInitialMetrics("hook-timing");
+    const event = {
+      eventType: "api_request" as const,
+      payload: {
+        usage: {
+          input_tokens: 100,
+          output_tokens: 50,
+          cache_read_input_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cost_usd: 0.01,
+          model: "claude-sonnet-4-20250514",
+          duration_ms: 1000,
+          speed: "normal",
+        },
+      },
+      receivedAt: "2026-03-27T10:00:00Z",
+    };
+    const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE, false);
+
+    expect(updated.sessionStartedAt).toBe("");
+  });
+
   it("isOtelActive=false preserves existing hook behavior for all event types", () => {
     fc.assert(
       fc.property(tokenBearingEventArb, (event) => {

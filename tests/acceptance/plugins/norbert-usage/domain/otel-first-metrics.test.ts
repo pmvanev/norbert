@@ -692,7 +692,7 @@ describe("US-OFM-05: OTel session timing preference", () => {
 
   describe("when OTel is active, first API request sets session start", () => {
 
-    it.skip("first API request sets session start time", () => {
+    it("first API request sets session start time", () => {
       const events: AggregatorEvent[] = [
         buildSessionStartEvent("2026-03-27T10:00:05Z"),
         buildApiRequestEvent({
@@ -706,7 +706,7 @@ describe("US-OFM-05: OTel session timing preference", () => {
       expect(result.sessionStartedAt).toBe("2026-03-27T10:00:02Z");
     });
 
-    it.skip("API request arriving before session start preserves earlier timestamp", () => {
+    it("API request arriving before session start preserves earlier timestamp", () => {
       const events: AggregatorEvent[] = [
         buildApiRequestEvent({
           costUsd: 0.10,
@@ -723,7 +723,7 @@ describe("US-OFM-05: OTel session timing preference", () => {
 
   describe("when OTel is not active, session start hook sets the timestamp", () => {
 
-    it.skip("hook-only session uses session start timestamp", () => {
+    it("hook-only session uses session start timestamp", () => {
       const events: AggregatorEvent[] = [
         buildSessionStartEvent("2026-03-27T10:00:05Z"),
       ];
@@ -733,7 +733,7 @@ describe("US-OFM-05: OTel session timing preference", () => {
       expect(result.sessionStartedAt).toBe("2026-03-27T10:00:05Z");
     });
 
-    it.skip("second session start does not overwrite the first timestamp", () => {
+    it("second session start does not overwrite the first timestamp", () => {
       const events: AggregatorEvent[] = [
         buildSessionStartEvent("2026-03-27T10:00:05Z"),
         buildSessionStartEvent("2026-03-27T10:00:15Z"),

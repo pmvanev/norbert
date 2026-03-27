@@ -126,6 +126,15 @@ const applyAgentCompleteCount = (metrics: SessionMetrics): SessionMetrics => ({
   activeAgentCount: Math.max(0, metrics.activeAgentCount - 1),
 });
 
+/** Set sessionStartedAt if currently empty. Does not touch activeAgentCount. */
+const applySessionStartedAtIfEmpty = (
+  metrics: SessionMetrics,
+  receivedAt: string,
+): SessionMetrics =>
+  metrics.sessionStartedAt === ""
+    ? { ...metrics, sessionStartedAt: receivedAt }
+    : metrics;
+
 /** Increment apiErrorCount. */
 const applyApiErrorCount = (metrics: SessionMetrics): SessionMetrics => ({
   ...metrics,
@@ -209,14 +218,21 @@ const otelEventHandlers: Record<string, EventHandler> = {
   tool_call_end: identityHandler,
   tool_call_start: identityHandler,
 
-  session_start: (metrics, event) =>
-    applySessionStart(metrics, event.receivedAt),
+  session_start: (metrics) => ({
+    ...metrics,
+    activeAgentCount: metrics.activeAgentCount + 1,
+  }),
 
   agent_complete: (metrics) =>
     applyAgentCompleteCount(metrics),
 
   api_request: (metrics, event, pricingTable) =>
-    applyApiRequestCount(applyApiRequestTokenUsage(metrics, event.payload, pricingTable)),
+    applyApiRequestCount(
+      applySessionStartedAtIfEmpty(
+        applyApiRequestTokenUsage(metrics, event.payload, pricingTable),
+        event.receivedAt,
+      ),
+    ),
 
   user_prompt: identityHandler,
   tool_result: (metrics) => applyToolCallStart(metrics),
