@@ -118,7 +118,7 @@ export const UsageDashboardView = ({
       <MetricCard card={dashboard.activeAgents} />
       <MetricCard card={dashboard.toolCalls} />
       <MetricCard card={dashboard.contextWindow} />
-      <MetricCard card={dashboard.hookHealth} />
+      <MetricCard card={dashboard.dataHealth} />
     </div>
 
     {dailyCosts.length > 0 && (

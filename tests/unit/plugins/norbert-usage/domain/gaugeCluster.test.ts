@@ -221,14 +221,75 @@ describe("Fuel gauge token label", () => {
 // Warning cluster
 // ---------------------------------------------------------------------------
 
-describe("Warning cluster hook health", () => {
-  it("reports normal when totalEventCount > 0 (events flowing)", () => {
-    const result = computeGaugeClusterData(createSnapshot({ totalEventCount: 50 }));
-    expect(result.warningCluster.hookHealth).toBe("normal");
+describe("Warning cluster data health", () => {
+  const recentTime = "2026-03-27T10:00:50Z";
+  const now = new Date("2026-03-27T10:01:00Z"); // 10s after recentTime
+
+  it("reports healthy when events are flowing and recent", () => {
+    const result = computeGaugeClusterData(
+      createSnapshot({ totalEventCount: 50, lastEventAt: recentTime }),
+      undefined,
+      now,
+    );
+    expect(result.warningCluster.dataHealth).toBe("healthy");
   });
 
-  it("reports degraded when totalEventCount is 0 (no events received)", () => {
-    const result = computeGaugeClusterData(createSnapshot({ totalEventCount: 0 }));
-    expect(result.warningCluster.hookHealth).toBe("degraded");
+  it("reports degraded when events exist but are stale (beyond 60s threshold)", () => {
+    const staleTime = "2026-03-27T09:59:50Z"; // 70s before now
+    const result = computeGaugeClusterData(
+      createSnapshot({ totalEventCount: 15, lastEventAt: staleTime }),
+      undefined,
+      now,
+    );
+    expect(result.warningCluster.dataHealth).toBe("degraded");
+  });
+
+  it("reports no-data when totalEventCount is 0", () => {
+    const result = computeGaugeClusterData(
+      createSnapshot({ totalEventCount: 0 }),
+      undefined,
+      now,
+    );
+    expect(result.warningCluster.dataHealth).toBe("no-data");
+  });
+
+  it("healthy at exactly the staleness threshold boundary (60s)", () => {
+    // lastEventAt = now - 60s exactly => elapsed = 60000ms <= 60000ms threshold => healthy
+    const boundaryTime = "2026-03-27T10:00:00Z";
+    const result = computeGaugeClusterData(
+      createSnapshot({ totalEventCount: 10, lastEventAt: boundaryTime }),
+      undefined,
+      now,
+    );
+    expect(result.warningCluster.dataHealth).toBe("healthy");
+  });
+
+  it("degraded at one millisecond beyond staleness threshold", () => {
+    // 60001ms before now
+    const justBeyond = "2026-03-27T09:59:59.999Z";
+    const result = computeGaugeClusterData(
+      createSnapshot({ totalEventCount: 10, lastEventAt: justBeyond }),
+      undefined,
+      now,
+    );
+    expect(result.warningCluster.dataHealth).toBe("degraded");
+  });
+
+  it("property: dataHealth is always one of the three valid states", () => {
+    fc.assert(
+      fc.property(
+        fc.nat({ max: 100_000 }),
+        fc.date({ min: new Date("2020-01-01"), max: new Date("2030-01-01") }),
+        fc.date({ min: new Date("2020-01-01"), max: new Date("2030-01-01") }),
+        (eventCount, lastEvent, nowDate) => {
+          const result = computeGaugeClusterData(
+            createSnapshot({ totalEventCount: eventCount, lastEventAt: lastEvent.toISOString() }),
+            undefined,
+            nowDate,
+          );
+          expect(["healthy", "degraded", "no-data"]).toContain(result.warningCluster.dataHealth);
+        },
+      ),
+    );
   });
 });

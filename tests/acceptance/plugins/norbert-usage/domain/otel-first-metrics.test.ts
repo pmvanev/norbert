@@ -30,6 +30,9 @@ import {
 } from "../../../../../src/plugins/norbert-usage/domain/metricsAggregator";
 import { DEFAULT_PRICING_TABLE } from "../../../../../src/plugins/norbert-usage/domain/pricingModel";
 import type { SessionMetrics } from "../../../../../src/plugins/norbert-usage/domain/types";
+import {
+  computeGaugeClusterData,
+} from "../../../../../src/plugins/norbert-usage/domain/gaugeCluster";
 
 // ---------------------------------------------------------------------------
 // Event builders -- business-language helpers for test readability
@@ -219,15 +222,20 @@ describe("Walking Skeleton: operator sees per-tool breakdown from OTel tool resu
 });
 
 describe("Walking Skeleton: operator sees healthy data pipeline", () => {
-  it.skip("data health shows healthy when OTel events are flowing recently", () => {
+  it("data health shows healthy when OTel events are flowing recently", () => {
     // Given: session has received 42 events, most recent 5 seconds ago
+    const metrics: SessionMetrics = {
+      ...createInitialMetrics("ws-health"),
+      totalEventCount: 42,
+      lastEventAt: "2026-03-27T10:00:55Z",
+    };
+    const now = new Date("2026-03-27T10:01:00Z");
+
     // When: data health indicator is computed
+    const gaugeData = computeGaugeClusterData(metrics, undefined, now);
+
     // Then: data health status is "healthy"
-    //
-    // NOTE: This requires the refactored buildWarningCluster (step 06-01)
-    // which takes totalEventCount, lastEventAt, and now parameters.
-    // The computeGaugeClusterData driving port will be updated.
-    expect(true).toBe(true); // Placeholder until step 06-01
+    expect(gaugeData.warningCluster.dataHealth).toBe("healthy");
   });
 });
 
@@ -636,50 +644,92 @@ describe("US-OFM-03: API error visibility", () => {
 
 describe("US-OFM-04: Source-agnostic data health indicator", () => {
 
-  // NOTE: These tests exercise computeGaugeClusterData / buildWarningCluster
-  // which will be refactored in step 06-01 to accept (totalEventCount, lastEventAt, now).
-  // Until then, these are skipped placeholders.
-
   describe("data health considers total event count and recency", () => {
 
-    it.skip("healthy when OTel events are flowing recently", () => {
+    it("healthy when OTel events are flowing recently", () => {
       // Given: 42 events, most recent 5 seconds ago
-      // buildWarningCluster(42, "2026-03-27T10:00:55Z", "2026-03-27T10:01:00Z")
-      // => { dataHealth: "healthy" }
-      expect(true).toBe(true); // Placeholder
+      const metrics: SessionMetrics = {
+        ...createInitialMetrics("otel-health"),
+        totalEventCount: 42,
+        lastEventAt: "2026-03-27T10:00:55Z",
+      };
+      const now = new Date("2026-03-27T10:01:00Z");
+
+      const gaugeData = computeGaugeClusterData(metrics, undefined, now);
+
+      expect(gaugeData.warningCluster.dataHealth).toBe("healthy");
     });
 
-    it.skip("healthy when hook events are flowing recently", () => {
+    it("healthy when hook events are flowing recently", () => {
       // Given: 28 hook events, most recent 10 seconds ago
-      // => { dataHealth: "healthy" }
-      expect(true).toBe(true);
+      const metrics: SessionMetrics = {
+        ...createInitialMetrics("hook-health"),
+        totalEventCount: 28,
+        lastEventAt: "2026-03-27T10:00:50Z",
+      };
+      const now = new Date("2026-03-27T10:01:00Z");
+
+      const gaugeData = computeGaugeClusterData(metrics, undefined, now);
+
+      expect(gaugeData.warningCluster.dataHealth).toBe("healthy");
     });
 
-    it.skip("degraded when events are stale", () => {
+    it("degraded when events are stale", () => {
       // Given: 15 events, most recent 90 seconds ago
-      // => { dataHealth: "degraded" }
-      expect(true).toBe(true);
+      const metrics: SessionMetrics = {
+        ...createInitialMetrics("stale"),
+        totalEventCount: 15,
+        lastEventAt: "2026-03-27T09:59:30Z",
+      };
+      const now = new Date("2026-03-27T10:01:00Z");
+
+      const gaugeData = computeGaugeClusterData(metrics, undefined, now);
+
+      expect(gaugeData.warningCluster.dataHealth).toBe("degraded");
     });
 
-    it.skip("no-data when no events have been received", () => {
+    it("no-data when no events have been received", () => {
       // Given: 0 events
-      // => { dataHealth: "no-data" }
-      expect(true).toBe(true);
+      const metrics: SessionMetrics = {
+        ...createInitialMetrics("no-data"),
+        totalEventCount: 0,
+      };
+      const now = new Date("2026-03-27T10:01:00Z");
+
+      const gaugeData = computeGaugeClusterData(metrics, undefined, now);
+
+      expect(gaugeData.warningCluster.dataHealth).toBe("no-data");
     });
   });
 
   describe("staleness threshold determines healthy vs degraded boundary", () => {
 
-    it.skip("events arriving just within threshold show healthy", () => {
+    it("events arriving just within threshold show healthy", () => {
       // Given: 10 events, most recent 59 seconds ago, threshold 60s
-      // => { dataHealth: "healthy" }
-      expect(true).toBe(true);
+      const metrics: SessionMetrics = {
+        ...createInitialMetrics("boundary-ok"),
+        totalEventCount: 10,
+        lastEventAt: "2026-03-27T10:00:01Z",
+      };
+      const now = new Date("2026-03-27T10:01:00Z");
+
+      const gaugeData = computeGaugeClusterData(metrics, undefined, now);
+
+      expect(gaugeData.warningCluster.dataHealth).toBe("healthy");
     });
 
-    it.skip("events arriving just beyond threshold show degraded", () => {
+    it("events arriving just beyond threshold show degraded", () => {
       // Given: 10 events, most recent 61 seconds ago, threshold 60s
-      // => { dataHealth: "degraded" }
-      expect(true).toBe(true);
+      const metrics: SessionMetrics = {
+        ...createInitialMetrics("boundary-stale"),
+        totalEventCount: 10,
+        lastEventAt: "2026-03-27T09:59:59Z",
+      };
+      const now = new Date("2026-03-27T10:01:00Z");
+
+      const gaugeData = computeGaugeClusterData(metrics, undefined, now);
+
+      expect(gaugeData.warningCluster.dataHealth).toBe("degraded");
     });
   });
 });

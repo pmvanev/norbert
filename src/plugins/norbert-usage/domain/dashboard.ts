@@ -18,7 +18,7 @@ export interface DashboardData {
   readonly activeAgents: MetricCardData;
   readonly toolCalls: MetricCardData;
   readonly contextWindow: MetricCardData;
-  readonly hookHealth: MetricCardData;
+  readonly dataHealth: MetricCardData;
   readonly isOnboarding: boolean;
   readonly sessionLabel: string;
 }
@@ -110,8 +110,8 @@ const buildContextWindowCard = (metrics: SessionMetrics): MetricCardData => ({
   urgency: contextWindowUrgency(metrics.contextWindowPct),
 });
 
-const buildHookHealthCard = (metrics: SessionMetrics): MetricCardData => ({
-  label: "Hook Health",
+const buildDataHealthCard = (metrics: SessionMetrics): MetricCardData => ({
+  label: "Data Health",
   value: metrics.totalEventCount > 0 ? "OK" : "No Events",
   subtitle: metrics.totalEventCount > 0 ? `${metrics.totalEventCount} events` : "",
   urgency: metrics.totalEventCount > 0 ? "normal" : "amber",
@@ -133,7 +133,7 @@ export const computeDashboardData = (metrics: SessionMetrics): DashboardData => 
   activeAgents: buildActiveAgentsCard(metrics),
   toolCalls: buildToolCallsCard(metrics),
   contextWindow: buildContextWindowCard(metrics),
-  hookHealth: buildHookHealthCard(metrics),
+  dataHealth: buildDataHealthCard(metrics),
   isOnboarding: isOnboardingSession(metrics),
   sessionLabel: deriveSessionLabel(metrics.sessionId),
 });

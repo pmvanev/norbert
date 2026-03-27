@@ -50,8 +50,9 @@ describe("Gauge Cluster displays all instrument data for active session", () => 
       lastEventAt: "2025-01-01T00:12:30Z",
     });
 
-    // When gauge cluster data is computed
-    const gaugeData = computeGaugeClusterData(metrics);
+    // When gauge cluster data is computed (now is shortly after last event)
+    const now = new Date("2025-01-01T00:12:35Z");
+    const gaugeData = computeGaugeClusterData(metrics, undefined, now);
 
     // Then the tachometer shows 150 tok/s
     expect(gaugeData.tachometer.value).toBe(150);
@@ -67,8 +68,8 @@ describe("Gauge Cluster displays all instrument data for active session", () => 
     // And the RPM counter shows 1 agent
     expect(gaugeData.rpmCounter.value).toBe(1);
 
-    // And the warning cluster shows normal status
-    expect(gaugeData.warningCluster.hookHealth).toBe("normal");
+    // And the warning cluster shows healthy status (events flowing, recent)
+    expect(gaugeData.warningCluster.dataHealth).toBe("healthy");
   });
 });
 

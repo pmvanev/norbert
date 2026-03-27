@@ -171,10 +171,10 @@ export const GaugeClusterView = ({ data }: GaugeClusterViewProps) => (
         <span className="gauge-label">Active Agents</span>
       </div>
 
-      <div className={`gauge-card warning-cluster ${urgencyClass(data.warningCluster.hookHealth)}`}>
-        <span className={`gauge-health-dot ${data.warningCluster.hookHealth === "normal" ? "live" : "warn"}`} />
-        <span className="gauge-value gauge-value-sm" data-mono="">{data.warningCluster.hookHealth}</span>
-        <span className="gauge-label">Hook Health</span>
+      <div className={`gauge-card warning-cluster ${data.warningCluster.dataHealth === "healthy" ? "gauge-urgency-normal" : data.warningCluster.dataHealth === "degraded" ? "gauge-urgency-amber" : "gauge-urgency-red"}`}>
+        <span className={`gauge-health-dot ${data.warningCluster.dataHealth === "healthy" ? "live" : "warn"}`} />
+        <span className="gauge-value gauge-value-sm" data-mono="">{data.warningCluster.dataHealth}</span>
+        <span className="gauge-label">Data Health</span>
       </div>
     </div>
   </div>

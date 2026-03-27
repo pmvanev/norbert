@@ -40,8 +40,10 @@ export interface RpmCounterData {
   readonly label: "agents";
 }
 
+export type DataHealthStatus = "healthy" | "degraded" | "no-data";
+
 export interface WarningClusterData {
-  readonly hookHealth: "normal" | "degraded" | "error";
+  readonly dataHealth: DataHealthStatus;
 }
 
 export interface GaugeClusterData {
@@ -95,12 +97,27 @@ const buildRpmCounter = (activeAgentCount: number): RpmCounterData => ({
   label: "agents",
 });
 
-/** Determine hook health from event count.
- *  "degraded" when no events received (hooks may not be configured),
- *  "normal" when events are flowing. */
-const buildWarningCluster = (totalEventCount: number): WarningClusterData => ({
-  hookHealth: totalEventCount === 0 ? "degraded" : "normal",
-});
+// ---------------------------------------------------------------------------
+// Staleness threshold for data health indicator
+// ---------------------------------------------------------------------------
+
+const DEFAULT_STALENESS_THRESHOLD_MS = 60_000;
+
+/** Determine data health from event count and recency.
+ *  "no-data" when no events received,
+ *  "degraded" when last event is older than staleness threshold,
+ *  "healthy" when events are flowing and recent. */
+const buildWarningCluster = (
+  totalEventCount: number,
+  lastEventAt: string,
+  now: Date,
+  stalenessThresholdMs: number = DEFAULT_STALENESS_THRESHOLD_MS,
+): WarningClusterData => {
+  if (totalEventCount === 0) return { dataHealth: "no-data" };
+  const lastEventMs = new Date(lastEventAt).getTime();
+  const elapsedMs = now.getTime() - lastEventMs;
+  return { dataHealth: elapsedMs <= stalenessThresholdMs ? "healthy" : "degraded" };
+};
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -115,10 +132,11 @@ const buildWarningCluster = (totalEventCount: number): WarningClusterData => ({
 export const computeGaugeClusterData = (
   metrics: SessionMetrics,
   thresholds: UrgencyThresholds = DEFAULT_URGENCY_THRESHOLDS,
+  now: Date = new Date(),
 ): GaugeClusterData => ({
   tachometer: buildTachometer(metrics.burnRate, thresholds),
   fuelGauge: buildFuelGauge(metrics.contextWindowPct, metrics.contextWindowTokens, metrics.contextWindowMaxTokens, thresholds),
   odometer: buildOdometer(metrics.sessionCost),
   rpmCounter: buildRpmCounter(metrics.activeAgentCount),
-  warningCluster: buildWarningCluster(metrics.totalEventCount),
+  warningCluster: buildWarningCluster(metrics.totalEventCount, metrics.lastEventAt, now),
 });

@@ -70,9 +70,9 @@ describe("User opens Usage Dashboard and sees session health at a glance", () =>
     // And the context window card shows "56%"
     expect(dashboard.contextWindow.value).toBe("56%");
 
-    // And the hook health card shows "OK" (events are flowing)
-    expect(dashboard.hookHealth.value).toBe("OK");
-    expect(dashboard.hookHealth.urgency).toBe("normal");
+    // And the data health card shows "OK" (events are flowing)
+    expect(dashboard.dataHealth.value).toBe("OK");
+    expect(dashboard.dataHealth.urgency).toBe("normal");
   });
 });
 
@@ -154,8 +154,8 @@ describe("Hook health card shows amber for newly started session", () => {
     const dashboard = computeDashboardData(metrics);
 
     // Then hook health shows 'No Events' in amber
-    expect(dashboard.hookHealth.value).toBe("No Events");
-    expect(dashboard.hookHealth.urgency).toBe("amber");
+    expect(dashboard.dataHealth.value).toBe("No Events");
+    expect(dashboard.dataHealth.urgency).toBe("amber");
   });
 });
 

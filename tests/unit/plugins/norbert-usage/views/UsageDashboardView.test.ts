@@ -75,7 +75,7 @@ describe("UsageDashboardView renders 6 metric cards", () => {
     expect(screen.getByText("Active Agents")).toBeInTheDocument();
     expect(screen.getByText("Tool Calls")).toBeInTheDocument();
     expect(screen.getByText("Context Window")).toBeInTheDocument();
-    expect(screen.getByText("Hook Health")).toBeInTheDocument();
+    expect(screen.getByText("Data Health")).toBeInTheDocument();
 
     // Values are rendered
     expect(screen.getByText("$2.30")).toBeInTheDocument();
