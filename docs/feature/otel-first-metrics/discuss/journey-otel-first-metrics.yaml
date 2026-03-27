@@ -1,0 +1,197 @@
+journey:
+  name: "OTel-First Metrics Pipeline"
+  goal: "Accurate session metrics when OTel is active, using api_request as single source of truth for cost, tool_result for tool stats, and api_error for error visibility"
+  persona: "Kai Nakamura -- Norbert power user, 3-5 daily Claude Code sessions, OTel configured, monitors costs against $2000/mo team budget"
+
+  emotional_arc:
+    start: "Suspicious -- numbers seem inflated, do not match Anthropic billing"
+    middle: "Reassured -- can see data source, understand where metrics come from"
+    end: "Trusting -- dashboard matches billing, health indicator confirms pipeline status"
+
+  job_stories:
+    - id: JS-001
+      situation: "viewing session cost in Norbert while OTel is active"
+      motivation: "see accurate cost that matches my Anthropic billing"
+      outcome: "trust the dashboard numbers and make informed budget decisions"
+      forces:
+        push: "Current cost shows ~2x actual billing due to double-counting from hooks and OTel"
+        pull: "Single source of truth (api_request cost_usd) eliminates discrepancy"
+        anxiety: "What if switching to OTel-only cost breaks accuracy for hook-only sessions?"
+        habit: "Hook-based cost has been the default since day one"
+
+    - id: JS-002
+      situation: "debugging a slow Claude Code session"
+      motivation: "see which tools are taking the longest and which are failing"
+      outcome: "identify bottleneck tools and adjust my workflow"
+      forces:
+        push: "Current toolCallCount is just a number -- no breakdown by tool name, duration, or success"
+        pull: "Per-tool breakdown with success rates from OTel tool_result events"
+        anxiety: "Will the richer data make the UI cluttered?"
+        habit: "Glancing at the single tool count number"
+
+    - id: JS-003
+      situation: "noticing unexpected cost spikes in a session"
+      motivation: "understand if API errors and retries are driving up costs"
+      outcome: "correlate error count with cost to explain anomalies"
+      forces:
+        push: "api_error events are discarded -- errors are invisible"
+        pull: "Error count and rate surface retry storms that explain cost spikes"
+        anxiety: "Too many error alerts could be noisy"
+        habit: "Ignoring errors because they were never visible"
+
+    - id: JS-004
+      situation: "opening Norbert and checking if the data pipeline is working"
+      motivation: "see at a glance whether metrics data is flowing, regardless of source"
+      outcome: "feel confident the dashboard reflects reality before making decisions"
+      forces:
+        push: "hookHealth shows 'degraded' when OTel is the primary source, which is misleading"
+        pull: "Source-agnostic health indicator that reflects actual data flow"
+        anxiety: "What if the new indicator hides real problems?"
+        habit: "Looking at the hookHealth gauge for pipeline status"
+
+steps:
+  - id: 1
+    name: "Cost Single Source of Truth"
+    description: "When OTel active, suppress hook-based token/cost accumulation; use api_request cost_usd only"
+
+    shared_artifacts:
+      - name: otel_active_flag
+        source: "otelDetection.isOtelActiveSession()"
+        displayed_as: "${isOtelActive}"
+        consumers:
+          - "metricsAggregator dispatch table"
+          - "hookProcessor event routing"
+          - "gaugeCluster health indicator"
+          - "App.tsx transcript polling gate"
+
+      - name: session_cost
+        source: "api_request.payload.usage.cost_usd (when OTel) OR pricingModel.calculateCost (when hooks-only)"
+        displayed_as: "${sessionCost}"
+        consumers:
+          - "gaugeCluster odometer"
+          - "SessionMetrics.sessionCost"
+          - "multi-session aggregate"
+
+    emotional_state:
+      entry: "Suspicious -- cost seems doubled"
+      exit: "Relieved -- cost now matches billing"
+
+    integration_checkpoint: |
+      Verify: when OTel active, hook events (prompt_submit, tool_call_end, agent_complete)
+      do NOT contribute to totalTokens or sessionCost.
+      Verify: when OTel NOT active, hook events still contribute normally (backward compatible).
+
+  - id: 2
+    name: "Rich Tool Tracking"
+    description: "Use OTel tool_result events for toolCallCount plus per-tool name/duration/success stats"
+
+    shared_artifacts:
+      - name: tool_call_count
+        source: "tool_result event count (when OTel) OR tool_call_start count (when hooks-only)"
+        displayed_as: "${toolCallCount}"
+        consumers:
+          - "SessionMetrics.toolCallCount"
+          - "toolUsageAggregator (OTel path only)"
+
+    emotional_state:
+      entry: "Curious -- which tools are slow?"
+      exit: "Informed -- per-tool breakdown available"
+
+    integration_checkpoint: |
+      Verify: toolCallCount increments from tool_result when OTel active.
+      Verify: toolCallCount increments from tool_call_start when hooks-only.
+      Verify: toolUsageAggregator receives tool_result payload (name, duration, success).
+
+  - id: 3
+    name: "Error Visibility"
+    description: "Track api_error events as apiErrorCount and apiErrorRate in SessionMetrics"
+
+    shared_artifacts:
+      - name: api_error_count
+        source: "metricsAggregator api_error handler"
+        displayed_as: "${apiErrorCount}"
+        consumers:
+          - "SessionMetrics.apiErrorCount"
+          - "SessionMetrics.apiErrorRate"
+
+    emotional_state:
+      entry: "Puzzled by cost spike"
+      exit: "Understanding -- retry storm explains cost"
+
+    integration_checkpoint: |
+      Verify: api_error events increment apiErrorCount.
+      Verify: apiErrorRate computed as apiErrorCount / (apiErrorCount + api_request count).
+
+  - id: 4
+    name: "Source-Agnostic Data Health"
+    description: "Replace hookHealth with dataHealth indicator satisfied by any event source"
+
+    shared_artifacts:
+      - name: data_health_status
+        source: "gaugeCluster.buildWarningCluster()"
+        displayed_as: "${dataHealth}"
+        consumers:
+          - "GaugeClusterData.warningCluster"
+          - "Warning cluster UI component"
+
+      - name: total_event_count
+        source: "SessionMetrics.hookEventCount (renamed to totalEventCount)"
+        displayed_as: "${totalEventCount}"
+        consumers:
+          - "gaugeCluster health computation"
+
+    emotional_state:
+      entry: "Confused -- hookHealth says degraded but data is flowing"
+      exit: "Confident -- data health reflects actual pipeline state"
+
+    integration_checkpoint: |
+      Verify: dataHealth shows 'healthy' when OTel events flowing (even if hookEventCount would be 0).
+      Verify: dataHealth shows 'healthy' when hook events flowing (backward compatible).
+      Verify: dataHealth shows 'degraded' when last event is stale (>60s).
+      Verify: dataHealth shows 'no-data' when no events received.
+
+  - id: 5
+    name: "Transcript Legacy Marking"
+    description: "Document transcript polling as legacy path when OTel active; no code change needed"
+
+    emotional_state:
+      entry: "Neutral"
+      exit: "Clear -- understand the fallback chain"
+
+    integration_checkpoint: |
+      Verify: transcript polling already gated by isOtelActiveSession() (ADR-034).
+      Document: transcript path as legacy fallback for hook-only sessions.
+
+  - id: 6
+    name: "Session Timing Preference"
+    description: "Prefer first OTel api_request timestamp for sessionStartedAt when OTel active"
+
+    shared_artifacts:
+      - name: session_started_at
+        source: "First api_request receivedAt (when OTel) OR session_start receivedAt (when hooks-only)"
+        displayed_as: "${sessionStartedAt}"
+        consumers:
+          - "SessionMetrics.sessionStartedAt"
+          - "burn rate computation"
+
+    emotional_state:
+      entry: "Indifferent -- timing is a background detail"
+      exit: "Subtly more accurate -- session duration reflects actual API activity"
+
+    integration_checkpoint: |
+      Verify: sessionStartedAt set from first api_request when OTel active.
+      Verify: sessionStartedAt set from session_start when hooks-only (backward compatible).
+
+integration_validation:
+  shared_artifact_consistency:
+    - artifact: otel_active_flag
+      must_match_across: [1, 2, 3, 4, 5, 6]
+      failure_message: "OTel detection result must be consistent across all aggregator dispatch paths"
+
+    - artifact: session_cost
+      must_match_across: [1, 4]
+      failure_message: "Cost shown in gauge cluster must match SessionMetrics.sessionCost exactly"
+
+    - artifact: total_event_count
+      must_match_across: [4]
+      failure_message: "Event count used for health must include both hook and OTel events"
