@@ -345,3 +345,70 @@ describe("hookProcessor pipeline accumulation", () => {
     expect(store.updateCount()).toBe(2);
   });
 });
+
+// ---------------------------------------------------------------------------
+// isOtelActive passthrough via getIsOtelActive dependency (D1)
+// ---------------------------------------------------------------------------
+
+describe("hookProcessor passes isOtelActive to aggregateEvent", () => {
+  it("when getIsOtelActive returns true, OTel cost path is used (hook cost suppressed)", () => {
+    const store = createSpyStore();
+    const processor = createHookProcessor({
+      updateMetrics: store.updateMetrics,
+      pricingTable: DEFAULT_PRICING_TABLE,
+      getIsOtelActive: () => true,
+    });
+
+    // prompt_submit with tokens: when OTel is active, cost should NOT increase
+    const payload = {
+      session_id: "sess-otel",
+      event_type: "prompt_submit",
+      usage: {
+        input_tokens: 1000,
+        output_tokens: 500,
+        model: "claude-sonnet-4-20250514",
+      },
+    };
+    processor(payload);
+
+    const metrics = store.getMetrics();
+    // OTel-active suppresses hook token/cost contribution for prompt_submit
+    expect(metrics.sessionCost).toBe(0);
+    expect(metrics.totalTokens).toBe(0);
+    expect(metrics.totalEventCount).toBe(1);
+  });
+
+  it("when getIsOtelActive is undefined, aggregateEvent receives false (backward compat)", () => {
+    const store = createSpyStore();
+    const processor = createHookProcessor({
+      updateMetrics: store.updateMetrics,
+      pricingTable: DEFAULT_PRICING_TABLE,
+      // getIsOtelActive not provided
+    });
+
+    const payload = makeTokenPayload("prompt_submit", 1000, 500);
+    processor(payload);
+
+    const metrics = store.getMetrics();
+    // Hook-only: cost should be computed via pricing model
+    expect(metrics.sessionCost).toBeGreaterThan(0);
+    expect(metrics.totalTokens).toBe(1500);
+  });
+
+  it("when getIsOtelActive returns false, aggregateEvent receives false", () => {
+    const store = createSpyStore();
+    const processor = createHookProcessor({
+      updateMetrics: store.updateMetrics,
+      pricingTable: DEFAULT_PRICING_TABLE,
+      getIsOtelActive: () => false,
+    });
+
+    const payload = makeTokenPayload("prompt_submit", 1000, 500);
+    processor(payload);
+
+    const metrics = store.getMetrics();
+    // Hook-only: cost should be computed via pricing model
+    expect(metrics.sessionCost).toBeGreaterThan(0);
+    expect(metrics.totalTokens).toBe(1500);
+  });
+});

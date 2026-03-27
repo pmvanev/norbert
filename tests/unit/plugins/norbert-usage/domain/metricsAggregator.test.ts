@@ -890,6 +890,81 @@ describe("dual dispatch: isOtelActive selects handler table", () => {
     expect(updated.sessionStartedAt).toBe("");
   });
 
+  it("NaN cost_usd falls back to pricing model", () => {
+    const initial = createInitialMetrics("nan-cost-test");
+    const event = {
+      eventType: "api_request" as const,
+      payload: {
+        usage: {
+          input_tokens: 1000,
+          output_tokens: 500,
+          cache_read_input_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cost_usd: NaN,
+          model: "claude-sonnet-4-20250514",
+          duration_ms: 1000,
+          speed: "normal",
+        },
+      },
+      receivedAt: "2026-03-27T10:00:00Z",
+    };
+    const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE);
+
+    // Sonnet: (1000/1000)*0.003 + (500/1000)*0.015 = 0.0105
+    expect(updated.sessionCost).toBeCloseTo(0.0105, 6);
+    expect(updated.totalTokens).toBe(1500);
+  });
+
+  it("Infinity cost_usd falls back to pricing model", () => {
+    const initial = createInitialMetrics("infinity-cost-test");
+    const event = {
+      eventType: "api_request" as const,
+      payload: {
+        usage: {
+          input_tokens: 1000,
+          output_tokens: 500,
+          cache_read_input_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cost_usd: Infinity,
+          model: "claude-sonnet-4-20250514",
+          duration_ms: 1000,
+          speed: "normal",
+        },
+      },
+      receivedAt: "2026-03-27T10:00:00Z",
+    };
+    const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE);
+
+    // Sonnet: (1000/1000)*0.003 + (500/1000)*0.015 = 0.0105
+    expect(updated.sessionCost).toBeCloseTo(0.0105, 6);
+    expect(updated.totalTokens).toBe(1500);
+  });
+
+  it("negative cost_usd falls back to pricing model", () => {
+    const initial = createInitialMetrics("negative-cost-test");
+    const event = {
+      eventType: "api_request" as const,
+      payload: {
+        usage: {
+          input_tokens: 1000,
+          output_tokens: 500,
+          cache_read_input_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cost_usd: -0.5,
+          model: "claude-sonnet-4-20250514",
+          duration_ms: 1000,
+          speed: "normal",
+        },
+      },
+      receivedAt: "2026-03-27T10:00:00Z",
+    };
+    const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE);
+
+    // Sonnet: (1000/1000)*0.003 + (500/1000)*0.015 = 0.0105
+    expect(updated.sessionCost).toBeCloseTo(0.0105, 6);
+    expect(updated.totalTokens).toBe(1500);
+  });
+
   it("isOtelActive=false preserves existing hook behavior for all event types", () => {
     fc.assert(
       fc.property(tokenBearingEventArb, (event) => {

@@ -474,7 +474,7 @@ describe("US-OFM-02: Rich tool tracking from OTel", () => {
       expect(result.toolCallCount).toBe(2);
     });
 
-    it("per-tool breakdown includes success rate and average duration", () => {
+    it("mixed tool result events increment tool call count correctly", () => {
       const events = [
         buildToolResultEvent({ toolName: "Read", success: true, durationMs: 120 }),
         buildToolResultEvent({ toolName: "Write", success: true, durationMs: 340 }),
@@ -486,9 +486,6 @@ describe("US-OFM-02: Rich tool tracking from OTel", () => {
       const result = foldEvents(events, undefined, true);
 
       expect(result.toolCallCount).toBe(5);
-      // NOTE: Per-tool breakdown assertion requires toolUsageAggregator wiring.
-      // The software-crafter will verify this in the inner-loop unit tests
-      // once tool_result events flow through aggregateEvent to toolUsageAggregator.
     });
   });
 

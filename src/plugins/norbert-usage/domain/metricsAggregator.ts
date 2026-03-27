@@ -79,7 +79,7 @@ const extractCostUsd = (payload: unknown): number | undefined => {
   if (typeof usageField !== "object" || usageField === null || Array.isArray(usageField)) return undefined;
   const usage = usageField as Record<string, unknown>;
   const costUsd = usage["cost_usd"];
-  return typeof costUsd === "number" ? costUsd : undefined;
+  return typeof costUsd === "number" && isFinite(costUsd) && costUsd >= 0 ? costUsd : undefined;
 };
 
 /** Apply token and cost updates for api_request events (OTel).

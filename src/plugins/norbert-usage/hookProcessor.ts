@@ -23,6 +23,7 @@ export interface HookProcessorDeps {
   readonly updateMultiSessionMetrics?: (sessionId: string, label: string, reducer: (prev: SessionMetrics) => SessionMetrics) => void;
   readonly appendSessionSample?: (sessionId: string, samples: CategorySampleInput) => void;
   readonly pricingTable: PricingTable;
+  readonly getIsOtelActive?: (sessionId: string) => boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -141,19 +142,20 @@ const deriveCategorySamples = (
  * 4. updateMetrics(reducer) -> effect (store update)
  */
 export const createHookProcessor = (deps: HookProcessorDeps): HookProcessor => {
-  const { updateMetrics, updateMultiSessionMetrics, appendSessionSample, pricingTable } = deps;
+  const { updateMetrics, updateMultiSessionMetrics, appendSessionSample, pricingTable, getIsOtelActive } = deps;
 
   return (payload: unknown): void => {
     const eventType = extractEventType(payload);
     const event = buildAggregatorEvent(eventType, payload);
+    const sessionId = extractSessionId(payload);
+    const isOtelActive = sessionId ? (getIsOtelActive?.(sessionId) ?? false) : false;
 
     updateMetrics((previous: SessionMetrics): SessionMetrics =>
-      aggregateEvent(previous, event, pricingTable),
+      aggregateEvent(previous, event, pricingTable, isOtelActive),
     );
 
     // Also feed multi-session store if available
     if (updateMultiSessionMetrics) {
-      const sessionId = extractSessionId(payload);
       if (sessionId) {
         const label = extractSessionLabel(payload);
         // Capture previous and updated metrics for category sample derivation
@@ -162,7 +164,7 @@ export const createHookProcessor = (deps: HookProcessorDeps): HookProcessor => {
 
         updateMultiSessionMetrics(sessionId, label, (previous: SessionMetrics): SessionMetrics => {
           previousMetrics = previous;
-          const next = aggregateEvent(previous, event, pricingTable);
+          const next = aggregateEvent(previous, event, pricingTable, isOtelActive);
           updatedMetrics = next;
           return next;
         });

@@ -77,6 +77,8 @@ export interface SessionMetrics {
   readonly totalEventCount: number;
   readonly apiErrorCount: number;
   readonly apiRequestCount: number;
+  /** Derived: apiErrorCount / (apiErrorCount + apiRequestCount). 0 when no API interactions.
+   *  Always recomputed by applyApiErrorCount/applyApiRequestCount -- never set directly. */
   readonly apiErrorRate: number;
   readonly sessionStartedAt: string;
   readonly lastEventAt: string;
