@@ -1,5 +1,6 @@
 {
   "schema_version": "3.0",
+  "project_id": "session-time-filter",
   "feature_id": "session-time-filter",
   "events": [
     {
@@ -29,6 +30,13 @@
       "s": "EXECUTED",
       "d": "PASS",
       "t": "2026-03-27T03:04:27Z"
+    },
+    {
+      "sid": "01-01",
+      "p": "COMMIT",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-03-27T03:08:15Z"
     }
   ]
 }
