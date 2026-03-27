@@ -272,14 +272,16 @@ describe("Warning cluster data health", () => {
   });
 
   it("property: dataHealth is always one of the three valid states", () => {
+    const validDate = fc.date({ min: new Date("2020-01-01"), max: new Date("2030-01-01") }).filter(d => !isNaN(d.getTime()));
     fc.assert(
       fc.property(
         fc.nat({ max: 100_000 }),
-        fc.date({ min: new Date("2020-01-01"), max: new Date("2030-01-01") }),
-        fc.date({ min: new Date("2020-01-01"), max: new Date("2030-01-01") }),
+        validDate,
+        validDate,
         (eventCount, lastEvent, nowDate) => {
+          const lastEventAt = eventCount === 0 ? "" : lastEvent.toISOString();
           const result = computeGaugeClusterData(
-            createSnapshot({ totalEventCount: eventCount, lastEventAt: lastEvent.toISOString() }),
+            createSnapshot({ totalEventCount: eventCount, lastEventAt }),
             undefined,
             nowDate,
           );
