@@ -5,7 +5,7 @@
 /// no business logic. All computation happens in the domain layer (dashboard.ts).
 
 import type { DashboardData, DailyCostEntry } from "../domain/dashboard";
-import type { MetricCardData } from "../domain/types";
+import type { MetricCardData, Urgency } from "../domain/types";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -20,12 +20,12 @@ interface UsageDashboardViewProps {
 // Urgency-to-CSS class mapping
 // ---------------------------------------------------------------------------
 
-const URGENCY_CLASS_MAP: Record<string, string> = {
+const URGENCY_CLASS_MAP: Partial<Record<Urgency, string>> = {
   red: "metric-card-urgency-red",
   amber: "metric-card-urgency-amber",
 };
 
-const urgencyClass = (urgency: string): string =>
+const urgencyClass = (urgency: Urgency): string =>
   URGENCY_CLASS_MAP[urgency] ?? "metric-card-urgency-normal";
 
 // ---------------------------------------------------------------------------

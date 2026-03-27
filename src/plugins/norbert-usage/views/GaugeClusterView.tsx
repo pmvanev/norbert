@@ -8,6 +8,7 @@
 /// styled counters for odometer and RPM, and a status indicator for hook health.
 
 import type { GaugeClusterData, TachometerData, FuelGaugeData } from "../domain/gaugeCluster";
+import type { Urgency } from "../domain/types";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -21,19 +22,19 @@ interface GaugeClusterViewProps {
 // Urgency-to-CSS class mapping
 // ---------------------------------------------------------------------------
 
-const URGENCY_CLASS_MAP: Record<string, string> = {
+const URGENCY_CLASS_MAP: Partial<Record<Urgency, string>> = {
   red: "gauge-urgency-red",
   amber: "gauge-urgency-amber",
 };
 
-const urgencyClass = (urgency: string): string =>
+const urgencyClass = (urgency: Urgency): string =>
   URGENCY_CLASS_MAP[urgency] ?? "gauge-urgency-normal";
 
 // ---------------------------------------------------------------------------
 // Urgency → stroke color for arc gauges
 // ---------------------------------------------------------------------------
 
-const urgencyColor = (urgency: string): string => {
+const urgencyColor = (urgency: Urgency): string => {
   if (urgency === "red") return "var(--error)";
   if (urgency === "amber") return "var(--amber)";
   return "var(--brand)";

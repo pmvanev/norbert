@@ -275,10 +275,6 @@ describe("session cost is never negative regardless of event sequence", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Immutability: aggregator never mutates previous metrics
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
 // OTel api_request: cost_usd bypass (acceptance)
 // ---------------------------------------------------------------------------
 
@@ -417,10 +413,6 @@ describe("OTel identity event types increment totalEventCount only", () => {
     },
   );
 });
-
-// ---------------------------------------------------------------------------
-// Immutability: aggregator never mutates previous metrics
-// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // extractCostUsd guard clauses: malformed payloads (Category 1 + 2 mutants)
