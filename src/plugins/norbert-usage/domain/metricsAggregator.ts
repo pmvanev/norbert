@@ -219,7 +219,7 @@ const otelEventHandlers: Record<string, EventHandler> = {
     applyApiRequestCount(applyApiRequestTokenUsage(metrics, event.payload, pricingTable)),
 
   user_prompt: identityHandler,
-  tool_result: identityHandler,
+  tool_result: (metrics) => applyToolCallStart(metrics),
   api_error: (metrics) => applyApiErrorCount(metrics),
   tool_decision: identityHandler,
 };

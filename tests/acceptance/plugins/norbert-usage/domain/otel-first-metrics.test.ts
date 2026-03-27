@@ -459,7 +459,7 @@ describe("US-OFM-02: Rich tool tracking from OTel", () => {
 
   describe("when OTel is active, tool_result events are the source for tool counts", () => {
 
-    it.skip("tool result events increment tool call count", () => {
+    it("tool result events increment tool call count", () => {
       const events = [
         buildToolResultEvent({ toolName: "Read" }),
         buildToolResultEvent({ toolName: "Write" }),
@@ -473,7 +473,7 @@ describe("US-OFM-02: Rich tool tracking from OTel", () => {
       expect(result.toolCallCount).toBe(5);
     });
 
-    it.skip("tool call start events are ignored when OTel is active", () => {
+    it("tool call start events are ignored when OTel is active", () => {
       const events: AggregatorEvent[] = [
         buildToolResultEvent({ toolName: "Read" }),
         buildToolResultEvent({ toolName: "Write" }),
@@ -486,7 +486,7 @@ describe("US-OFM-02: Rich tool tracking from OTel", () => {
       expect(result.toolCallCount).toBe(2);
     });
 
-    it.skip("per-tool breakdown includes success rate and average duration", () => {
+    it("per-tool breakdown includes success rate and average duration", () => {
       const events = [
         buildToolResultEvent({ toolName: "Read", success: true, durationMs: 120 }),
         buildToolResultEvent({ toolName: "Write", success: true, durationMs: 340 }),
@@ -506,7 +506,7 @@ describe("US-OFM-02: Rich tool tracking from OTel", () => {
 
   describe("when OTel is not active, tool_call_start is the source", () => {
 
-    it.skip("tool call start events increment tool count in hook-only session", () => {
+    it("tool call start events increment tool count in hook-only session", () => {
       const events = [
         buildToolCallStartEvent(),
         buildToolCallStartEvent(),
@@ -522,7 +522,7 @@ describe("US-OFM-02: Rich tool tracking from OTel", () => {
 
   describe("property: tool count invariants", () => {
 
-    it.skip("tool call count matches number of tool result events when OTel active", () => {
+    it("tool call count matches number of tool result events when OTel active", () => {
       const toolResultArb = fc.record({
         eventType: fc.constant("tool_result" as const),
         payload: fc.record({
