@@ -1187,6 +1187,13 @@ code, pre, .mono,
   min-width: 0;
 }
 
+/* All direct children of the detail pane must not shrink so that
+   overflow-y: auto on the pane produces a scrollbar when content
+   exceeds the available height. */
+.pm-detail-pane > * {
+  flex-shrink: 0;
+}
+
 .pm-sidebar {
   display: flex;
   flex-direction: column;
@@ -1241,11 +1248,7 @@ code, pre, .mono,
   margin-top: 2px;
 }
 
-.pm-detail-pane {
-  flex: 1;
-  overflow-y: auto;
-  min-width: 0;
-}
+/* (pm-detail-pane base styles defined above in PERFORMANCE MONITOR section) */
 
 /* PM Detail Header */
 .pm-detail-header {
@@ -1379,11 +1382,11 @@ code, pre, .mono,
   white-space: nowrap;
 }
 
-/* PM Detail Aggregate Graph — hero chart, takes most space */
+/* PM Detail Aggregate Graph — hero chart with fixed height so pane scrolls */
 .pm-detail-aggregate-graph {
   padding: 4px 12px;
-  flex: 3;
-  min-height: 140px;
+  height: 200px;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
 }
@@ -1392,13 +1395,12 @@ code, pre, .mono,
   flex: 1;
 }
 
-/* PM Detail Per-Session Grid — compact */
+/* PM Detail Per-Session Grid — compact, grows naturally with session count */
 .pm-detail-session-grid {
   display: grid;
   gap: 4px;
   padding: 4px 12px;
-  flex: 1;
-  min-height: 80px;
+  flex-shrink: 0;
 }
 
 .pm-detail-session-chart {
