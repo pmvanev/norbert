@@ -37,6 +37,7 @@ export const createInitialMetrics = (sessionId: string, sessionLabel = ""): Sess
   contextWindowTokens: 0,
   contextWindowMaxTokens: 0,
   contextWindowModel: "",
+  lastApiLatencyMs: 0,
   totalEventCount: 0,
   apiErrorCount: 0,
   apiRequestCount: 0,
@@ -71,6 +72,17 @@ const applyTokenUsage = (
   };
 };
 
+/** Extract a numeric field from payload.usage if present. */
+const extractUsageNumber = (payload: unknown, field: string): number | undefined => {
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return undefined;
+  const record = payload as Record<string, unknown>;
+  const usageField = record["usage"];
+  if (typeof usageField !== "object" || usageField === null || Array.isArray(usageField)) return undefined;
+  const usage = usageField as Record<string, unknown>;
+  const value = usage[field];
+  return typeof value === "number" && isFinite(value) && value >= 0 ? value : undefined;
+};
+
 /** Extract cost_usd from payload.usage if present as a number (including 0.0). */
 const extractCostUsd = (payload: unknown): number | undefined => {
   if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return undefined;
@@ -95,6 +107,7 @@ const applyApiRequestTokenUsage = (
   const { usage } = extraction;
   const costUsd = extractCostUsd(payload);
   const cost = costUsd !== undefined ? costUsd : calculateCost(usage, pricingTable).totalCost;
+  const durationMs = extractUsageNumber(payload, "duration_ms");
 
   return {
     ...metrics,
@@ -102,6 +115,7 @@ const applyApiRequestTokenUsage = (
     inputTokens: metrics.inputTokens + usage.inputTokens,
     outputTokens: metrics.outputTokens + usage.outputTokens,
     sessionCost: Math.max(0, metrics.sessionCost + cost),
+    lastApiLatencyMs: durationMs ?? metrics.lastApiLatencyMs,
   };
 };
 

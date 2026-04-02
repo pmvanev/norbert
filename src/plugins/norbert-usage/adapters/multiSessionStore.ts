@@ -33,7 +33,7 @@ export interface CategorySampleInput {
   readonly tokens: number;
   readonly cost: number;
   readonly agents: number;
-  readonly context: number;
+  readonly latency: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -60,7 +60,7 @@ export interface MultiSessionStore {
 
 const DEFAULT_BUFFER_CAPACITY = 60;
 
-const CATEGORY_IDS: ReadonlyArray<MetricCategoryId> = ["tokens", "cost", "agents", "context"];
+const CATEGORY_IDS: ReadonlyArray<MetricCategoryId> = ["tokens", "cost", "agents", "latency"];
 
 // ---------------------------------------------------------------------------
 // Pure helpers

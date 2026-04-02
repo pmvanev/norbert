@@ -24,5 +24,5 @@ export const createHeartbeatSample = (
   tokens: 0,
   cost: 0,
   agents: session.activeAgentCount,
-  context: session.contextWindowPct,
+  latency: 0,
 });

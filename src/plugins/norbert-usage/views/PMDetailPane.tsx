@@ -247,9 +247,7 @@ export const PMDetailPane = ({
           {category.label}
         </span>
         <span className="pm-detail-subtitle">
-          {selectedCategory === "context"
-            ? "Per-session context utilization"
-            : `Aggregate across ${sessionCount} session${sessionCount !== 1 ? "s" : ""}`}
+          {`Aggregate across ${sessionCount} session${sessionCount !== 1 ? "s" : ""}`}
         </span>
       </div>
 

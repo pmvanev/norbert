@@ -74,6 +74,8 @@ export interface SessionMetrics {
   readonly contextWindowTokens: number;
   readonly contextWindowMaxTokens: number;
   readonly contextWindowModel: string;
+  /** Duration of the most recent API request in milliseconds. 0 before first request. */
+  readonly lastApiLatencyMs: number;
   readonly totalEventCount: number;
   readonly apiErrorCount: number;
   readonly apiRequestCount: number;
@@ -196,7 +198,7 @@ export type TimeWindowId = "1m" | "5m" | "15m" | "session";
 // MetricCategoryId -- discriminated union for the four metric categories
 // ---------------------------------------------------------------------------
 
-export type MetricCategoryId = "tokens" | "cost" | "agents" | "context";
+export type MetricCategoryId = "tokens" | "cost" | "agents" | "latency";
 
 // ---------------------------------------------------------------------------
 // CategorySample -- per-category sample point for multi-category buffers

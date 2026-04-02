@@ -184,13 +184,13 @@ describe("Tooltip shows category-appropriate formatted values", () => {
     expect(formatted).toContain("/min");
   });
 
-  it("context tooltip shows percentage", () => {
-    // Given Raj hovers over a context window data point at 72%
-    const context = getCategoryById("context");
-    const formatted = context.formatValue(72);
+  it("latency tooltip shows milliseconds", () => {
+    // Given Raj hovers over a latency data point at 423ms
+    const latency = getCategoryById("latency");
+    const formatted = latency.formatValue(423);
 
-    // Then the tooltip displays "72%"
-    expect(formatted).toBe("72%");
+    // Then the tooltip displays "423ms"
+    expect(formatted).toBe("423ms");
   });
 });
 

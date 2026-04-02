@@ -101,15 +101,14 @@ describe("Detail pane shows aggregate graph for aggregatable categories", () => 
   });
 });
 
-describe("Detail pane omits aggregate graph for context category", () => {
-  it("context category skips aggregate graph and shows per-session as primary", () => {
-    // Given the context category is selected
-    const category = getCategoryById("context");
+describe("Detail pane shows aggregate graph for latency category", () => {
+  it("latency category has aggregate graph visible", () => {
+    // Given the latency category is selected
+    const category = getCategoryById("latency");
 
     // When checking whether to show the aggregate graph
-    // Then the aggregate graph is omitted (context is not aggregatable)
-    expect(category.aggregateApplicable).toBe(false);
-    // And per-session graphs become the primary display
+    // Then the aggregate graph should be shown (latency is aggregatable)
+    expect(category.aggregateApplicable).toBe(true);
   });
 });
 

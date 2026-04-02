@@ -133,7 +133,7 @@ const deriveCategorySamples = (
     tokens: tokenRate,
     cost: costRate,
     agents: updated.activeAgentCount,
-    context: updated.contextWindowPct,
+    latency: updated.lastApiLatencyMs,
   };
 };
 

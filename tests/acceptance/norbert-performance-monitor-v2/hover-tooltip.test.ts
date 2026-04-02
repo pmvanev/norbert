@@ -80,14 +80,14 @@ describe("Tooltip shows agent count for agents category", () => {
   });
 });
 
-describe("Tooltip shows percentage for context category", () => {
-  it("context tooltip shows percentage with time offset", () => {
-    // Given the user hovers over the context chart at a sample with value 72
-    const context = getCategoryById("context");
-    const formattedValue = context.formatValue(72);
+describe("Tooltip shows latency for latency category", () => {
+  it("latency tooltip shows milliseconds with time offset", () => {
+    // Given the user hovers over the latency chart at a sample with value 423
+    const latency = getCategoryById("latency");
+    const formattedValue = latency.formatValue(423);
 
-    // Then the formatted value shows "72%"
-    expect(formattedValue).toBe("72%");
+    // Then the formatted value shows "423ms"
+    expect(formattedValue).toBe("423ms");
   });
 });
 

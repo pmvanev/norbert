@@ -3,7 +3,7 @@
  *
  * Validates the MultiSessionStore extension: per-session per-category
  * ring buffers, aggregate buffer computation, subscriber notification,
- * and the aggregate applicability rule (context has no aggregate).
+ * and the aggregate applicability rule.
  *
  * Driving ports: extended MultiSessionStore adapter
  * These tests exercise the adapter boundary with real internal domain
@@ -49,7 +49,7 @@ describe("User sees per-session metric graphs update as events arrive", () => {
       tokens: 312,
       cost: 0.003,
       agents: 2,
-      context: 45,
+      latency: 0,
     });
 
     // Then the session's token buffer contains the sample
@@ -57,10 +57,10 @@ describe("User sees per-session metric graphs update as events arrive", () => {
     expect(tokenBuffer).toBeDefined();
     expect(tokenBuffer!.samples.length).toBeGreaterThan(0);
 
-    // And the session's context buffer also contains the sample
-    const contextBuffer = store.getSessionBuffer("refactor-auth", "context");
-    expect(contextBuffer).toBeDefined();
-    expect(contextBuffer!.samples.length).toBeGreaterThan(0);
+    // And the session's latency buffer also contains the sample
+    const latencyBuffer = store.getSessionBuffer("refactor-auth", "latency");
+    expect(latencyBuffer).toBeDefined();
+    expect(latencyBuffer!.samples.length).toBeGreaterThan(0);
   });
 });
 
@@ -77,8 +77,8 @@ describe("Each session maintains independent buffers per category", () => {
     store.addSession("session-b");
 
     // When different samples are appended to each session
-    store.appendSessionSample("session-a", { tokens: 500, cost: 0.005, agents: 1, context: 30 });
-    store.appendSessionSample("session-b", { tokens: 100, cost: 0.001, agents: 2, context: 60 });
+    store.appendSessionSample("session-a", { tokens: 500, cost: 0.005, agents: 1, latency: 0 });
+    store.appendSessionSample("session-b", { tokens: 100, cost: 0.001, agents: 2, latency: 0 });
 
     // Then session-a's token buffer has its own values
     const bufferA = store.getSessionBuffer("session-a", "tokens");
@@ -97,7 +97,7 @@ describe("Removing a session cleans up its per-category buffers", () => {
     // Given a session with buffered samples
     const store = createMultiSessionStore();
     store.addSession("temp-session");
-    store.appendSessionSample("temp-session", { tokens: 200, cost: 0.002, agents: 1, context: 50 });
+    store.appendSessionSample("temp-session", { tokens: 200, cost: 0.002, agents: 1, latency: 0 });
 
     // When the session is removed
     store.removeSession("temp-session");
@@ -116,7 +116,7 @@ describe("Appending to a nonexistent session is a no-op", () => {
     // When a sample is appended to a session that does not exist
     // Then no error is thrown
     expect(() => {
-      store.appendSessionSample("ghost-session", { tokens: 100, cost: 0, agents: 0, context: 0 });
+      store.appendSessionSample("ghost-session", { tokens: 100, cost: 0, agents: 0, latency: 0 });
     }).not.toThrow();
 
     // And no buffer is created for the unknown session
@@ -138,9 +138,9 @@ describe("Aggregate token buffer sums across all sessions", () => {
     store.addSession("s2");
     store.addSession("s3");
 
-    store.appendSessionSample("s1", { tokens: 312, cost: 0.003, agents: 1, context: 45 });
-    store.appendSessionSample("s2", { tokens: 185, cost: 0.002, agents: 2, context: 67 });
-    store.appendSessionSample("s3", { tokens: 30, cost: 0.0003, agents: 1, context: 20 });
+    store.appendSessionSample("s1", { tokens: 312, cost: 0.003, agents: 1, latency: 0 });
+    store.appendSessionSample("s2", { tokens: 185, cost: 0.002, agents: 2, latency: 0 });
+    store.appendSessionSample("s3", { tokens: 30, cost: 0.0003, agents: 1, latency: 0 });
 
     // When the aggregate token buffer is read
     const aggBuffer = store.getAggregateBuffer("tokens");
@@ -161,8 +161,8 @@ describe("Aggregate cost buffer sums across all sessions", () => {
     store.addSession("opus-session");
     store.addSession("sonnet-session");
 
-    store.appendSessionSample("opus-session", { tokens: 300, cost: 0.18, agents: 1, context: 40 });
-    store.appendSessionSample("sonnet-session", { tokens: 100, cost: 0.004, agents: 1, context: 30 });
+    store.appendSessionSample("opus-session", { tokens: 300, cost: 0.18, agents: 1, latency: 0 });
+    store.appendSessionSample("sonnet-session", { tokens: 100, cost: 0.004, agents: 1, latency: 0 });
 
     // When the aggregate cost buffer is read
     const aggBuffer = store.getAggregateBuffer("cost");
@@ -176,21 +176,21 @@ describe("Aggregate cost buffer sums across all sessions", () => {
   });
 });
 
-describe("Context category has no aggregate buffer", () => {
-  it("aggregate context buffer is empty or not populated", () => {
-    // Given multiple sessions with context data
+describe("Latency category has aggregate buffer", () => {
+  it("aggregate latency buffer sums across sessions", () => {
+    // Given multiple sessions with latency data
     const store = createMultiSessionStore();
     store.addSession("s1");
     store.addSession("s2");
 
-    store.appendSessionSample("s1", { tokens: 100, cost: 0.001, agents: 1, context: 45 });
-    store.appendSessionSample("s2", { tokens: 200, cost: 0.002, agents: 1, context: 72 });
+    store.appendSessionSample("s1", { tokens: 100, cost: 0.001, agents: 1, latency: 200 });
+    store.appendSessionSample("s2", { tokens: 200, cost: 0.002, agents: 1, latency: 300 });
 
-    // When the aggregate context buffer is requested
-    const aggBuffer = store.getAggregateBuffer("context");
+    // When the aggregate latency buffer is requested
+    const aggBuffer = store.getAggregateBuffer("latency");
 
-    // Then the buffer is empty (context aggregation is not applicable per ADR-009)
-    expect(aggBuffer.samples).toHaveLength(0);
+    // Then the buffer is populated (latency aggregation is applicable)
+    expect(aggBuffer.samples.length).toBeGreaterThan(0);
   });
 });
 
@@ -209,7 +209,7 @@ describe("Subscribers are notified when samples are appended", () => {
     const unsubscribe = store.subscribe(() => { notified = true; });
 
     // When a sample is appended
-    store.appendSessionSample("test-session", { tokens: 100, cost: 0, agents: 1, context: 50 });
+    store.appendSessionSample("test-session", { tokens: 100, cost: 0, agents: 1, latency: 0 });
 
     // Then the subscriber is notified
     expect(notified).toBe(true);
@@ -230,7 +230,7 @@ describe("Unsubscribed callbacks are not invoked", () => {
     unsubscribe();
 
     // When a sample is appended
-    store.appendSessionSample("test-session", { tokens: 100, cost: 0, agents: 1, context: 50 });
+    store.appendSessionSample("test-session", { tokens: 100, cost: 0, agents: 1, latency: 0 });
 
     // Then the callback was not called
     expect(callCount).toBe(0);
@@ -270,7 +270,7 @@ describe("Getting buffer for unknown category returns empty buffer", () => {
     // Given a session with samples
     const store = createMultiSessionStore();
     store.addSession("test");
-    store.appendSessionSample("test", { tokens: 100, cost: 0, agents: 1, context: 50 });
+    store.appendSessionSample("test", { tokens: 100, cost: 0, agents: 1, latency: 0 });
 
     // When requesting a buffer for an unknown category
     const buffer = store.getSessionBuffer("test", "nonexistent" as MetricCategoryId);
@@ -285,7 +285,7 @@ describe("Adding same session twice is idempotent", () => {
     // Given a session with existing sample data
     const store = createMultiSessionStore();
     store.addSession("dup-test");
-    store.appendSessionSample("dup-test", { tokens: 500, cost: 0.005, agents: 2, context: 60 });
+    store.appendSessionSample("dup-test", { tokens: 500, cost: 0.005, agents: 2, latency: 0 });
 
     // When addSession is called again with the same ID
     store.addSession("dup-test");
@@ -303,15 +303,15 @@ describe("Aggregate buffer updates when a session is removed", () => {
     const store = createMultiSessionStore();
     store.addSession("keep");
     store.addSession("remove");
-    store.appendSessionSample("keep", { tokens: 300, cost: 0.003, agents: 1, context: 40 });
-    store.appendSessionSample("remove", { tokens: 200, cost: 0.002, agents: 1, context: 50 });
+    store.appendSessionSample("keep", { tokens: 300, cost: 0.003, agents: 1, latency: 0 });
+    store.appendSessionSample("remove", { tokens: 200, cost: 0.002, agents: 1, latency: 0 });
 
     // When one session is removed
     store.removeSession("remove");
 
     // Then the aggregate buffer no longer includes the removed session's data
     // (next append to remaining session should produce correct aggregate)
-    store.appendSessionSample("keep", { tokens: 350, cost: 0.003, agents: 1, context: 42 });
+    store.appendSessionSample("keep", { tokens: 350, cost: 0.003, agents: 1, latency: 0 });
     const aggBuffer = store.getAggregateBuffer("tokens");
     expect(aggBuffer).toBeDefined();
   });
@@ -325,7 +325,7 @@ describe("Multiple rapid samples accumulate in ring buffer", () => {
 
     // When 5 samples are appended
     for (let i = 0; i < 5; i++) {
-      store.appendSessionSample("rapid", { tokens: 100 + i * 10, cost: 0.001, agents: 1, context: 40 });
+      store.appendSessionSample("rapid", { tokens: 100 + i * 10, cost: 0.001, agents: 1, latency: 0 });
     }
 
     // Then the buffer contains the samples
@@ -337,11 +337,11 @@ describe("Multiple rapid samples accumulate in ring buffer", () => {
 
 // ---------------------------------------------------------------------------
 // PROPERTY-SHAPED SCENARIOS
-// Traces to: ADR-009 -- context never aggregated
+// Traces to: ADR-009 -- latency is aggregatable
 // ---------------------------------------------------------------------------
 
-describe("@property: context aggregate buffer is never populated regardless of session count", () => {
-  it("for any number of sessions, context aggregate remains empty", () => {
+describe("@property: latency aggregate buffer grows with session count", () => {
+  it("for any number of sessions, latency aggregate is populated", () => {
     // Given varying numbers of sessions (1 through 5)
     const store = createMultiSessionStore();
     for (let i = 1; i <= 5; i++) {
@@ -350,14 +350,14 @@ describe("@property: context aggregate buffer is never populated regardless of s
         tokens: 100 * i,
         cost: 0.001 * i,
         agents: i,
-        context: 20 * i,
+        latency: 100 * i,
       });
 
-      // When the context aggregate buffer is checked after each addition
-      const aggBuffer = store.getAggregateBuffer("context");
+      // When the latency aggregate buffer is checked after each addition
+      const aggBuffer = store.getAggregateBuffer("latency");
 
-      // Then the context aggregate buffer is always empty
-      expect(aggBuffer.samples).toHaveLength(0);
+      // Then the latency aggregate buffer is populated
+      expect(aggBuffer.samples.length).toBeGreaterThan(0);
     }
   });
 });
@@ -369,7 +369,7 @@ describe("@property: aggregate sum always equals sum of per-session latest value
     const rates = [312, 185, 30];
     for (let i = 0; i < rates.length; i++) {
       store.addSession(`s${i}`);
-      store.appendSessionSample(`s${i}`, { tokens: rates[i], cost: 0, agents: 1, context: 0 });
+      store.appendSessionSample(`s${i}`, { tokens: rates[i], cost: 0, agents: 1, latency: 0 });
     }
 
     // When the aggregate tokens buffer is read
@@ -455,8 +455,8 @@ describe("Hook processor feeds per-category samples after metrics update", () =>
     expect(lastSample.sessionId).toBe("s2");
     // Agent count should be 1 after session_start
     expect(lastSample.samples.agents).toBe(1);
-    // Context percentage should also be present (from metrics)
-    expect(typeof lastSample.samples.context).toBe("number");
+    // Latency should also be present (from metrics)
+    expect(typeof lastSample.samples.latency).toBe("number");
   });
 
   it("Existing single-session pipeline unchanged after extension", () => {

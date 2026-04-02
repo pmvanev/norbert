@@ -64,8 +64,14 @@ const formatCostRate = (value: number): string => {
 /// Formats an agent count as an integer string.
 const formatAgentCount = (value: number): string => `${Math.round(value)}`;
 
-/// Formats a context window percentage.
-const formatContextPct = (value: number): string => `${Math.round(value)}%`;
+/// Formats an API latency value in milliseconds.
+/// Below 1000: "423ms", at/above 1000: "2.1s"
+const formatLatency = (value: number): string => {
+  if (value >= 1000) {
+    return `${(value / 1000).toFixed(1)}s`;
+  }
+  return `${Math.round(value)}ms`;
+};
 
 /// Identity formatter for stat cell values.
 const formatIdentity = (value: number | string): string => `${value}`;
@@ -101,13 +107,13 @@ const agentsStatsConfig: ReadonlyArray<StatCellConfig> = [
   { label: "Tool Calls", key: "toolCalls", format: formatIdentity },
 ];
 
-const contextStatsConfig: ReadonlyArray<StatCellConfig> = [
+const latencyStatsConfig: ReadonlyArray<StatCellConfig> = [
   { label: "Current", key: "current", format: formatIdentity },
-  { label: "Remaining", key: "remaining", format: formatIdentity },
-  { label: "Max Tokens", key: "maxTokens", format: formatIdentity },
+  { label: "Sessions", key: "sessions", format: formatIdentity },
+  { label: "Peak", key: "peak", format: formatIdentity },
+  { label: "Requests", key: "requests", format: formatIdentity },
+  { label: "Average", key: "avg", format: formatIdentity },
   { label: "Model", key: "model", format: formatIdentity },
-  { label: "Urgency", key: "urgency", format: formatIdentity },
-  { label: "Compressions", key: "compressions", format: formatIdentity },
 ];
 
 // ---------------------------------------------------------------------------
@@ -155,17 +161,17 @@ export const METRIC_CATEGORIES: ReadonlyArray<MetricCategory> = [
     sessionColumns: ["Session ID", "Agents", "Tokens/s", "Status"],
   },
   {
-    id: "context",
-    label: "Context",
+    id: "latency",
+    label: "Latency",
     color: "#7aa89e",
     cssVar: "--teal",
-    yMax: 100,
-    yLabels: ["0%", "25%", "50%", "75%", "100%"],
-    aggregateApplicable: false,
-    aggregateStrategy: "none",
-    formatValue: formatContextPct,
-    statsConfig: contextStatsConfig,
-    sessionColumns: ["Session ID", "Context %", "Urgency", "Remaining"],
+    yMax: 10000,
+    yLabels: ["0", "2.5s", "5s", "7.5s", "10s"],
+    aggregateApplicable: true,
+    aggregateStrategy: "sum",
+    formatValue: formatLatency,
+    statsConfig: latencyStatsConfig,
+    sessionColumns: ["Session ID", "Latency", "Requests", "Model"],
   },
 ];
 

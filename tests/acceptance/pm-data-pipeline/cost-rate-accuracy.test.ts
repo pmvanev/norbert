@@ -136,7 +136,7 @@ describe("Heartbeat does not sustain cost rate spikes", () => {
 
     // And point-in-time categories reflect session state
     expect(sample.agents).toBe(2);
-    expect(sample.context).toBe(45);
+    expect(sample.latency).toBe(0);
   });
 });
 

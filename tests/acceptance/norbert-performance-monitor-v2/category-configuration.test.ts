@@ -29,18 +29,18 @@ import {
 // ---------------------------------------------------------------------------
 
 describe("User sees four distinct metric categories for monitoring", () => {
-  it("four categories are defined: tokens, cost, agents, context", () => {
+  it("four categories are defined: tokens, cost, agents, latency", () => {
     // Given the performance monitor v2 category configuration
     // When the category list is loaded
     const categoryIds = METRIC_CATEGORIES.map((c) => c.id);
 
     // Then four categories exist
     expect(METRIC_CATEGORIES).toHaveLength(4);
-    // And the categories are tokens, cost, agents, context
+    // And the categories are tokens, cost, agents, latency
     expect(categoryIds).toContain("tokens");
     expect(categoryIds).toContain("cost");
     expect(categoryIds).toContain("agents");
-    expect(categoryIds).toContain("context");
+    expect(categoryIds).toContain("latency");
   });
 });
 
@@ -77,23 +77,23 @@ describe("Each category has a distinct display label", () => {
     expect(agents.label).toBe("Agents");
   });
 
-  it("context category is labeled 'Context'", () => {
-    // Given the context category configuration
-    const context = getCategoryById("context");
+  it("latency category is labeled 'Latency'", () => {
+    // Given the latency category configuration
+    const latency = getCategoryById("latency");
 
     // When the label is read
-    // Then the label is "Context"
-    expect(context.label).toBe("Context");
+    // Then the label is "Latency"
+    expect(latency.label).toBe("Latency");
   });
 });
 
 describe("Each category has a distinct line color", () => {
-  it("tokens uses brand cyan, cost uses amber, agents uses blue, context uses muted teal", () => {
+  it("tokens uses brand cyan, cost uses amber, agents uses blue, latency uses muted teal", () => {
     // Given all four category configurations
     const tokens = getCategoryById("tokens");
     const cost = getCategoryById("cost");
     const agents = getCategoryById("agents");
-    const context = getCategoryById("context");
+    const latency = getCategoryById("latency");
 
     // When the line colors are read
     // Then tokens uses brand cyan (#00e5cc)
@@ -102,8 +102,8 @@ describe("Each category has a distinct line color", () => {
     expect(cost.color).toBe("#f0920a");
     // And agents uses blue (#4a9eff)
     expect(agents.color).toBe("#4a9eff");
-    // And context uses muted teal (#7aa89e)
-    expect(context.color).toBe("#7aa89e");
+    // And latency uses muted teal (#7aa89e)
+    expect(latency.color).toBe("#7aa89e");
   });
 });
 
@@ -173,16 +173,16 @@ describe("Agent count formatted as integer", () => {
   });
 });
 
-describe("Context percentage formatted with percent sign", () => {
-  it("context shows percentage value", () => {
-    // Given context at 72%
-    const context = getCategoryById("context");
+describe("Latency formatted with millisecond or second suffix", () => {
+  it("latency shows milliseconds for values below 1000", () => {
+    // Given latency at 423ms
+    const latency = getCategoryById("latency");
 
     // When the value is formatted
-    const formatted = context.formatValue(72);
+    const formatted = latency.formatValue(423);
 
-    // Then it shows "72%"
-    expect(formatted).toBe("72%");
+    // Then it shows "423ms"
+    expect(formatted).toBe("423ms");
   });
 });
 
@@ -224,16 +224,16 @@ describe("Tokens, cost, and agents support aggregate graphs", () => {
   });
 });
 
-describe("Context does not support aggregate graph", () => {
-  it("context is not aggregate-applicable", () => {
-    // Given the context category
-    const context = getCategoryById("context");
+describe("Latency supports aggregate graph", () => {
+  it("latency is aggregate-applicable with sum strategy", () => {
+    // Given the latency category
+    const latency = getCategoryById("latency");
 
     // When aggregate applicability is checked
-    // Then aggregate is not applicable (each session has independent context)
-    expect(context.aggregateApplicable).toBe(false);
-    // And the strategy is none
-    expect(context.aggregateStrategy).toBe("none");
+    // Then aggregate is applicable
+    expect(latency.aggregateApplicable).toBe(true);
+    // And the strategy is sum
+    expect(latency.aggregateStrategy).toBe("sum");
   });
 });
 
@@ -257,19 +257,22 @@ describe("Each category defines 6 stats grid cells", () => {
     expect(labels).toContain("Sessions");
   });
 
-  it("context stats include current, remaining, max tokens, model, urgency, compressions", () => {
-    // Given the context category
-    const context = getCategoryById("context");
+  it("latency stats include current, sessions, peak, requests, average, model", () => {
+    // Given the latency category
+    const latency = getCategoryById("latency");
 
     // When the stats config is read
-    const labels = context.statsConfig.map((s) => s.label);
+    const labels = latency.statsConfig.map((s) => s.label);
 
     // Then 6 stat cells are defined
-    expect(context.statsConfig).toHaveLength(6);
-    // And they include context-specific stats
+    expect(latency.statsConfig).toHaveLength(6);
+    // And they include latency-specific stats
     expect(labels).toContain("Current");
-    expect(labels).toContain("Remaining");
-    expect(labels).toContain("Urgency");
+    expect(labels).toContain("Sessions");
+    expect(labels).toContain("Peak");
+    expect(labels).toContain("Requests");
+    expect(labels).toContain("Average");
+    expect(labels).toContain("Model");
   });
 });
 
@@ -288,13 +291,13 @@ describe("Each category defines session table columns", () => {
     expect(tokens.sessionColumns).toEqual(["Session ID", "Tokens/s", "Agents", "Cost"]);
   });
 
-  it("context category table has session ID, context %, urgency, remaining columns", () => {
-    // Given the context category
-    const context = getCategoryById("context");
+  it("latency category table has session ID, latency, requests, model columns", () => {
+    // Given the latency category
+    const latency = getCategoryById("latency");
 
     // When the session columns are read
     // Then columns include the expected headers
-    expect(context.sessionColumns).toEqual(["Session ID", "Context %", "Urgency", "Remaining"]);
+    expect(latency.sessionColumns).toEqual(["Session ID", "Latency", "Requests", "Model"]);
   });
 });
 
@@ -358,16 +361,16 @@ describe("Cost formatter handles very small rates", () => {
   });
 });
 
-describe("Context formatter handles 100%", () => {
-  it("fully consumed context shows 100%", () => {
-    // Given context at 100%
-    const context = getCategoryById("context");
+describe("Latency formatter handles values at and above 1000ms", () => {
+  it("latency at 2100ms shows seconds format", () => {
+    // Given latency at 2100ms
+    const latency = getCategoryById("latency");
 
-    // When 100 is formatted
-    const formatted = context.formatValue(100);
+    // When 2100 is formatted
+    const formatted = latency.formatValue(2100);
 
-    // Then it shows "100%"
-    expect(formatted).toBe("100%");
+    // Then it shows "2.1s"
+    expect(formatted).toBe("2.1s");
   });
 });
 
