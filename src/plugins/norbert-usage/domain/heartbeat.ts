@@ -2,36 +2,27 @@
  * Heartbeat sample creation -- pure function that produces the next
  * category sample for idle chart scrolling.
  *
- * Rate-based categories (tokens, cost) carry forward the last-known
- * value from the session's buffer to avoid abrupt drops to zero.
- * Point-in-time categories (agents, context) use current session state.
+ * Rate-based categories (tokens, cost) are set to zero because the
+ * rate represents "how fast are tokens/dollars flowing right now" --
+ * when no API call is in progress, the answer is zero.
+ *
+ * Point-in-time categories (agents, context) use current session state
+ * because those values persist between events.
  *
  * No side effects, no IO.
  */
 
-import type { SessionMetrics, TimeSeriesBuffer } from "./types";
+import type { SessionMetrics } from "./types";
 import type { CategorySampleInput } from "../adapters/multiSessionStore";
 
 /**
- * Extract the latest value from a category buffer's tokenRate field.
- * Returns 0 when the buffer is empty or undefined.
- */
-const latestBufferValue = (buffer: TimeSeriesBuffer | undefined): number => {
-  if (!buffer || buffer.samples.length === 0) return 0;
-  return buffer.samples[buffer.samples.length - 1].tokenRate;
-};
-
-/**
- * Create a heartbeat sample that carries forward rate-based metrics
- * and uses current session state for point-in-time metrics.
+ * Create a heartbeat sample with zero rates and current session state.
  */
 export const createHeartbeatSample = (
   session: SessionMetrics,
-  tokenBuffer: TimeSeriesBuffer | undefined,
-  costBuffer: TimeSeriesBuffer | undefined,
 ): CategorySampleInput => ({
-  tokens: latestBufferValue(tokenBuffer),
-  cost: latestBufferValue(costBuffer),
+  tokens: 0,
+  cost: 0,
   agents: session.activeAgentCount,
   context: session.contextWindowPct,
 });

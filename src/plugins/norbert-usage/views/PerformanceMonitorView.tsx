@@ -77,17 +77,16 @@ export const PerformanceMonitorView = ({
     return unsubscribe;
   }, [multiSessionStore]);
 
-  // Heartbeat: carry forward last-known rates at ~1Hz so charts keep
-  // scrolling when no real events arrive. Uses createHeartbeatSample
-  // (pure domain function) to preserve rate-based values.
+  // Heartbeat: inject zero-rate samples at ~1Hz so charts keep scrolling
+  // when no real events arrive. Rate-based categories (tokens, cost) go to
+  // zero because no tokens/dollars are flowing during idle. Point-in-time
+  // categories (agents, context) reflect current session state.
   useEffect(() => {
     const id = setInterval(() => {
       const sessions = multiSessionStore.getSessions();
       if (sessions.length > 0) {
         for (const session of sessions) {
-          const tokenBuffer = multiSessionStore.getSessionBuffer(session.sessionId, "tokens");
-          const costBuffer = multiSessionStore.getSessionBuffer(session.sessionId, "cost");
-          const sample = createHeartbeatSample(session, tokenBuffer, costBuffer);
+          const sample = createHeartbeatSample(session);
           multiSessionStore.appendSessionSample(session.sessionId, sample);
         }
       }

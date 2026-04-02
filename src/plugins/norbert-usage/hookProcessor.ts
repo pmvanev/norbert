@@ -98,16 +98,29 @@ const buildAggregatorEvent = (
 // Category sample derivation — pure helper
 // ---------------------------------------------------------------------------
 
-/** Derive per-category sample values from previous and updated session metrics. */
+/** Minimum assumed interval (ms) between events when no prior timestamp exists. */
+const DEFAULT_EVENT_INTERVAL_MS = 1000;
+
+/** Derive per-category sample values from previous and updated session metrics.
+ *
+ *  Uses the real elapsed time between events (from lastEventAt) to compute
+ *  instantaneous rates. Falls back to 1 second when no prior timestamp exists. */
 const deriveCategorySamples = (
   previous: SessionMetrics,
   updated: SessionMetrics,
 ): CategorySampleInput => {
   const now = Date.now();
+  const previousTimestamp = previous.lastEventAt
+    ? new Date(previous.lastEventAt).getTime()
+    : 0;
+  // Use real elapsed time; fall back to 1s for first event or invalid timestamps
+  const elapsed = previousTimestamp > 0 ? now - previousTimestamp : DEFAULT_EVENT_INTERVAL_MS;
+  const safeElapsed = Math.max(DEFAULT_EVENT_INTERVAL_MS, elapsed);
+
   const previousSnapshot = {
     totalTokens: previous.totalTokens,
     sessionCost: previous.sessionCost,
-    timestamp: now - 1, // ensure non-zero delta
+    timestamp: now - safeElapsed,
   };
   const currentSnapshot = {
     totalTokens: updated.totalTokens,
