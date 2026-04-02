@@ -362,12 +362,21 @@ export const PMChart = ({
       const value = chartSamples[sampleIndex]?.value ?? 0;
       const timeOffsetMs = (chartSamples.length - 1 - sampleIndex) * sampleIntervalMs;
 
+      // Normalize tooltip viewport coordinates by the same DPR scale
+      // factor used for the crosshair. getBoundingClientRect() and clientX
+      // are in the browser's coordinate space, but CSS position: fixed
+      // expects CSS layout pixels. The ratio rect.width/canvasDimensions.width
+      // captures any DPR mismatch between these spaces.
+      const displayH = rect.height;
+      const scaleX = displayW > 0 ? displayW / canvasDimensions.width : 1;
+      const scaleY = displayH > 0 ? displayH / canvasDimensions.height : 1;
+
       hover({
         sampleIndex,
         value,
         timeOffsetMs,
-        tooltipX: e.clientX,
-        tooltipY: e.clientY,
+        tooltipX: e.clientX / scaleX,
+        tooltipY: e.clientY / scaleY,
       });
     };
 
