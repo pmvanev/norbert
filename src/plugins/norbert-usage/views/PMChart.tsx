@@ -73,6 +73,8 @@ interface PMChartProps {
   readonly onHover?: (data: HoverData) => void;
   readonly onHoverEnd?: () => void;
   readonly bufferCapacity?: number;
+  /** Sample interval in ms for this time window. Used to compute hover time offsets. Defaults to 1000. */
+  readonly sampleIntervalMs?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -217,6 +219,7 @@ export const PMChart = ({
   onHover,
   onHoverEnd,
   bufferCapacity,
+  sampleIntervalMs = 1000,
 }: PMChartProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -280,17 +283,20 @@ export const PMChart = ({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Scale canvas for HiDPI displays to eliminate blurry rendering
+    // Scale canvas for HiDPI displays to eliminate blurry rendering.
+    // Always set the transform to guard against context resets.
     const dpr = devicePixelRatio || 1;
     const cssW = canvasDimensions.width;
     const cssH = canvasDimensions.height;
-    if (canvas.width !== cssW * dpr || canvas.height !== cssH * dpr) {
-      canvas.width = cssW * dpr;
-      canvas.height = cssH * dpr;
-      canvas.style.width = `${cssW}px`;
-      canvas.style.height = `${cssH}px`;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const bufferW = Math.round(cssW * dpr);
+    const bufferH = Math.round(cssH * dpr);
+    if (canvas.width !== bufferW || canvas.height !== bufferH) {
+      canvas.width = bufferW;
+      canvas.height = bufferH;
     }
+    canvas.style.width = `${cssW}px`;
+    canvas.style.height = `${cssH}px`;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     // Compute chart points from domain function (right-aligned sliding window)
     const points = prepareFilledAreaPoints(chartSamples, canvasDimensions, effectiveYMax, bufferCapacity);
@@ -320,10 +326,18 @@ export const PMChart = ({
     let rafPending = false;
     const handleMouseMove = (e: MouseEvent): void => {
       const rect = canvas.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
 
-      // Update crosshair position and schedule redraw via rAF
-      crosshairXRef.current = mouseX;
+      // Normalize mouse position from displayed size to canvas coordinate
+      // space. This handles DPR mismatches where the canvas display size
+      // (from getBoundingClientRect) may differ from canvasDimensions.
+      const rawX = e.clientX - rect.left;
+      const displayW = rect.width;
+      const normalizedX = displayW > 0
+        ? (rawX / displayW) * canvasDimensions.width
+        : rawX;
+
+      // Update crosshair position (in canvas coordinate space) and schedule redraw
+      crosshairXRef.current = normalizedX;
       if (!rafPending) {
         rafPending = true;
         requestAnimationFrame(() => {
@@ -336,7 +350,7 @@ export const PMChart = ({
       if (!hover) return;
 
       const { sampleIndex } = computeHitTest(
-        mouseX,
+        normalizedX,
         canvasDimensions.width,
         chartSamples.length,
         canvasDimensions.padding,
@@ -346,7 +360,7 @@ export const PMChart = ({
       if (sampleIndex < 0) return;
 
       const value = chartSamples[sampleIndex]?.value ?? 0;
-      const timeOffsetMs = (chartSamples.length - 1 - sampleIndex) * 1000;
+      const timeOffsetMs = (chartSamples.length - 1 - sampleIndex) * sampleIntervalMs;
 
       hover({
         sampleIndex,

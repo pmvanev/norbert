@@ -22,9 +22,16 @@ import {
   formatSessionLabel,
   formatDurationLabel,
 } from "../domain/chartViewHelpers";
+import { TIME_WINDOW_PRESETS } from "../domain/multiWindowSampler";
 import { PMChart, type HoverData, resolveThemeColor } from "./PMChart";
 import { PMStatsGrid } from "./PMStatsGrid";
 import { PMSessionTable, type SessionRowData } from "./PMSessionTable";
+
+/** Look up the sample interval for a given time window. Defaults to 1000ms. */
+const getSampleIntervalMs = (windowId: TimeWindowId): number => {
+  const preset = TIME_WINDOW_PRESETS.find((p) => p.label === windowId);
+  return preset?.sampleIntervalMs ?? 1000;
+};
 
 /**
  * Derive stats grid metrics from the aggregate buffer for a category.
@@ -266,6 +273,7 @@ export const PMDetailPane = ({
             onHover={handleAggregateHover}
             onHoverEnd={handleHoverEnd}
             bufferCapacity={aggregateBuffer.capacity}
+            sampleIntervalMs={getSampleIntervalMs(selectedWindow)}
           />
           <span className="pm-detail-duration-label">
             {formatDurationLabel(selectedWindow)}
@@ -313,6 +321,7 @@ export const PMDetailPane = ({
                   onHover={createHoverHandler(`session-${session.sessionId}-${selectedCategory}`)}
                   onHoverEnd={handleHoverEnd}
                   bufferCapacity={sessionBuffer?.capacity}
+                  sampleIntervalMs={getSampleIntervalMs(selectedWindow)}
                 />
               </div>
             );

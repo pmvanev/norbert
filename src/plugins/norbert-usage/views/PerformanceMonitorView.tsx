@@ -18,6 +18,7 @@ import { useState, useEffect } from "react";
 import type { MetricsStore } from "../adapters/metricsStore";
 import type { MultiSessionStore } from "../adapters/multiSessionStore";
 import type { MetricCategoryId, TimeWindowId, HoverState } from "../domain/types";
+import { createHeartbeatSample } from "../domain/heartbeat";
 import { PMTimeWindowSelector } from "./PMTimeWindowSelector";
 import { PMSidebar } from "./PMSidebar";
 import { PMDetailPane } from "./PMDetailPane";
@@ -76,19 +77,18 @@ export const PerformanceMonitorView = ({
     return unsubscribe;
   }, [multiSessionStore]);
 
-  // Heartbeat: inject zero-rate samples at ~1Hz so charts keep scrolling
-  // when no real events arrive, producing a flat line during idle.
+  // Heartbeat: carry forward last-known rates at ~1Hz so charts keep
+  // scrolling when no real events arrive. Uses createHeartbeatSample
+  // (pure domain function) to preserve rate-based values.
   useEffect(() => {
     const id = setInterval(() => {
       const sessions = multiSessionStore.getSessions();
       if (sessions.length > 0) {
         for (const session of sessions) {
-          multiSessionStore.appendSessionSample(session.sessionId, {
-            tokens: 0,
-            cost: 0,
-            agents: session.activeAgentCount,
-            context: session.contextWindowPct,
-          });
+          const tokenBuffer = multiSessionStore.getSessionBuffer(session.sessionId, "tokens");
+          const costBuffer = multiSessionStore.getSessionBuffer(session.sessionId, "cost");
+          const sample = createHeartbeatSample(session, tokenBuffer, costBuffer);
+          multiSessionStore.appendSessionSample(session.sessionId, sample);
         }
       }
     }, 1000);
