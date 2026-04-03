@@ -4,6 +4,28 @@ import "./styles/themes.css";
 import "./styles/design-system.css";
 import App from "./App";
 
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { error: Error | null }
+> {
+  state: { error: Error | null } = { error: null };
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <pre style={{ color: "#ff4444", padding: 20, fontFamily: "monospace", whiteSpace: "pre-wrap" }}>
+          {this.state.error.message}
+          {"\n\n"}
+          {this.state.error.stack}
+        </pre>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 /// Zoom step size (10% increments).
 const ZOOM_STEP = 0.1;
 const ZOOM_MIN = 0.5;
@@ -50,6 +72,8 @@ document.addEventListener("keydown", (e) => {
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </React.StrictMode>,
 );

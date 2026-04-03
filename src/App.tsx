@@ -277,38 +277,41 @@ function App() {
         lastTranscriptOutputRef.current = 0;
       }
 
-      // Poll events for each live session
+      // Batch-fetch new events for all live sessions in a single IPC call
+      const offsets: Record<string, number> = {};
       for (const session of liveSessions) {
-        const prevCount = processedCountsRef.current.get(session.id) ?? 0;
+        offsets[session.id] = processedCountsRef.current.get(session.id) ?? 0;
+      }
 
-        invoke<Array<{ session_id: string; event_type: string; payload: Record<string, unknown>; received_at: string; provider: string }>>(
-          "get_session_events",
-          { sessionId: session.id }
-        )
-          .then((events) => {
-            const newEvents = events.slice(prevCount);
+      invoke<Record<string, Array<{ session_id: string; event_type: string; payload: Record<string, unknown>; received_at: string; provider: string }>>>(
+        "get_new_events_batch",
+        { offsets }
+      )
+        .then((batchResult) => {
+          for (const [sessionId, newEvents] of Object.entries(batchResult)) {
             for (const event of newEvents) {
               deliverHookEvent("session-event", event);
               // Extract transcript_path from primary session
-              if (session.id === polledSessionIdRef.current && transcriptPathRef.current === null && event.payload) {
+              if (sessionId === polledSessionIdRef.current && transcriptPathRef.current === null && event.payload) {
                 const tp = (event.payload as Record<string, unknown>)["transcript_path"];
                 if (typeof tp === "string") {
                   transcriptPathRef.current = tp;
                 }
               }
             }
-            processedCountsRef.current.set(session.id, events.length);
+            const prevCount = processedCountsRef.current.get(sessionId) ?? 0;
+            processedCountsRef.current.set(sessionId, prevCount + newEvents.length);
             // Mark session as OTel-active once any api_request event is seen
-            if (!otelActiveRef.current.get(session.id)) {
+            if (!otelActiveRef.current.get(sessionId)) {
               if (newEvents.some((e) => e.event_type === "api_request")) {
-                otelActiveRef.current.set(session.id, true);
+                otelActiveRef.current.set(sessionId, true);
               }
             }
-          })
-          .catch(() => {
-            // Silently ignore — status poller handles connectivity errors
-          });
-      }
+          }
+        })
+        .catch(() => {
+          // Silently ignore — status poller handles connectivity errors
+        });
     }, POLL_INTERVAL_MS);
 
     return () => clearInterval(intervalId);

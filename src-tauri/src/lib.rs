@@ -2,6 +2,7 @@ pub mod adapters;
 pub mod domain;
 pub mod ports;
 
+use std::collections::HashMap;
 use std::sync::Mutex;
 
 use adapters::db::metric_store::SqliteMetricStore;
@@ -67,6 +68,29 @@ fn get_sessions(state: tauri::State<AppState>) -> Vec<Session> {
 fn get_session_events(state: tauri::State<AppState>, session_id: String) -> Vec<domain::Event> {
     let store = state.event_store.lock().unwrap();
     store.get_events_for_session(&session_id).unwrap_or_default()
+}
+
+/// Return new events for multiple sessions in a single IPC call.
+///
+/// Takes a map of session_id → number of already-processed events (offset).
+/// Returns a map of session_id → new events (events after the offset).
+/// Sessions with no new events are omitted from the result.
+#[tauri::command]
+fn get_new_events_batch(
+    state: tauri::State<AppState>,
+    offsets: HashMap<String, usize>,
+) -> HashMap<String, Vec<domain::Event>> {
+    let store = state.event_store.lock().unwrap();
+    let mut result = HashMap::new();
+
+    for (session_id, offset) in offsets {
+        let all_events = store.get_events_for_session(&session_id).unwrap_or_default();
+        if all_events.len() > offset {
+            result.insert(session_id, all_events[offset..].to_vec());
+        }
+    }
+
+    result
 }
 
 /// Return accumulated metrics for a given session.
@@ -884,7 +908,7 @@ pub fn run() {
                 .build(app)?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet, get_status, get_latest_session, get_sessions, get_session_events, get_metrics_for_session, get_session_metadata, get_all_session_metadata, get_transcript_usage, read_claude_config])
+        .invoke_handler(tauri::generate_handler![greet, get_status, get_latest_session, get_sessions, get_session_events, get_new_events_batch, get_metrics_for_session, get_session_metadata, get_all_session_metadata, get_transcript_usage, read_claude_config])
         .run(tauri::generate_context!())
         .expect("error while running Norbert");
 }
