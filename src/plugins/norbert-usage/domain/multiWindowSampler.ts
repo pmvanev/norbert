@@ -92,11 +92,14 @@ export const appendMultiWindowSample = (
   multiBuffer: MultiWindowBuffer,
   rateSample: RateSample,
 ): MultiWindowBuffer => {
+  let anyChanged = false;
   const updatedWindows: Record<string, WindowState> = {};
   for (const [key, windowState] of Object.entries(multiBuffer.windows)) {
-    updatedWindows[key] = appendToWindow(windowState, rateSample);
+    const updated = appendToWindow(windowState, rateSample);
+    updatedWindows[key] = updated;
+    if (updated !== windowState) anyChanged = true;
   }
-  return { windows: updatedWindows };
+  return anyChanged ? { windows: updatedWindows } : multiBuffer;
 };
 
 // ---------------------------------------------------------------------------

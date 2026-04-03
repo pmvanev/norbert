@@ -6,6 +6,7 @@
 /// This is a thin orchestration layer -- all domain logic lives in the
 /// pure aggregator modules.
 
+import { useMemo } from "react";
 import type { ToolResultEvent } from "../domain/toolUsageAggregator";
 import type { ApiErrorEvent } from "../domain/apiHealthAggregator";
 import type { UserPromptEvent } from "../domain/promptActivityAggregator";
@@ -89,10 +90,10 @@ export const SessionDashboard = ({
   totalApiRequests,
   onClose,
 }: SessionDashboardProps): JSX.Element => {
-  const toolResultEvents = toToolResultEvents(events);
-  const apiErrorEvents = toApiErrorEvents(events);
-  const userPromptEvents = toUserPromptEvents(events);
-  const toolDecisionEvents = toToolDecisionEvents(events);
+  const toolResultEvents = useMemo(() => toToolResultEvents(events), [events]);
+  const apiErrorEvents = useMemo(() => toApiErrorEvents(events), [events]);
+  const userPromptEvents = useMemo(() => toUserPromptEvents(events), [events]);
+  const toolDecisionEvents = useMemo(() => toToolDecisionEvents(events), [events]);
 
   return (
     <div className="session-dashboard">

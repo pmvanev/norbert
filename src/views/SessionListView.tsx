@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   type SessionInfo,
@@ -122,8 +122,14 @@ export function SessionListView({ sessions, onSessionSelect }: SessionListViewPr
     );
   }
 
-  const filteredSessions = filterSessions(sessions, selectedFilter, Date.now());
-  const sortedSessions = sortSessionsMostRecentFirst(filteredSessions);
+  const filteredSessions = useMemo(
+    () => filterSessions(sessions, selectedFilter, Date.now()),
+    [sessions, selectedFilter],
+  );
+  const sortedSessions = useMemo(
+    () => sortSessionsMostRecentFirst(filteredSessions),
+    [filteredSessions],
+  );
 
   return (
     <section className="session-list">

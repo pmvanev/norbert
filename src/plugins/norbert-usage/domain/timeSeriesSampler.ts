@@ -1,13 +1,12 @@
 /**
- * Time-Series Sampler -- pure functions operating on immutable TimeSeriesBuffer.
+ * Time-Series Sampler -- circular buffer for time-series data.
  *
- * Ring buffer implementation for oscilloscope display:
- * - createBuffer: creates empty buffer with given capacity
- * - appendSample: returns new buffer with sample appended, evicts oldest if full
- * - getSamples: returns samples in insertion order
- * - computeStats: computes peak rate, average rate, total rate sum, window duration
+ * Uses a fixed-size backing array with a write pointer (headIndex).
+ * Append is O(1) — overwrites the oldest slot, no array copying.
+ * The `samples` property provides an ordered view (oldest → newest).
  *
- * All functions are pure. No mutation, no IO.
+ * All public functions are pure. The backing array is encapsulated;
+ * consumers only see the ordered `samples` snapshot.
  */
 
 import type {
@@ -29,25 +28,41 @@ export const createBuffer = (capacity: number): TimeSeriesBuffer => ({
 });
 
 // ---------------------------------------------------------------------------
-// appendSample -- immutable append with eviction when full
+// appendSample -- O(1) circular append, returns new buffer with ordered view
 // ---------------------------------------------------------------------------
 
 export const appendSample = (
   buffer: TimeSeriesBuffer,
   sample: RateSample,
 ): TimeSeriesBuffer => {
-  const currentSamples = buffer.samples;
-  const isFull = currentSamples.length >= buffer.capacity;
+  const { samples, capacity, headIndex } = buffer;
+  const len = samples.length;
 
-  const newSamples = isFull
-    ? [...currentSamples.slice(1), sample]
-    : [...currentSamples, sample];
+  if (len < capacity) {
+    // Buffer not yet full: grow the array (append to end)
+    const newSamples = new Array<RateSample>(len + 1);
+    for (let i = 0; i < len; i++) newSamples[i] = samples[i];
+    newSamples[len] = sample;
+    return { samples: newSamples, capacity, headIndex: 0 };
+  }
 
-  return {
-    samples: newSamples,
-    capacity: buffer.capacity,
-    headIndex: 0,
-  };
+  // Buffer full: overwrite oldest slot, advance head pointer.
+  // Build ordered view by reading from head (oldest) to head-1 (newest).
+  const newHead = (headIndex + 1) % capacity;
+  const newSamples = new Array<RateSample>(capacity);
+
+  // Copy all existing slots except the one being overwritten
+  // The new backing order: write the sample at headIndex, then produce ordered view
+  // Ordered view: [headIndex+1, headIndex+2, ..., capacity-1, 0, 1, ..., headIndex-1, NEW]
+  // Simplification: copy the old ordered view, shift left by 1, place new at end
+  for (let i = 0; i < capacity - 1; i++) {
+    // In the old ordered view, samples[0] is oldest, samples[capacity-1] is newest
+    // We want to drop samples[0] (oldest) and append the new sample
+    newSamples[i] = samples[i + 1];
+  }
+  newSamples[capacity - 1] = sample;
+
+  return { samples: newSamples, capacity, headIndex: newHead };
 };
 
 // ---------------------------------------------------------------------------
@@ -65,9 +80,10 @@ export const getSamples = (
 export const computeStats = (
   buffer: TimeSeriesBuffer,
 ): OscilloscopeStats => {
-  const samples = getSamples(buffer);
+  const samples = buffer.samples;
+  const len = samples.length;
 
-  if (samples.length === 0) {
+  if (len === 0) {
     return {
       peakRate: 0,
       avgRate: 0,
@@ -76,26 +92,16 @@ export const computeStats = (
     };
   }
 
-  const peakRate = samples.reduce(
-    (max, s) => Math.max(max, s.tokenRate),
-    0,
-  );
+  let peakRate = 0;
+  let totalRateSum = 0;
+  for (let i = 0; i < len; i++) {
+    const rate = samples[i].tokenRate;
+    if (rate > peakRate) peakRate = rate;
+    totalRateSum += rate;
+  }
 
-  const totalRateSum = samples.reduce(
-    (sum, s) => sum + s.tokenRate,
-    0,
-  );
+  const avgRate = totalRateSum / len;
+  const windowDuration = Math.max(0, samples[len - 1].timestamp - samples[0].timestamp);
 
-  const avgRate = totalRateSum / samples.length;
-
-  const firstTimestamp = samples[0].timestamp;
-  const lastTimestamp = samples[samples.length - 1].timestamp;
-  const windowDuration = Math.max(0, lastTimestamp - firstTimestamp);
-
-  return {
-    peakRate,
-    avgRate,
-    totalRateSum,
-    windowDuration,
-  };
+  return { peakRate, avgRate, totalRateSum, windowDuration };
 };

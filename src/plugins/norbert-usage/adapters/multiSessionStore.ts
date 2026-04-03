@@ -125,30 +125,6 @@ const extractWindowBuffer = (
   return windowState.buffer;
 };
 
-/// Recompute aggregate buffer for a given category by summing per-session latest values.
-const recomputeAggregateBuffer = (
-  sessionBuffers: Map<string, Map<MetricCategoryId, TimeSeriesBuffer>>,
-  categoryId: MetricCategoryId,
-  currentAggregate: TimeSeriesBuffer,
-  timestamp: number,
-): TimeSeriesBuffer => {
-  if (!isCategoryAggregatable(categoryId)) {
-    return currentAggregate;
-  }
-
-  let sum = 0;
-  for (const [, categoryBufferMap] of sessionBuffers) {
-    const buffer = categoryBufferMap.get(categoryId);
-    if (buffer && buffer.samples.length > 0) {
-      const latestSample = buffer.samples[buffer.samples.length - 1];
-      sum += latestSample.tokenRate;
-    }
-  }
-
-  const aggregateSample = createCategorySample(sum, timestamp);
-  return appendSample(currentAggregate, aggregateSample);
-};
-
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
@@ -162,10 +138,16 @@ export const createMultiSessionStore = (): MultiSessionStore => {
   const aggregateMultiWindowBuffers = new Map<MetricCategoryId, MultiWindowBuffer>();
   const subscribers = new Set<() => void>();
 
-  // Initialize aggregate buffers for all categories
+  // Running aggregate sums per category (delta-updated, not recomputed from all sessions)
+  const aggregateSums = new Map<MetricCategoryId, number>();
+  // Last-known value per session per category (for delta computation)
+  const lastSessionValues = new Map<string, Map<MetricCategoryId, number>>();
+
+  // Initialize aggregate buffers and sums for all categories
   for (const id of CATEGORY_IDS) {
     aggregateBuffers.set(id, createBuffer(DEFAULT_BUFFER_CAPACITY));
     aggregateMultiWindowBuffers.set(id, createMultiWindowBuffer());
+    aggregateSums.set(id, 0);
   }
 
   let batchDepth = 0;
@@ -201,12 +183,26 @@ export const createMultiSessionStore = (): MultiSessionStore => {
     sessions.set(sessionId, createInitialMetrics(sessionId));
     sessionBuffers.set(sessionId, createCategoryBuffers());
     sessionMultiWindowBuffers.set(sessionId, createCategoryMultiWindowBuffers());
+    const valueMap = new Map<MetricCategoryId, number>();
+    for (const id of CATEGORY_IDS) valueMap.set(id, 0);
+    lastSessionValues.set(sessionId, valueMap);
   };
 
   const removeSession = (sessionId: string): void => {
+    // Subtract this session's last values from running aggregates
+    const valueMap = lastSessionValues.get(sessionId);
+    if (valueMap) {
+      for (const categoryId of CATEGORY_IDS) {
+        if (isCategoryAggregatable(categoryId)) {
+          const oldValue = valueMap.get(categoryId) ?? 0;
+          aggregateSums.set(categoryId, (aggregateSums.get(categoryId) ?? 0) - oldValue);
+        }
+      }
+    }
     sessions.delete(sessionId);
     sessionBuffers.delete(sessionId);
     sessionMultiWindowBuffers.delete(sessionId);
+    lastSessionValues.delete(sessionId);
   };
 
   const updateSession = (sessionId: string, metrics: SessionMetrics): void => {
@@ -227,55 +223,42 @@ export const createMultiSessionStore = (): MultiSessionStore => {
 
     const timestamp = Date.now();
     const sessionMwBufferMap = sessionMultiWindowBuffers.get(sessionId);
+    const valueMap = lastSessionValues.get(sessionId);
 
-    // Append per-category samples to session buffers (single-window and multi-window)
+    // Append per-category samples and delta-update aggregates in a single pass
     for (const categoryId of CATEGORY_IDS) {
       const value = extractCategoryValue(samples, categoryId);
       const rateSample = createCategorySample(value, timestamp);
 
-      // Single-window buffer (existing behavior)
+      // Per-session single-window buffer
       const currentBuffer = categoryBufferMap.get(categoryId)!;
       categoryBufferMap.set(categoryId, appendSample(currentBuffer, rateSample));
 
-      // Multi-window buffers (1m/5m/15m)
+      // Per-session multi-window buffers
       if (sessionMwBufferMap) {
         const currentMwBuffer = sessionMwBufferMap.get(categoryId)!;
         sessionMwBufferMap.set(categoryId, appendMultiWindowSample(currentMwBuffer, rateSample));
       }
 
-    }
-
-    // Recompute aggregate multi-window buffers by summing across sessions
-    for (const categoryId of CATEGORY_IDS) {
+      // Delta-update running aggregate sum (O(1) instead of O(sessions))
       if (isCategoryAggregatable(categoryId)) {
-        let sum = 0;
-        for (const [, sessionMwMap] of sessionMultiWindowBuffers) {
-          const mwBuffer = sessionMwMap.get(categoryId);
-          if (mwBuffer) {
-            // Find the latest value from any window (use 1m as canonical)
-            const windowState = mwBuffer.windows["1m"];
-            if (windowState && windowState.buffer.samples.length > 0) {
-              const latestSample = windowState.buffer.samples[windowState.buffer.samples.length - 1];
-              sum += latestSample.tokenRate;
-            }
-          }
-        }
-        const aggregateSample = createCategorySample(sum, timestamp);
+        const oldValue = valueMap?.get(categoryId) ?? 0;
+        const newSum = (aggregateSums.get(categoryId) ?? 0) - oldValue + value;
+        aggregateSums.set(categoryId, newSum);
+        valueMap?.set(categoryId, value);
+
+        // Append aggregate sample to both single-window and multi-window buffers
+        const aggregateSample = createCategorySample(newSum, timestamp);
+
+        const currentAggregate = aggregateBuffers.get(categoryId)!;
+        aggregateBuffers.set(categoryId, appendSample(currentAggregate, aggregateSample));
+
         const currentAggMwBuffer = aggregateMultiWindowBuffers.get(categoryId)!;
         aggregateMultiWindowBuffers.set(
           categoryId,
           appendMultiWindowSample(currentAggMwBuffer, aggregateSample),
         );
       }
-    }
-
-    // Recompute aggregate buffers for aggregatable categories (single-window, existing behavior)
-    for (const categoryId of CATEGORY_IDS) {
-      const currentAggregate = aggregateBuffers.get(categoryId)!;
-      aggregateBuffers.set(
-        categoryId,
-        recomputeAggregateBuffer(sessionBuffers, categoryId, currentAggregate, timestamp),
-      );
     }
 
     notifySubscribers();
