@@ -78,17 +78,18 @@ export const PerformanceMonitorView = ({
   }, [multiSessionStore]);
 
   // Heartbeat: inject zero-rate samples at ~1Hz so charts keep scrolling
-  // when no real events arrive. Rate-based categories (tokens, cost) go to
-  // zero because no tokens/dollars are flowing during idle. Point-in-time
-  // categories (agents) reflect current session state. Latency is zero during idle.
+  // when no real events arrive. Batches all session appends before notifying
+  // subscribers once, avoiding N re-renders for N sessions.
   useEffect(() => {
     const id = setInterval(() => {
       const sessions = multiSessionStore.getSessions();
       if (sessions.length > 0) {
-        for (const session of sessions) {
-          const sample = createHeartbeatSample(session);
-          multiSessionStore.appendSessionSample(session.sessionId, sample);
-        }
+        multiSessionStore.batchUpdate(() => {
+          for (const session of sessions) {
+            const sample = createHeartbeatSample(session);
+            multiSessionStore.appendSessionSample(session.sessionId, sample);
+          }
+        });
       }
     }, 1000);
     return () => clearInterval(id);

@@ -47,6 +47,8 @@ export interface MultiSessionStore {
   readonly getSessions: () => ReadonlyArray<SessionMetrics>;
   readonly getSession: (sessionId: string) => SessionMetrics | undefined;
   readonly appendSessionSample: (sessionId: string, samples: CategorySampleInput) => void;
+  /** Execute a batch of operations, notifying subscribers only once at the end. */
+  readonly batchUpdate: (fn: () => void) => void;
   readonly getSessionBuffer: (sessionId: string, categoryId: MetricCategoryId) => TimeSeriesBuffer | undefined;
   readonly getAggregateBuffer: (categoryId: MetricCategoryId) => TimeSeriesBuffer;
   readonly getAggregateWindowBuffer: (categoryId: MetricCategoryId, windowId: TimeWindowId) => TimeSeriesBuffer;
@@ -166,9 +168,31 @@ export const createMultiSessionStore = (): MultiSessionStore => {
     aggregateMultiWindowBuffers.set(id, createMultiWindowBuffer());
   }
 
+  let batchDepth = 0;
+  let batchDirty = false;
+
   const notifySubscribers = (): void => {
+    if (batchDepth > 0) {
+      batchDirty = true;
+      return;
+    }
     for (const callback of subscribers) {
       callback();
+    }
+  };
+
+  const batchUpdate = (fn: () => void): void => {
+    batchDepth++;
+    try {
+      fn();
+    } finally {
+      batchDepth--;
+      if (batchDepth === 0 && batchDirty) {
+        batchDirty = false;
+        for (const callback of subscribers) {
+          callback();
+        }
+      }
     }
   };
 
@@ -306,6 +330,7 @@ export const createMultiSessionStore = (): MultiSessionStore => {
     getSessions,
     getSession,
     appendSessionSample,
+    batchUpdate,
     getSessionBuffer,
     getAggregateBuffer,
     getAggregateWindowBuffer,

@@ -37,7 +37,6 @@ import { computeDashboardData } from "./plugins/norbert-usage/domain/dashboard";
 import { computeGaugeClusterData } from "./plugins/norbert-usage/domain/gaugeCluster";
 import { computeCostTickerData } from "./plugins/norbert-usage/domain/costTicker";
 import { resetHookBridge, deliverHookEvent } from "./plugins/hookBridge";
-import { isOtelActiveSession } from "./domain/otelDetection";
 import { createDefaultLayoutState, isSecondaryVisible, toggleSecondaryZone, type TwoZoneLayoutState } from "./layout/zoneToggle";
 import { assignView } from "./layout/assignmentEngine";
 import { ZoneRenderer, type ViewRegistry } from "./layout/zoneRenderer";
@@ -241,9 +240,9 @@ function App() {
   /// Tracks per-session processed event counts to avoid re-delivering.
   const processedCountsRef = useRef<Map<string, number>>(new Map());
   const polledSessionIdRef = useRef<string | null>(null);
-  /// Per-session event cache: used by the transcript poller to detect OTel-active
-  /// sessions via isOtelActiveSession. Keyed by session ID.
-  const sessionEventsRef = useRef<Map<string, ReadonlyArray<{ event_type: string }>>>(new Map());
+  /// Per-session OTel-active flag: true once an api_request event is seen.
+  /// Used by the transcript poller to skip polling for OTel-active sessions.
+  const otelActiveRef = useRef<Map<string, boolean>>(new Map());
 
   useEffect(() => {
     const intervalId = setInterval(() => {
@@ -262,7 +261,7 @@ function App() {
         if (!liveIds.has(tracked.sessionId)) {
           usageMultiSessionStore.removeSession(tracked.sessionId);
           processedCountsRef.current.delete(tracked.sessionId);
-          sessionEventsRef.current.delete(tracked.sessionId);
+          otelActiveRef.current.delete(tracked.sessionId);
         }
       }
 
@@ -299,8 +298,12 @@ function App() {
               }
             }
             processedCountsRef.current.set(session.id, events.length);
-            // Cache events for OTel detection by the transcript poller
-            sessionEventsRef.current.set(session.id, events);
+            // Mark session as OTel-active once any api_request event is seen
+            if (!otelActiveRef.current.get(session.id)) {
+              if (newEvents.some((e) => e.event_type === "api_request")) {
+                otelActiveRef.current.set(session.id, true);
+              }
+            }
           })
           .catch(() => {
             // Silently ignore — status poller handles connectivity errors
@@ -333,8 +336,7 @@ function App() {
       // arrives directly via api_request events, making transcript parsing redundant.
       const primaryId = polledSessionIdRef.current;
       if (primaryId !== null) {
-        const primaryEvents = sessionEventsRef.current.get(primaryId) ?? [];
-        if (isOtelActiveSession(primaryEvents)) return;
+        if (otelActiveRef.current.get(primaryId)) return;
       }
 
       invoke<{ input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_creation_tokens: number; model: string; message_count: number }>(
