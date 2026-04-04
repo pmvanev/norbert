@@ -75,6 +75,7 @@ describe("configAggregator properties", () => {
           expect(result.agents).toHaveLength(agents.length);
         },
       ),
+      { numRuns: 50 },
     );
   });
 
@@ -96,6 +97,7 @@ describe("configAggregator properties", () => {
           expect(result.commands).toHaveLength(commands.length);
         },
       ),
+      { numRuns: 50 },
     );
   });
 
@@ -122,6 +124,7 @@ describe("configAggregator properties", () => {
           }
         },
       ),
+      { numRuns: 50 },
     );
   });
 

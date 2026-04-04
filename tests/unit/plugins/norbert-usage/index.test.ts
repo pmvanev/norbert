@@ -138,7 +138,7 @@ describe("norbert-usage onLoad view registrations", () => {
 
     const pm = calls.views.find((v) => v.id === "performance-monitor");
     expect(pm).toBeDefined();
-    expect(pm!.icon).toBe("activity");
+    expect(pm!.icon).toBe("square-activity");
   });
 });
 
