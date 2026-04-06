@@ -41,6 +41,14 @@ const SPARKLINE_DIMENSIONS: CanvasDimensions = {
 // Pure sparkline canvas drawing
 // ---------------------------------------------------------------------------
 
+const clampY = (y: number): number => {
+  const top = SPARKLINE_DIMENSIONS.padding;
+  const bottom = SPARKLINE_HEIGHT - SPARKLINE_DIMENSIONS.padding;
+  if (y < top) return top;
+  if (y > bottom) return bottom;
+  return y;
+};
+
 const drawSparkline = (
   ctx: CanvasRenderingContext2D,
   points: ReadonlyArray<FilledAreaPoint>,
@@ -54,10 +62,10 @@ const drawSparkline = (
   ctx.lineWidth = 1;
   ctx.lineJoin = "round";
   ctx.beginPath();
-  ctx.moveTo(points[0].x, points[0].y);
+  ctx.moveTo(points[0].x, clampY(points[0].y));
 
   for (let i = 1; i < points.length; i++) {
-    ctx.lineTo(points[i].x, points[i].y);
+    ctx.lineTo(points[i].x, clampY(points[i].y));
   }
 
   ctx.stroke();
@@ -99,6 +107,17 @@ const SparklineCanvas = ({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    const dpr = window.devicePixelRatio || 1;
+    const targetW = Math.round(SPARKLINE_WIDTH * dpr);
+    const targetH = Math.round(SPARKLINE_HEIGHT * dpr);
+    if (canvas.width !== targetW || canvas.height !== targetH) {
+      canvas.width = targetW;
+      canvas.height = targetH;
+    }
+    if (typeof ctx.setTransform === "function") {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
     const buffer = multiSessionStore.getAggregateBuffer(category.id);
     const samples = buffer.samples.map((sample) => ({
       timestamp: sample.timestamp,
@@ -124,6 +143,7 @@ const SparklineCanvas = ({
       ref={canvasRef}
       width={SPARKLINE_WIDTH}
       height={SPARKLINE_HEIGHT}
+      style={{ width: `${SPARKLINE_WIDTH}px`, height: `${SPARKLINE_HEIGHT}px` }}
       className="pm-sidebar-sparkline"
       aria-hidden="true"
     />
