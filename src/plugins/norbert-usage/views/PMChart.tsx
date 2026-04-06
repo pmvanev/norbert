@@ -283,7 +283,9 @@ export const PMChart = ({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Scale canvas for HiDPI displays to eliminate blurry rendering.
+    // Scale canvas buffer for HiDPI displays to eliminate blurry rendering.
+    // Note: Chromium reports devicePixelRatio as physicalDPR × cssZoom, so
+    // this also picks up the Ctrl-+/- zoom from main.tsx automatically.
     // Always set the transform to guard against context resets.
     const dpr = devicePixelRatio || 1;
     const cssW = canvasDimensions.width;
@@ -327,9 +329,12 @@ export const PMChart = ({
     const handleMouseMove = (e: MouseEvent): void => {
       const rect = canvas.getBoundingClientRect();
 
-      // Normalize mouse position from displayed size to canvas coordinate
-      // space. This handles DPR mismatches where the canvas display size
-      // (from getBoundingClientRect) may differ from canvasDimensions.
+      // Normalize mouse position from the visually-displayed rect to the
+      // canvas's logical coordinate space. The two differ when CSS zoom
+      // (set on documentElement for Ctrl-+/- in main.tsx) inflates the
+      // bounding rect: rect.width = canvasDimensions.width * cssZoom.
+      // This is *not* about devicePixelRatio — getBoundingClientRect
+      // returns CSS pixels regardless of physical DPR.
       const rawX = e.clientX - rect.left;
       const displayW = rect.width;
       const normalizedX = displayW > 0
@@ -362,21 +367,21 @@ export const PMChart = ({
       const value = chartSamples[sampleIndex]?.value ?? 0;
       const timeOffsetMs = (chartSamples.length - 1 - sampleIndex) * sampleIntervalMs;
 
-      // Normalize tooltip viewport coordinates by the same DPR scale
-      // factor used for the crosshair. getBoundingClientRect() and clientX
-      // are in the browser's coordinate space, but CSS position: fixed
-      // expects CSS layout pixels. The ratio rect.width/canvasDimensions.width
-      // captures any DPR mismatch between these spaces.
+      // Compensate tooltip coordinates for CSS zoom. clientX/Y come back
+      // in the zoomed coordinate space (e.g. on a 1.5× zoom, clientX is
+      // 1.5× the value position: fixed elements expect). Dividing by the
+      // zoom factor returns coordinates in unzoomed CSS layout pixels,
+      // which is what position: fixed uses.
       const displayH = rect.height;
-      const scaleX = displayW > 0 ? displayW / canvasDimensions.width : 1;
-      const scaleY = displayH > 0 ? displayH / canvasDimensions.height : 1;
+      const cssZoomX = displayW > 0 ? displayW / canvasDimensions.width : 1;
+      const cssZoomY = displayH > 0 ? displayH / canvasDimensions.height : 1;
 
       hover({
         sampleIndex,
         value,
         timeOffsetMs,
-        tooltipX: e.clientX / scaleX,
-        tooltipY: e.clientY / scaleY,
+        tooltipX: e.clientX / cssZoomX,
+        tooltipY: e.clientY / cssZoomY,
       });
     };
 

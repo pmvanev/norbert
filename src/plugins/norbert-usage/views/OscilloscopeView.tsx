@@ -182,7 +182,9 @@ export const OscilloscopeView = ({ store }: OscilloscopeViewProps) => {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Scale canvas for HiDPI displays to eliminate blurry rendering
+    // Scale canvas buffer for HiDPI displays to eliminate blurry rendering.
+    // Note: Chromium reports devicePixelRatio as physicalDPR × cssZoom, so
+    // this also picks up the Ctrl-+/- zoom from main.tsx automatically.
     const dpr = devicePixelRatio || 1;
     const cssW = canvasDimensions.width;
     const cssH = canvasDimensions.height;
