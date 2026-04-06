@@ -240,4 +240,61 @@ describe("configAggregator properties", () => {
       ),
     );
   });
+
+  describe("skill name derivation", () => {
+    const baseRaw = (skillFile: FileEntry): RawClaudeConfig => ({
+      agents: [],
+      commands: [],
+      skills: [skillFile],
+      settings: null,
+      claudeMdFiles: [],
+      errors: [],
+      scope: "both",
+    } as RawClaudeConfig);
+
+    it("uses YAML frontmatter `name:` field when present", () => {
+      const result = aggregateConfig(baseRaw({
+        path: "/plugins/cache/nw/skills/troubleshooter-reviewer/SKILL.md",
+        content: "---\nname: troubleshooter-reviewer\ndescription: Skill bundle\n---\n\nbody",
+        scope: "user",
+      } as FileEntry));
+      expect(result.skills[0].name).toBe("troubleshooter-reviewer");
+    });
+
+    it("uses parent directory when filename is SKILL.md and no frontmatter name", () => {
+      const result = aggregateConfig(baseRaw({
+        path: "C:\\Users\\x\\plugins\\nw\\skills\\agent-builder\\SKILL.md",
+        content: "# Some heading\n\nbody",
+        scope: "user",
+      } as FileEntry));
+      expect(result.skills[0].name).toBe("agent-builder");
+    });
+
+    it("handles forward-slash POSIX paths for SKILL.md parent dir", () => {
+      const result = aggregateConfig(baseRaw({
+        path: "/home/me/.claude/plugins/cache/nw/skills/data-engineer/SKILL.md",
+        content: "# heading",
+        scope: "user",
+      } as FileEntry));
+      expect(result.skills[0].name).toBe("data-engineer");
+    });
+
+    it("frontmatter name wins over parent directory for SKILL.md", () => {
+      const result = aggregateConfig(baseRaw({
+        path: "/plugins/skills/dir-name/SKILL.md",
+        content: "---\nname: explicit-name\n---\n\nbody",
+        scope: "user",
+      } as FileEntry));
+      expect(result.skills[0].name).toBe("explicit-name");
+    });
+
+    it("falls back to filename for normal skill files", () => {
+      const result = aggregateConfig(baseRaw({
+        path: "./.claude/commands/deploy.md",
+        content: "# Deploy\n\nbody",
+        scope: "project",
+      } as FileEntry));
+      expect(result.skills[0].name).toBe("deploy");
+    });
+  });
 });

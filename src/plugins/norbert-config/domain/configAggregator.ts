@@ -130,13 +130,53 @@ function aggregateSkills(skillFiles: readonly FileEntry[]): readonly SkillDefini
 function parseSkillEntry(entry: FileEntry): SkillDefinition {
   const filename = extractFilename(entry.path);
   const partial = parseSkillFile(filename, entry.content);
+  const name = deriveSkillName(entry.path, entry.content, partial.name);
 
   return {
     ...partial,
+    name,
     filePath: entry.path,
     scope: entry.scope,
     source: entry.source,
   };
+}
+
+/**
+ * Derive a meaningful skill name.
+ *
+ * Preference order:
+ * 1. `name:` field in YAML frontmatter (authoritative when present)
+ * 2. Parent directory name when the file is named SKILL.md (case-insensitive)
+ * 3. The filename-derived fallback (filename without .md)
+ */
+function deriveSkillName(filePath: string, content: string, fallback: string): string {
+  const frontmatterName = extractFrontmatterName(content);
+  if (frontmatterName) {
+    return frontmatterName;
+  }
+
+  if (fallback.toUpperCase() === "SKILL") {
+    const parent = extractParentDirectory(filePath);
+    if (parent) {
+      return parent;
+    }
+  }
+
+  return fallback;
+}
+
+function extractFrontmatterName(content: string): string | null {
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!match) {
+    return null;
+  }
+  const nameMatch = match[1].match(/^name:\s*(.+?)\s*$/m);
+  return nameMatch ? nameMatch[1].trim() : null;
+}
+
+function extractParentDirectory(filePath: string): string | null {
+  const segments = filePath.split(/[/\\]/).filter((s) => s.length > 0);
+  return segments.length >= 2 ? segments[segments.length - 2] : null;
 }
 
 // ---------------------------------------------------------------------------
