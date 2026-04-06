@@ -127,9 +127,10 @@ export const ConfigViewerView: FC<ConfigViewerViewProps> = ({
       <div className="sec-hdr">
         <span className="sec-t">Configuration Viewer</span>
         <button
-          className="config-reload-btn"
+          className={`config-reload-btn${loadState.tag === "loading" ? " is-loading" : ""}`}
           onClick={loadConfig}
           type="button"
+          disabled={loadState.tag === "loading"}
           title="Reload configuration"
           aria-label="Reload configuration"
         >
@@ -154,7 +155,20 @@ export const ConfigViewerView: FC<ConfigViewerViewProps> = ({
 
       <div className="config-sub-tab-content" role="tabpanel" aria-label={SUB_TAB_LABELS[activeTab]}>
         {(loadState.tag === "idle" || loadState.tag === "loading") && (
-          <p className="config-placeholder">Loading configuration...</p>
+          <div className="config-loading" role="status" aria-live="polite">
+            <div className="config-loading-header">
+              <span className="config-loading-spinner" aria-hidden="true" />
+              <span>Loading configuration…</span>
+            </div>
+            <ul className="config-skeleton-list" aria-hidden="true">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <li key={i} className="config-skeleton-row">
+                  <span className="config-skeleton-dot" />
+                  <span className="config-skeleton-line" />
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
 
         {loadState.tag === "error" && (
