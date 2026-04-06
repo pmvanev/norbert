@@ -91,14 +91,9 @@ export const ConfigViewerView: FC<ConfigViewerViewProps> = ({
     setLoadState({ tag: "loading" });
     setSelectedKey(null);
     try {
-      const t0 = performance.now();
       const rawConfig = await invoke<RawClaudeConfig>("read_claude_config", { scope: "both" });
-      const ipcMs = performance.now() - t0;
       await yieldToMain();
-      const t1 = performance.now();
       const config = aggregateConfig(rawConfig);
-      const aggMs = performance.now() - t1;
-      console.log(`[config] ipc=${ipcMs.toFixed(0)}ms aggregate=${aggMs.toFixed(0)}ms`);
       await yieldToMain();
       startTransition(() => setLoadState({ tag: "loaded", config }));
     } catch (err) {

@@ -250,33 +250,23 @@ function App() {
       tickCount++;
 
       // Phase 1: Status + sessions in a single IPC call (one mutex lock, one query)
-      let t0 = performance.now();
       let freshSessions: SessionInfo[];
       try {
         const [newStatus, sessions] = await invoke<[AppStatus, SessionInfo[]]>("get_status_and_sessions");
-        const ipcMs = performance.now() - t0;
 
         // Only update state when data actually changed
-        let statusChanged = false;
         const statusKey = `${newStatus.session_count}:${newStatus.event_count}`;
         if (statusKey !== prevStatusRef.current) {
           prevStatusRef.current = statusKey;
-          statusChanged = true;
           await yieldToMain();
           setStatus(newStatus);
         }
 
-        let sessionsChanged = false;
         const sessKey = sessions.map((s) => `${s.id}:${s.event_count}:${s.last_event_at}`).join("|");
         if (sessKey !== prevSessionsRef.current) {
           prevSessionsRef.current = sessKey;
-          sessionsChanged = true;
           await yieldToMain();
           setSessions(sessions);
-        }
-
-        if (ipcMs > 10 || statusChanged || sessionsChanged) {
-          console.log(`[poll] ipc=${ipcMs.toFixed(0)}ms status=${statusChanged} sessions=${sessionsChanged}`);
         }
 
         freshSessions = sessions;
