@@ -39,7 +39,7 @@ fn greet(name: &str) -> String {
 #[tauri::command]
 fn get_status(state: tauri::State<AppState>) -> AppStatus {
     let store = state.event_store.lock().unwrap();
-    let session_count = store.get_sessions().map(|s| s.len() as u32).unwrap_or(0);
+    let session_count = store.get_session_count().unwrap_or(0);
     let event_count = store.get_event_count().unwrap_or(0);
     let latest_session = store.get_latest_session().unwrap_or(None);
     build_status_with_session(session_count, event_count, latest_session.as_ref())
@@ -59,6 +59,18 @@ fn get_latest_session(state: tauri::State<AppState>) -> Option<Session> {
 fn get_sessions(state: tauri::State<AppState>) -> Vec<Session> {
     let store = state.event_store.lock().unwrap();
     store.get_sessions().unwrap_or_default()
+}
+
+/// Combined status + sessions in a single IPC call.
+/// Avoids double mutex acquisition and double query per poll tick.
+#[tauri::command]
+fn get_status_and_sessions(state: tauri::State<AppState>) -> (AppStatus, Vec<Session>) {
+    let store = state.event_store.lock().unwrap();
+    let sessions = store.get_sessions().unwrap_or_default();
+    let event_count = store.get_event_count().unwrap_or(0);
+    let latest_session = store.get_latest_session().unwrap_or(None);
+    let status = build_status_with_session(sessions.len() as u32, event_count, latest_session.as_ref());
+    (status, sessions)
 }
 
 /// Return all events for a given session, ordered chronologically.
@@ -908,7 +920,7 @@ pub fn run() {
                 .build(app)?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet, get_status, get_latest_session, get_sessions, get_session_events, get_new_events_batch, get_metrics_for_session, get_session_metadata, get_all_session_metadata, get_transcript_usage, read_claude_config])
+        .invoke_handler(tauri::generate_handler![greet, get_status, get_latest_session, get_sessions, get_status_and_sessions, get_session_events, get_new_events_batch, get_metrics_for_session, get_session_metadata, get_all_session_metadata, get_transcript_usage, read_claude_config])
         .run(tauri::generate_context!())
         .expect("error while running Norbert");
 }

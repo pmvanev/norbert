@@ -43,6 +43,15 @@ function setupDefaultMocks() {
         },
       ]);
     }
+    if (cmd === "get_status_and_sessions") {
+      return Promise.resolve([
+        { version: "0.2.1-test", port: 3001, session_count: 2, event_count: 10 },
+        [
+          { id: "session-1", started_at: "2026-03-12T10:00:00Z", last_event_at: "2026-03-12T10:05:00Z", event_count: 5 },
+          { id: "session-2", started_at: "2026-03-12T09:00:00Z", last_event_at: "2026-03-12T09:30:00Z", event_count: 5 },
+        ],
+      ]);
+    }
     if (cmd === "get_new_events_batch") {
       return Promise.resolve({});
     }

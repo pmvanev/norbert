@@ -113,15 +113,6 @@ export function SessionListView({ sessions, onSessionSelect }: SessionListViewPr
       });
   }, [sessions]);
 
-  if (isEmptyState(sessions.length)) {
-    return (
-      <section className="session-list-empty">
-        <p>{EMPTY_STATE_MESSAGE}</p>
-        <code>{PLUGIN_INSTALL_COMMAND}</code>
-      </section>
-    );
-  }
-
   const filteredSessions = useMemo(
     () => filterSessions(sessions, selectedFilter, Date.now()),
     [sessions, selectedFilter],
@@ -130,6 +121,15 @@ export function SessionListView({ sessions, onSessionSelect }: SessionListViewPr
     () => sortSessionsMostRecentFirst(filteredSessions),
     [filteredSessions],
   );
+
+  if (isEmptyState(sessions.length)) {
+    return (
+      <section className="session-list-empty">
+        <p>{EMPTY_STATE_MESSAGE}</p>
+        <code>{PLUGIN_INSTALL_COMMAND}</code>
+      </section>
+    );
+  }
 
   return (
     <section className="session-list">

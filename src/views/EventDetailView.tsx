@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, startTransition } from "react";
+import { createIdlePoller, yieldToMain } from "../scheduling";
 import { invoke } from "@tauri-apps/api/core";
 import {
   type SessionInfo,
@@ -27,7 +28,7 @@ interface EventDetailViewProps {
 const PAYLOAD_SNIPPET_MAX_LENGTH = 80;
 
 /// Polling interval in milliseconds for live event updates.
-const EVENT_POLL_INTERVAL_MS = 1000;
+const EVENT_POLL_INTERVAL_MS = 2000;
 
 /// A single event row displaying timestamp, canonical type label, and payload snippet.
 function EventRow({ event }: { readonly event: SessionEvent }) {
@@ -55,29 +56,31 @@ export function EventDetailView({ session, onBack }: EventDetailViewProps) {
 
   useEffect(() => {
     let cancelled = false;
+    let prevLen = 0;
 
-    function fetchEvents() {
-      invoke<SessionEvent[]>("get_session_events", {
-        sessionId: session.id,
-      })
-        .then((data) => {
-          if (!cancelled) {
-            setEvents(data);
-            setError(null);
-          }
-        })
-        .catch(() => {
-          if (!cancelled) {
-            setError("Failed to load events");
-          }
+    async function fetchEvents() {
+      try {
+        const data = await invoke<SessionEvent[]>("get_session_events", {
+          sessionId: session.id,
         });
+        if (cancelled || data.length === prevLen) return;
+        prevLen = data.length;
+        await yieldToMain();
+        if (!cancelled) startTransition(() => {
+          setEvents(data);
+          setError(null);
+        });
+      } catch {
+        if (!cancelled) startTransition(() => {
+          setError("Failed to load events");
+        });
+      }
     }
 
-    fetchEvents();
-    const intervalId = setInterval(fetchEvents, EVENT_POLL_INTERVAL_MS);
+    const stop = createIdlePoller(fetchEvents, EVENT_POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
-      clearInterval(intervalId);
+      stop();
     };
   }, [session.id]);
 

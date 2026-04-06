@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef, type FC } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, startTransition, type FC } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   type AppStatus,
@@ -44,10 +44,11 @@ import { SessionListView } from "./views/SessionListView";
 import { EventDetailView } from "./views/EventDetailView";
 import { createDefaultSidebarState, getVisibleItems } from "./sidebar/sidebarManager";
 import { Icon } from "./components/Icon";
+import { createIdlePoller, yieldToMain } from "./scheduling";
 // LayoutState base type imported via TwoZoneLayoutState from zoneToggle
 
 /// Polling interval in milliseconds for live UI updates.
-const POLL_INTERVAL_MS = 1000;
+const POLL_INTERVAL_MS = 2000;
 
 /// Minimum zone width in pixels for the layout divider.
 const MIN_ZONE_WIDTH = 200;
@@ -94,17 +95,27 @@ function SessionDashboardLoader({ sessionId, onClose }: { readonly sessionId: st
 
   useEffect(() => {
     let cancelled = false;
-    const fetchData = () => {
-      invoke<DashboardSessionEvent[]>("get_session_events", { sessionId })
-        .then((data) => { if (!cancelled) setEvents(data); })
-        .catch(() => {});
-      invoke<BackendAccumulatedMetric[]>("get_metrics_for_session", { sessionId })
-        .then((data) => { if (!cancelled) setMetrics(data); })
-        .catch(() => {});
+    let prevEvtLen = 0;
+    let prevMetLen = 0;
+    const fetchData = async () => {
+      const [eventsResult, metricsResult] = await Promise.allSettled([
+        invoke<DashboardSessionEvent[]>("get_session_events", { sessionId }),
+        invoke<BackendAccumulatedMetric[]>("get_metrics_for_session", { sessionId }),
+      ]);
+      if (cancelled) return;
+      if (eventsResult.status === "fulfilled" && eventsResult.value.length !== prevEvtLen) {
+        prevEvtLen = eventsResult.value.length;
+        await yieldToMain();
+        startTransition(() => setEvents(eventsResult.value));
+      }
+      if (metricsResult.status === "fulfilled" && metricsResult.value.length !== prevMetLen) {
+        prevMetLen = metricsResult.value.length;
+        await yieldToMain();
+        startTransition(() => setMetrics(metricsResult.value));
+      }
     };
-    fetchData();
-    const intervalId = setInterval(fetchData, POLL_INTERVAL_MS);
-    return () => { cancelled = true; clearInterval(intervalId); };
+    const stop = createIdlePoller(fetchData, POLL_INTERVAL_MS);
+    return () => { cancelled = true; stop(); };
   }, [sessionId]);
 
   const totalApiRequests = events.filter((e) => e.event_type === "api_request").length;
@@ -212,50 +223,77 @@ function App() {
   /// Reactive metrics: re-render views when the store updates.
   const [metrics, setMetrics] = useState(() => usageMetricsStore.getMetrics());
   useEffect(() => {
-    return usageMetricsStore.subscribe((m) => setMetrics(m));
+    return usageMetricsStore.subscribe((m) => startTransition(() => setMetrics(m)));
   }, []);
 
-  useEffect(() => {
-    function pollStatus() {
-      invoke<AppStatus>("get_status")
-        .then(setStatus)
-        .catch((err) => setError(String(err)));
+  /// Change-detection refs: skip setState when poll data is unchanged.
+  /// This prevents React from reconciling + repainting the DOM on no-op polls,
+  /// which is the primary source of UI lag during window drag.
+  const prevStatusRef = useRef<string>("");
+  const prevSessionsRef = useRef<string>("");
 
-      invoke<SessionInfo[]>("get_sessions")
-        .then(setSessions)
-        .catch((err) => setError(String(err)));
-    }
-
-    pollStatus();
-    const intervalId = setInterval(pollStatus, POLL_INTERVAL_MS);
-    return () => clearInterval(intervalId);
-  }, []);
-
-  /// Event poller: bridges SQLite events → hook bridge → metricsStore.
-  ///
-  /// Polls ALL live sessions so the multi-session store gets per-session
-  /// metrics. The "primary" session (most active) also feeds the transcript
-  /// poller for token usage data.
-  ///
-  /// Tracks per-session processed event counts to avoid re-delivering.
+  /// Unified polling loop: fetches status, sessions, events, and transcript
+  /// usage in a single tick. Skips when the document is hidden to avoid
+  /// wasted renders. Transcript usage polls every other tick (~4s).
   const processedCountsRef = useRef<Map<string, number>>(new Map());
   const polledSessionIdRef = useRef<string | null>(null);
-  /// Per-session OTel-active flag: true once an api_request event is seen.
-  /// Used by the transcript poller to skip polling for OTel-active sessions.
   const otelActiveRef = useRef<Map<string, boolean>>(new Map());
+  const transcriptPathRef = useRef<string | null>(null);
+  const lastTranscriptInputRef = useRef(0);
+  const lastTranscriptOutputRef = useRef(0);
 
   useEffect(() => {
-    const intervalId = setInterval(() => {
-      const liveSessions = sessions.filter((s) => isSessionActive(s));
+    let tickCount = 0;
+
+    const pollTick = async () => {
+      if (document.visibilityState === "hidden") return;
+      tickCount++;
+
+      // Phase 1: Status + sessions in a single IPC call (one mutex lock, one query)
+      let t0 = performance.now();
+      let freshSessions: SessionInfo[];
+      try {
+        const [newStatus, sessions] = await invoke<[AppStatus, SessionInfo[]]>("get_status_and_sessions");
+        const ipcMs = performance.now() - t0;
+
+        // Only update state when data actually changed
+        let statusChanged = false;
+        const statusKey = `${newStatus.session_count}:${newStatus.event_count}`;
+        if (statusKey !== prevStatusRef.current) {
+          prevStatusRef.current = statusKey;
+          statusChanged = true;
+          await yieldToMain();
+          setStatus(newStatus);
+        }
+
+        let sessionsChanged = false;
+        const sessKey = sessions.map((s) => `${s.id}:${s.event_count}:${s.last_event_at}`).join("|");
+        if (sessKey !== prevSessionsRef.current) {
+          prevSessionsRef.current = sessKey;
+          sessionsChanged = true;
+          await yieldToMain();
+          setSessions(sessions);
+        }
+
+        if (ipcMs > 10 || statusChanged || sessionsChanged) {
+          console.log(`[poll] ipc=${ipcMs.toFixed(0)}ms status=${statusChanged} sessions=${sessionsChanged}`);
+        }
+
+        freshSessions = sessions;
+      } catch (err) {
+        setError(String(err));
+        return;
+      }
+
+      // Phase 2: Event batch processing (uses fresh sessions, no stale closure)
+      const liveSessions = freshSessions.filter((s) => isSessionActive(s));
       if (liveSessions.length === 0) {
-        // No active sessions — clean up all tracked sessions from the store
         for (const tracked of usageMultiSessionStore.getSessions()) {
           usageMultiSessionStore.removeSession(tracked.sessionId);
         }
         return;
       }
 
-      // Remove ended/stale sessions from multi-session store and cleanup
       const liveIds = new Set(liveSessions.map((s) => s.id));
       for (const tracked of usageMultiSessionStore.getSessions()) {
         if (!liveIds.has(tracked.sessionId)) {
@@ -265,7 +303,6 @@ function App() {
         }
       }
 
-      // Identify primary session for transcript poller
       const primary = liveSessions.reduce((best, s) =>
         new Date(s.last_event_at!).getTime() > new Date(best.last_event_at!).getTime() ? s : best
       );
@@ -277,86 +314,63 @@ function App() {
         lastTranscriptOutputRef.current = 0;
       }
 
-      // Batch-fetch new events for all live sessions in a single IPC call
       const offsets: Record<string, number> = {};
       for (const session of liveSessions) {
         offsets[session.id] = processedCountsRef.current.get(session.id) ?? 0;
       }
 
-      invoke<Record<string, Array<{ session_id: string; event_type: string; payload: Record<string, unknown>; received_at: string; provider: string }>>>(
-        "get_new_events_batch",
-        { offsets }
-      )
-        .then((batchResult) => {
-          for (const [sessionId, newEvents] of Object.entries(batchResult)) {
-            for (const event of newEvents) {
-              deliverHookEvent("session-event", event);
-              // Extract transcript_path from primary session
-              if (sessionId === polledSessionIdRef.current && transcriptPathRef.current === null && event.payload) {
-                const tp = (event.payload as Record<string, unknown>)["transcript_path"];
-                if (typeof tp === "string") {
-                  transcriptPathRef.current = tp;
-                }
-              }
-            }
-            const prevCount = processedCountsRef.current.get(sessionId) ?? 0;
-            processedCountsRef.current.set(sessionId, prevCount + newEvents.length);
-            // Mark session as OTel-active once any api_request event is seen
-            if (!otelActiveRef.current.get(sessionId)) {
-              if (newEvents.some((e) => e.event_type === "api_request")) {
-                otelActiveRef.current.set(sessionId, true);
+      try {
+        const batchResult = await invoke<Record<string, Array<{ session_id: string; event_type: string; payload: Record<string, unknown>; received_at: string; provider: string }>>>(
+          "get_new_events_batch",
+          { offsets }
+        );
+
+        for (const [sessionId, newEvents] of Object.entries(batchResult)) {
+          for (const event of newEvents) {
+            deliverHookEvent("session-event", event);
+            if (sessionId === polledSessionIdRef.current && transcriptPathRef.current === null && event.payload) {
+              const tp = (event.payload as Record<string, unknown>)["transcript_path"];
+              if (typeof tp === "string") {
+                transcriptPathRef.current = tp;
               }
             }
           }
-        })
-        .catch(() => {
-          // Silently ignore — status poller handles connectivity errors
-        });
-    }, POLL_INTERVAL_MS);
+          const prevCount = processedCountsRef.current.get(sessionId) ?? 0;
+          processedCountsRef.current.set(sessionId, prevCount + newEvents.length);
+          if (!otelActiveRef.current.get(sessionId)) {
+            if (newEvents.some((e) => e.event_type === "api_request")) {
+              otelActiveRef.current.set(sessionId, true);
+            }
+          }
+        }
+      } catch {
+        // Silently ignore — phase 1 handles connectivity errors
+      }
 
-    return () => clearInterval(intervalId);
-  }, [sessions]);
+      await yieldToMain();
 
-  /// Transcript usage poller: reads token data from Claude Code transcript files.
-  ///
-  /// Claude Code hook payloads do NOT include token usage data (input_tokens,
-  /// output_tokens, model). That data lives in the session transcript JSONL files.
-  /// Every hook event includes a `transcript_path` field pointing to the file.
-  ///
-  /// This poller extracts the transcript path from the first event of the active
-  /// session, calls get_transcript_usage to read the JSONL, and feeds a synthetic
-  /// event with the cumulative usage into the hook bridge for metrics processing.
-  const transcriptPathRef = useRef<string | null>(null);
-  const lastTranscriptInputRef = useRef(0);
-  const lastTranscriptOutputRef = useRef(0);
+      // Phase 3: Transcript usage (every other tick ≈ 4s)
+      if (tickCount % 2 !== 0) return;
 
-  useEffect(() => {
-    const intervalId = setInterval(() => {
       const path = transcriptPathRef.current;
       if (path === null) return;
 
-      // Skip transcript polling for OTel-active sessions: their usage data
-      // arrives directly via api_request events, making transcript parsing redundant.
       const primaryId = polledSessionIdRef.current;
-      if (primaryId !== null) {
-        if (otelActiveRef.current.get(primaryId)) return;
-      }
+      if (primaryId !== null && otelActiveRef.current.get(primaryId)) return;
 
-      invoke<{ input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_creation_tokens: number; model: string; message_count: number }>(
-        "get_transcript_usage",
-        { transcriptPath: path }
-      )
-        .then((usage) => {
-          const deltaInput = usage.input_tokens - lastTranscriptInputRef.current;
-          const deltaOutput = usage.output_tokens - lastTranscriptOutputRef.current;
+      try {
+        const usage = await invoke<{ input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_creation_tokens: number; model: string; message_count: number }>(
+          "get_transcript_usage",
+          { transcriptPath: path }
+        );
 
-          // Only deliver if token count changed since last poll
-          if (deltaInput <= 0 && deltaOutput <= 0) return;
+        const deltaInput = usage.input_tokens - lastTranscriptInputRef.current;
+        const deltaOutput = usage.output_tokens - lastTranscriptOutputRef.current;
 
+        if (deltaInput > 0 || deltaOutput > 0) {
           lastTranscriptInputRef.current = usage.input_tokens;
           lastTranscriptOutputRef.current = usage.output_tokens;
 
-          // Feed as a wrapped event matching the DB event format
           deliverHookEvent("session-event", {
             session_id: polledSessionIdRef.current ?? "",
             event_type: "tool_call_end",
@@ -372,13 +386,13 @@ function App() {
             received_at: new Date().toISOString(),
             provider: "transcript",
           });
-        })
-        .catch(() => {
-          // Silently ignore — transcript may not be accessible yet
-        });
-    }, POLL_INTERVAL_MS * 3); // Poll transcript less frequently than events
+        }
+      } catch {
+        // Silently ignore — transcript may not be accessible yet
+      }
+    };
 
-    return () => clearInterval(intervalId);
+    return createIdlePoller(pollTick, POLL_INTERVAL_MS);
   }, []);
 
   /// Use refs so wrapper components stay referentially stable across re-renders.

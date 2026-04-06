@@ -7,7 +7,8 @@
 /// Uses sec-hdr pattern for the title and Unicode symbols (not emoji)
 /// for icons per project feedback.
 
-import { useState, useCallback, type FC } from "react";
+import { useState, useCallback, startTransition, type FC } from "react";
+import { yieldToMain } from "../../../scheduling";
 import { invoke } from "@tauri-apps/api/core";
 import { CONFIG_SUB_TABS, type ConfigSubTab, type AggregatedConfig, type SelectedConfigItem } from "../domain/types";
 import { aggregateConfig, type RawClaudeConfig } from "../domain/configAggregator";
@@ -86,17 +87,23 @@ export const ConfigViewerView: FC<ConfigViewerViewProps> = ({
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   /// Load (or reload) config from the backend.
-  const loadConfig = useCallback(() => {
+  const loadConfig = useCallback(async () => {
     setLoadState({ tag: "loading" });
     setSelectedKey(null);
-    invoke<RawClaudeConfig>("read_claude_config", { scope: "both" })
-      .then((rawConfig) => {
-        const config = aggregateConfig(rawConfig);
-        setLoadState({ tag: "loaded", config });
-      })
-      .catch((err) => {
-        setLoadState({ tag: "error", message: String(err) });
-      });
+    try {
+      const t0 = performance.now();
+      const rawConfig = await invoke<RawClaudeConfig>("read_claude_config", { scope: "both" });
+      const ipcMs = performance.now() - t0;
+      await yieldToMain();
+      const t1 = performance.now();
+      const config = aggregateConfig(rawConfig);
+      const aggMs = performance.now() - t1;
+      console.log(`[config] ipc=${ipcMs.toFixed(0)}ms aggregate=${aggMs.toFixed(0)}ms`);
+      await yieldToMain();
+      startTransition(() => setLoadState({ tag: "loaded", config }));
+    } catch (err) {
+      startTransition(() => setLoadState({ tag: "error", message: String(err) }));
+    }
   }, []);
 
   /// Load on first render.

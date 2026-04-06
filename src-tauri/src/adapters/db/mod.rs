@@ -53,6 +53,12 @@ const CREATE_INDEX_EVENTS_SESSION_ID: &str =
 const CREATE_INDEX_EVENTS_RECEIVED_AT: &str =
     "CREATE INDEX IF NOT EXISTS idx_events_received_at ON events (received_at)";
 
+/// Composite index for the correlated subquery in get_sessions:
+/// SELECT MAX(e.received_at) FROM events e WHERE e.session_id = s.id
+/// Without this, SQLite scans all events per session.
+const CREATE_INDEX_EVENTS_SESSION_RECEIVED: &str =
+    "CREATE INDEX IF NOT EXISTS idx_events_session_received ON events (session_id, received_at)";
+
 /// Resolve the database path for the application.
 ///
 /// Uses the platform data directory (e.g., ~/.local/share/norbert on Linux,
@@ -119,6 +125,9 @@ impl SqliteEventStore {
         connection
             .execute_batch(CREATE_INDEX_EVENTS_RECEIVED_AT)
             .map_err(|e| format!("Failed to create received_at index: {}", e))?;
+        connection
+            .execute_batch(CREATE_INDEX_EVENTS_SESSION_RECEIVED)
+            .map_err(|e| format!("Failed to create composite session+received index: {}", e))?;
         Ok(())
     }
 }
@@ -228,6 +237,14 @@ impl EventStore for SqliteEventStore {
             .map_err(|e| format!("Failed to read session row: {}", e))?;
 
         Ok(sessions)
+    }
+
+    fn get_session_count(&self) -> Result<u32, String> {
+        let count: u32 = self
+            .connection
+            .query_row("SELECT COUNT(*) FROM sessions", [], |row| row.get(0))
+            .map_err(|e| format!("Failed to count sessions: {}", e))?;
+        Ok(count)
     }
 
     fn get_event_count(&self) -> Result<u32, String> {

@@ -17,6 +17,9 @@ pub trait EventStore {
     /// Retrieve all sessions, most recent first.
     fn get_sessions(&self) -> Result<Vec<Session>, String>;
 
+    /// Return the number of sessions without fetching full session data.
+    fn get_session_count(&self) -> Result<u32, String>;
+
     /// Return total number of stored events across all sessions.
     fn get_event_count(&self) -> Result<u32, String>;
 
@@ -126,6 +129,10 @@ mod tests {
 
         fn get_sessions(&self) -> Result<Vec<Session>, String> {
             Ok(self.sessions.clone())
+        }
+
+        fn get_session_count(&self) -> Result<u32, String> {
+            Ok(self.sessions.len() as u32)
         }
 
         fn get_event_count(&self) -> Result<u32, String> {

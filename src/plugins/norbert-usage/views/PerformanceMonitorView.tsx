@@ -15,6 +15,7 @@
  */
 
 import { useState, useEffect } from "react";
+import { createIdlePoller } from "../../../scheduling";
 import type { MetricsStore } from "../adapters/metricsStore";
 import type { MultiSessionStore } from "../adapters/multiSessionStore";
 import type { MetricCategoryId, TimeWindowId, HoverState } from "../domain/types";
@@ -81,7 +82,7 @@ export const PerformanceMonitorView = ({
   // when no real events arrive. Batches all session appends before notifying
   // subscribers once, avoiding N re-renders for N sessions.
   useEffect(() => {
-    const id = setInterval(() => {
+    return createIdlePoller(() => {
       const sessions = multiSessionStore.getSessions();
       if (sessions.length > 0) {
         multiSessionStore.batchUpdate(() => {
@@ -91,8 +92,7 @@ export const PerformanceMonitorView = ({
           }
         });
       }
-    }, 1000);
-    return () => clearInterval(id);
+    }, 2000);
   }, [multiSessionStore]);
 
   return (

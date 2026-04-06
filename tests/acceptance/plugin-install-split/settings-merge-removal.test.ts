@@ -12,29 +12,32 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { readFileSync, existsSync } from "fs";
-import { resolve } from "path";
-import { execSync } from "child_process";
+import { readFileSync, existsSync, readdirSync, statSync } from "fs";
+import { resolve, extname } from "path";
 
 const PROJECT_ROOT = resolve(__dirname, "../../..");
 
-/**
- * Helper: search for a string in the project source code.
- * Returns true if the string is found in any source file.
- */
-function sourceContains(searchTerm: string): boolean {
-  try {
-    // Use forward slashes and explicit bash shell for Windows compatibility
-    const root = PROJECT_ROOT.replace(/\\/g, "/");
-    execSync(
-      `grep -r "${searchTerm}" --include="*.ts" --include="*.tsx" --include="*.rs" --include="*.js" "${root}/src" "${root}/src-tauri/src" "${root}/scripts" 2>/dev/null`,
-      { encoding: "utf-8", shell: "bash" }
-    );
-    return true;
-  } catch {
-    // grep returns exit code 1 when no matches found
-    return false;
+const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".rs", ".js"]);
+const SOURCE_DIRS = ["src", "src-tauri/src", "scripts"].map((d) => resolve(PROJECT_ROOT, d));
+
+function collectSourceFiles(dir: string): string[] {
+  const files: string[] = [];
+  if (!existsSync(dir)) return files;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = resolve(dir, entry.name);
+    if (entry.isDirectory() && entry.name !== "node_modules") {
+      files.push(...collectSourceFiles(full));
+    } else if (entry.isFile() && SOURCE_EXTENSIONS.has(extname(entry.name))) {
+      files.push(full);
+    }
   }
+  return files;
+}
+
+const allSourceFiles = SOURCE_DIRS.flatMap(collectSourceFiles);
+
+function sourceContains(searchTerm: string): boolean {
+  return allSourceFiles.some((f) => readFileSync(f, "utf-8").includes(searchTerm));
 }
 
 // @walking_skeleton
