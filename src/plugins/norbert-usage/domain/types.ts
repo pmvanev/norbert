@@ -64,9 +64,14 @@ export interface CostResult {
 export interface SessionMetrics {
   readonly sessionId: string;
   readonly sessionLabel: string;
+  /** Sum of input + output + cache_read + cache_creation across all
+   *  api_request events. Matches the basis Anthropic bills against, so
+   *  totalTokens stays consistent with sessionCost. */
   readonly totalTokens: number;
   readonly inputTokens: number;
   readonly outputTokens: number;
+  readonly cacheReadTokens: number;
+  readonly cacheCreationTokens: number;
   readonly sessionCost: number;
   readonly toolCallCount: number;
   readonly activeAgentCount: number;

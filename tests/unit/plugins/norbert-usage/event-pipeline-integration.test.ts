@@ -139,9 +139,13 @@ describe("Event pipeline integration: DB event → hookBridge → metricsStore",
 
     const after = usageMetricsStore.getMetrics();
     const deltaTokens = after.totalTokens - before.totalTokens;
-    expect(deltaTokens).toBe(1600); // 1200 input + 400 output
+    // 1200 input + 400 output + 500 cache_read = 2100 (cache tokens
+    // are billed and now counted in totalTokens so the displayed total
+    // matches what sessionCost was computed against).
+    expect(deltaTokens).toBe(2100);
     expect(after.inputTokens - before.inputTokens).toBe(1200);
     expect(after.outputTokens - before.outputTokens).toBe(400);
+    expect(after.cacheReadTokens - before.cacheReadTokens).toBe(500);
     expect(after.sessionCost).toBeGreaterThan(before.sessionCost);
     expect(after.totalEventCount).toBeGreaterThan(before.totalEventCount);
   });

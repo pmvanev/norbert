@@ -325,6 +325,68 @@ describe("session cost is never negative regardless of event sequence", () => {
 // OTel api_request: cost_usd bypass (acceptance)
 // ---------------------------------------------------------------------------
 
+describe("api_request totalTokens reflects all billed token categories", () => {
+  // Regression guard: Claude Code's OTel exporter reports input,
+  // output, cache_read, and cache_creation tokens separately, and
+  // Anthropic bills against the sum of all four. Earlier the
+  // aggregator only summed input + output, which made totalTokens
+  // appear ~50x smaller than what sessionCost was computed against
+  // (because cache reads/creations dominate in long sessions with
+  // prompt caching). This test pins the all-categories sum so a
+  // future regression can't silently misreport tokens.
+  it("includes cache_read and cache_creation tokens in totalTokens", () => {
+    const initial = createInitialMetrics("cache-totals");
+    const event = {
+      eventType: "api_request" as const,
+      payload: {
+        usage: {
+          input_tokens: 1_000,
+          output_tokens: 500,
+          cache_read_input_tokens: 35_000,
+          cache_creation_input_tokens: 8_000,
+          cost_usd: 0.05,
+          model: "claude-sonnet-4-5-20250929",
+        },
+      },
+      receivedAt: "2025-06-15T10:00:00Z",
+    };
+    const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE);
+
+    expect(updated.totalTokens).toBe(1_000 + 500 + 35_000 + 8_000);
+    expect(updated.inputTokens).toBe(1_000);
+    expect(updated.outputTokens).toBe(500);
+    expect(updated.cacheReadTokens).toBe(35_000);
+    expect(updated.cacheCreationTokens).toBe(8_000);
+  });
+
+  it("totalTokens accumulates cache categories across multiple api_request events", () => {
+    let metrics = createInitialMetrics("cache-accum");
+    const mkEvent = (cacheRead: number, cacheCreate: number) => ({
+      eventType: "api_request" as const,
+      payload: {
+        usage: {
+          input_tokens: 100,
+          output_tokens: 50,
+          cache_read_input_tokens: cacheRead,
+          cache_creation_input_tokens: cacheCreate,
+          model: "claude-sonnet-4-5-20250929",
+        },
+      },
+      receivedAt: "2025-06-15T10:00:00Z",
+    });
+
+    metrics = aggregateEvent(metrics, mkEvent(10_000, 2_000), DEFAULT_PRICING_TABLE);
+    metrics = aggregateEvent(metrics, mkEvent(15_000, 0), DEFAULT_PRICING_TABLE);
+    metrics = aggregateEvent(metrics, mkEvent(20_000, 1_500), DEFAULT_PRICING_TABLE);
+
+    expect(metrics.cacheReadTokens).toBe(45_000);
+    expect(metrics.cacheCreationTokens).toBe(3_500);
+    expect(metrics.inputTokens).toBe(300);
+    expect(metrics.outputTokens).toBe(150);
+    expect(metrics.totalTokens).toBe(300 + 150 + 45_000 + 3_500);
+  });
+});
+
 describe("api_request event with cost_usd updates session cost by exact cost_usd value", () => {
   it("cost_usd=0.042 produces sessionCost of exactly 0.042", () => {
     const initial = createInitialMetrics("otel-test");
@@ -349,9 +411,14 @@ describe("api_request event with cost_usd updates session cost by exact cost_usd
     const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE);
 
     expect(updated.sessionCost).toBe(0.042);
-    expect(updated.totalTokens).toBe(337 + 12);
+    // totalTokens includes cache_creation_input_tokens because that's
+    // what Anthropic bills against -- otherwise the displayed total can
+    // be orders of magnitude smaller than the cost was computed against.
+    expect(updated.totalTokens).toBe(337 + 12 + 0 + 22996);
     expect(updated.inputTokens).toBe(337);
     expect(updated.outputTokens).toBe(12);
+    expect(updated.cacheCreationTokens).toBe(22996);
+    expect(updated.cacheReadTokens).toBe(0);
     expect(updated.totalEventCount).toBe(1);
   });
 });

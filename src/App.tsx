@@ -178,6 +178,8 @@ function SessionStatusLoader({
       totalTokens={effectiveMetrics.totalTokens}
       inputTokens={effectiveMetrics.inputTokens}
       outputTokens={effectiveMetrics.outputTokens}
+      cacheReadTokens={effectiveMetrics.cacheReadTokens}
+      cacheCreationTokens={effectiveMetrics.cacheCreationTokens}
       events={events}
       metrics={metrics}
       totalApiRequests={totalApiRequests}

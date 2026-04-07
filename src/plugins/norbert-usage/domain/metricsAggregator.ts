@@ -31,6 +31,8 @@ export const createInitialMetrics = (sessionId: string, sessionLabel = ""): Sess
   totalTokens: 0,
   inputTokens: 0,
   outputTokens: 0,
+  cacheReadTokens: 0,
+  cacheCreationTokens: 0,
   sessionCost: 0,
   toolCallCount: 0,
   activeAgentCount: 0,
@@ -130,11 +132,21 @@ const applyApiRequestTokenUsage = (
   const cost = costUsd !== undefined ? costUsd : calculateCost(usage, pricingTable).totalCost;
   const durationMs = extractUsageNumber(payload, "duration_ms");
 
+  // totalTokens is the basis Anthropic bills against, so we sum every
+  // category that contributed: uncached input, output, cache reads, and
+  // cache creations. Without including cache tokens the displayed total
+  // can be 50x smaller than what the cost was actually computed against
+  // (Claude Code sessions with prompt caching enabled routinely log
+  // tens of millions of cache_read tokens).
+  const billedTokens =
+    usage.inputTokens + usage.outputTokens + usage.cacheReadTokens + usage.cacheCreationTokens;
   const withTokens: SessionMetrics = {
     ...metrics,
-    totalTokens: metrics.totalTokens + usage.inputTokens + usage.outputTokens,
+    totalTokens: metrics.totalTokens + billedTokens,
     inputTokens: metrics.inputTokens + usage.inputTokens,
     outputTokens: metrics.outputTokens + usage.outputTokens,
+    cacheReadTokens: metrics.cacheReadTokens + usage.cacheReadTokens,
+    cacheCreationTokens: metrics.cacheCreationTokens + usage.cacheCreationTokens,
     sessionCost: Math.max(0, metrics.sessionCost + cost),
     lastApiLatencyMs: durationMs ?? metrics.lastApiLatencyMs,
   };

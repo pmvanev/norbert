@@ -248,19 +248,23 @@ const TotalTokensTile = ({
   totalTokens,
   inputTokens,
   outputTokens,
+  cacheReadTokens,
+  cacheCreationTokens,
 }: {
   readonly totalTokens: number;
   readonly inputTokens: number;
   readonly outputTokens: number;
+  readonly cacheReadTokens: number;
+  readonly cacheCreationTokens: number;
 }) => (
   <div className="gauge-card">
     <span className="gauge-value gauge-value-lg" data-mono="">{formatTokenCount(totalTokens)}</span>
-    <span className="gauge-unit">tokens</span>
+    <span className="gauge-unit">billed tokens</span>
     <span className="gauge-label">Total Tokens</span>
     <span className="gauge-sublabel">
       {totalTokens === 0
         ? "no data"
-        : `${formatTokenCount(inputTokens)} in / ${formatTokenCount(outputTokens)} out`}
+        : `${formatTokenCount(inputTokens)} in · ${formatTokenCount(outputTokens)} out · ${formatTokenCount(cacheReadTokens)} cache rd · ${formatTokenCount(cacheCreationTokens)} cache wr`}
     </span>
   </div>
 );
@@ -330,6 +334,8 @@ interface SessionStatusViewProps {
   readonly totalTokens: number;
   readonly inputTokens: number;
   readonly outputTokens: number;
+  readonly cacheReadTokens: number;
+  readonly cacheCreationTokens: number;
   readonly events: ReadonlyArray<SessionEvent>;
   readonly metrics: ReadonlyArray<AccumulatedMetric>;
   readonly totalApiRequests: number;
@@ -343,6 +349,8 @@ export const SessionStatusView = ({
   totalTokens,
   inputTokens,
   outputTokens,
+  cacheReadTokens,
+  cacheCreationTokens,
   events,
   metrics,
   totalApiRequests,
@@ -382,6 +390,8 @@ export const SessionStatusView = ({
           totalTokens={totalTokens}
           inputTokens={inputTokens}
           outputTokens={outputTokens}
+          cacheReadTokens={cacheReadTokens}
+          cacheCreationTokens={cacheCreationTokens}
         />
 
         <div className="gauge-card rpm-counter">
