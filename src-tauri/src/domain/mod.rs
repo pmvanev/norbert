@@ -254,7 +254,7 @@ pub struct AccumulatedMetric {
 ///
 /// Populated on first OTLP payload per session. All fields except session_id
 /// are optional for graceful degradation when attributes are missing.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct SessionMetadata {
     /// Unique session identifier.
     pub session_id: String,
@@ -266,6 +266,10 @@ pub struct SessionMetadata {
     pub os_type: Option<String>,
     /// Host architecture (from resource attribute host.arch).
     pub host_arch: Option<String>,
+    /// Working directory the Claude Code session was started from
+    /// (from the top-level `cwd` field on hook payloads). Used to render
+    /// a meaningful project name in the Sessions view.
+    pub cwd: Option<String>,
 }
 
 /// Calculate the duration in seconds between two ISO 8601 timestamps.

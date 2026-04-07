@@ -333,10 +333,12 @@ fn extract_resource_attributes_from(resource_attrs: Option<&Vec<Value>>) -> (Opt
     }
 }
 
-/// Extract terminal.type from the first log record that has it.
+/// Extract terminal.type from an OTLP logs request.
 ///
-/// Pure function: traverses all log records in the request looking for
-/// a `terminal.type` attribute. Returns the first value found, or None.
+/// Pure function: Claude Code emits `terminal.type` as a *resource* attribute
+/// on every export, and only puts it on individual log records for some event
+/// types (e.g. user_prompt). Check resource attributes first, then fall back
+/// to scanning log records so we still find it on partial/legacy payloads.
 pub fn extract_terminal_type_from_logs_request(request: &Value) -> Option<String> {
     let empty_array = Vec::new();
     let resource_logs = request
@@ -345,6 +347,16 @@ pub fn extract_terminal_type_from_logs_request(request: &Value) -> Option<String
         .unwrap_or(&empty_array);
 
     for resource_log in resource_logs {
+        if let Some(resource_attrs) = resource_log
+            .get("resource")
+            .and_then(|r| r.get("attributes"))
+            .and_then(|v| v.as_array())
+        {
+            if let Some(terminal_type) = get_string_attribute(resource_attrs, "terminal.type") {
+                return Some(terminal_type);
+            }
+        }
+
         let scope_logs = resource_log
             .get("scopeLogs")
             .and_then(|v| v.as_array())
@@ -387,6 +399,23 @@ pub fn extract_log_resource_attributes(request: &Value) -> (Option<String>, Opti
         .and_then(|v| v.as_array());
 
     extract_resource_attributes_from(resource_attrs)
+}
+
+/// Extract terminal.type from an OTLP metrics request.
+///
+/// Pure function: Claude Code includes `terminal.type` as a resource attribute
+/// on metric exports as well as log exports. Reading it from metrics lets the
+/// IDE badge populate as soon as the first metrics batch lands, instead of
+/// waiting for the first logs export (which only flushes after user activity).
+pub fn extract_terminal_type_from_metrics_request(request: &Value) -> Option<String> {
+    let resource_attrs = request
+        .get("resourceMetrics")
+        .and_then(|v| v.as_array())
+        .and_then(|arr| arr.first())
+        .and_then(|rm| rm.get("resource"))
+        .and_then(|r| r.get("attributes"))
+        .and_then(|v| v.as_array())?;
+    get_string_attribute(resource_attrs, "terminal.type")
 }
 
 /// Extract resource attributes from an OTLP metrics request.
@@ -1062,6 +1091,57 @@ mod tests {
         let request = serde_json::json!({"resourceLogs": []});
         let terminal_type = super::extract_terminal_type_from_logs_request(&request);
         assert_eq!(terminal_type, None);
+    }
+
+    #[test]
+    fn extracts_terminal_type_from_resource_attributes_when_absent_from_log_records() {
+        // Regression: Claude Code emits terminal.type as a resource attribute
+        // on every OTLP export, but only puts it on individual log records for
+        // certain event types (e.g. user_prompt). A batch containing only
+        // api_request log records must still surface the IDE badge.
+        let log_record = make_log_record("claude_code.api_request", vec![
+            serde_json::json!({"key": "model", "value": {"stringValue": "claude-opus-4-6"}}),
+            serde_json::json!({"key": "input_tokens", "value": {"stringValue": "3"}}),
+            serde_json::json!({"key": "output_tokens", "value": {"stringValue": "13"}}),
+        ]);
+        let request = serde_json::json!({
+            "resourceLogs": [{
+                "resource": {
+                    "attributes": [
+                        {"key": "terminal.type", "value": {"stringValue": "vscode"}}
+                    ]
+                },
+                "scopeLogs": [{
+                    "logRecords": [log_record]
+                }]
+            }]
+        });
+
+        let terminal_type = super::extract_terminal_type_from_logs_request(&request);
+        assert_eq!(terminal_type, Some("vscode".to_string()));
+    }
+
+    #[test]
+    fn resource_terminal_type_takes_precedence_over_log_record() {
+        // Resource-level attribute is the canonical Claude Code source of truth.
+        let log_record = make_log_record("claude_code.user_prompt", vec![
+            serde_json::json!({"key": "terminal.type", "value": {"stringValue": "cursor"}}),
+        ]);
+        let request = serde_json::json!({
+            "resourceLogs": [{
+                "resource": {
+                    "attributes": [
+                        {"key": "terminal.type", "value": {"stringValue": "vscode"}}
+                    ]
+                },
+                "scopeLogs": [{
+                    "logRecords": [log_record]
+                }]
+            }]
+        });
+
+        let terminal_type = super::extract_terminal_type_from_logs_request(&request);
+        assert_eq!(terminal_type, Some("vscode".to_string()));
     }
 
     // ---------------------------------------------------------------

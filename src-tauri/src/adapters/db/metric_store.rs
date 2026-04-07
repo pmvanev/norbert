@@ -32,9 +32,16 @@ const CREATE_SESSION_METADATA_TABLE: &str = "
         service_version TEXT,
         os_type TEXT,
         host_arch TEXT,
+        cwd TEXT,
         created_at TEXT NOT NULL
     )
 ";
+
+/// SQL migration: add cwd column to existing session_metadata tables.
+/// SQLite doesn't support `ADD COLUMN IF NOT EXISTS`, so the caller checks
+/// for the column first via PRAGMA table_info.
+const MIGRATE_ADD_CWD_COLUMN: &str =
+    "ALTER TABLE session_metadata ADD COLUMN cwd TEXT";
 
 /// SQL for atomic upsert: accumulate delta onto existing value.
 const UPSERT_METRIC: &str = "
@@ -52,22 +59,35 @@ const SELECT_METRICS_FOR_SESSION: &str = "
     ORDER BY metric_name, attribute_key
 ";
 
-/// SQL for first-write-wins session metadata insertion.
+/// SQL for session metadata insertion with NULL backfill.
+///
+/// First non-NULL value wins per column: existing non-NULL values are
+/// preserved, but NULL columns get filled in by later batches that carry
+/// the data. This matters because Claude Code spreads enrichment attributes
+/// (terminal.type, service.version, etc.) across different OTLP batches —
+/// a strict first-write-wins policy would freeze a session at whatever
+/// happened to arrive first.
 const INSERT_SESSION_METADATA: &str = "
-    INSERT OR IGNORE INTO session_metadata (session_id, terminal_type, service_version, os_type, host_arch, created_at)
-    VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+    INSERT INTO session_metadata (session_id, terminal_type, service_version, os_type, host_arch, cwd, created_at)
+    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+    ON CONFLICT (session_id) DO UPDATE SET
+        terminal_type = COALESCE(terminal_type, excluded.terminal_type),
+        service_version = COALESCE(service_version, excluded.service_version),
+        os_type = COALESCE(os_type, excluded.os_type),
+        host_arch = COALESCE(host_arch, excluded.host_arch),
+        cwd = COALESCE(cwd, excluded.cwd)
 ";
 
 /// SQL to query session metadata by session_id.
 const SELECT_SESSION_METADATA: &str = "
-    SELECT session_id, terminal_type, service_version, os_type, host_arch
+    SELECT session_id, terminal_type, service_version, os_type, host_arch, cwd
     FROM session_metadata
     WHERE session_id = ?1
 ";
 
 /// SQL to query all session metadata rows.
 const SELECT_ALL_SESSION_METADATA: &str = "
-    SELECT session_id, terminal_type, service_version, os_type, host_arch
+    SELECT session_id, terminal_type, service_version, os_type, host_arch, cwd
     FROM session_metadata
     ORDER BY created_at DESC
 ";
@@ -97,7 +117,26 @@ impl SqliteMetricStore {
         connection
             .execute_batch(CREATE_SESSION_METADATA_TABLE)
             .map_err(|e| format!("Failed to create session_metadata table: {}", e))?;
+        // Migrate: add cwd column to pre-existing databases that pre-date this field.
+        if !Self::session_metadata_has_column(connection, "cwd")? {
+            connection
+                .execute_batch(MIGRATE_ADD_CWD_COLUMN)
+                .map_err(|e| format!("Failed to migrate session_metadata table: {}", e))?;
+        }
         Ok(())
+    }
+
+    /// Check whether the session_metadata table already has a given column.
+    fn session_metadata_has_column(connection: &Connection, column: &str) -> Result<bool, String> {
+        let mut stmt = connection
+            .prepare("PRAGMA table_info(session_metadata)")
+            .map_err(|e| format!("Failed to query session_metadata table info: {}", e))?;
+        let columns: Vec<String> = stmt
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(|e| format!("Failed to read session_metadata table info: {}", e))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("Failed to collect session_metadata columns: {}", e))?;
+        Ok(columns.iter().any(|c| c == column))
     }
 }
 
@@ -151,6 +190,7 @@ impl MetricStore for SqliteMetricStore {
                     metadata.service_version,
                     metadata.os_type,
                     metadata.host_arch,
+                    metadata.cwd,
                     now,
                 ],
             )
@@ -169,6 +209,7 @@ impl MetricStore for SqliteMetricStore {
                     service_version: row.get(2)?,
                     os_type: row.get(3)?,
                     host_arch: row.get(4)?,
+                    cwd: row.get(5)?,
                 })
             },
         );
@@ -194,6 +235,7 @@ impl MetricStore for SqliteMetricStore {
                     service_version: row.get(2)?,
                     os_type: row.get(3)?,
                     host_arch: row.get(4)?,
+                    cwd: row.get(5)?,
                 })
             })
             .map_err(|e| format!("Failed to query all session metadata: {}", e))?
@@ -239,6 +281,7 @@ mod tests {
             service_version: Some("1.0.0".to_string()),
             os_type: Some("linux".to_string()),
             host_arch: Some("x86_64".to_string()),
+            cwd: None,
         }).unwrap();
         store.write_session_metadata(&SessionMetadata {
             session_id: "sess-B".to_string(),
@@ -246,6 +289,7 @@ mod tests {
             service_version: Some("2.0.0".to_string()),
             os_type: None,
             host_arch: None,
+            cwd: None,
         }).unwrap();
 
         // AC: get_metrics_for_session returns accumulated metrics for a session
@@ -354,6 +398,7 @@ mod tests {
             service_version: Some("1.2.3".to_string()),
             os_type: Some("linux".to_string()),
             host_arch: Some("x86_64".to_string()),
+            cwd: None,
         };
 
         store.write_session_metadata(&metadata).unwrap();
@@ -375,7 +420,41 @@ mod tests {
     }
 
     #[test]
-    fn write_session_metadata_is_first_write_wins() {
+    fn write_session_metadata_backfills_null_columns_from_later_writes() {
+        // Regression: Claude Code splits enrichment attributes across OTLP
+        // batches. A session whose first batch lacked terminal.type must be
+        // upgradable when a later batch carries it.
+        let store = create_test_store();
+
+        let first = SessionMetadata {
+            session_id: "sess-1".to_string(),
+            terminal_type: None,
+            service_version: Some("1.0.0".to_string()),
+            os_type: Some("linux".to_string()),
+            host_arch: Some("x86_64".to_string()),
+            cwd: None,
+        };
+        let second = SessionMetadata {
+            session_id: "sess-1".to_string(),
+            terminal_type: Some("vscode".to_string()),
+            service_version: None,
+            os_type: None,
+            host_arch: None,
+            cwd: None,
+        };
+
+        store.write_session_metadata(&first).unwrap();
+        store.write_session_metadata(&second).unwrap();
+
+        let result = store.get_session_metadata("sess-1").unwrap().unwrap();
+        assert_eq!(result.terminal_type, Some("vscode".to_string()), "NULL should be backfilled");
+        assert_eq!(result.service_version, Some("1.0.0".to_string()), "Non-NULL should be preserved");
+        assert_eq!(result.os_type, Some("linux".to_string()));
+        assert_eq!(result.host_arch, Some("x86_64".to_string()));
+    }
+
+    #[test]
+    fn write_session_metadata_is_first_non_null_wins_per_column() {
         let store = create_test_store();
 
         let first = SessionMetadata {
@@ -384,6 +463,7 @@ mod tests {
             service_version: Some("1.0.0".to_string()),
             os_type: Some("linux".to_string()),
             host_arch: Some("x86_64".to_string()),
+            cwd: None,
         };
         let second = SessionMetadata {
             session_id: "sess-1".to_string(),
@@ -391,14 +471,15 @@ mod tests {
             service_version: Some("2.0.0".to_string()),
             os_type: Some("darwin".to_string()),
             host_arch: Some("arm64".to_string()),
+            cwd: None,
         };
 
         store.write_session_metadata(&first).unwrap();
         store.write_session_metadata(&second).unwrap();
 
         let result = store.get_session_metadata("sess-1").unwrap().unwrap();
-        assert_eq!(result.terminal_type, Some("vscode".to_string()), "First-write should win");
-        assert_eq!(result.service_version, Some("1.0.0".to_string()), "First-write should win");
+        assert_eq!(result.terminal_type, Some("vscode".to_string()), "First non-NULL should win");
+        assert_eq!(result.service_version, Some("1.0.0".to_string()), "First non-NULL should win");
     }
 
     #[test]
@@ -411,6 +492,7 @@ mod tests {
             service_version: None,
             os_type: None,
             host_arch: None,
+            cwd: None,
         };
 
         store.write_session_metadata(&metadata).unwrap();
@@ -441,6 +523,7 @@ mod tests {
             service_version: Some("1.0.0".to_string()),
             os_type: Some("linux".to_string()),
             host_arch: Some("x86_64".to_string()),
+            cwd: None,
         };
         let meta2 = SessionMetadata {
             session_id: "sess-2".to_string(),
@@ -448,6 +531,7 @@ mod tests {
             service_version: Some("2.0.0".to_string()),
             os_type: Some("darwin".to_string()),
             host_arch: Some("arm64".to_string()),
+            cwd: None,
         };
 
         store.write_session_metadata(&meta1).unwrap();

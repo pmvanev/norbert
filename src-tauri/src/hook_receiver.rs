@@ -23,7 +23,8 @@ use norbert_lib::adapters::db::SqliteEventStore;
 use norbert_lib::adapters::otel::metrics_parser::parse_export_metrics_request;
 use norbert_lib::adapters::otel::{
     extract_log_resource_attributes, extract_metrics_resource_attributes,
-    extract_terminal_type_from_logs_request, parse_export_logs_request,
+    extract_terminal_type_from_logs_request, extract_terminal_type_from_metrics_request,
+    parse_export_logs_request,
 };
 use norbert_lib::adapters::providers::claude_code::ClaudeCodeProvider;
 use norbert_lib::domain::{SessionMetadata, HOOK_PORT};
@@ -314,6 +315,29 @@ async fn handle_hook_event(
         }
     };
     drop(store);
+
+    // Capture session cwd from the canonical event payload (Claude Code
+    // includes a top-level `cwd` on every hook event). This populates the
+    // session label immediately on SessionStart so the Sessions view can
+    // show a meaningful name without waiting for OTLP traffic.
+    if let Some(cwd) = canonical_event
+        .payload
+        .get("cwd")
+        .and_then(|v| v.as_str())
+    {
+        if !cwd.is_empty() {
+            let metadata = SessionMetadata {
+                session_id: canonical_event.session_id.clone(),
+                cwd: Some(cwd.to_string()),
+                ..Default::default()
+            };
+            let metric_store = state.metric_store.lock().unwrap();
+            if let Err(e) = metric_store.write_session_metadata(&metadata) {
+                eprintln!("Failed to write session cwd metadata: {}", e);
+            }
+        }
+    }
+
     state.writes_in_flight.fetch_sub(1, Ordering::Release);
     result
 }
@@ -355,6 +379,7 @@ async fn handle_otlp_logs(
                 service_version: service_version.clone(),
                 os_type: os_type.clone(),
                 host_arch: host_arch.clone(),
+                cwd: None,
             };
             if let Err(e) = metric_store.write_session_metadata(&metadata) {
                 eprintln!("Failed to write session metadata from logs: {}", e);
@@ -383,6 +408,11 @@ async fn handle_otlp_metrics(
 
     let data_points = parse_export_metrics_request(&json_body);
     let (service_version, os_type, host_arch) = extract_metrics_resource_attributes(&json_body);
+    // Claude Code emits `terminal.type` as a resource attribute on metric
+    // exports too. Picking it up here means the VS Code badge appears as soon
+    // as the first metrics batch arrives, instead of waiting for the first
+    // logs export (which only flushes after user activity).
+    let terminal_type = extract_terminal_type_from_metrics_request(&json_body);
 
     state.writes_in_flight.fetch_add(1, Ordering::Relaxed);
     let store = state.metric_store.lock().unwrap();
@@ -409,10 +439,11 @@ async fn handle_otlp_metrics(
     for session_id in session_ids {
         let metadata = SessionMetadata {
             session_id,
-            terminal_type: None,
+            terminal_type: terminal_type.clone(),
             service_version: service_version.clone(),
             os_type: os_type.clone(),
             host_arch: host_arch.clone(),
+            cwd: None,
         };
         if let Err(e) = store.write_session_metadata(&metadata) {
             eprintln!("Failed to write session metadata: {}", e);
@@ -1374,6 +1405,78 @@ mod tests {
 
         assert_eq!(metadata.session_id, "sess-enrich-no-term");
         assert!(metadata.terminal_type.is_none(), "Missing terminal.type should produce None, not error");
+    }
+
+    /// Build an OTLP logs request with terminal.type ONLY on the resource
+    /// attributes (not on any log record). This mirrors what Claude Code emits
+    /// for batches that contain only api_request / tool_result events.
+    fn otlp_logs_with_terminal_type_on_resource_only(session_id: &str) -> serde_json::Value {
+        serde_json::json!({
+            "resourceLogs": [{
+                "resource": {
+                    "attributes": [
+                        {"key": "service.name", "value": {"stringValue": "claude-code"}},
+                        {"key": "service.version", "value": {"stringValue": "2.1.81"}},
+                        {"key": "os.type", "value": {"stringValue": "linux"}},
+                        {"key": "host.arch", "value": {"stringValue": "x86_64"}},
+                        {"key": "terminal.type", "value": {"stringValue": "vscode"}}
+                    ]
+                },
+                "scopeLogs": [{
+                    "scope": {"name": "com.anthropic.claude_code.events"},
+                    "logRecords": [{
+                        "timeUnixNano": "1774290633104000000",
+                        "observedTimeUnixNano": "1774290633104000000",
+                        "body": {"stringValue": "claude_code.api_request"},
+                        "attributes": [
+                            {"key": "session.id", "value": {"stringValue": session_id}},
+                            {"key": "event.name", "value": {"stringValue": "api_request"}},
+                            {"key": "event.timestamp", "value": {"stringValue": "2026-03-23T18:30:33Z"}},
+                            {"key": "event.sequence", "value": {"intValue": "1"}},
+                            {"key": "prompt.id", "value": {"stringValue": "prompt-1"}},
+                            {"key": "model", "value": {"stringValue": "claude-opus-4-6"}},
+                            {"key": "input_tokens", "value": {"stringValue": "337"}},
+                            {"key": "output_tokens", "value": {"stringValue": "12"}}
+                        ],
+                        "droppedAttributesCount": 0
+                    }]
+                }]
+            }]
+        })
+    }
+
+    #[tokio::test]
+    async fn logs_with_terminal_type_on_resource_only_writes_session_metadata() {
+        // Regression: when an OTLP batch carries terminal.type only as a
+        // resource attribute (e.g. an api_request-only batch), the session
+        // must still get its IDE badge. Combined with the write-once
+        // INSERT OR IGNORE behavior of session_metadata, missing this case
+        // caused vscode sessions to randomly lose their badge depending on
+        // which event arrived first.
+        let state = test_state();
+        let app = build_router(state.clone());
+
+        let body = otlp_logs_with_terminal_type_on_resource_only("sess-enrich-resource-only");
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/v1/logs")
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::to_string(&body).unwrap()))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let metadata = state
+            .metric_store
+            .lock()
+            .unwrap()
+            .get_session_metadata("sess-enrich-resource-only")
+            .unwrap()
+            .expect("Session metadata should be written from /v1/logs");
+
+        assert_eq!(metadata.terminal_type, Some("vscode".to_string()));
     }
 
     // --- Event counter acceptance tests (step 02-01) ---
