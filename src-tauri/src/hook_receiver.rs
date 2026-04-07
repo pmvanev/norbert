@@ -455,6 +455,73 @@ async fn handle_otlp_metrics(
     (StatusCode::OK, "{}".to_string())
 }
 
+/// Backfill session_metadata.cwd for sessions that pre-date the cwd column.
+///
+/// Reads one stored event payload per session that is missing a cwd in its
+/// metadata row, parses the JSON, and writes the cwd back through the regular
+/// metric store upsert (which COALESCEs, so other fields stay intact).
+fn backfill_session_cwd_from_events(
+    db_path: &std::path::Path,
+    metric_store: &SqliteMetricStore,
+) -> Result<(), String> {
+    let conn = Connection::open(db_path)
+        .map_err(|e| format!("failed to open backfill connection: {}", e))?;
+
+    // Sessions with no metadata row OR a NULL cwd. We only need one payload
+    // per session, so MIN(id) keeps the query bounded.
+    let mut stmt = conn
+        .prepare(
+            "SELECT s.id, (SELECT e.payload FROM events e WHERE e.session_id = s.id ORDER BY e.id ASC LIMIT 1) \
+             FROM sessions s \
+             LEFT JOIN session_metadata m ON m.session_id = s.id \
+             WHERE m.session_id IS NULL OR m.cwd IS NULL",
+        )
+        .map_err(|e| format!("failed to prepare backfill query: {}", e))?;
+
+    let rows = stmt
+        .query_map([], |row| {
+            let session_id: String = row.get(0)?;
+            let payload: Option<String> = row.get(1)?;
+            Ok((session_id, payload))
+        })
+        .map_err(|e| format!("failed to execute backfill query: {}", e))?;
+
+    let mut filled = 0usize;
+    for row in rows {
+        let (session_id, payload_str) = match row {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("backfill row error: {}", e);
+                continue;
+            }
+        };
+        let Some(payload_str) = payload_str else { continue };
+        let parsed: serde_json::Value = match serde_json::from_str(&payload_str) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let cwd = parsed.get("cwd").and_then(|v| v.as_str()).unwrap_or("");
+        if cwd.is_empty() {
+            continue;
+        }
+        let metadata = SessionMetadata {
+            session_id,
+            cwd: Some(cwd.to_string()),
+            ..Default::default()
+        };
+        if let Err(e) = metric_store.write_session_metadata(&metadata) {
+            eprintln!("failed to backfill session cwd: {}", e);
+            continue;
+        }
+        filled += 1;
+    }
+
+    if filled > 0 {
+        eprintln!("norbert-hook-receiver: backfilled cwd for {} session(s)", filled);
+    }
+    Ok(())
+}
+
 /// Build the axum router with hook routes and OTLP log receiver.
 ///
 /// A 1 MB body size limit is applied globally to all routes. The `Bytes`
@@ -511,6 +578,13 @@ async fn main() {
             std::process::exit(1);
         }
     };
+
+    // One-shot backfill: populate cwd for sessions that pre-date the cwd
+    // column. The cwd is preserved on every stored hook payload, so we can
+    // recover it for old sessions by reading any one event per session.
+    if let Err(e) = backfill_session_cwd_from_events(&db_path, &metric_store) {
+        eprintln!("norbert-hook-receiver: cwd backfill skipped: {}", e);
+    }
 
     let state = Arc::new(AppState {
         event_store: Mutex::new(event_store),
