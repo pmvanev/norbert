@@ -7,7 +7,7 @@
 /// active time split, tool usage, prompts, api errors, permissions,
 /// and productivity.
 
-import type { GaugeClusterData, TachometerData, FuelGaugeData } from "../domain/gaugeCluster";
+import type { GaugeClusterData, FuelGaugeData } from "../domain/gaugeCluster";
 import type { Urgency } from "../domain/types";
 import type { AccumulatedMetric } from "../domain/activeTimeFormatter";
 import { formatActiveTime } from "../domain/activeTimeFormatter";
@@ -91,25 +91,6 @@ const GaugeArc = ({ pct, color }: { readonly pct: number; readonly color: string
 // ---------------------------------------------------------------------------
 // Primary gauge tiles (former GaugeClusterView)
 // ---------------------------------------------------------------------------
-
-const TACHO_MAX = 600;
-
-const TachometerTile = ({ data }: { readonly data: TachometerData }) => {
-  const pct = data.value / TACHO_MAX;
-  const color = urgencyColor(data.urgency);
-  return (
-    <div className={`gauge-card gauge-card-arc tachometer ${urgencyClass(data.urgency)}`}>
-      <div className="gauge-arc-wrap">
-        <GaugeArc pct={pct} color={color} />
-        <div className="gauge-arc-inner">
-          <span className="gauge-value" data-mono="">{Math.round(data.value)}</span>
-          <span className="gauge-unit">{data.unit}</span>
-        </div>
-      </div>
-      <span className="gauge-label">Burn Rate</span>
-    </div>
-  );
-};
 
 const FuelGaugeTile = ({ data }: { readonly data: FuelGaugeData }) => {
   const pct = data.value / 100;
@@ -256,6 +237,34 @@ const EventCountTile = ({ count }: { readonly count: number }) => (
   </div>
 );
 
+/** Format a token count as e.g. "1.2M" / "850k" / "420". */
+const formatTokenCount = (n: number): string => {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}k`;
+  return `${n}`;
+};
+
+const TotalTokensTile = ({
+  totalTokens,
+  inputTokens,
+  outputTokens,
+}: {
+  readonly totalTokens: number;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+}) => (
+  <div className="gauge-card">
+    <span className="gauge-value gauge-value-lg" data-mono="">{formatTokenCount(totalTokens)}</span>
+    <span className="gauge-unit">tokens</span>
+    <span className="gauge-label">Total Tokens</span>
+    <span className="gauge-sublabel">
+      {totalTokens === 0
+        ? "no data"
+        : `${formatTokenCount(inputTokens)} in / ${formatTokenCount(outputTokens)} out`}
+    </span>
+  </div>
+);
+
 // ---------------------------------------------------------------------------
 // Event filters (duplicated from SessionDashboard -- kept local so we can
 // remove the SessionDashboard dependency later).
@@ -266,10 +275,27 @@ const filterType = <T extends string>(
   eventType: T,
 ): ReadonlyArray<SessionEvent> => events.filter((e) => e.event_type === eventType);
 
+/** Unwrap a tool_result payload coming from the backend.
+ *
+ *  The OTel adapter (src-tauri/src/adapters/otel/mod.rs::extract_tool_result_payload)
+ *  nests tool fields under `payload.tool`: `{tool: {tool_name, success,
+ *  duration_ms, ...}}`. The toolUsageAggregator expects those fields
+ *  directly on `payload`. Without this unwrap the aggregator silently
+ *  reads `undefined` for tool_name (collapsing every tool to "unknown")
+ *  and `undefined` for success (counting every call as a failure),
+ *  which is what was driving the "0% success / 1 types" red tile. */
+const unwrapToolPayload = (payload: Record<string, unknown>): ToolResultEvent["payload"] => {
+  const inner = (payload as { tool?: unknown }).tool;
+  if (inner && typeof inner === "object" && !Array.isArray(inner)) {
+    return inner as ToolResultEvent["payload"];
+  }
+  return payload as ToolResultEvent["payload"];
+};
+
 const toToolResults = (events: ReadonlyArray<SessionEvent>): ReadonlyArray<ToolResultEvent> =>
   filterType(events, "tool_result").map((e) => ({
     eventType: "tool_result" as const,
-    payload: e.payload as ToolResultEvent["payload"],
+    payload: unwrapToolPayload(e.payload),
     receivedAt: e.received_at,
   }));
 
@@ -301,6 +327,9 @@ const toToolDecisions = (events: ReadonlyArray<SessionEvent>): ReadonlyArray<Too
 interface SessionStatusViewProps {
   readonly sessionName: string;
   readonly eventCount: number;
+  readonly totalTokens: number;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
   readonly events: ReadonlyArray<SessionEvent>;
   readonly metrics: ReadonlyArray<AccumulatedMetric>;
   readonly totalApiRequests: number;
@@ -311,6 +340,9 @@ interface SessionStatusViewProps {
 export const SessionStatusView = ({
   sessionName,
   eventCount,
+  totalTokens,
+  inputTokens,
+  outputTokens,
   events,
   metrics,
   totalApiRequests,
@@ -339,13 +371,18 @@ export const SessionStatusView = ({
       </div>
 
       <div className="gauge-cluster-grid">
-        <TachometerTile data={gaugeData.tachometer} />
         <FuelGaugeTile data={gaugeData.fuelGauge} />
 
         <div className="gauge-card odometer">
           <span className="gauge-value gauge-value-lg" data-mono="">{gaugeData.odometer.formatted}</span>
           <span className="gauge-label">Session Cost</span>
         </div>
+
+        <TotalTokensTile
+          totalTokens={totalTokens}
+          inputTokens={inputTokens}
+          outputTokens={outputTokens}
+        />
 
         <div className="gauge-card rpm-counter">
           <div className="gauge-rpm-dots">

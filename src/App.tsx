@@ -157,42 +157,19 @@ function SessionStatusLoader({
   // Subscribe to per-session metrics from the multi-session store.
   // This is the correct source for gauge cluster data -- the global
   // usageMetricsStore is an aggregate across all sessions.
-  //
-  // burnRate on the metrics record itself is a single-point instantaneous
-  // rate from the last event, so it collapses to 0 whenever a no-token
-  // event (e.g. tool_result, api_error) is the most recent thing that
-  // fired. To make the tachometer behave the way it does in the
-  // Performance Monitor -- smooth, non-jumpy, and matching the session's
-  // per-session Tok/s sparkline -- we instead read the 1-minute rolling
-  // window from the same time-series buffer PM uses and average it.
   const [sessionMetrics, setSessionMetrics] = useState(() =>
     usageMultiSessionStore.getSession(sessionId),
   );
-  const [smoothedBurnRate, setSmoothedBurnRate] = useState(0);
-
-  const recomputeSession = useCallback(() => {
-    const next = usageMultiSessionStore.getSession(sessionId);
-    setSessionMetrics(next);
-    const buffer = usageMultiSessionStore.getSessionWindowBuffer(sessionId, "tokens", "1m");
-    if (!buffer || buffer.samples.length === 0) {
-      setSmoothedBurnRate(0);
-      return;
-    }
-    const sum = buffer.samples.reduce((acc, s) => acc + s.tokenRate, 0);
-    setSmoothedBurnRate(sum / buffer.samples.length);
-  }, [sessionId]);
 
   useEffect(() => {
-    recomputeSession();
+    setSessionMetrics(usageMultiSessionStore.getSession(sessionId));
     return usageMultiSessionStore.subscribe(() =>
-      startTransition(recomputeSession),
+      startTransition(() => setSessionMetrics(usageMultiSessionStore.getSession(sessionId))),
     );
-  }, [recomputeSession]);
+  }, [sessionId]);
 
-  const gaugeData = computeGaugeClusterData({
-    ...(sessionMetrics ?? createInitialMetrics(sessionId)),
-    burnRate: smoothedBurnRate,
-  });
+  const effectiveMetrics = sessionMetrics ?? createInitialMetrics(sessionId);
+  const gaugeData = computeGaugeClusterData(effectiveMetrics);
 
   const totalApiRequests = events.filter((e) => e.event_type === "api_request").length;
   const sessionName = deriveSessionName(cwd, formatSessionTimestamp(startedAtFallback));
@@ -200,6 +177,9 @@ function SessionStatusLoader({
     <SessionStatusView
       sessionName={sessionName}
       eventCount={eventCount}
+      totalTokens={effectiveMetrics.totalTokens}
+      inputTokens={effectiveMetrics.inputTokens}
+      outputTokens={effectiveMetrics.outputTokens}
       events={events}
       metrics={metrics}
       totalApiRequests={totalApiRequests}

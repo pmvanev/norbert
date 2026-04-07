@@ -6,7 +6,6 @@
  *   2. Aggregate graph (PMChart in aggregate mode) -- omitted for context
  *   3. Per-session graph grid (PMChart in mini mode) -- hidden when 1 session
  *   4. Stats grid (PMStatsGrid with derived aggregate metrics)
- *   5. Session table (PMSessionTable with per-session breakdown)
  *
  * Pure data flows through categoryConfig and MultiSessionStore.
  * Canvas drawing (via PMChart) is the only side effect (at the view boundary).
@@ -14,7 +13,7 @@
 
 import type { MultiSessionStore } from "../adapters/multiSessionStore";
 import type { MetricCategoryId, HoverState, TimeWindowId } from "../domain/types";
-import { getCategoryById, type MetricCategory } from "../domain/categoryConfig";
+import { getCategoryById } from "../domain/categoryConfig";
 import {
   computeGridColumns,
   shouldShowPerSessionGrid,
@@ -25,7 +24,6 @@ import {
 import { TIME_WINDOW_PRESETS } from "../domain/multiWindowSampler";
 import { PMChart, type HoverData, resolveThemeColor } from "./PMChart";
 import { PMStatsGrid } from "./PMStatsGrid";
-import { PMSessionTable, type SessionRowData } from "./PMSessionTable";
 
 /** Look up the sample interval for a given time window. Defaults to 1000ms. */
 const getSampleIntervalMs = (windowId: TimeWindowId): number => {
@@ -86,42 +84,6 @@ const deriveStatsFromBuffer = (
     urgency: "--",
     compressions: "--",
   };
-};
-
-/**
- * Build SessionRowData[] from multiSessionStore sessions for the given category.
- * Each row contains pre-formatted cell values matching the category's sessionColumns.
- */
-const buildSessionRows = (
-  multiSessionStore: MultiSessionStore,
-  categoryId: MetricCategoryId,
-  category: MetricCategory,
-  windowId: TimeWindowId,
-): ReadonlyArray<SessionRowData> => {
-  const sessions = multiSessionStore.getSessions();
-
-  return sessions.map((session) => {
-    const sessionBuffer = multiSessionStore.getSessionWindowBuffer(session.sessionId, categoryId, windowId);
-    const latestValue = sessionBuffer && sessionBuffer.samples.length > 0
-      ? sessionBuffer.samples[sessionBuffer.samples.length - 1].tokenRate
-      : 0;
-
-    // Build cell values for columns after the Session ID column
-    const cells = category.sessionColumns.slice(1).map((col) => {
-      // First data column is the primary metric for this category
-      if (col === category.sessionColumns[1]) {
-        return category.formatValue(latestValue);
-      }
-      return "--";
-    });
-
-    return {
-      sessionId: session.sessionId,
-      displayLabel: formatSessionLabel(session),
-      cells,
-      sortValue: latestValue,
-    };
-  });
 };
 
 // ---------------------------------------------------------------------------
@@ -226,9 +188,8 @@ export const PMDetailPane = ({
   // Derive the crosshair index for synchronized hover across charts
   const activeCrosshairIndex = hoverState.active ? hoverState.sampleIndex : undefined;
 
-  // Derive stats and session rows for the real components
+  // Derive stats for the stats grid
   const metricsData = deriveStatsFromBuffer(multiSessionStore, selectedCategory, selectedWindow);
-  const sessionRows = buildSessionRows(multiSessionStore, selectedCategory, category, selectedWindow);
 
   return (
     <div
@@ -333,13 +294,6 @@ export const PMDetailPane = ({
       <PMStatsGrid
         statsConfig={category.statsConfig}
         metricsData={metricsData}
-        categoryId={selectedCategory}
-      />
-
-      {/* Session table */}
-      <PMSessionTable
-        columns={category.sessionColumns}
-        rows={sessionRows}
         categoryId={selectedCategory}
       />
     </div>
