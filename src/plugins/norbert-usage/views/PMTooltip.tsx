@@ -15,6 +15,7 @@
  * Pure presentational component -- all data arrives via HoverState.
  */
 
+import { useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { HoverState } from "../domain/types";
 import { computeTooltipLeft, computeTooltipTop } from "../domain/chartViewHelpers";
@@ -36,15 +37,48 @@ export const PMTooltip = ({
   hoverState,
   containerWidth = typeof window !== "undefined" ? window.innerWidth : 800,
 }: PMTooltipProps) => {
+  const tooltipRef = useRef<HTMLDivElement | null>(null);
+  const [measuredWidth, setMeasuredWidth] = useState<number | null>(null);
+
+  useLayoutEffect(() => {
+    if (tooltipRef.current) {
+      setMeasuredWidth(tooltipRef.current.offsetWidth);
+    }
+  }, [hoverState.active, hoverState.formattedValue, hoverState.timeOffset]);
+
   if (!hoverState.active) {
     return null;
   }
 
-  const left = computeTooltipLeft(hoverState.tooltipX, containerWidth);
+  // tooltipX comes from PMChart already divided by the canvas CSS-zoom
+  // factor, so compare against the same space by dividing containerWidth
+  // by the documentElement zoom (set in main.tsx for Ctrl-+/-).
+  const docZoom =
+    typeof document !== "undefined"
+      ? parseFloat(document.documentElement.style.zoom || "1") || 1
+      : 1;
+  const effectiveContainerWidth = containerWidth / docZoom;
+  const width = measuredWidth ?? 140;
+  const EDGE_MARGIN = 8;
+
+  // Flip to the left of cursor when the tooltip would overflow the right
+  // edge. Then clamp as a safety net so it can never extend past the
+  // viewport regardless of upstream coordinate-space quirks.
+  const rightEdge = effectiveContainerWidth - EDGE_MARGIN;
+  const preferredLeft =
+    hoverState.tooltipX + 8 + width > rightEdge
+      ? hoverState.tooltipX - 8 - width
+      : hoverState.tooltipX + 8;
+  const left = Math.max(
+    EDGE_MARGIN,
+    Math.min(preferredLeft, rightEdge - width),
+  );
+  void computeTooltipLeft; // kept exported for existing unit tests
   const top = computeTooltipTop(hoverState.tooltipY);
 
   const tooltip = (
     <div
+      ref={tooltipRef}
       className="pm-tooltip"
       style={{
         position: "fixed",
