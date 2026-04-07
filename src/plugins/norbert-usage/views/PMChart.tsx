@@ -64,6 +64,10 @@ interface PMChartProps {
   readonly samples: ReadonlyArray<RateSample>;
   readonly field: RateField;
   readonly color: string;
+  /** Optional CSS variable name (e.g. "--pm-cat-tokens"). When set, the chart
+   *  re-reads this var on every frame so theme switches take effect immediately
+   *  without needing the view to remount. `color` is used as the fallback. */
+  readonly colorVar?: string;
   readonly mode?: ChartMode;
   readonly yMax?: number;
   readonly yLabels?: ReadonlyArray<string>;
@@ -210,6 +214,7 @@ export const PMChart = ({
   samples,
   field,
   color,
+  colorVar,
   mode = "aggregate",
   yMax,
   yLabels: _yLabels = [],
@@ -310,15 +315,19 @@ export const PMChart = ({
       drawGridLines(ctx, canvasDimensions);
     }
 
-    drawFilledArea(ctx, points, color, canvasDimensions);
-    drawLineTrace(ctx, points, color);
+    // Re-resolve theme color each frame so theme switches take effect on the
+    // next ~1Hz redraw without requiring the view to remount.
+    const resolvedColor = colorVar ? getCssVar(colorVar, color) : color;
+
+    drawFilledArea(ctx, points, resolvedColor, canvasDimensions);
+    drawLineTrace(ctx, points, resolvedColor);
 
     // Draw crosshair at hovered position (CSS pixel space, DPR-independent)
     const crosshairX = crosshairXRef.current;
     if (crosshairX !== null) {
-      drawCrosshair(ctx, crosshairX, canvasDimensions, color);
+      drawCrosshair(ctx, crosshairX, canvasDimensions, resolvedColor);
     }
-  }, [canvasDimensions, chartSamples, effectiveYMax, color, isAggregate, bufferCapacity]);
+  }, [canvasDimensions, chartSamples, effectiveYMax, color, colorVar, isAggregate, bufferCapacity]);
 
   // Mouse interaction: hit-test and hover callbacks
   useEffect(() => {
@@ -416,7 +425,7 @@ export const PMChart = ({
   return (
     <div className="pm-chart-wrap" role="img" aria-label={title}>
       {!isAggregate && label && (
-        <div className="pm-chart-ext-label" style={{ color }}>
+        <div className="pm-chart-ext-label" style={{ color: colorVar ? `var(${colorVar}, ${color})` : color }}>
           {label}
         </div>
       )}

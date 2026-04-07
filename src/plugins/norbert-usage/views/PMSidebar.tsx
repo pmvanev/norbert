@@ -138,6 +138,19 @@ const SparklineCanvas = ({
     renderSparkline();
   }, [renderSparkline]);
 
+  // Re-render sparkline when the theme class on <html> changes so the line
+  // color picks up the new palette immediately (canvas pixels don't react to
+  // CSS variable changes on their own).
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const observer = new MutationObserver(() => renderSparkline());
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+    return () => observer.disconnect();
+  }, [renderSparkline]);
+
   return (
     <canvas
       ref={canvasRef}

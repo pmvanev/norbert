@@ -354,8 +354,8 @@ code, pre, .mono,
 }
 
 .sdot.live {
-  background: var(--success);
-  box-shadow: 0 0 8px var(--success);
+  background: var(--brand);
+  box-shadow: 0 0 8px var(--brand);
   animation: heartbeat 1s ease-in-out infinite;
 }
 
