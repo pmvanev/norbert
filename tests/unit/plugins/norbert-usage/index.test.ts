@@ -89,15 +89,15 @@ describe("norbert-usage manifest", () => {
 // ---------------------------------------------------------------------------
 
 describe("norbert-usage onLoad view registrations", () => {
-  it("registers exactly 3 views: usage-dashboard, session-status, performance-monitor", () => {
+  it("registers exactly 2 views: session-status, performance-monitor", () => {
     const { api, calls } = createStubApi();
     norbertUsagePlugin.onLoad(api);
 
-    expect(calls.views).toHaveLength(3);
+    expect(calls.views).toHaveLength(2);
     const viewIds = calls.views.map((v) => v.id);
-    expect(viewIds).toContain("usage-dashboard");
     expect(viewIds).toContain("session-status");
     expect(viewIds).toContain("performance-monitor");
+    expect(viewIds).not.toContain("usage-dashboard");
     expect(viewIds).not.toContain("gauge-cluster");
     expect(viewIds).not.toContain("session-dashboard");
   });
@@ -124,14 +124,11 @@ describe("norbert-usage onLoad view registrations", () => {
     expect(sessionStatus!.label).toBe("Session Status");
   });
 
-  it("usage-dashboard is the primaryView", () => {
+  it("none of norbert-usage's registered views are primary", () => {
     const { api, calls } = createStubApi();
     norbertUsagePlugin.onLoad(api);
 
-    const dashboard = calls.views.find((v) => v.id === "usage-dashboard");
-    expect(dashboard).toBeDefined();
-    expect(dashboard!.primaryView).toBe(true);
-    expect(dashboard!.label).toBe("Usage Dashboard");
+    expect(calls.views.every((v) => v.primaryView === false)).toBe(true);
   });
 
   it("performance-monitor uses the activity icon", () => {

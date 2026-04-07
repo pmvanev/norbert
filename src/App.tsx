@@ -31,11 +31,9 @@ import { ConfigViewerView } from "./plugins/norbert-config/views/ConfigViewerVie
 import { ConfigDetailPanel } from "./plugins/norbert-config/views/ConfigDetailPanel";
 import type { SelectedConfigItem } from "./plugins/norbert-config/domain/types";
 import { PerformanceMonitorView } from "./plugins/norbert-usage/views/PerformanceMonitorView";
-import { UsageDashboardView } from "./plugins/norbert-usage/views/UsageDashboardView";
 import { CostTicker } from "./plugins/norbert-usage/views/CostTicker";
 import { SessionStatusView, type SessionEvent as DashboardSessionEvent } from "./plugins/norbert-usage/views/SessionStatusView";
 import type { AccumulatedMetric as BackendAccumulatedMetric } from "./plugins/norbert-usage/domain/activeTimeFormatter";
-import { computeDashboardData } from "./plugins/norbert-usage/domain/dashboard";
 import { computeGaugeClusterData } from "./plugins/norbert-usage/domain/gaugeCluster";
 import { computeCostTickerData } from "./plugins/norbert-usage/domain/costTicker";
 import { resetHookBridge, deliverHookEvent } from "./plugins/hookBridge";
@@ -500,12 +498,6 @@ function App() {
     // norbert-usage views: each wrapper reads current metrics from the
     // reactive ref (updated via store subscription) and delegates to
     // pure domain functions for computation.
-    const UsageDashboardWrapper: FC = () => {
-      const dashboard = computeDashboardData(metricsRef.current);
-      return <UsageDashboardView dashboard={dashboard} dailyCosts={[]} />;
-    };
-    UsageDashboardWrapper.displayName = "UsageDashboardWrapper";
-
     const CostTickerWrapper: FC = () => {
       return <CostTicker data={computeCostTickerData(metricsRef.current.sessionCost, 0)} />;
     };
@@ -516,7 +508,6 @@ function App() {
     );
     PerformanceMonitorWrapper.displayName = "PerformanceMonitorWrapper";
 
-    registry.set("usage-dashboard", UsageDashboardWrapper);
     registry.set("cost-ticker", CostTickerWrapper);
     registry.set("performance-monitor", PerformanceMonitorWrapper);
 

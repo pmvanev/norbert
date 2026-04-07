@@ -40,10 +40,6 @@ const perSessionSnapshots = new Map<string, MetricsSnapshot>();
 
 const PERFORMANCE_MONITOR_VIEW_ICON = "square-activity";
 
-const USAGE_DASHBOARD_VIEW_ID = "usage-dashboard";
-const USAGE_DASHBOARD_VIEW_LABEL = "Usage Dashboard";
-const USAGE_DASHBOARD_VIEW_ICON = "bar-chart"; // usage dashboard
-
 // Session Status view: combined gauges + dashboard, shown in the secondary
 // panel when a session is selected. Not registered as a sidebar entry.
 const SESSION_STATUS_VIEW_ID = "session-status";
@@ -83,17 +79,6 @@ const COST_TICKER_ORDER = 0;
 /// api.ui.registerTab(), api.ui.registerStatusItem(), and api.hooks.register().
 /// No internal Norbert modules are accessed.
 const onLoad = (api: NorbertAPI): void => {
-  // Register the Usage Dashboard as the primary view
-  api.ui.registerView({
-    id: USAGE_DASHBOARD_VIEW_ID,
-    label: USAGE_DASHBOARD_VIEW_LABEL,
-    icon: USAGE_DASHBOARD_VIEW_ICON,
-    primaryView: true,
-    minWidth: 400,
-    minHeight: 300,
-    floatMetric: null,
-  });
-
   // Register the combined Session Status view (gauges + session dashboard).
   // Shown in the secondary panel when a session is selected; filtered out
   // of the sidebar.

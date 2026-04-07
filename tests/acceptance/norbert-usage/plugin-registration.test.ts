@@ -53,13 +53,13 @@ describe("User sees Usage tab after norbert-usage loads", () => {
     // Then the plugin is loaded successfully
     expect(registry.loadedPluginIds).toContain("norbert-usage");
 
-    // And 3 views are registered: usage-dashboard, session-status, performance-monitor
+    // And 2 views are registered: session-status, performance-monitor
     const views = getViewsByPlugin(registry, "norbert-usage");
-    expect(views).toHaveLength(3);
+    expect(views).toHaveLength(2);
     const viewIds = views.map((v) => v.id);
-    expect(viewIds).toContain("usage-dashboard");
     expect(viewIds).toContain("session-status");
     expect(viewIds).toContain("performance-monitor");
+    expect(viewIds).not.toContain("usage-dashboard");
 
     // And a sidebar tab "usage" is registered
     const tabs = getTabsByPlugin(registry, "norbert-usage");
@@ -101,19 +101,19 @@ describe("Session Status view is secondary-panel only", () => {
   });
 });
 
-describe("Usage Dashboard is the primary view", () => {
-  it("usage-dashboard registers as primaryView for default display", () => {
-    // Given norbert-usage is loaded
+describe("norbert-usage no longer registers a primary view", () => {
+  it("the obsolete usage-dashboard view is gone", () => {
+    // Historical note: norbert-usage previously registered a "Usage
+    // Dashboard" as its primaryView. After the Session Status panel
+    // and Performance Monitor took over both per-session and
+    // cross-session views, the dashboard became obsolete and was
+    // removed. The default primary view now comes from norbert-session
+    // (session-list).
     const registry = loadUsagePlugin();
-
-    // When inspecting the usage-dashboard view registration
     const views = getViewsByPlugin(registry, "norbert-usage");
-    const dashboard = views.find((v) => v.id === "usage-dashboard");
-
-    // Then the usage-dashboard view is marked as primary
-    expect(dashboard).toBeDefined();
-    expect(dashboard!.primaryView).toBe(true);
-    expect(dashboard!.label).toBe("Usage Dashboard");
+    const usageDashboard = views.find((v) => v.id === "usage-dashboard");
+    expect(usageDashboard).toBeUndefined();
+    expect(views.every((v) => v.primaryView === false)).toBe(true);
   });
 });
 
@@ -142,7 +142,7 @@ describe("Plugin operates with degraded functionality when API unavailable", () 
 
     // And views are still registered
     const views = getViewsByPlugin(registry, "norbert-usage");
-    expect(views.length).toBeGreaterThanOrEqual(3);
+    expect(views.length).toBeGreaterThanOrEqual(2);
   });
 });
 
