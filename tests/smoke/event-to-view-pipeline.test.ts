@@ -59,13 +59,13 @@ describe("Event-to-view pipeline", () => {
     expect(usageMetricsStore.getMetrics().totalEventCount).toBeGreaterThan(0);
   });
 
-  it("tool_call_start event increments tool call count", () => {
+  it("tool_result event increments tool call count (OTel-authoritative)", () => {
     deliverHookEvent("session-event", {
-      event_type: "tool_call_start",
+      event_type: "tool_result",
       session_id: "test-sess-3",
-      payload: {},
+      payload: { tool_name: "Read", success: true, duration_ms: 100 },
       received_at: new Date().toISOString(),
-      provider: "test",
+      provider: "otel",
     });
 
     expect(usageMetricsStore.getMetrics().toolCallCount).toBe(1);

@@ -53,13 +53,12 @@ describe("User sees Usage tab after norbert-usage loads", () => {
     // Then the plugin is loaded successfully
     expect(registry.loadedPluginIds).toContain("norbert-usage");
 
-    // And 4 views are registered: gauge-cluster, usage-dashboard, session-dashboard, performance-monitor
+    // And 3 views are registered: usage-dashboard, session-status, performance-monitor
     const views = getViewsByPlugin(registry, "norbert-usage");
-    expect(views).toHaveLength(4);
+    expect(views).toHaveLength(3);
     const viewIds = views.map((v) => v.id);
-    expect(viewIds).toContain("gauge-cluster");
     expect(viewIds).toContain("usage-dashboard");
-    expect(viewIds).toContain("session-dashboard");
+    expect(viewIds).toContain("session-status");
     expect(viewIds).toContain("performance-monitor");
 
     // And a sidebar tab "usage" is registered
@@ -85,20 +84,20 @@ describe("User sees Usage tab after norbert-usage loads", () => {
 // FOCUSED SCENARIOS: View Registration Details
 // ---------------------------------------------------------------------------
 
-describe("Gauge Cluster view supports floating panel mode", () => {
-  it("registers with floatMetric for session cost pill display", () => {
+describe("Session Status view is secondary-panel only", () => {
+  it("registers as a non-primary view with no float metric", () => {
     // Given norbert-usage is loaded
     const registry = loadUsagePlugin();
 
-    // When inspecting the gauge-cluster view registration
+    // When inspecting the session-status view registration
     const views = getViewsByPlugin(registry, "norbert-usage");
-    const gaugeCluster = views.find((v) => v.id === "gauge-cluster");
+    const sessionStatus = views.find((v) => v.id === "session-status");
 
-    // Then the gauge-cluster view registers with floatMetric "session_cost"
-    expect(gaugeCluster).toBeDefined();
-    expect(gaugeCluster!.floatMetric).toBe("session_cost");
-    // And it is not the primary view
-    expect(gaugeCluster!.primaryView).toBe(false);
+    // Then the session-status view exists and is not primary
+    expect(sessionStatus).toBeDefined();
+    expect(sessionStatus!.primaryView).toBe(false);
+    expect(sessionStatus!.floatMetric).toBeNull();
+    expect(sessionStatus!.label).toBe("Session Status");
   });
 });
 

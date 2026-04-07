@@ -5,9 +5,10 @@
 /// No side effects, no IO imports. All state transitions produce new
 /// immutable SessionMetrics values.
 
-import type { SessionMetrics, PricingTable } from "./types";
+import type { SessionMetrics, PricingTable, TokenUsage } from "./types";
 import { extractTokenUsage } from "./tokenExtractor";
 import { calculateCost } from "./pricingModel";
+import { deriveContextWindowSample } from "./contextWindow";
 
 // ---------------------------------------------------------------------------
 // Event shape accepted by the aggregator
@@ -51,25 +52,45 @@ export const createInitialMetrics = (sessionId: string, sessionLabel = ""): Sess
 // Per-event-type handlers (pure helpers)
 // ---------------------------------------------------------------------------
 
-/** Apply token and cost updates from a payload that may contain usage data. */
-const applyTokenUsage = (
+/** Overlay the latest context-window snapshot on a metrics record.
+ *
+ *  Context window TOKENS are NOT cumulative: each request reports the
+ *  full input side (prompt + cached prefix) that was sent to the model,
+ *  so the snapshot is replaced with the most recent value.
+ *
+ *  Context window MAX, however, is sticky per session. Sonnet/Opus 4.x
+ *  on the `context-1m-2025-08-07` beta header reports the same model id
+ *  as the 200k variant; the only signal of the wider window is observing
+ *  a request that exceeds 200k. Once promoted, the session stays on the
+ *  larger tier so that a later, smaller request doesn't flap the gauge
+ *  back to a stale baseline. */
+const applyContextWindow = (
+  metrics: SessionMetrics,
+  usage: TokenUsage,
+): SessionMetrics => {
+  const sample = deriveContextWindowSample(usage);
+  const stickyMax = Math.max(metrics.contextWindowMaxTokens, sample.maxTokens);
+  const stickyPct = stickyMax === 0 ? 0 : Math.min(100, (sample.currentTokens / stickyMax) * 100);
+  return {
+    ...metrics,
+    contextWindowPct: stickyPct,
+    contextWindowTokens: sample.currentTokens,
+    contextWindowMaxTokens: stickyMax,
+    contextWindowModel: sample.model,
+  };
+};
+
+/** Apply ONLY the context-window snapshot from a payload's usage record,
+ *  without touching token counts or cost. Used by hook-path handlers so
+ *  the fuel gauge can reflect the most recent request even though cost
+ *  is credited exclusively by OTel api_request events. */
+const applyContextWindowFromPayload = (
   metrics: SessionMetrics,
   payload: unknown,
-  pricingTable: PricingTable,
 ): SessionMetrics => {
   const extraction = extractTokenUsage(payload);
   if (extraction.tag === "absent") return metrics;
-
-  const { usage } = extraction;
-  const cost = calculateCost(usage, pricingTable);
-
-  return {
-    ...metrics,
-    totalTokens: metrics.totalTokens + usage.inputTokens + usage.outputTokens,
-    inputTokens: metrics.inputTokens + usage.inputTokens,
-    outputTokens: metrics.outputTokens + usage.outputTokens,
-    sessionCost: Math.max(0, metrics.sessionCost + cost.totalCost),
-  };
+  return applyContextWindow(metrics, extraction.usage);
 };
 
 /** Extract a numeric field from payload.usage if present. */
@@ -109,7 +130,7 @@ const applyApiRequestTokenUsage = (
   const cost = costUsd !== undefined ? costUsd : calculateCost(usage, pricingTable).totalCost;
   const durationMs = extractUsageNumber(payload, "duration_ms");
 
-  return {
+  const withTokens: SessionMetrics = {
     ...metrics,
     totalTokens: metrics.totalTokens + usage.inputTokens + usage.outputTokens,
     inputTokens: metrics.inputTokens + usage.inputTokens,
@@ -117,6 +138,7 @@ const applyApiRequestTokenUsage = (
     sessionCost: Math.max(0, metrics.sessionCost + cost),
     lastApiLatencyMs: durationMs ?? metrics.lastApiLatencyMs,
   };
+  return applyContextWindow(withTokens, usage);
 };
 
 /** Increment tool call count. */
@@ -125,15 +147,24 @@ const applyToolCallStart = (metrics: SessionMetrics): SessionMetrics => ({
   toolCallCount: metrics.toolCallCount + 1,
 });
 
-/** Increment active agent count and set sessionStartedAt if first. */
+/** Increment active agent count and track the earliest sessionStartedAt. */
 const applySessionStart = (
   metrics: SessionMetrics,
   receivedAt: string,
 ): SessionMetrics => ({
   ...metrics,
   activeAgentCount: metrics.activeAgentCount + 1,
-  sessionStartedAt: metrics.sessionStartedAt === "" ? receivedAt : metrics.sessionStartedAt,
+  sessionStartedAt: earliestTimestamp(metrics.sessionStartedAt, receivedAt),
 });
+
+/** Pick the earlier of two ISO timestamps. Empty string means "unset". */
+const earliestTimestamp = (existing: string, candidate: string): string => {
+  if (existing === "") return candidate;
+  if (candidate === "") return existing;
+  return new Date(candidate).getTime() < new Date(existing).getTime()
+    ? candidate
+    : existing;
+};
 
 /** Decrement active agent count, floored at 0. */
 const applyAgentCompleteCount = (metrics: SessionMetrics): SessionMetrics => ({
@@ -141,14 +172,16 @@ const applyAgentCompleteCount = (metrics: SessionMetrics): SessionMetrics => ({
   activeAgentCount: Math.max(0, metrics.activeAgentCount - 1),
 });
 
-/** Set sessionStartedAt if currently empty. Does not touch activeAgentCount. */
-const applySessionStartedAtIfEmpty = (
+/** Track the earliest sessionStartedAt seen so far. Does not touch
+ *  activeAgentCount. Used by api_request handlers so OTel timing can
+ *  win over a later-arriving session_start hook. */
+const applyEarliestSessionStartedAt = (
   metrics: SessionMetrics,
   receivedAt: string,
-): SessionMetrics =>
-  metrics.sessionStartedAt === ""
-    ? { ...metrics, sessionStartedAt: receivedAt }
-    : metrics;
+): SessionMetrics => ({
+  ...metrics,
+  sessionStartedAt: earliestTimestamp(metrics.sessionStartedAt, receivedAt),
+});
 
 /** Compute error rate: errors / (errors + requests), convention 0/0 = 0. */
 const computeErrorRate = (errors: number, requests: number): number =>
@@ -210,58 +243,46 @@ type EventHandler = (metrics: SessionMetrics, event: AggregatorEvent, pricingTab
 /** Identity handler for unknown event types: only common fields updated. */
 const identityHandler: EventHandler = (metrics) => metrics;
 
-/** Hook-only dispatch table: all hook events contribute tokens and cost. */
-const hookEventHandlers: Record<string, EventHandler> = {
-  prompt_submit: (metrics, event, pricingTable) =>
-    applyTokenUsage(metrics, event.payload, pricingTable),
+/** Unified dispatch table.
+ *
+ *  Cost and token counts are credited EXCLUSIVELY by OTel `api_request`
+ *  events (via applyApiRequestTokenUsage), which use the authoritative
+ *  `cost_usd` field from Claude Code's OTel exporter and avoid the
+ *  hook/OTel double-counting that would otherwise occur when hooks fire
+ *  alongside OTel metrics for the same request.
+ *
+ *  Hook-path events (`prompt_submit`, `tool_call_end`, `agent_complete`)
+ *  still carry a usage record and are used to refresh the context-window
+ *  snapshot between `api_request` events, but they no longer contribute
+ *  to `totalTokens`, `inputTokens`, `outputTokens`, or `sessionCost`. */
+const eventHandlers: Record<string, EventHandler> = {
+  prompt_submit: (metrics, event) =>
+    applyContextWindowFromPayload(metrics, event.payload),
 
-  tool_call_end: (metrics, event, pricingTable) =>
-    applyTokenUsage(metrics, event.payload, pricingTable),
+  tool_call_end: (metrics, event) =>
+    applyContextWindowFromPayload(metrics, event.payload),
 
-  tool_call_start: (metrics) =>
-    applyToolCallStart(metrics),
+  // Hook PreToolUse. Under the OTel-authoritative policy, tool counts
+  // are driven by tool_result (the OTel post-tool signal) so we don't
+  // double-count when both streams are present.
+  tool_call_start: identityHandler,
 
   session_start: (metrics, event) =>
     applySessionStart(metrics, event.receivedAt),
 
-  agent_complete: (metrics, event, pricingTable) =>
-    applyAgentCompleteCount(applyTokenUsage(metrics, event.payload, pricingTable)),
-
-  api_request: (metrics, event, pricingTable) =>
-    applyApiRequestCount(applyApiRequestTokenUsage(metrics, event.payload, pricingTable)),
-
-  user_prompt: identityHandler,
-  tool_result: identityHandler,
-  api_error: (metrics) => applyApiErrorCount(metrics),
-  tool_decision: identityHandler,
-};
-
-/** OTel-active dispatch table: hook cost/token events suppressed.
- *  prompt_submit, tool_call_end, tool_call_start -> identity (no cost/token contribution).
- *  agent_complete -> count only (no token/cost).
- *  api_request -> full cost_usd + token processing (same as hook table). */
-const otelEventHandlers: Record<string, EventHandler> = {
-  prompt_submit: identityHandler,
-  tool_call_end: identityHandler,
-  tool_call_start: identityHandler,
-
-  session_start: (metrics) => ({
-    ...metrics,
-    activeAgentCount: metrics.activeAgentCount + 1,
-  }),
-
-  agent_complete: (metrics) =>
-    applyAgentCompleteCount(metrics),
+  agent_complete: (metrics, event) =>
+    applyAgentCompleteCount(applyContextWindowFromPayload(metrics, event.payload)),
 
   api_request: (metrics, event, pricingTable) =>
     applyApiRequestCount(
-      applySessionStartedAtIfEmpty(
+      applyEarliestSessionStartedAt(
         applyApiRequestTokenUsage(metrics, event.payload, pricingTable),
         event.receivedAt,
       ),
     ),
 
   user_prompt: identityHandler,
+  // OTel post-tool signal -- the single source for tool call counts.
   tool_result: (metrics) => applyToolCallStart(metrics),
   api_error: (metrics) => applyApiErrorCount(metrics),
   tool_decision: identityHandler,
@@ -271,10 +292,12 @@ export const aggregateEvent = (
   previous: SessionMetrics,
   event: AggregatorEvent,
   pricingTable: PricingTable,
-  isOtelActive: boolean = false,
+  // isOtelActive is retained for backward compatibility with existing call
+  // sites but is now unused: cost is always sourced from OTel api_request.
+  _isOtelActive: boolean = false,
 ): SessionMetrics => {
-  const handlers = isOtelActive ? otelEventHandlers : hookEventHandlers;
-  const handler = handlers[event.eventType] ?? identityHandler;
+  void _isOtelActive;
+  const handler = eventHandlers[event.eventType] ?? identityHandler;
   const updated = handler(previous, event, pricingTable);
   return applyCommonFields(updated, event.receivedAt);
 };

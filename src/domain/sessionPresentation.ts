@@ -3,6 +3,20 @@
 /// These functions derive CSS class names and display labels from session state,
 /// keeping the view components thin (rendering only) and the logic testable.
 
+/// Derive a short, human-readable name for a session from its working
+/// directory. Uses the last path segment (the project folder) and falls
+/// back to the provided timestamp fallback string when no cwd is available.
+///
+/// Pure function: no side effects.
+export function deriveSessionName(cwd: string | null, fallback: string): string {
+  if (cwd && cwd.length > 0) {
+    const segments = cwd.replace(/\\/g, "/").split("/").filter(Boolean);
+    const last = segments[segments.length - 1];
+    if (last) return last;
+  }
+  return fallback;
+}
+
 /// Derive the status label for a session detail header.
 ///
 /// Pure function: returns "Active" or "Completed" based on whether

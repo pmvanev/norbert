@@ -47,6 +47,14 @@ const extractSessionId = (payload: unknown): string | null => {
   return typeof sid === "string" ? sid : null;
 };
 
+/** Extract the provider tag from an event wrapper.
+ *  Known values: "hook", "otel", "transcript". Returns null when absent. */
+const extractProvider = (payload: unknown): string | null => {
+  if (!isRecord(payload)) return null;
+  const provider = payload["provider"];
+  return typeof provider === "string" ? provider : null;
+};
+
 /** Extract a human-readable project name from the event payload.
  *  Claude Code hook payloads include a `cwd` field with the working directory.
  *  Falls back to the last segment of `transcript_path` parent directories. */
@@ -157,11 +165,29 @@ const deriveCategorySamples = (
 export const createHookProcessor = (deps: HookProcessorDeps): HookProcessor => {
   const { updateMetrics, updateMultiSessionMetrics, appendSessionSample, pricingTable, getIsOtelActive } = deps;
 
+  // Per-session OTel-active tracking. A session is flipped to OTel mode
+  // on the first event tagged with provider="otel" and remains in that
+  // mode for the rest of its lifetime. Subsequent hook-provider events
+  // for that session are routed through the OTel dispatch table, which
+  // suppresses hook-side cost/token accumulation and avoids double-
+  // counting against OTel api_request events.
+  const otelActiveSessions = new Set<string>();
+
   return (payload: unknown): void => {
     const eventType = extractEventType(payload);
     const event = buildAggregatorEvent(eventType, payload);
     const sessionId = extractSessionId(payload);
-    const isOtelActive = sessionId ? (getIsOtelActive?.(sessionId) ?? false) : false;
+    const provider = extractProvider(payload);
+
+    // Flip the switch BEFORE dispatch so the triggering OTel event is
+    // itself processed through the OTel handlers.
+    if (sessionId && provider === "otel") {
+      otelActiveSessions.add(sessionId);
+    }
+
+    const isOtelActive = sessionId
+      ? otelActiveSessions.has(sessionId) || (getIsOtelActive?.(sessionId) ?? false)
+      : false;
 
     updateMetrics((previous: SessionMetrics): SessionMetrics =>
       aggregateEvent(previous, event, pricingTable, isOtelActive),

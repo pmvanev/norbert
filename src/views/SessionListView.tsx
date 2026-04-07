@@ -11,6 +11,7 @@ import {
   PLUGIN_INSTALL_COMMAND,
 } from "../domain/status";
 import {
+  deriveSessionName,
   deriveSessionRowClass,
   deriveSessionDotClass,
   mapTerminalType,
@@ -32,18 +33,6 @@ export interface SessionMetadata {
   readonly os_type: string | null;
   readonly host_arch: string | null;
   readonly cwd: string | null;
-}
-
-/// Derive a short, human-readable name for a session from its working
-/// directory. Uses the last path segment (the project folder) and falls
-/// back to the formatted start timestamp when no cwd is available yet.
-function deriveSessionName(cwd: string | null, startedAt: string): string {
-  if (cwd && cwd.length > 0) {
-    const segments = cwd.replace(/\\/g, "/").split("/").filter(Boolean);
-    const last = segments[segments.length - 1];
-    if (last) return last;
-  }
-  return formatSessionTimestamp(startedAt);
 }
 
 /// Props for the SessionListView component.
@@ -92,7 +81,7 @@ function SessionRow({
     <div className={rowClassName} onClick={handleClick} onKeyDown={handleKeyDown} role="button" tabIndex={0}>
       <span className={dotClassName} />
       <span className="sname" title={metadata?.cwd ?? undefined}>
-        {deriveSessionName(metadata?.cwd ?? null, session.started_at)}
+        {deriveSessionName(metadata?.cwd ?? null, formatSessionTimestamp(session.started_at))}
       </span>
       {ideBadge !== null && <span className="sbadge br">{ideBadge}</span>}
       {versionBadge !== null && <span className="sbadge br">{versionBadge}</span>}

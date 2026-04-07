@@ -4,9 +4,12 @@ import {
   type AppStatus,
   type SessionInfo,
   formatField,
+  formatSessionTimestamp,
   deriveConnectionStatus,
   isSessionActive,
 } from "./domain/status";
+import { deriveSessionName } from "./domain/sessionPresentation";
+import { createInitialMetrics } from "./plugins/norbert-usage/domain/metricsAggregator";
 import {
   type ThemeName,
   THEME_NAMES,
@@ -27,11 +30,10 @@ import { NotificationCenterStandalone } from "./plugins/norbert-notif/views/Noti
 import { ConfigViewerView } from "./plugins/norbert-config/views/ConfigViewerView";
 import { ConfigDetailPanel } from "./plugins/norbert-config/views/ConfigDetailPanel";
 import type { SelectedConfigItem } from "./plugins/norbert-config/domain/types";
-import { GaugeClusterView } from "./plugins/norbert-usage/views/GaugeClusterView";
 import { PerformanceMonitorView } from "./plugins/norbert-usage/views/PerformanceMonitorView";
 import { UsageDashboardView } from "./plugins/norbert-usage/views/UsageDashboardView";
 import { CostTicker } from "./plugins/norbert-usage/views/CostTicker";
-import { SessionDashboard, type SessionEvent as DashboardSessionEvent } from "./plugins/norbert-usage/views/SessionDashboard";
+import { SessionStatusView, type SessionEvent as DashboardSessionEvent } from "./plugins/norbert-usage/views/SessionStatusView";
 import type { AccumulatedMetric as BackendAccumulatedMetric } from "./plugins/norbert-usage/domain/activeTimeFormatter";
 import { computeDashboardData } from "./plugins/norbert-usage/domain/dashboard";
 import { computeGaugeClusterData } from "./plugins/norbert-usage/domain/gaugeCluster";
@@ -89,9 +91,43 @@ const createInitialLayout = (): TwoZoneLayoutState => {
 ///
 /// Extracted as a standalone component so React hooks work correctly
 /// (components inside useMemo read from refs, this component manages its own state).
-function SessionDashboardLoader({ sessionId, onClose }: { readonly sessionId: string; readonly onClose?: () => void }) {
+/// Loader for the combined Session Status view.
+///
+/// Fetches events + OTel metrics for the selected session, reads per-session
+/// gauge metrics from the multi-session store (so gauges reflect THIS session,
+/// not aggregate data), and fetches the session metadata once to derive a
+/// human-readable name from the cwd.
+function SessionStatusLoader({
+  sessionId,
+  eventCount,
+  startedAtFallback,
+  onClose,
+}: {
+  readonly sessionId: string;
+  readonly eventCount: number;
+  readonly startedAtFallback: string;
+  readonly onClose?: () => void;
+}) {
   const [events, setEvents] = useState<DashboardSessionEvent[]>([]);
   const [metrics, setMetrics] = useState<BackendAccumulatedMetric[]>([]);
+  const [cwd, setCwd] = useState<string | null>(null);
+
+  // Fetch session metadata once per sessionId change to derive the name.
+  useEffect(() => {
+    let cancelled = false;
+    invoke<Array<{ session_id: string; cwd: string | null }>>("get_all_session_metadata")
+      .then((list) => {
+        if (cancelled) return;
+        const meta = list.find((m) => m.session_id === sessionId);
+        setCwd(meta?.cwd ?? null);
+      })
+      .catch(() => {
+        // Missing metadata is not fatal — falls back to timestamp name.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -118,13 +154,56 @@ function SessionDashboardLoader({ sessionId, onClose }: { readonly sessionId: st
     return () => { cancelled = true; stop(); };
   }, [sessionId]);
 
+  // Subscribe to per-session metrics from the multi-session store.
+  // This is the correct source for gauge cluster data -- the global
+  // usageMetricsStore is an aggregate across all sessions.
+  //
+  // burnRate on the metrics record itself is a single-point instantaneous
+  // rate from the last event, so it collapses to 0 whenever a no-token
+  // event (e.g. tool_result, api_error) is the most recent thing that
+  // fired. To make the tachometer behave the way it does in the
+  // Performance Monitor -- smooth, non-jumpy, and matching the session's
+  // per-session Tok/s sparkline -- we instead read the 1-minute rolling
+  // window from the same time-series buffer PM uses and average it.
+  const [sessionMetrics, setSessionMetrics] = useState(() =>
+    usageMultiSessionStore.getSession(sessionId),
+  );
+  const [smoothedBurnRate, setSmoothedBurnRate] = useState(0);
+
+  const recomputeSession = useCallback(() => {
+    const next = usageMultiSessionStore.getSession(sessionId);
+    setSessionMetrics(next);
+    const buffer = usageMultiSessionStore.getSessionWindowBuffer(sessionId, "tokens", "1m");
+    if (!buffer || buffer.samples.length === 0) {
+      setSmoothedBurnRate(0);
+      return;
+    }
+    const sum = buffer.samples.reduce((acc, s) => acc + s.tokenRate, 0);
+    setSmoothedBurnRate(sum / buffer.samples.length);
+  }, [sessionId]);
+
+  useEffect(() => {
+    recomputeSession();
+    return usageMultiSessionStore.subscribe(() =>
+      startTransition(recomputeSession),
+    );
+  }, [recomputeSession]);
+
+  const gaugeData = computeGaugeClusterData({
+    ...(sessionMetrics ?? createInitialMetrics(sessionId)),
+    burnRate: smoothedBurnRate,
+  });
+
   const totalApiRequests = events.filter((e) => e.event_type === "api_request").length;
+  const sessionName = deriveSessionName(cwd, formatSessionTimestamp(startedAtFallback));
   return (
-    <SessionDashboard
-      sessionId={sessionId}
+    <SessionStatusView
+      sessionName={sessionName}
+      eventCount={eventCount}
       events={events}
       metrics={metrics}
       totalApiRequests={totalApiRequests}
+      gaugeData={gaugeData}
       onClose={onClose}
     />
   );
@@ -149,7 +228,7 @@ function App() {
   /// as a navigation target, not a standalone sidebar entry.
   const sidebarState = useMemo(
     () => createDefaultSidebarState(
-      getAllViews(pluginRegistry).filter((v) => v.id !== "session-detail" && v.id !== "config-detail" && v.id !== "session-dashboard"),
+      getAllViews(pluginRegistry).filter((v) => v.id !== "session-detail" && v.id !== "config-detail" && v.id !== "session-status"),
       [],
     ),
     [pluginRegistry]
@@ -183,7 +262,7 @@ function App() {
       const withSecondary = isSecondaryVisible(currentLayout)
         ? currentLayout
         : toggleSecondaryZone(currentLayout);
-      const assigned = assignView(withSecondary, "secondary", "session-dashboard", "norbert-usage");
+      const assigned = assignView(withSecondary, "secondary", "session-status", "norbert-usage");
       return { ...withSecondary, ...assigned };
     });
   }, []);
@@ -441,11 +520,6 @@ function App() {
     // norbert-usage views: each wrapper reads current metrics from the
     // reactive ref (updated via store subscription) and delegates to
     // pure domain functions for computation.
-    const GaugeClusterWrapper: FC = () => {
-      return <GaugeClusterView data={computeGaugeClusterData(metricsRef.current)} />;
-    };
-    GaugeClusterWrapper.displayName = "GaugeClusterWrapper";
-
     const UsageDashboardWrapper: FC = () => {
       const dashboard = computeDashboardData(metricsRef.current);
       return <UsageDashboardView dashboard={dashboard} dailyCosts={[]} />;
@@ -462,21 +536,30 @@ function App() {
     );
     PerformanceMonitorWrapper.displayName = "PerformanceMonitorWrapper";
 
-    registry.set("gauge-cluster", GaugeClusterWrapper);
     registry.set("usage-dashboard", UsageDashboardWrapper);
     registry.set("cost-ticker", CostTickerWrapper);
     registry.set("performance-monitor", PerformanceMonitorWrapper);
 
-    // Session Dashboard: wraps the SessionDashboard component.
-    // Data fetching is handled by the SessionDashboardLoader component
-    // defined outside the useMemo to allow proper hook usage.
-    const SessionDashboardWrapperInner: FC = () => {
+    // Session Status: combined gauges + session dashboard, shown in the
+    // secondary panel when a session is selected. Data fetching handled
+    // by SessionStatusLoader defined outside the useMemo.
+    const SessionStatusWrapperInner: FC = () => {
       const sid = selectedSessionIdRef.current;
-      if (sid === null) return <div className="empty-state">Select a session to view its dashboard.</div>;
-      return <SessionDashboardLoader sessionId={sid} onClose={handleBackToSessionsRef.current} />;
+      if (sid === null) return <div className="empty-state">Select a session to view its status.</div>;
+      const selected = sessionsRef.current.find((s) => s.id === sid) ?? null;
+      const eventCount = selected?.event_count ?? 0;
+      const startedAt = selected?.started_at ?? new Date().toISOString();
+      return (
+        <SessionStatusLoader
+          sessionId={sid}
+          eventCount={eventCount}
+          startedAtFallback={startedAt}
+          onClose={handleBackToSessionsRef.current}
+        />
+      );
     };
-    SessionDashboardWrapperInner.displayName = "SessionDashboardWrapper";
-    registry.set("session-dashboard", SessionDashboardWrapperInner);
+    SessionStatusWrapperInner.displayName = "SessionStatusWrapper";
+    registry.set("session-status", SessionStatusWrapperInner);
 
     // norbert-config views: list view in main zone, detail view in secondary.
     const ConfigViewerWrapper: FC = () => (

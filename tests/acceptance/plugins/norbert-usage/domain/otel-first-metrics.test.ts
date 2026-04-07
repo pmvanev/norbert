@@ -287,9 +287,15 @@ describe("US-OFM-01: Cost single source of truth", () => {
     });
   });
 
-  describe("when OTel is not active, hook events contribute to cost as before", () => {
+  describe("under the OTel-authoritative cost policy, hook events never contribute cost", () => {
+    // Historical note: earlier versions credited cost from hook
+    // prompt_submit/tool_call_end via the pricing model whenever OTel
+    // was not detected. That behavior was removed because sessions
+    // running with BOTH hooks and OTel enabled would double-count
+    // cost for the same API request. Cost is now credited
+    // exclusively by OTel api_request events.
 
-    it("hook-only session calculates cost via pricing model", () => {
+    it("hook-only session produces no cost from prompt_submit", () => {
       const events = [
         buildPromptSubmitEvent({
           inputTokens: 1500,
@@ -300,13 +306,11 @@ describe("US-OFM-01: Cost single source of truth", () => {
 
       const result = foldEvents(events, undefined, false);
 
-      // Sonnet: input=0.003/1k, output=0.015/1k
-      // (1500/1000)*0.003 + (800/1000)*0.015 = 0.0045 + 0.012 = 0.0165
-      expect(result.sessionCost).toBeCloseTo(0.0165, 4);
-      expect(result.totalTokens).toBe(2300);
+      expect(result.sessionCost).toBe(0);
+      expect(result.totalTokens).toBe(0);
     });
 
-    it("hook-only session counts tools from tool call start events", () => {
+    it("tool_call_start (hook PreToolUse) is identity -- only tool_result increments tool count", () => {
       const events = [
         buildToolCallStartEvent(),
         buildToolCallStartEvent(),
@@ -315,7 +319,7 @@ describe("US-OFM-01: Cost single source of truth", () => {
 
       const result = foldEvents(events, undefined, false);
 
-      expect(result.toolCallCount).toBe(3);
+      expect(result.toolCallCount).toBe(0);
     });
   });
 
@@ -489,9 +493,14 @@ describe("US-OFM-02: Rich tool tracking from OTel", () => {
     });
   });
 
-  describe("when OTel is not active, tool_call_start is the source", () => {
+  describe("tool_call_start is an identity signal regardless of session mode", () => {
+    // Historical note: hook-only sessions previously drove tool counts
+    // from tool_call_start. Under the OTel-authoritative policy that
+    // source is identity to avoid double-counting with tool_result,
+    // and hook-only sessions without OTel simply do not track tool
+    // counts.
 
-    it("tool call start events increment tool count in hook-only session", () => {
+    it("tool_call_start events do not increment tool count", () => {
       const events = [
         buildToolCallStartEvent(),
         buildToolCallStartEvent(),
@@ -501,7 +510,7 @@ describe("US-OFM-02: Rich tool tracking from OTel", () => {
 
       const result = foldEvents(events, undefined, false);
 
-      expect(result.toolCallCount).toBe(4);
+      expect(result.toolCallCount).toBe(0);
     });
   });
 

@@ -35,14 +35,29 @@ const modelArb = fc.constantFrom(
 const timestampArb = fc.integer({ min: 1735689600000, max: 1798761600000 })
   .map((ms) => new Date(ms).toISOString());
 
-const tokenBearingEventTypeArb = fc.constantFrom(
+// Hook-path events that carry a usage record but, under the
+// OTel-authoritative cost policy, do NOT credit tokens/cost.
+const hookUsageEventTypeArb = fc.constantFrom(
   "prompt_submit" as const,
   "tool_call_end" as const,
   "agent_complete" as const,
 );
 
+const hookUsageEventArb = fc.record({
+  eventType: hookUsageEventTypeArb,
+  payload: fc.record({
+    usage: fc.record({
+      input_tokens: tokenCountArb,
+      output_tokens: tokenCountArb,
+      model: modelArb,
+    }),
+  }),
+  receivedAt: timestampArb,
+});
+
+// api_request events: the sole cost/token source under the new policy.
 const tokenBearingEventArb = fc.record({
-  eventType: tokenBearingEventTypeArb,
+  eventType: fc.constant("api_request" as const),
   payload: fc.record({
     usage: fc.record({
       input_tokens: tokenCountArb,
@@ -109,8 +124,8 @@ describe("createInitialMetrics", () => {
 // Token-bearing events accumulate tokens and cost
 // ---------------------------------------------------------------------------
 
-describe("token-bearing events update tokens and cost", () => {
-  it("prompt_submit with tokens increases totalTokens, inputTokens, outputTokens, and sessionCost", () => {
+describe("OTel api_request events are the sole source of tokens and cost", () => {
+  it("api_request with usage increases totalTokens, inputTokens, outputTokens, and sessionCost", () => {
     fc.assert(
       fc.property(tokenBearingEventArb, (event) => {
         const initial = createInitialMetrics("test");
@@ -126,7 +141,7 @@ describe("token-bearing events update tokens and cost", () => {
     );
   });
 
-  it("token accumulation is monotonically non-decreasing over sequence of token events", () => {
+  it("token accumulation is monotonically non-decreasing over a sequence of api_request events", () => {
     fc.assert(
       fc.property(fc.array(tokenBearingEventArb, { minLength: 1, maxLength: 10 }), (events) => {
         let metrics = createInitialMetrics("test");
@@ -139,27 +154,59 @@ describe("token-bearing events update tokens and cost", () => {
       }),
     );
   });
+
+  it("hook-path events (prompt_submit / tool_call_end / agent_complete) never credit tokens or cost", () => {
+    fc.assert(
+      fc.property(hookUsageEventArb, (event) => {
+        const initial = createInitialMetrics("hook-no-cost");
+        const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE);
+
+        expect(updated.totalTokens).toBe(0);
+        expect(updated.inputTokens).toBe(0);
+        expect(updated.outputTokens).toBe(0);
+        expect(updated.sessionCost).toBe(0);
+      }),
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
 // tool_call_start increments tool count only
 // ---------------------------------------------------------------------------
 
-describe("tool_call_start increments tool count without affecting cost", () => {
-  it("tool count increments while cost and tokens remain unchanged", () => {
+describe("tool_result is the OTel-authoritative source for tool counts", () => {
+  it("tool_result increments tool count while cost and tokens remain unchanged", () => {
+    const initial: SessionMetrics = {
+      ...createInitialMetrics("test"),
+      sessionCost: 5.5,
+      totalTokens: 10000,
+      toolCallCount: 3,
+    };
+    const event = {
+      eventType: "tool_result" as const,
+      payload: { tool_name: "Read", success: true, duration_ms: 120 },
+      receivedAt: "2025-01-01T00:00:00Z",
+    };
+    const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE);
+
+    expect(updated.toolCallCount).toBe(4);
+    expect(updated.sessionCost).toBe(5.5);
+    expect(updated.totalTokens).toBe(10000);
+  });
+
+  it("tool_call_start (hook PreToolUse) is an identity signal and does NOT increment tool count", () => {
+    // Regression guard for double-counting: sessions with both hooks
+    // and OTel enabled fire tool_call_start AND tool_result for the
+    // same tool call. Only one should count.
     fc.assert(
       fc.property(toolCallStartEventArb, (event) => {
         const initial: SessionMetrics = {
           ...createInitialMetrics("test"),
-          sessionCost: 5.5,
-          totalTokens: 10000,
           toolCallCount: 3,
         };
         const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE);
 
-        expect(updated.toolCallCount).toBe(4);
-        expect(updated.sessionCost).toBe(5.5);
-        expect(updated.totalTokens).toBe(10000);
+        expect(updated.toolCallCount).toBe(3);
       }),
     );
   });
@@ -379,10 +426,11 @@ describe("api_request with cost_usd=0.0 treats zero as valid cost", () => {
 // OTel identity event types: user_prompt, tool_result, api_error, tool_decision
 // ---------------------------------------------------------------------------
 
-describe("Non-metric event types increment totalEventCount only (hook mode)", () => {
+describe("Non-metric event types increment totalEventCount only", () => {
+  // Note: tool_result is NOT in this list because it is the
+  // OTel-authoritative source for toolCallCount increments.
   const nonMetricEventTypes = [
     "user_prompt",
-    "tool_result",
     "tool_decision",
   ] as const;
 
@@ -753,18 +801,23 @@ const apiRequestEventArb = fc.record({
   receivedAt: timestampArb,
 });
 
-describe("dual dispatch: isOtelActive selects handler table", () => {
+describe("OTel-authoritative cost policy (unified handler table)", () => {
+  // Under the unified OTel-authoritative table the legacy `isOtelActive`
+  // parameter is an unused passthrough. Cost comes exclusively from
+  // api_request; hook-path usage events contribute only to the context
+  // window snapshot. These tests pin that contract so the isOtelActive
+  // flag can't silently bring hook-cost-crediting back.
 
-  it("prompt_submit with isOtelActive=true does not change cost or tokens", () => {
+  it("prompt_submit does not change cost or tokens, regardless of isOtelActive flag", () => {
     fc.assert(
-      fc.property(tokenBearingEventArb, (event) => {
+      fc.property(tokenBearingEventArb, fc.boolean(), (event, flag) => {
         const initial: SessionMetrics = {
-          ...createInitialMetrics("otel-suppress"),
+          ...createInitialMetrics("policy-prompt"),
           sessionCost: 5.0,
           totalTokens: 10000,
         };
         const patched = { ...event, eventType: "prompt_submit" as const };
-        const updated = aggregateEvent(initial, patched, DEFAULT_PRICING_TABLE, true);
+        const updated = aggregateEvent(initial, patched, DEFAULT_PRICING_TABLE, flag);
 
         expect(updated.sessionCost).toBe(5.0);
         expect(updated.totalTokens).toBe(10000);
@@ -773,16 +826,16 @@ describe("dual dispatch: isOtelActive selects handler table", () => {
     );
   });
 
-  it("tool_call_end with isOtelActive=true does not change cost or tokens", () => {
+  it("tool_call_end does not change cost or tokens, regardless of isOtelActive flag", () => {
     fc.assert(
-      fc.property(tokenBearingEventArb, (event) => {
+      fc.property(tokenBearingEventArb, fc.boolean(), (event, flag) => {
         const initial: SessionMetrics = {
-          ...createInitialMetrics("otel-suppress"),
+          ...createInitialMetrics("policy-tool-end"),
           sessionCost: 3.0,
           totalTokens: 8000,
         };
         const patched = { ...event, eventType: "tool_call_end" as const };
-        const updated = aggregateEvent(initial, patched, DEFAULT_PRICING_TABLE, true);
+        const updated = aggregateEvent(initial, patched, DEFAULT_PRICING_TABLE, flag);
 
         expect(updated.sessionCost).toBe(3.0);
         expect(updated.totalTokens).toBe(8000);
@@ -790,23 +843,9 @@ describe("dual dispatch: isOtelActive selects handler table", () => {
     );
   });
 
-  it("tool_call_start with isOtelActive=true does not increment toolCallCount", () => {
-    fc.assert(
-      fc.property(toolCallStartEventArb, (event) => {
-        const initial: SessionMetrics = {
-          ...createInitialMetrics("otel-suppress"),
-          toolCallCount: 5,
-        };
-        const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE, true);
-
-        expect(updated.toolCallCount).toBe(5);
-      }),
-    );
-  });
-
-  it("agent_complete with isOtelActive=true decrements count but does not change cost", () => {
+  it("agent_complete decrements count and refreshes context, but does not change cost", () => {
     const initial: SessionMetrics = {
-      ...createInitialMetrics("otel-agent"),
+      ...createInitialMetrics("policy-agent"),
       activeAgentCount: 2,
       sessionCost: 4.0,
       totalTokens: 7000,
@@ -822,18 +861,19 @@ describe("dual dispatch: isOtelActive selects handler table", () => {
       },
       receivedAt: "2026-03-27T10:00:00Z",
     };
-    const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE, true);
+    const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE);
 
     expect(updated.activeAgentCount).toBe(1);
     expect(updated.sessionCost).toBe(4.0);
     expect(updated.totalTokens).toBe(7000);
+    expect(updated.contextWindowTokens).toBe(500);
   });
 
-  it("api_request with isOtelActive=true still applies cost_usd and tokens", () => {
+  it("api_request applies cost_usd and tokens", () => {
     fc.assert(
       fc.property(apiRequestEventArb, (event) => {
-        const initial = createInitialMetrics("otel-api");
-        const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE, true);
+        const initial = createInitialMetrics("policy-api");
+        const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE);
 
         expect(updated.totalTokens).toBeGreaterThanOrEqual(0);
         expect(updated.sessionCost).toBeGreaterThanOrEqual(0);
@@ -842,52 +882,34 @@ describe("dual dispatch: isOtelActive selects handler table", () => {
     );
   });
 
-  it("api_request with isOtelActive=true sets sessionStartedAt when empty", () => {
-    fc.assert(
-      fc.property(apiRequestEventArb, (event) => {
-        const initial = createInitialMetrics("otel-timing");
-        const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE, true);
+  it("hook events arriving before api_request never credit cost (no double-counting)", () => {
+    // Regression guard for the double-counting bug: hook usage for a
+    // request followed by the OTel api_request for the SAME request
+    // must yield exactly one cost contribution.
+    const initial = createInitialMetrics("policy-no-doublecount");
+    const model = "claude-sonnet-4-20250514";
 
-        expect(updated.sessionStartedAt).toBe(event.receivedAt);
-      }),
-    );
-  });
-
-  it("api_request with isOtelActive=true does not overwrite sessionStartedAt when already set", () => {
-    fc.assert(
-      fc.property(apiRequestEventArb, (event) => {
-        const initial: SessionMetrics = {
-          ...createInitialMetrics("otel-timing-preserve"),
-          sessionStartedAt: "2026-01-01T00:00:00Z",
-        };
-        const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE, true);
-
-        expect(updated.sessionStartedAt).toBe("2026-01-01T00:00:00Z");
-      }),
-    );
-  });
-
-  it("api_request with isOtelActive=false does not set sessionStartedAt", () => {
-    const initial = createInitialMetrics("hook-timing");
-    const event = {
-      eventType: "api_request" as const,
-      payload: {
-        usage: {
-          input_tokens: 100,
-          output_tokens: 50,
-          cache_read_input_tokens: 0,
-          cache_creation_input_tokens: 0,
-          cost_usd: 0.01,
-          model: "claude-sonnet-4-20250514",
-          duration_ms: 1000,
-          speed: "normal",
-        },
-      },
+    const hookEvent = {
+      eventType: "prompt_submit" as const,
+      payload: { usage: { input_tokens: 1000, output_tokens: 500, model } },
       receivedAt: "2026-03-27T10:00:00Z",
     };
-    const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE, false);
+    const apiEvent = {
+      eventType: "api_request" as const,
+      payload: { usage: { input_tokens: 1000, output_tokens: 500, model } },
+      receivedAt: "2026-03-27T10:00:01Z",
+    };
 
-    expect(updated.sessionStartedAt).toBe("");
+    const afterHook = aggregateEvent(initial, hookEvent, DEFAULT_PRICING_TABLE);
+    const afterApi = aggregateEvent(afterHook, apiEvent, DEFAULT_PRICING_TABLE);
+
+    // Exactly ONE request's worth of tokens, not two.
+    expect(afterApi.totalTokens).toBe(1500);
+    expect(afterApi.apiRequestCount).toBe(1);
+
+    // Expected cost for one Sonnet request at the default rates.
+    const expectedCost = (1000 / 1000) * 0.003 + (500 / 1000) * 0.015;
+    expect(afterApi.sessionCost).toBeCloseTo(expectedCost, 6);
   });
 
   it("NaN cost_usd falls back to pricing model", () => {
@@ -965,18 +987,125 @@ describe("dual dispatch: isOtelActive selects handler table", () => {
     expect(updated.totalTokens).toBe(1500);
   });
 
-  it("isOtelActive=false preserves existing hook behavior for all event types", () => {
+  it("isOtelActive is a no-op passthrough: result is identical for any flag value", () => {
     fc.assert(
-      fc.property(tokenBearingEventArb, (event) => {
-        const initial = createInitialMetrics("hook-compat");
+      fc.property(apiRequestEventArb, (event) => {
+        const initial = createInitialMetrics("flag-noop");
         const withoutFlag = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE);
         const withFalse = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE, false);
+        const withTrue = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE, true);
 
         expect(withFalse.sessionCost).toBe(withoutFlag.sessionCost);
         expect(withFalse.totalTokens).toBe(withoutFlag.totalTokens);
-        expect(withFalse.toolCallCount).toBe(withoutFlag.toolCallCount);
-        expect(withFalse.activeAgentCount).toBe(withoutFlag.activeAgentCount);
+        expect(withTrue.sessionCost).toBe(withoutFlag.sessionCost);
+        expect(withTrue.totalTokens).toBe(withoutFlag.totalTokens);
       }),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Context window tracking: fill percentage must be updated from any event
+// that carries a usage record, in both hook and OTel dispatch modes, so
+// the fuel gauge reflects the most recent request's input side.
+// ---------------------------------------------------------------------------
+
+describe("aggregateEvent populates contextWindow fields from usage", () => {
+  const sonnetUsageEvent = (inputTokens: number, outputTokens = 0, eventType = "tool_call_end") => ({
+    eventType,
+    receivedAt: "2025-01-01T00:00:00Z",
+    payload: {
+      usage: {
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        cache_read_input_tokens: 0,
+        cache_creation_input_tokens: 0,
+        model: "claude-sonnet-4-20250514",
+      },
+    },
+  });
+
+  it("hook tool_call_end sets contextWindowPct from input tokens vs model max", () => {
+    const initial = createInitialMetrics("ctx-hook");
+    const updated = aggregateEvent(initial, sonnetUsageEvent(100_000), DEFAULT_PRICING_TABLE, false);
+
+    expect(updated.contextWindowTokens).toBe(100_000);
+    expect(updated.contextWindowMaxTokens).toBe(200_000);
+    expect(updated.contextWindowPct).toBe(50);
+    expect(updated.contextWindowModel).toBe("claude-sonnet-4-20250514");
+  });
+
+  it("OTel api_request sets contextWindowPct even when hook cost is suppressed", () => {
+    const initial = createInitialMetrics("ctx-otel");
+    const event = sonnetUsageEvent(60_000, 0, "api_request");
+    const updated = aggregateEvent(initial, event, DEFAULT_PRICING_TABLE, true);
+
+    expect(updated.contextWindowTokens).toBe(60_000);
+    expect(updated.contextWindowPct).toBe(30);
+  });
+
+  it("context window is replaced, not accumulated, across successive events", () => {
+    const initial = createInitialMetrics("ctx-replace");
+    const afterLarge = aggregateEvent(initial, sonnetUsageEvent(150_000), DEFAULT_PRICING_TABLE, false);
+    expect(afterLarge.contextWindowPct).toBe(75);
+
+    const afterSmall = aggregateEvent(afterLarge, sonnetUsageEvent(20_000), DEFAULT_PRICING_TABLE, false);
+    expect(afterSmall.contextWindowTokens).toBe(20_000);
+    expect(afterSmall.contextWindowPct).toBe(10);
+  });
+
+  it("contextWindowMaxTokens is sticky once promoted to the 1M beta tier", () => {
+    // First request crosses 200k -> session promoted to 1M tier.
+    const initial = createInitialMetrics("ctx-sticky");
+    const bigUsage = {
+      eventType: "api_request",
+      receivedAt: "2025-01-01T00:00:00Z",
+      payload: {
+        usage: {
+          input_tokens: 685_000,
+          output_tokens: 0,
+          cache_read_input_tokens: 0,
+          cache_creation_input_tokens: 0,
+          model: "claude-sonnet-4-5-20250929",
+        },
+      },
+    };
+    const afterBig = aggregateEvent(initial, bigUsage, DEFAULT_PRICING_TABLE);
+    expect(afterBig.contextWindowMaxTokens).toBe(1_000_000);
+    expect(afterBig.contextWindowPct).toBeCloseTo(68.5, 1);
+
+    // A later, smaller request must NOT flap the session back to 200k.
+    const smallUsage = {
+      eventType: "api_request",
+      receivedAt: "2025-01-01T00:01:00Z",
+      payload: {
+        usage: {
+          input_tokens: 50_000,
+          output_tokens: 0,
+          cache_read_input_tokens: 0,
+          cache_creation_input_tokens: 0,
+          model: "claude-sonnet-4-5-20250929",
+        },
+      },
+    };
+    const afterSmall = aggregateEvent(afterBig, smallUsage, DEFAULT_PRICING_TABLE);
+    expect(afterSmall.contextWindowMaxTokens).toBe(1_000_000);
+    expect(afterSmall.contextWindowTokens).toBe(50_000);
+    expect(afterSmall.contextWindowPct).toBe(5);
+  });
+
+  it("events without a usage record leave the context snapshot untouched", () => {
+    const initial = createInitialMetrics("ctx-retain");
+    const withContext = aggregateEvent(initial, sonnetUsageEvent(80_000), DEFAULT_PRICING_TABLE, false);
+    expect(withContext.contextWindowPct).toBe(40);
+
+    const noUsageEvent = {
+      eventType: "user_prompt",
+      receivedAt: "2025-01-01T00:00:01Z",
+      payload: { text: "hello" },
+    };
+    const after = aggregateEvent(withContext, noUsageEvent, DEFAULT_PRICING_TABLE, false);
+    expect(after.contextWindowTokens).toBe(80_000);
+    expect(after.contextWindowPct).toBe(40);
   });
 });

@@ -89,16 +89,17 @@ describe("norbert-usage manifest", () => {
 // ---------------------------------------------------------------------------
 
 describe("norbert-usage onLoad view registrations", () => {
-  it("registers exactly 4 views: gauge-cluster, usage-dashboard, session-dashboard, performance-monitor", () => {
+  it("registers exactly 3 views: usage-dashboard, session-status, performance-monitor", () => {
     const { api, calls } = createStubApi();
     norbertUsagePlugin.onLoad(api);
 
-    expect(calls.views).toHaveLength(4);
+    expect(calls.views).toHaveLength(3);
     const viewIds = calls.views.map((v) => v.id);
-    expect(viewIds).toContain("gauge-cluster");
     expect(viewIds).toContain("usage-dashboard");
-    expect(viewIds).toContain("session-dashboard");
+    expect(viewIds).toContain("session-status");
     expect(viewIds).toContain("performance-monitor");
+    expect(viewIds).not.toContain("gauge-cluster");
+    expect(viewIds).not.toContain("session-dashboard");
   });
 
   it("performance-monitor is not primary and has no floatMetric", () => {
@@ -112,14 +113,15 @@ describe("norbert-usage onLoad view registrations", () => {
     expect(pm!.label).toBe("Performance Monitor");
   });
 
-  it("gauge-cluster has floatMetric 'session_cost' and is not primary", () => {
+  it("session-status is secondary-only and has no floatMetric", () => {
     const { api, calls } = createStubApi();
     norbertUsagePlugin.onLoad(api);
 
-    const gaugeCluster = calls.views.find((v) => v.id === "gauge-cluster");
-    expect(gaugeCluster).toBeDefined();
-    expect(gaugeCluster!.floatMetric).toBe("session_cost");
-    expect(gaugeCluster!.primaryView).toBe(false);
+    const sessionStatus = calls.views.find((v) => v.id === "session-status");
+    expect(sessionStatus).toBeDefined();
+    expect(sessionStatus!.primaryView).toBe(false);
+    expect(sessionStatus!.floatMetric).toBeNull();
+    expect(sessionStatus!.label).toBe("Session Status");
   });
 
   it("usage-dashboard is the primaryView", () => {

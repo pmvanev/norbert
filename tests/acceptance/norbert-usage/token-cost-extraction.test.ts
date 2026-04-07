@@ -35,10 +35,15 @@ import {
 // ---------------------------------------------------------------------------
 
 // @walking_skeleton
-describe("User sees accurate cost computed from hook events", () => {
-  it("token event flows through extraction, pricing, and aggregation to produce session cost", () => {
-    // Given a prompt_submit event payload from an Opus 4 session
-    // with 1,200 input tokens and 3,400 output tokens
+describe("User sees accurate cost computed from OTel api_request events", () => {
+  it("api_request event flows through extraction, pricing, and aggregation to produce session cost", () => {
+    // Given an api_request event payload from an Opus 4 session
+    // with 1,200 input tokens and 3,400 output tokens.
+    //
+    // Note: under the OTel-authoritative cost policy, cost is credited
+    // EXCLUSIVELY by api_request events (sourced from the Claude Code
+    // OTel exporter). Hook events with usage are used only to refresh
+    // the context-window snapshot.
     const payload = {
       usage: {
         input_tokens: 1200,
@@ -73,7 +78,7 @@ describe("User sees accurate cost computed from hook events", () => {
     };
 
     const event = {
-      eventType: "prompt_submit" as const,
+      eventType: "api_request" as const,
       payload,
       receivedAt: new Date().toISOString(),
     };
@@ -196,7 +201,7 @@ describe("Pricing includes cache token costs", () => {
 // ---------------------------------------------------------------------------
 
 describe("Events without token data handled gracefully", () => {
-  it("tool_call_start event increments tool count without affecting cost", () => {
+  it("tool_result event increments tool count without affecting cost", () => {
     // Given an active session with $1.20 cost and 5 tool calls
     const metrics: SessionMetrics = {
       ...createInitialMetrics("test-session"),
@@ -205,10 +210,12 @@ describe("Events without token data handled gracefully", () => {
       totalTokens: 50000,
     };
 
-    // When a tool_call_start event arrives without token fields
+    // When a tool_result event arrives (OTel-authoritative source for
+    // tool counts -- tool_call_start is an identity signal to avoid
+    // double-counting against the OTel stream).
     const event = {
-      eventType: "tool_call_start" as const,
-      payload: { tool: "bash" },
+      eventType: "tool_result" as const,
+      payload: { tool_name: "bash", success: true, duration_ms: 200 },
       receivedAt: new Date().toISOString(),
     };
     const updated = aggregateEvent(metrics, event, DEFAULT_PRICING_TABLE);

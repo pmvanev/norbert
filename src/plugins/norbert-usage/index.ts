@@ -15,7 +15,7 @@ import { createMultiSessionStore } from "./adapters/multiSessionStore";
 import { DEFAULT_PRICING_TABLE } from "./domain/pricingModel";
 import { appendSample } from "./domain/timeSeriesSampler";
 import { computeInstantaneousRates, type MetricsSnapshot } from "./domain/instantaneousRate";
-import type { RateSample } from "./domain/types";
+import type { RateSample, SessionMetrics } from "./domain/types";
 
 // ---------------------------------------------------------------------------
 // Shared metrics store -- module-level so App.tsx and the hook processor
@@ -29,13 +29,14 @@ export const usageMultiSessionStore = createMultiSessionStore();
 // Module-level singleton alongside the metrics store.
 let previousSnapshot: MetricsSnapshot = { totalTokens: 0, sessionCost: 0, timestamp: Date.now() };
 
+// Per-session snapshots used to compute each session's own burn rate.
+// Keyed by sessionId so that one session's rate isn't affected by events
+// from another session interleaving through the global pipeline.
+const perSessionSnapshots = new Map<string, MetricsSnapshot>();
+
 // ---------------------------------------------------------------------------
 // View constants
 // ---------------------------------------------------------------------------
-
-const GAUGE_CLUSTER_VIEW_ID = "gauge-cluster";
-const GAUGE_CLUSTER_VIEW_LABEL = "Gauge Cluster";
-const GAUGE_CLUSTER_VIEW_ICON = "gauge"; // gauge cluster
 
 const PERFORMANCE_MONITOR_VIEW_ICON = "square-activity";
 
@@ -43,9 +44,11 @@ const USAGE_DASHBOARD_VIEW_ID = "usage-dashboard";
 const USAGE_DASHBOARD_VIEW_LABEL = "Usage Dashboard";
 const USAGE_DASHBOARD_VIEW_ICON = "bar-chart"; // usage dashboard
 
-const SESSION_DASHBOARD_VIEW_ID = "session-dashboard";
-const SESSION_DASHBOARD_VIEW_LABEL = "Session Dashboard";
-const SESSION_DASHBOARD_VIEW_ICON = "layout-dashboard";
+// Session Status view: combined gauges + dashboard, shown in the secondary
+// panel when a session is selected. Not registered as a sidebar entry.
+const SESSION_STATUS_VIEW_ID = "session-status";
+const SESSION_STATUS_VIEW_LABEL = "Session Status";
+const SESSION_STATUS_VIEW_ICON = "layout-dashboard";
 
 const PERFORMANCE_MONITOR_VIEW_ID = "performance-monitor";
 const PERFORMANCE_MONITOR_VIEW_LABEL = "Performance Monitor";
@@ -80,17 +83,6 @@ const COST_TICKER_ORDER = 0;
 /// api.ui.registerTab(), api.ui.registerStatusItem(), and api.hooks.register().
 /// No internal Norbert modules are accessed.
 const onLoad = (api: NorbertAPI): void => {
-  // Register the Gauge Cluster view (floating panel with session cost pill)
-  api.ui.registerView({
-    id: GAUGE_CLUSTER_VIEW_ID,
-    label: GAUGE_CLUSTER_VIEW_LABEL,
-    icon: GAUGE_CLUSTER_VIEW_ICON,
-    primaryView: false,
-    minWidth: 200,
-    minHeight: 150,
-    floatMetric: "session_cost",
-  });
-
   // Register the Usage Dashboard as the primary view
   api.ui.registerView({
     id: USAGE_DASHBOARD_VIEW_ID,
@@ -102,11 +94,13 @@ const onLoad = (api: NorbertAPI): void => {
     floatMetric: null,
   });
 
-  // Register Session Dashboard view (per-session OTel metrics detail)
+  // Register the combined Session Status view (gauges + session dashboard).
+  // Shown in the secondary panel when a session is selected; filtered out
+  // of the sidebar.
   api.ui.registerView({
-    id: SESSION_DASHBOARD_VIEW_ID,
-    label: SESSION_DASHBOARD_VIEW_LABEL,
-    icon: SESSION_DASHBOARD_VIEW_ICON,
+    id: SESSION_STATUS_VIEW_ID,
+    label: SESSION_STATUS_VIEW_LABEL,
+    icon: SESSION_STATUS_VIEW_ICON,
     primaryView: false,
     minWidth: 400,
     minHeight: 300,
@@ -175,10 +169,33 @@ const onLoad = (api: NorbertAPI): void => {
       const prev = usageMultiSessionStore.getSession(sessionId);
       if (prev) {
         const updated = reducer(prev);
+        const now = Date.now();
+
+        // Per-session burn rate: compute instantaneous token rate from this
+        // session's own previous snapshot. Mirrors the global pipeline but
+        // scoped per sessionId so cross-session interleaving can't skew it.
+        const sessionPrevSnapshot: MetricsSnapshot = perSessionSnapshots.get(sessionId) ?? {
+          totalTokens: prev.totalTokens,
+          sessionCost: prev.sessionCost,
+          timestamp: now,
+        };
+        const sessionCurrentSnapshot: MetricsSnapshot = {
+          totalTokens: updated.totalTokens,
+          sessionCost: updated.sessionCost,
+          timestamp: now,
+        };
+        const { tokenRate } = computeInstantaneousRates(
+          sessionCurrentSnapshot,
+          sessionPrevSnapshot,
+        );
+        perSessionSnapshots.set(sessionId, sessionCurrentSnapshot);
+
+        const withBurnRate: SessionMetrics = { ...updated, burnRate: tokenRate };
+
         // Populate sessionLabel from cwd on first event (when label is empty)
-        const withLabel = updated.sessionLabel === "" && label !== ""
-          ? { ...updated, sessionLabel: label }
-          : updated;
+        const withLabel = withBurnRate.sessionLabel === "" && label !== ""
+          ? { ...withBurnRate, sessionLabel: label }
+          : withBurnRate;
         usageMultiSessionStore.updateSession(sessionId, withLabel);
       }
     },
