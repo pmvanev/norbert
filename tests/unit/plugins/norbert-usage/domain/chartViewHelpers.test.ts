@@ -18,6 +18,7 @@ import {
   computeEffectiveYMax,
   hexToRgba,
   computeTooltipLeft,
+  computeTooltipLeftClamped,
   computeTooltipTop,
   computeGridColumns,
   shouldShowPerSessionGrid,
@@ -135,6 +136,48 @@ describe("computeTooltipLeft", () => {
 
     // tooltipX=653 -- 653 + 8 + 140 = 801 > 800, flips
     expect(computeTooltipLeft(653, 800)).toBe(505);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// computeTooltipLeftClamped
+// ---------------------------------------------------------------------------
+
+describe("computeTooltipLeftClamped", () => {
+  it("places tooltip to the right of cursor when space allows", () => {
+    // tooltipX=100, width=140, container=800, zoom=1 -> 100+8 = 108
+    expect(computeTooltipLeftClamped(100, 140, 800, 1)).toBe(108);
+  });
+
+  it("flips left when measured width would overflow right edge", () => {
+    // 700 + 8 + 140 = 848 > 800-8 -> flip: 700 - 8 - 140 = 552
+    expect(computeTooltipLeftClamped(700, 140, 800, 1)).toBe(552);
+  });
+
+  it("flips when actual width is larger than the legacy 140 estimate", () => {
+    // tooltipX=680, width=200: 680+8+200=888 > 792 -> flip
+    // 680 - 8 - 200 = 472
+    expect(computeTooltipLeftClamped(680, 200, 800, 1)).toBe(472);
+  });
+
+  it("normalizes containerWidth by documentElement zoom", () => {
+    // With zoom=1.5 the effective layout width is 800/1.5 ≈ 533.
+    // tooltipX=500, width=140: 500+8+140=648 > 533-8=525 -> flip
+    // preferred = 500 - 8 - 140 = 352
+    expect(computeTooltipLeftClamped(500, 140, 800, 1.5)).toBe(352);
+  });
+
+  it("clamps so tooltip cannot extend past the right edge", () => {
+    // tooltipX past container (coordinate-space mismatch case)
+    // preferred flip = 1000 - 8 - 140 = 852, but rightEdge - width = 652
+    // result clamped to 652
+    expect(computeTooltipLeftClamped(1000, 140, 800, 1)).toBe(652);
+  });
+
+  it("clamps to left margin when preferred would go negative", () => {
+    // tooltipX=-50, width=140: preferred right = -50+8 = -42, also flip
+    // gives -50-8-140 = -198. Clamped to EDGE_MARGIN = 8.
+    expect(computeTooltipLeftClamped(-50, 140, 800, 1)).toBe(8);
   });
 });
 

@@ -84,6 +84,35 @@ export const computeTooltipLeft = (
 export const computeTooltipTop = (tooltipY: number): number =>
   tooltipY + TOOLTIP_OFFSET_Y;
 
+/**
+ * Compute tooltip left position with measured width and viewport clamp.
+ *
+ * - tooltipX comes from PMChart already divided by the canvas CSS-zoom
+ *   factor, so we normalize containerWidth by docZoom (set on
+ *   documentElement for Ctrl-+/-) to compare in the same space.
+ * - Flips to the left of cursor when the tooltip would overflow.
+ * - Clamps the result to [margin, rightEdge - width] as a safety net so
+ *   the tooltip can never extend past the viewport regardless of any
+ *   upstream coordinate-space quirks.
+ */
+export const computeTooltipLeftClamped = (
+  tooltipX: number,
+  tooltipWidth: number,
+  containerWidth: number,
+  docZoom: number,
+): number => {
+  const effectiveContainerWidth = containerWidth / docZoom;
+  const rightEdge = effectiveContainerWidth - TOOLTIP_OFFSET_X;
+  const preferredLeft =
+    tooltipX + TOOLTIP_OFFSET_X + tooltipWidth > rightEdge
+      ? tooltipX - TOOLTIP_OFFSET_X - tooltipWidth
+      : tooltipX + TOOLTIP_OFFSET_X;
+  return Math.max(
+    TOOLTIP_OFFSET_X,
+    Math.min(preferredLeft, rightEdge - tooltipWidth),
+  );
+};
+
 // ---------------------------------------------------------------------------
 // Layout helpers (from PMDetailPane)
 // ---------------------------------------------------------------------------
