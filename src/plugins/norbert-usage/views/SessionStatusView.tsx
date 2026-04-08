@@ -383,7 +383,9 @@ export const SessionStatusView = ({
 
         <div className="gauge-card odometer">
           <span className="gauge-value gauge-value-lg" data-mono="">{gaugeData.odometer.formatted}</span>
+          <span className="gauge-unit">API list price</span>
           <span className="gauge-label">Session Cost</span>
+          <span className="gauge-sublabel">pay-as-you-go equivalent · not what Max/Pro plans are billed</span>
         </div>
 
         <TotalTokensTile
