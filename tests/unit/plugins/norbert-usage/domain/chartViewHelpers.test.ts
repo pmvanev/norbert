@@ -266,10 +266,7 @@ describe("formatSessionLabel", () => {
 // ---------------------------------------------------------------------------
 
 describe("formatDurationLabel", () => {
-  it("maps all TimeWindowId values", () => {
+  it("maps the 1m window to its duration label", () => {
     expect(formatDurationLabel("1m")).toBe("60 seconds");
-    expect(formatDurationLabel("5m")).toBe("5 minutes");
-    expect(formatDurationLabel("15m")).toBe("15 minutes");
-    expect(formatDurationLabel("session")).toBe("Full session");
   });
 });

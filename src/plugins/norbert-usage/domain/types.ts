@@ -194,10 +194,12 @@ export interface TimeWindowConfig {
 }
 
 // ---------------------------------------------------------------------------
-// TimeWindowId -- discriminated union for time window selection
+// TimeWindowId -- the only exposed time window. Kept as a type alias (rather
+// than inlining `"1m"` everywhere) so bringing back multiple windows later is
+// a one-line widening.
 // ---------------------------------------------------------------------------
 
-export type TimeWindowId = "1m" | "5m" | "15m" | "session";
+export type TimeWindowId = "1m";
 
 // ---------------------------------------------------------------------------
 // MetricCategoryId -- discriminated union for the four metric categories

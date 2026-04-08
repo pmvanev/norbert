@@ -139,8 +139,5 @@ export const formatSessionLabel = (
 export const formatDurationLabel = (windowId: TimeWindowId): string => {
   switch (windowId) {
     case "1m": return "60 seconds";
-    case "5m": return "5 minutes";
-    case "15m": return "15 minutes";
-    case "session": return "Full session";
   }
 };

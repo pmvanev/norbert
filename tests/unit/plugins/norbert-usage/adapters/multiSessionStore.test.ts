@@ -152,7 +152,9 @@ describe("multiSessionStore aggregate window buffer", () => {
 
   it("sums values across two sessions in the 1m window buffer", () => {
     // Control timestamps to ensure the aggregate multi-window buffer accepts both samples.
-    // The 1m window has a 100ms sample interval, so timestamps must be >100ms apart.
+    // The 1m window has a 2000ms sample interval (aligned with the 2s heartbeat
+    // poll), so timestamps must be >2000ms apart for the second append to pass
+    // the downsample gate in multiWindowSampler.appendToWindow.
     let now = 1000;
     vi.spyOn(Date, "now").mockImplementation(() => now);
 
@@ -163,8 +165,8 @@ describe("multiSessionStore aggregate window buffer", () => {
     // First sample at t=1000
     store.appendSessionSample("session-a", { tokens: 100, cost: 0, agents: 0, context: 0 });
 
-    // Advance time past the 1m window's 100ms sample interval
-    now = 1200;
+    // Advance time past the 1m window's 2000ms sample interval
+    now = 3100;
     store.appendSessionSample("session-b", { tokens: 250, cost: 0, agents: 0, context: 0 });
 
     // tokens is aggregateApplicable, so the aggregate window should sum both

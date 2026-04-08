@@ -136,35 +136,3 @@ export const computeMultiWindowStats = (
   return computeStats(windowState.buffer);
 };
 
-// ---------------------------------------------------------------------------
-// resolveSessionWindowConfig -- dynamic resolution for session-length window
-// ---------------------------------------------------------------------------
-
-const SESSION_TARGET_MIN_POINTS = 300;
-const SESSION_TARGET_MAX_POINTS = 900;
-const SESSION_TARGET_POINTS = 600;
-
-export const resolveSessionWindowConfig = (
-  sessionDurationMs: number,
-): TimeWindowConfig => {
-  // Compute ideal interval to hit target point count
-  const idealInterval = Math.max(1, Math.floor(sessionDurationMs / SESSION_TARGET_POINTS));
-
-  // Compute actual capacity based on the chosen interval
-  const capacity = Math.min(
-    SESSION_TARGET_MAX_POINTS,
-    Math.max(
-      SESSION_TARGET_MIN_POINTS,
-      Math.ceil(sessionDurationMs / idealInterval),
-    ),
-  );
-
-  const sampleIntervalMs = Math.max(1, Math.floor(sessionDurationMs / capacity));
-
-  return {
-    durationMs: sessionDurationMs,
-    label: "session",
-    sampleIntervalMs,
-    bufferCapacity: capacity,
-  };
-};
