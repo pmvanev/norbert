@@ -20,7 +20,6 @@ import type { MetricsStore } from "../adapters/metricsStore";
 import type { MultiSessionStore } from "../adapters/multiSessionStore";
 import type { MetricCategoryId, TimeWindowId, HoverState } from "../domain/types";
 import { createHeartbeatSample } from "../domain/heartbeat";
-import { PMTimeWindowSelector } from "./PMTimeWindowSelector";
 import { PMSidebar } from "./PMSidebar";
 import { PMDetailPane } from "./PMDetailPane";
 import { PMTooltip } from "./PMTooltip";
@@ -30,7 +29,10 @@ import { PMTooltip } from "./PMTooltip";
 // ---------------------------------------------------------------------------
 
 const DEFAULT_CATEGORY: MetricCategoryId = "tokens";
-const DEFAULT_TIME_WINDOW: TimeWindowId = "1m";
+// Only the 1m window is exposed in the UI; keeping the identifier around as
+// a plain constant preserves the downstream buffer/stats lookups without the
+// overhead of a selector.
+const TIME_WINDOW: TimeWindowId = "1m";
 
 const INITIAL_HOVER_STATE: HoverState = {
   active: false,
@@ -63,7 +65,6 @@ export const PerformanceMonitorView = ({
   multiSessionStore,
 }: PerformanceMonitorViewProps) => {
   const [selectedCategory, setSelectedCategory] = useState<MetricCategoryId>(DEFAULT_CATEGORY);
-  const [selectedWindow, setSelectedWindow] = useState<TimeWindowId>(DEFAULT_TIME_WINDOW);
   const [hoverState, setHoverState] = useState<HoverState>(INITIAL_HOVER_STATE);
 
   // hoverState + setter passed to PMDetailPane
@@ -99,10 +100,6 @@ export const PerformanceMonitorView = ({
     <div className="performance-monitor" role="region" aria-label="Performance Monitor">
       <div className="sec-hdr">
         <span className="sec-t">Performance Monitor</span>
-        <PMTimeWindowSelector
-          selectedWindow={selectedWindow}
-          onChange={setSelectedWindow}
-        />
       </div>
 
       <div className="pm-container">
@@ -117,7 +114,7 @@ export const PerformanceMonitorView = ({
         <PMDetailPane
           multiSessionStore={multiSessionStore}
           selectedCategory={selectedCategory}
-          selectedWindow={selectedWindow}
+          selectedWindow={TIME_WINDOW}
           hoverState={hoverState}
           onHoverChange={setHoverState}
         />

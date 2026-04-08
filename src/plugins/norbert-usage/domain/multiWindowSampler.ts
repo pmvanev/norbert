@@ -30,10 +30,14 @@ export type { TimeWindowId } from "./types";
 // TIME_WINDOW_PRESETS -- readonly const array of fixed-duration windows
 // ---------------------------------------------------------------------------
 
+// The 1m preset's sampleIntervalMs and bufferCapacity are deliberately aligned
+// to the heartbeat poll cadence in PerformanceMonitorView (2000ms). Each poll
+// tick produces exactly one sample, so buffer position * sampleIntervalMs ==
+// real elapsed time -- which is what PMChart relies on for x-axis layout and
+// what PMDetailPane relies on for "Ns ago" tooltips. If the poll rate ever
+// changes, update these two numbers in lockstep or the plot will lie.
 export const TIME_WINDOW_PRESETS: ReadonlyArray<TimeWindowConfig> = [
-  { durationMs: 60_000, label: "1m", sampleIntervalMs: 100, bufferCapacity: 600 },
-  { durationMs: 300_000, label: "5m", sampleIntervalMs: 500, bufferCapacity: 600 },
-  { durationMs: 900_000, label: "15m", sampleIntervalMs: 1_000, bufferCapacity: 900 },
+  { durationMs: 60_000, label: "1m", sampleIntervalMs: 2_000, bufferCapacity: 30 },
 ] as const;
 
 // ---------------------------------------------------------------------------
