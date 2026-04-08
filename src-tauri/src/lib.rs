@@ -8,11 +8,13 @@ use std::sync::Mutex;
 use adapters::db::metric_store::SqliteMetricStore;
 use adapters::db::SqliteEventStore;
 use domain::{
-    build_status_with_session, AccumulatedMetric, AppStatus, Session, SessionMetadata, VERSION,
+    build_status_with_session, decide_launch_action, next_window_label, parse_launch_intent,
+    AccumulatedMetric, AppStatus, LaunchAction, Session, SessionMetadata, DEFAULT_WINDOW_LABEL,
+    VERSION,
 };
 use ports::{EventStore, MetricStore};
 use rusqlite::Connection;
-use tauri::Manager;
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
 /// Shared application state accessible from IPC command handlers.
 ///
@@ -817,6 +819,51 @@ fn initialize_metric_store() -> Result<SqliteMetricStore, String> {
     SqliteMetricStore::new(connection)
 }
 
+// ---------------------------------------------------------------------------
+// Multi-window support
+// ---------------------------------------------------------------------------
+
+/// Spawn a brand-new Norbert window.
+///
+/// Generates a unique label from the set of currently-open windows and opens
+/// a fresh webview pointing at the frontend entry. The new window gets its
+/// own OS-level HWND, so it shows up as an independent entry in the Windows
+/// taskbar even though it shares the underlying process and backend state.
+fn open_new_window(app: &AppHandle) -> tauri::Result<()> {
+    let windows = app.webview_windows();
+    let existing: Vec<String> = windows.keys().cloned().collect();
+    let existing_refs: Vec<&str> = existing.iter().map(String::as_str).collect();
+    let label = next_window_label(&existing_refs);
+
+    WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
+        .title("Norbert")
+        .inner_size(1024.0, 768.0)
+        .build()?;
+
+    Ok(())
+}
+
+/// Focus the primary Norbert window, or any remaining window if `main` is gone.
+///
+/// Falls back to the first available window because users can close the
+/// original `main` window while other windows remain open.
+fn focus_any_existing_window(app: &AppHandle) {
+    let window = app
+        .get_webview_window(DEFAULT_WINDOW_LABEL)
+        .or_else(|| app.webview_windows().values().next().cloned());
+    if let Some(window) = window {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+/// IPC command: open a new Norbert window (invoked from the frontend).
+#[tauri::command]
+fn open_window(app: AppHandle) -> Result<(), String> {
+    open_new_window(&app).map_err(|e| e.to_string())
+}
+
 /// Build and configure the Tauri application.
 ///
 /// This is the composition root: initializes the database
@@ -847,15 +894,55 @@ pub fn run() {
     };
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            // Second instance launched — focus the existing window instead.
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.set_focus();
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            // A second norbert.exe was launched. Decide whether to focus the
+            // existing window or spawn an additional one based on CLI args.
+            let intent = parse_launch_intent(&args);
+            let has_existing = !app.webview_windows().is_empty();
+            match decide_launch_action(intent, has_existing) {
+                LaunchAction::SpawnFirst | LaunchAction::SpawnAdditional => {
+                    if let Err(e) = open_new_window(app) {
+                        eprintln!("norbert: failed to open new window: {}", e);
+                    }
+                }
+                LaunchAction::FocusExisting => {
+                    focus_any_existing_window(app);
+                }
             }
         }))
         .manage(app_state)
-        .invoke_handler(tauri::generate_handler![greet, get_status, get_latest_session, get_sessions, get_status_and_sessions, get_session_events, get_new_events_batch, get_metrics_for_session, get_session_metadata, get_all_session_metadata, get_transcript_usage, read_claude_config])
+        .setup(|app| {
+            use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+
+            let new_window = MenuItemBuilder::with_id("new_window", "New Window")
+                .accelerator("CmdOrCtrl+Shift+N")
+                .build(app)?;
+            let quit = MenuItemBuilder::with_id("quit", "Quit Norbert")
+                .accelerator("CmdOrCtrl+Q")
+                .build(app)?;
+            let file_menu = SubmenuBuilder::new(app, "File")
+                .item(&new_window)
+                .separator()
+                .item(&quit)
+                .build()?;
+            let menu = MenuBuilder::new(app).item(&file_menu).build()?;
+            app.set_menu(menu)?;
+
+            app.on_menu_event(|app_handle, event| match event.id().as_ref() {
+                "new_window" => {
+                    if let Err(e) = open_new_window(app_handle) {
+                        eprintln!("norbert: failed to open new window: {}", e);
+                    }
+                }
+                "quit" => {
+                    app_handle.exit(0);
+                }
+                _ => {}
+            });
+
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![greet, get_status, get_latest_session, get_sessions, get_status_and_sessions, get_session_events, get_new_events_batch, get_metrics_for_session, get_session_metadata, get_all_session_metadata, get_transcript_usage, read_claude_config, open_window])
         .run(tauri::generate_context!())
         .expect("error while running Norbert");
 }

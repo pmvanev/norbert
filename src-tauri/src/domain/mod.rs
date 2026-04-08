@@ -98,6 +98,85 @@ pub fn build_status_with_session(
     }
 }
 
+// ---------------------------------------------------------------------------
+// Multi-window launch behavior
+// ---------------------------------------------------------------------------
+
+/// CLI flag that requests a new window on launch.
+///
+/// When present in process arguments, a second-instance launch spawns an
+/// additional window instead of focusing the existing one.
+pub const NEW_WINDOW_FLAG: &str = "--new-window";
+
+/// Default label Tauri assigns to the first webview window.
+pub const DEFAULT_WINDOW_LABEL: &str = "main";
+
+/// Interpretation of the command-line arguments passed to a Norbert launch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LaunchIntent {
+    /// Standard launch: open the app or focus the existing instance.
+    Default,
+    /// Explicit request for a new window (e.g. `norbert.exe --new-window`).
+    NewWindow,
+}
+
+/// Action the application should take in response to a launch or re-launch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LaunchAction {
+    /// No Norbert window exists yet -- create the first one.
+    SpawnFirst,
+    /// A window already exists and the intent is default -- show/focus it.
+    FocusExisting,
+    /// A window already exists and the user asked for another -- spawn one.
+    SpawnAdditional,
+}
+
+/// Parse command-line arguments into a launch intent.
+///
+/// Pure function: looks for `--new-window` anywhere in the arg list.
+/// All other arguments are ignored.
+pub fn parse_launch_intent(args: &[String]) -> LaunchIntent {
+    if args.iter().any(|a| a == NEW_WINDOW_FLAG) {
+        LaunchIntent::NewWindow
+    } else {
+        LaunchIntent::Default
+    }
+}
+
+/// Decide what the application should do in response to a launch.
+///
+/// Pure function combining the parsed intent with current window state.
+/// Rules:
+/// - No existing window: always spawn (first window must exist regardless of intent).
+/// - Existing window + Default intent: focus existing (avoids accidental duplicates).
+/// - Existing window + NewWindow intent: spawn an additional window.
+pub fn decide_launch_action(intent: LaunchIntent, has_existing_window: bool) -> LaunchAction {
+    match (intent, has_existing_window) {
+        (_, false) => LaunchAction::SpawnFirst,
+        (LaunchIntent::Default, true) => LaunchAction::FocusExisting,
+        (LaunchIntent::NewWindow, true) => LaunchAction::SpawnAdditional,
+    }
+}
+
+/// Generate a unique label for a newly spawned window.
+///
+/// Pure function: returns `"main"` when no windows exist, otherwise returns
+/// the lowest-numbered `"window-N"` (N >= 2) not already in use. The default
+/// first-window label is always `"main"` to match Tauri's convention.
+pub fn next_window_label(existing_labels: &[&str]) -> String {
+    if existing_labels.is_empty() {
+        return DEFAULT_WINDOW_LABEL.to_string();
+    }
+    let mut n: u32 = 2;
+    loop {
+        let candidate = format!("window-{}", n);
+        if !existing_labels.iter().any(|l| *l == candidate) {
+            return candidate;
+        }
+        n += 1;
+    }
+}
+
 /// Canonical classification of events across all tool providers.
 ///
 /// Each variant represents a tool-agnostic lifecycle event.
@@ -262,6 +341,94 @@ mod tests {
         assert_eq!(status.port, HOOK_PORT);
         assert_eq!(status.session_count, 0);
         assert_eq!(status.event_count, 0);
+    }
+
+    // --- Multi-window launch behavior tests ---
+
+    #[test]
+    fn parse_launch_intent_defaults_when_no_flag_present() {
+        let args: Vec<String> = vec!["norbert.exe".into()];
+        assert_eq!(parse_launch_intent(&args), LaunchIntent::Default);
+    }
+
+    #[test]
+    fn parse_launch_intent_detects_new_window_flag() {
+        let args: Vec<String> = vec!["norbert.exe".into(), "--new-window".into()];
+        assert_eq!(parse_launch_intent(&args), LaunchIntent::NewWindow);
+    }
+
+    #[test]
+    fn parse_launch_intent_detects_new_window_flag_among_other_args() {
+        let args: Vec<String> = vec![
+            "norbert.exe".into(),
+            "--some-other".into(),
+            "--new-window".into(),
+            "positional".into(),
+        ];
+        assert_eq!(parse_launch_intent(&args), LaunchIntent::NewWindow);
+    }
+
+    #[test]
+    fn decide_launch_action_spawns_first_when_no_existing_window_regardless_of_intent() {
+        assert_eq!(
+            decide_launch_action(LaunchIntent::Default, false),
+            LaunchAction::SpawnFirst
+        );
+        assert_eq!(
+            decide_launch_action(LaunchIntent::NewWindow, false),
+            LaunchAction::SpawnFirst
+        );
+    }
+
+    #[test]
+    fn decide_launch_action_focuses_existing_on_default_relaunch() {
+        assert_eq!(
+            decide_launch_action(LaunchIntent::Default, true),
+            LaunchAction::FocusExisting
+        );
+    }
+
+    #[test]
+    fn decide_launch_action_spawns_additional_on_explicit_new_window_relaunch() {
+        assert_eq!(
+            decide_launch_action(LaunchIntent::NewWindow, true),
+            LaunchAction::SpawnAdditional
+        );
+    }
+
+    #[test]
+    fn next_window_label_returns_main_when_no_windows_exist() {
+        let labels: Vec<&str> = vec![];
+        assert_eq!(next_window_label(&labels), "main");
+    }
+
+    #[test]
+    fn next_window_label_returns_window_2_when_only_main_exists() {
+        let labels = vec!["main"];
+        assert_eq!(next_window_label(&labels), "window-2");
+    }
+
+    #[test]
+    fn next_window_label_skips_taken_numbered_labels() {
+        let labels = vec!["main", "window-2", "window-3"];
+        assert_eq!(next_window_label(&labels), "window-4");
+    }
+
+    #[test]
+    fn next_window_label_fills_gaps_in_numbering() {
+        // If window-2 was closed, the next spawn reuses window-2.
+        let labels = vec!["main", "window-3"];
+        assert_eq!(next_window_label(&labels), "window-2");
+    }
+
+    #[test]
+    fn new_window_flag_constant_matches_documented_cli_arg() {
+        assert_eq!(NEW_WINDOW_FLAG, "--new-window");
+    }
+
+    #[test]
+    fn default_window_label_is_main() {
+        assert_eq!(DEFAULT_WINDOW_LABEL, "main");
     }
 
     // --- Canonical EventType tests ---
