@@ -1,7 +1,23 @@
 # ADR-039: VERSIONINFO Embedding Strategy for Hook Receiver Binary
 
 ## Status
-Accepted
+Accepted — **superseded in part** by the 2026-04-08 implementation note below.
+
+## 2026-04-08 Implementation note
+
+The `CARGO_BIN_NAME`-guarded approach described in "Decision" below was merged but **never ran**: `CARGO_BIN_NAME` is not set in build-script environments (it is only set for rustc when compiling a specific binary target). The branch silently dead-coded and `norbert-hook-receiver.exe` shipped without custom VERSIONINFO.
+
+On 2026-04-08 this was fixed by adopting **Alternative 1** (a Cargo workspace with `norbert-hook-receiver` as its own member crate under `src-tauri/hook-receiver/`). The sidecar now has its own `build.rs` that unconditionally emits the VERSIONINFO resource, so no dispatch guard is needed. `tauri_build::build()` continues to handle the main `norbert` binary untouched, because the two crates no longer share a build script.
+
+The "scope is disproportionate" objection to Alternative 1 was overstated: the refactor was a few dozen lines once the hook receiver's `include_bytes!("../icons/…")` path was fixed up for the new crate root. `norbert-hook-receiver` still depends on `norbert_lib` by path (`{ path = "..", package = "norbert" }`), so no import paths changed.
+
+Verified post-implementation:
+- `norbert-hook-receiver.exe` reads `FileDescription = "Norbert Hook Receiver"`, `ProductName = "Norbert"`
+- `norbert.exe` still reads `FileDescription = "Norbert"` (tauri-build's resource unaffected)
+
+The original "Decision" section below is retained for historical context.
+
+---
 
 ## Context
 

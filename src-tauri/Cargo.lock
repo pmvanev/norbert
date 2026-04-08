@@ -2295,6 +2295,24 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-single-instance",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "tower 0.4.13",
+ "tray-icon",
+]
+
+[[package]]
+name = "norbert-hook-receiver"
+version = "0.4.4"
+dependencies = [
+ "axum",
+ "chrono",
+ "muda",
+ "norbert",
+ "png",
+ "rusqlite",
+ "serde_json",
  "tauri-winres",
  "tempfile",
  "tokio",
