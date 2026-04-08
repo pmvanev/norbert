@@ -6,9 +6,6 @@ use chrono::DateTime;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-/// Application name used in UI labels and tooltips.
-pub const APP_NAME: &str = "Norbert";
-
 /// Application version, sourced from Cargo.toml at compile time.
 /// Single source of truth -- no other module should hardcode the version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -99,52 +96,6 @@ pub fn build_status_with_session(
         session_count,
         event_count,
     }
-}
-
-/// Format the tray tooltip based on active state.
-///
-/// Pure function: when listening, shows "AppName vVersion".
-/// When active, appends status and event count.
-pub fn format_active_tooltip(
-    app_name: &str,
-    version: &str,
-    status: &str,
-    event_count: u32,
-) -> String {
-    let base = format!("{} v{}", app_name, version);
-    if status == "Listening" {
-        base
-    } else {
-        format!("{} - {} ({} events)", base, status, event_count)
-    }
-}
-
-/// Action the application should take on a window when the tray icon is clicked.
-#[derive(Debug, Clone, PartialEq)]
-pub enum WindowAction {
-    /// Window is hidden: show it and bring it to focus.
-    ShowAndFocus,
-    /// Window is visible: hide it.
-    Hide,
-}
-
-/// Determine the window action based on current visibility.
-///
-/// Pure function: maps visibility state to the appropriate toggle action.
-/// When visible, the window should hide. When hidden, it should show and focus.
-pub fn toggle_window_action(is_visible: bool) -> WindowAction {
-    if is_visible {
-        WindowAction::Hide
-    } else {
-        WindowAction::ShowAndFocus
-    }
-}
-
-/// Build the tray icon tooltip string from app name and version.
-///
-/// Pure function: no side effects, no IO.
-pub fn format_tooltip(app_name: &str, version: &str) -> String {
-    format!("{} v{}", app_name, version)
 }
 
 /// Canonical classification of events across all tool providers.
@@ -293,26 +244,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn format_tooltip_combines_name_and_version() {
-        assert_eq!(format_tooltip("Norbert", "0.1.0"), "Norbert v0.1.0");
-        assert_eq!(format_tooltip("TestApp", "2.3.4"), "TestApp v2.3.4");
-    }
-
-    #[test]
-    fn app_name_constant_is_norbert() {
-        assert_eq!(APP_NAME, "Norbert");
-    }
-
-    #[test]
     fn version_constant_matches_cargo_version() {
         // VERSION is pulled from Cargo.toml via env!("CARGO_PKG_VERSION")
         assert_eq!(VERSION, "0.4.4");
-    }
-
-    #[test]
-    fn tooltip_for_current_app_matches_expected() {
-        let tooltip = format_tooltip(APP_NAME, VERSION);
-        assert_eq!(tooltip, "Norbert v0.4.4");
     }
 
     #[test]
@@ -328,16 +262,6 @@ mod tests {
         assert_eq!(status.port, HOOK_PORT);
         assert_eq!(status.session_count, 0);
         assert_eq!(status.event_count, 0);
-    }
-
-    #[test]
-    fn toggle_window_action_hides_when_visible() {
-        assert_eq!(toggle_window_action(true), WindowAction::Hide);
-    }
-
-    #[test]
-    fn toggle_window_action_shows_and_focuses_when_hidden() {
-        assert_eq!(toggle_window_action(false), WindowAction::ShowAndFocus);
     }
 
     // --- Canonical EventType tests ---
@@ -685,17 +609,4 @@ mod tests {
         );
     }
 
-    // --- format_active_tooltip tests ---
-
-    #[test]
-    fn format_active_tooltip_shows_base_when_listening() {
-        let result = format_active_tooltip("Norbert", "0.1.0", "Listening", 0);
-        assert_eq!(result, "Norbert v0.1.0");
-    }
-
-    #[test]
-    fn format_active_tooltip_includes_status_and_events_when_active() {
-        let result = format_active_tooltip("Norbert", "0.1.0", "Active session", 15);
-        assert_eq!(result, "Norbert v0.1.0 - Active session (15 events)");
-    }
 }

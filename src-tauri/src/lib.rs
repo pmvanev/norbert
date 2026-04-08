@@ -8,8 +8,7 @@ use std::sync::Mutex;
 use adapters::db::metric_store::SqliteMetricStore;
 use adapters::db::SqliteEventStore;
 use domain::{
-    build_status_with_session, format_tooltip, toggle_window_action, AccumulatedMetric,
-    AppStatus, Session, SessionMetadata, WindowAction, APP_NAME, VERSION,
+    build_status_with_session, AccumulatedMetric, AppStatus, Session, SessionMetadata, VERSION,
 };
 use ports::{EventStore, MetricStore};
 use rusqlite::Connection;
@@ -824,8 +823,6 @@ fn initialize_metric_store() -> Result<SqliteMetricStore, String> {
 /// and registers IPC commands. The library entry point called by the binary.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let tooltip = format_tooltip(APP_NAME, VERSION);
-
     // Initialize the event store before building the app.
     let event_store = match initialize_event_store() {
         Ok(store) => store,
@@ -858,68 +855,6 @@ pub fn run() {
             }
         }))
         .manage(app_state)
-        .setup(move |app| {
-            let icon = app
-                .default_window_icon()
-                .cloned()
-                .expect("default window icon must be set in tauri.conf.json");
-
-            let show_hide = tauri::menu::MenuItemBuilder::with_id("show_hide", "Show / Hide")
-                .build(app)?;
-            let quit = tauri::menu::MenuItemBuilder::with_id("quit", "Quit Norbert")
-                .build(app)?;
-            let menu = tauri::menu::MenuBuilder::new(app)
-                .item(&show_hide)
-                .separator()
-                .item(&quit)
-                .build()?;
-
-            let _tray = tauri::tray::TrayIconBuilder::new()
-                .icon(icon)
-                .tooltip(&tooltip)
-                .menu(&menu)
-                .on_menu_event(|app_handle, event| {
-                    match event.id().as_ref() {
-                        "show_hide" => {
-                            if let Some(window) = app_handle.get_webview_window("main") {
-                                let is_visible = window.is_visible().unwrap_or(false);
-                                match toggle_window_action(is_visible) {
-                                    WindowAction::ShowAndFocus => {
-                                        let _ = window.show();
-                                        let _ = window.set_focus();
-                                    }
-                                    WindowAction::Hide => {
-                                        let _ = window.hide();
-                                    }
-                                }
-                            }
-                        }
-                        "quit" => {
-                            app_handle.exit(0);
-                        }
-                        _ => {}
-                    }
-                })
-                .on_tray_icon_event(|tray_icon, event| {
-                    if let tauri::tray::TrayIconEvent::Click { .. } = event {
-                        let app_handle = tray_icon.app_handle();
-                        if let Some(window) = app_handle.get_webview_window("main") {
-                            let is_visible = window.is_visible().unwrap_or(false);
-                            match toggle_window_action(is_visible) {
-                                WindowAction::ShowAndFocus => {
-                                    let _ = window.show();
-                                    let _ = window.set_focus();
-                                }
-                                WindowAction::Hide => {
-                                    let _ = window.hide();
-                                }
-                            }
-                        }
-                    }
-                })
-                .build(app)?;
-            Ok(())
-        })
         .invoke_handler(tauri::generate_handler![greet, get_status, get_latest_session, get_sessions, get_status_and_sessions, get_session_events, get_new_events_batch, get_metrics_for_session, get_session_metadata, get_all_session_metadata, get_transcript_usage, read_claude_config])
         .run(tauri::generate_context!())
         .expect("error while running Norbert");
