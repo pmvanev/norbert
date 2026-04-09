@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { reconstructMetricsFromDb } from "./metricsReconstructor";
+import { computeGaugeClusterData } from "./gaugeCluster";
 import type { AccumulatedMetric } from "./activeTimeFormatter";
 
 const metric = (
@@ -84,5 +85,32 @@ describe("reconstructMetricsFromDb", () => {
     expect(result.contextWindowPct).toBe(0);
     expect(result.activeAgentCount).toBe(0);
     expect(result.toolCallCount).toBe(0);
+  });
+});
+
+describe("inactive session gauge pipeline", () => {
+  it("reconstructed metrics produce non-zero gauge cost and token data", () => {
+    const dbMetrics = [
+      metric("token.usage", "model=m,type=input", 5000),
+      metric("token.usage", "model=m,type=output", 1200),
+      metric("token.usage", "model=m,type=cache_read", 800),
+      metric("cost.usage", "model=m", 0.42),
+    ];
+    const reconstructed = reconstructMetricsFromDb("s1", dbMetrics);
+    const gaugeData = computeGaugeClusterData(reconstructed);
+
+    expect(gaugeData.odometer.value).toBeCloseTo(0.42);
+    expect(gaugeData.odometer.formatted).toBe("$0.42");
+    // Burn rate and context are real-time only, expected zero for inactive
+    expect(gaugeData.tachometer.value).toBe(0);
+    expect(gaugeData.fuelGauge.value).toBe(0);
+  });
+
+  it("produces zero gauges when no DB metrics exist", () => {
+    const reconstructed = reconstructMetricsFromDb("s1", []);
+    const gaugeData = computeGaugeClusterData(reconstructed);
+
+    expect(gaugeData.odometer.value).toBe(0);
+    expect(gaugeData.odometer.formatted).toBe("$0.00");
   });
 });
