@@ -10,6 +10,7 @@ import {
 } from "./domain/status";
 import { deriveSessionName } from "./domain/sessionPresentation";
 import { createInitialMetrics } from "./plugins/norbert-usage/domain/metricsAggregator";
+import { reconstructMetricsFromDb } from "./plugins/norbert-usage/domain/metricsReconstructor";
 import { listen } from "@tauri-apps/api/event";
 import {
   type ThemeName,
@@ -166,7 +167,10 @@ function SessionStatusLoader({
     );
   }, [sessionId]);
 
-  const effectiveMetrics = sessionMetrics ?? createInitialMetrics(sessionId);
+  // Prefer live in-memory metrics; fall back to database reconstruction
+  // so inactive sessions still show their final token/cost totals.
+  const effectiveMetrics = sessionMetrics
+    ?? (metrics.length > 0 ? reconstructMetricsFromDb(sessionId, metrics) : createInitialMetrics(sessionId));
   const gaugeData = computeGaugeClusterData(effectiveMetrics);
 
   const totalApiRequests = events.filter((e) => e.event_type === "api_request").length;
