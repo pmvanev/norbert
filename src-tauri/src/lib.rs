@@ -879,23 +879,53 @@ fn theme_label(base: &str, is_active: bool) -> String {
     }
 }
 
-/// Update native menu item labels to show which theme is active.
-fn update_theme_selection(app: &AppHandle, active_id: &str) {
-    use tauri::menu::MenuItemKind;
-    if let Some(menu) = app.menu() {
-        for (tid, label) in THEME_IDS.iter().zip(THEME_LABELS.iter()) {
-            if let Some(MenuItemKind::MenuItem(item)) = menu.get(*tid) {
-                let _ = item.set_text(theme_label(label, *tid == active_id));
-            }
+/// Rebuild and reassign the entire app menu with the given theme active.
+/// On Windows, individual menu item mutations may not propagate to
+/// window-level copies, so we rebuild the full menu instead.
+fn rebuild_menu_with_theme(app: &AppHandle, active_id: &str) {
+    use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+    let build = || -> tauri::Result<()> {
+        let new_window = MenuItemBuilder::with_id("new_window", "New Window")
+            .accelerator("CmdOrCtrl+Shift+N")
+            .build(app)?;
+        let quit = MenuItemBuilder::with_id("quit", "Quit Norbert")
+            .accelerator("CmdOrCtrl+Q")
+            .build(app)?;
+        let file_menu = SubmenuBuilder::new(app, "File")
+            .item(&new_window)
+            .separator()
+            .item(&quit)
+            .build()?;
+
+        let mut theme_submenu = SubmenuBuilder::new(app, "Theme");
+        for (id, label) in THEME_IDS.iter().zip(THEME_LABELS.iter()) {
+            let item = MenuItemBuilder::with_id(*id, theme_label(label, *id == active_id))
+                .build(app)?;
+            theme_submenu = theme_submenu.item(&item);
         }
+        let theme_menu = theme_submenu.build()?;
+
+        let view_menu = SubmenuBuilder::new(app, "View")
+            .item(&theme_menu)
+            .build()?;
+
+        let menu = MenuBuilder::new(app)
+            .item(&file_menu)
+            .item(&view_menu)
+            .build()?;
+        app.set_menu(menu)?;
+        Ok(())
+    };
+    if let Err(e) = build() {
+        eprintln!("norbert: failed to rebuild menu: {}", e);
     }
 }
 
 /// IPC command: sync native menu theme selection with the frontend's stored theme.
 #[tauri::command]
 fn sync_theme_menu(app: AppHandle, theme: String) {
-    let target_id = format!("theme_{}", theme);
-    update_theme_selection(&app, &target_id);
+    let active_id = format!("theme_{}", theme);
+    rebuild_menu_with_theme(&app, &active_id);
 }
 
 /// Build and configure the Tauri application.
@@ -992,7 +1022,7 @@ pub fn run() {
                         app_handle.exit(0);
                     }
                     _ if id.starts_with("theme_") => {
-                        update_theme_selection(app_handle, id);
+                        rebuild_menu_with_theme(app_handle, id);
                         let theme_name = id.strip_prefix("theme_").unwrap_or("nb");
                         let _ = app_handle.emit("theme-changed", theme_name);
                     }
