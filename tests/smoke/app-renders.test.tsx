@@ -12,6 +12,11 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
 }));
 
+// Mock @tauri-apps/api/event (listen returns an unlisten function)
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(() => Promise.resolve(() => {})),
+}));
+
 const mockedInvoke = vi.mocked(invoke);
 
 // Must import App after mock setup
@@ -58,6 +63,9 @@ function setupDefaultMocks() {
     if (cmd === "get_transcript_usage") {
       return Promise.resolve({ input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0, model: "", message_count: 0 });
     }
+    if (cmd === "sync_theme_menu") {
+      return Promise.resolve();
+    }
     return Promise.reject(new Error(`Unknown command: ${cmd}`));
   });
 }
@@ -83,11 +91,11 @@ beforeEach(() => {
 });
 
 describe("App smoke test — catches black screen regressions", () => {
-  it("renders the menu bar with View entry", async () => {
+  it("renders the app body after loading", async () => {
     render(<App />);
 
     await waitFor(() => {
-      expect(screen.getByText("View")).toBeInTheDocument();
+      expect(screen.getByTestId("sidebar")).toBeInTheDocument();
     });
   });
 
@@ -115,7 +123,7 @@ describe("App smoke test — catches black screen regressions", () => {
     const { container } = render(<App />);
 
     await waitFor(() => {
-      expect(screen.getByText("View")).toBeInTheDocument();
+      expect(screen.getByTestId("sidebar")).toBeInTheDocument();
     });
 
     const main = container.querySelector("main");

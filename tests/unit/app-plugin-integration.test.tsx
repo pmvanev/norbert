@@ -8,7 +8,7 @@
  * 1. Initializes the plugin system (loads norbert-session plugin)
  * 2. Renders the ZoneRenderer instead of hardcoded views
  * 3. Builds a view registry mapping viewIds to React components
- * 4. Keeps MenuBar and status bar footer
+ * 4. Keeps status bar footer (theme menu is now native Tauri menu)
  * 5. Session list functionality remains accessible through the layout engine
  */
 
@@ -21,6 +21,11 @@ import { invoke } from "@tauri-apps/api/core";
 // Mock @tauri-apps/api/core before importing App
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
+}));
+
+// Mock @tauri-apps/api/event (listen returns an unlisten function)
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(() => Promise.resolve(() => {})),
 }));
 
 const mockedInvoke = vi.mocked(invoke);
@@ -63,6 +68,15 @@ function setupDefaultMocks() {
         ],
       ]);
     }
+    if (cmd === "get_new_events_batch") {
+      return Promise.resolve({});
+    }
+    if (cmd === "get_transcript_usage") {
+      return Promise.resolve({ input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0, model: "", message_count: 0 });
+    }
+    if (cmd === "sync_theme_menu") {
+      return Promise.resolve();
+    }
     return Promise.reject(new Error(`Unknown command: ${cmd}`));
   });
 }
@@ -95,12 +109,10 @@ describe("App renders via plugin system and layout engine", () => {
     const { container } = render(<App />);
 
     await waitFor(() => {
-      expect(screen.getByText("View")).toBeInTheDocument();
+      // ZoneRenderer renders a zone-container div
+      const zoneContainer = container.querySelector("[data-testid='zone-container']");
+      expect(zoneContainer).toBeInTheDocument();
     });
-
-    // ZoneRenderer renders a zone-container div
-    const zoneContainer = container.querySelector("[data-testid='zone-container']");
-    expect(zoneContainer).toBeInTheDocument();
   });
 
   it("renders session list inside the main zone via view registry", async () => {
@@ -113,11 +125,11 @@ describe("App renders via plugin system and layout engine", () => {
     });
   });
 
-  it("preserves the MenuBar with View entry", async () => {
+  it("syncs theme to native menu on mount", async () => {
     render(<App />);
 
     await waitFor(() => {
-      expect(screen.getByText("View")).toBeInTheDocument();
+      expect(mockedInvoke).toHaveBeenCalledWith("sync_theme_menu", { theme: "nb" });
     });
   });
 

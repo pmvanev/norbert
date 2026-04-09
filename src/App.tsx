@@ -10,15 +10,15 @@ import {
 } from "./domain/status";
 import { deriveSessionName } from "./domain/sessionPresentation";
 import { createInitialMetrics } from "./plugins/norbert-usage/domain/metricsAggregator";
+import { listen } from "@tauri-apps/api/event";
 import {
   type ThemeName,
   THEME_NAMES,
+  isValidThemeName,
   readStoredTheme,
   storeTheme,
   themeToClassName,
 } from "./domain/theme";
-import { buildMenuBar } from "./domain/menu";
-import { MenuBar } from "./components/MenuBar";
 import { loadPlugins } from "./plugins/lifecycleManager";
 import { createNorbertAPI } from "./plugins/apiFactory";
 import { createPluginRegistry, getAllViews } from "./plugins/pluginRegistry";
@@ -226,12 +226,19 @@ function App() {
   const handleThemeSelect = useCallback((newTheme: ThemeName) => {
     setTheme(newTheme);
     storeTheme(newTheme, localStorage);
+    invoke("sync_theme_menu", { theme: newTheme }).catch(() => {});
   }, []);
 
-  const menuEntries = useMemo(
-    () => buildMenuBar(theme, handleThemeSelect),
-    [theme, handleThemeSelect]
-  );
+  /// Sync initial theme to the native menu and listen for native menu theme changes.
+  useEffect(() => {
+    invoke("sync_theme_menu", { theme }).catch(() => {});
+    const unlisten = listen<string>("theme-changed", (event) => {
+      if (isValidThemeName(event.payload)) {
+        handleThemeSelect(event.payload);
+      }
+    });
+    return () => { unlisten.then((f) => f()); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /// Handler for selecting a session row to view its events.
   /// Opens session-detail in the secondary zone (side-by-side layout).
@@ -600,7 +607,6 @@ function App() {
 
   return (
     <main>
-      <MenuBar entries={menuEntries} />
       <div className="app-body">
         <nav className="sidebar" data-testid="sidebar">
           {visibleSidebarItems.map((item) => (

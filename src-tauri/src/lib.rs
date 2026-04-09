@@ -14,7 +14,7 @@ use domain::{
 };
 use ports::{EventStore, MetricStore};
 use rusqlite::Connection;
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 /// Shared application state accessible from IPC command handlers.
 ///
@@ -864,6 +864,40 @@ fn open_window(app: AppHandle) -> Result<(), String> {
     open_new_window(&app).map_err(|e| e.to_string())
 }
 
+/// Theme identifiers matching the frontend CSS class suffixes.
+const THEME_IDS: [&str; 5] = ["theme_nb", "theme_cd", "theme_vd", "theme_cl", "theme_vl"];
+
+/// Base labels for each theme (no prefix).
+const THEME_LABELS: [&str; 5] = ["Norbert", "Claude Dark", "VS Code Dark", "Claude Light", "VS Code Light"];
+
+/// Format a theme label with a bullet prefix for the active theme.
+fn theme_label(base: &str, is_active: bool) -> String {
+    if is_active {
+        format!("\u{2022}  {}", base)
+    } else {
+        format!("    {}", base)
+    }
+}
+
+/// Update native menu item labels to show which theme is active.
+fn update_theme_selection(app: &AppHandle, active_id: &str) {
+    use tauri::menu::MenuItemKind;
+    if let Some(menu) = app.menu() {
+        for (tid, label) in THEME_IDS.iter().zip(THEME_LABELS.iter()) {
+            if let Some(MenuItemKind::MenuItem(item)) = menu.get(*tid) {
+                let _ = item.set_text(theme_label(label, *tid == active_id));
+            }
+        }
+    }
+}
+
+/// IPC command: sync native menu theme selection with the frontend's stored theme.
+#[tauri::command]
+fn sync_theme_menu(app: AppHandle, theme: String) {
+    let target_id = format!("theme_{}", theme);
+    update_theme_selection(&app, &target_id);
+}
+
 /// Build and configure the Tauri application.
 ///
 /// This is the composition root: initializes the database
@@ -925,24 +959,50 @@ pub fn run() {
                 .separator()
                 .item(&quit)
                 .build()?;
-            let menu = MenuBuilder::new(app).item(&file_menu).build()?;
+
+            // View > Theme submenu with bullet-prefixed labels (select-one).
+            // The frontend calls sync_theme_menu on startup to match localStorage.
+            let mut theme_submenu = SubmenuBuilder::new(app, "Theme");
+            for (id, label) in THEME_IDS.iter().zip(THEME_LABELS.iter()) {
+                let item = MenuItemBuilder::with_id(*id, theme_label(label, *id == "theme_nb"))
+                    .build(app)?;
+                theme_submenu = theme_submenu.item(&item);
+            }
+            let theme_menu = theme_submenu.build()?;
+
+            let view_menu = SubmenuBuilder::new(app, "View")
+                .item(&theme_menu)
+                .build()?;
+
+            let menu = MenuBuilder::new(app)
+                .item(&file_menu)
+                .item(&view_menu)
+                .build()?;
             app.set_menu(menu)?;
 
-            app.on_menu_event(|app_handle, event| match event.id().as_ref() {
-                "new_window" => {
-                    if let Err(e) = open_new_window(app_handle) {
-                        eprintln!("norbert: failed to open new window: {}", e);
+            app.on_menu_event(|app_handle, event| {
+                let id = event.id().as_ref();
+                match id {
+                    "new_window" => {
+                        if let Err(e) = open_new_window(app_handle) {
+                            eprintln!("norbert: failed to open new window: {}", e);
+                        }
                     }
+                    "quit" => {
+                        app_handle.exit(0);
+                    }
+                    _ if id.starts_with("theme_") => {
+                        update_theme_selection(app_handle, id);
+                        let theme_name = id.strip_prefix("theme_").unwrap_or("nb");
+                        let _ = app_handle.emit("theme-changed", theme_name);
+                    }
+                    _ => {}
                 }
-                "quit" => {
-                    app_handle.exit(0);
-                }
-                _ => {}
             });
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet, get_status, get_latest_session, get_sessions, get_status_and_sessions, get_session_events, get_new_events_batch, get_metrics_for_session, get_session_metadata, get_all_session_metadata, get_transcript_usage, read_claude_config, open_window])
+        .invoke_handler(tauri::generate_handler![greet, get_status, get_latest_session, get_sessions, get_status_and_sessions, get_session_events, get_new_events_batch, get_metrics_for_session, get_session_metadata, get_all_session_metadata, get_transcript_usage, read_claude_config, open_window, sync_theme_menu])
         .run(tauri::generate_context!())
         .expect("error while running Norbert");
 }
