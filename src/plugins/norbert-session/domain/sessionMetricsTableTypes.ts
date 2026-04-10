@@ -45,6 +45,21 @@ export interface SortState {
 // BuildTableRowsInput -- grouped inputs for buildTableRows
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Heat coloring types
+// ---------------------------------------------------------------------------
+
+/** Heat intensity level for metric cell shading. */
+export type HeatLevel = "neutral" | "amber" | "red";
+
+/** Column identifiers that support heat coloring. */
+export type HeatColumnId =
+  | "cost"
+  | "totalTokens"
+  | "burnRate"
+  | "contextPercent"
+  | "apiHealth";
+
 export type {
   SessionInfo,
   SessionMetrics,

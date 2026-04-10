@@ -13,6 +13,8 @@ import type {
   ColumnId,
   SortDirection,
   SortState,
+  HeatLevel,
+  HeatColumnId,
 } from "./sessionMetricsTableTypes";
 
 // ---------------------------------------------------------------------------
@@ -237,4 +239,65 @@ export function applySortToggle(
     };
   }
   return { columnId: clickedColumnId, direction: "asc" };
+}
+
+// ---------------------------------------------------------------------------
+// Heat coloring -- thresholds per column
+// ---------------------------------------------------------------------------
+
+/** Amber and red thresholds for each heat column. */
+interface HeatThresholds {
+  readonly amber: number;
+  readonly red: number;
+}
+
+const HEAT_THRESHOLDS: Record<string, HeatThresholds> = {
+  cost: { amber: 0.50, red: 2.00 },
+  totalTokens: { amber: 50_000, red: 200_000 },
+  burnRate: { amber: 100, red: 300 },
+  contextPercent: { amber: 60, red: 80 },
+};
+
+/** API health thresholds: success rate BELOW these values triggers heat. */
+const API_HEALTH_THRESHOLDS: HeatThresholds = { amber: 98, red: 90 };
+
+/** Classify a value against standard (higher = hotter) thresholds. */
+function classifyStandard(value: number, thresholds: HeatThresholds): HeatLevel {
+  if (value >= thresholds.red) return "red";
+  if (value >= thresholds.amber) return "amber";
+  return "neutral";
+}
+
+/** Classify API health where LOWER success rate = higher heat. */
+function classifyApiHealth(successRate: number): HeatLevel {
+  if (successRate <= 0) return "neutral";
+  if (successRate < API_HEALTH_THRESHOLDS.red) return "red";
+  if (successRate < API_HEALTH_THRESHOLDS.amber) return "amber";
+  return "neutral";
+}
+
+/**
+ * Compute the heat level for a metric value in the given column.
+ * Zero values always produce neutral (treated as missing/no-data).
+ * For standard columns, higher values produce higher heat.
+ * For apiHealth, lower success rates produce higher heat.
+ */
+export function computeHeatLevel(value: number, columnId: HeatColumnId): HeatLevel {
+  if (value === 0) return "neutral";
+
+  if (columnId === "apiHealth") {
+    return classifyApiHealth(value);
+  }
+
+  const thresholds = HEAT_THRESHOLDS[columnId];
+  return classifyStandard(value, thresholds);
+}
+
+// ---------------------------------------------------------------------------
+// deriveHeatClass -- map HeatLevel to CSS class string
+// ---------------------------------------------------------------------------
+
+/** Map a HeatLevel to a CSS class string for styling. */
+export function deriveHeatClass(heatLevel: HeatLevel): string {
+  return `heat-${heatLevel}`;
 }
