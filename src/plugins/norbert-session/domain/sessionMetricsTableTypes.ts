@@ -23,6 +23,17 @@ export interface TableRow {
 }
 
 // ---------------------------------------------------------------------------
+// GroupedRows -- active vs recent grouping
+// ---------------------------------------------------------------------------
+
+export interface GroupedRows {
+  readonly active: readonly TableRow[];
+  readonly recent: readonly TableRow[];
+  readonly activeCount: number;
+  readonly recentCount: number;
+}
+
+// ---------------------------------------------------------------------------
 // Sorting types
 // ---------------------------------------------------------------------------
 

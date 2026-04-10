@@ -10,6 +10,7 @@ import type { SessionMetrics } from "../../norbert-usage/domain/types";
 import type { SessionMetadata } from "../../../views/SessionListView";
 import type {
   TableRow,
+  GroupedRows,
   ColumnId,
   SortDirection,
   SortState,
@@ -101,6 +102,36 @@ export function buildTableRows(
   return sessions.map((session) =>
     sessionToTableRow(session, metrics, metadata, now),
   );
+}
+
+// ---------------------------------------------------------------------------
+// groupSessionRows -- partition rows into active and recent groups
+// ---------------------------------------------------------------------------
+
+/**
+ * Partition table rows into active and recent groups based on isActive flag.
+ * Active sessions (not ended, event within 5 min) go to the active group.
+ * All other sessions go to the recent group.
+ * Returns counts for each group alongside the row arrays.
+ */
+export function groupSessionRows(rows: readonly TableRow[]): GroupedRows {
+  const active = rows.filter((row) => row.isActive);
+  const recent = rows.filter((row) => !row.isActive);
+  return {
+    active,
+    recent,
+    activeCount: active.length,
+    recentCount: recent.length,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// toggleGroupCollapsed -- flip collapse/expand state
+// ---------------------------------------------------------------------------
+
+/** Toggle a group's collapsed state. Returns the opposite boolean value. */
+export function toggleGroupCollapsed(collapsed: boolean): boolean {
+  return !collapsed;
 }
 
 // ---------------------------------------------------------------------------
