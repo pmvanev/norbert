@@ -431,6 +431,117 @@ mod tests {
         assert_eq!(DEFAULT_WINDOW_LABEL, "main");
     }
 
+    // --- Window capability coverage tests ---
+    //
+    // These tests verify that every label next_window_label can produce
+    // matches at least one pattern in capabilities/default.json.
+    // Would have caught the original bug where only "main" was listed.
+
+    /// Minimal glob matcher for Tauri capability window patterns.
+    /// Supports only trailing `*` (e.g., "window-*"), which is all Tauri uses.
+    fn matches_capability_pattern(label: &str, pattern: &str) -> bool {
+        if let Some(prefix) = pattern.strip_suffix('*') {
+            label.starts_with(prefix)
+        } else {
+            label == pattern
+        }
+    }
+
+    /// Parse window patterns from capabilities/default.json.
+    fn read_capability_window_patterns() -> Vec<String> {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let path = std::path::Path::new(manifest_dir)
+            .join("capabilities")
+            .join("default.json");
+        let content = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("Cannot read {}: {}", path.display(), e));
+        let parsed: serde_json::Value = serde_json::from_str(&content)
+            .expect("capabilities/default.json is not valid JSON");
+        parsed["windows"]
+            .as_array()
+            .expect("capabilities/default.json missing 'windows' array")
+            .iter()
+            .map(|v| v.as_str().expect("window pattern is not a string").to_string())
+            .collect()
+    }
+
+    fn label_matches_any_pattern(label: &str, patterns: &[String]) -> bool {
+        patterns.iter().any(|p| matches_capability_pattern(label, p))
+    }
+
+    #[test]
+    fn capability_patterns_cover_default_window_label() {
+        let patterns = read_capability_window_patterns();
+        assert!(
+            label_matches_any_pattern(DEFAULT_WINDOW_LABEL, &patterns),
+            "Default label '{}' not covered by capability patterns: {:?}",
+            DEFAULT_WINDOW_LABEL, patterns
+        );
+    }
+
+    #[test]
+    fn capability_patterns_cover_all_generated_window_labels() {
+        let patterns = read_capability_window_patterns();
+
+        // Simulate spawning several windows and verify each label is covered.
+        let mut labels: Vec<String> = vec![];
+        for _ in 0..10 {
+            let refs: Vec<&str> = labels.iter().map(String::as_str).collect();
+            let label = next_window_label(&refs);
+            assert!(
+                label_matches_any_pattern(&label, &patterns),
+                "Generated label '{}' not covered by capability patterns: {:?}",
+                label, patterns
+            );
+            labels.push(label);
+        }
+    }
+
+    #[test]
+    fn capability_patterns_cover_gap_filled_labels() {
+        let patterns = read_capability_window_patterns();
+
+        // Close window-2, spawn again — should reuse window-2.
+        let labels = vec!["main", "window-3", "window-4"];
+        let label = next_window_label(&labels);
+        assert_eq!(label, "window-2");
+        assert!(
+            label_matches_any_pattern(&label, &patterns),
+            "Gap-filled label '{}' not covered by capability patterns: {:?}",
+            label, patterns
+        );
+    }
+
+    // --- Window creation safety tests ---
+    //
+    // These verify that the label computation is fully decoupled from
+    // the window map, preventing the deadlock where holding a read lock
+    // on webview_windows() while calling .build() (which needs a write
+    // lock) caused a hang.
+
+    #[test]
+    fn next_window_label_is_pure_and_takes_no_app_handle() {
+        // next_window_label takes &[&str], not &AppHandle.
+        // This test documents the contract: label computation must
+        // remain decoupled from Tauri's window registry so callers
+        // can drop the registry lock before creating a window.
+        let labels = vec!["main", "window-2"];
+        let label = next_window_label(&labels);
+        assert_eq!(label, "window-3");
+        // If this test compiles, the function signature hasn't regressed
+        // to take an AppHandle, which would re-introduce the deadlock risk.
+    }
+
+    #[test]
+    fn next_window_label_result_is_owned_string() {
+        // The returned String is fully owned — no borrow from the input slice.
+        // This lets callers drop the window map before using the label.
+        let labels = vec!["main"];
+        let label: String = next_window_label(&labels);
+        drop(labels); // would fail to compile if label borrowed from labels
+        assert_eq!(label, "window-2");
+    }
+
     // --- Canonical EventType tests ---
 
     #[test]

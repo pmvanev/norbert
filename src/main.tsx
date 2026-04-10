@@ -1,5 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { emit } from "@tauri-apps/api/event";
 import "./styles/themes.css";
 import "./styles/design-system.css";
 import App from "./App";
@@ -55,7 +56,13 @@ applyZoom(currentZoom);
 document.addEventListener("keydown", (e) => {
   if (!e.ctrlKey && !e.metaKey) return;
 
-  if (e.key === "=" || e.key === "+") {
+  if (e.shiftKey && e.key === "N") {
+    e.preventDefault();
+    emit("request-new-window");
+  } else if (e.key === "q") {
+    e.preventDefault();
+    emit("request-quit");
+  } else if (e.key === "=" || e.key === "+") {
     e.preventDefault();
     currentZoom = Math.min(ZOOM_MAX, currentZoom + ZOOM_STEP);
     applyZoom(currentZoom);

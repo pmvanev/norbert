@@ -14,7 +14,7 @@ use domain::{
 };
 use ports::{EventStore, MetricStore};
 use rusqlite::Connection;
-use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Listener, Manager, Runtime, WebviewUrl, WebviewWindowBuilder};
 
 /// Shared application state accessible from IPC command handlers.
 ///
@@ -828,11 +828,15 @@ fn initialize_metric_store() -> Result<SqliteMetricStore, String> {
 /// a fresh webview pointing at the frontend entry. The new window gets its
 /// own OS-level HWND, so it shows up as an independent entry in the Windows
 /// taskbar even though it shares the underlying process and backend state.
-fn open_new_window(app: &AppHandle) -> tauri::Result<()> {
-    let windows = app.webview_windows();
-    let existing: Vec<String> = windows.keys().cloned().collect();
-    let existing_refs: Vec<&str> = existing.iter().map(String::as_str).collect();
-    let label = next_window_label(&existing_refs);
+fn open_new_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
+    // Collect labels and drop the map before .build() to avoid a deadlock:
+    // webview_windows() holds a read lock; build() needs a write lock.
+    let label = {
+        let windows = app.webview_windows();
+        let existing: Vec<String> = windows.keys().cloned().collect();
+        let existing_refs: Vec<&str> = existing.iter().map(String::as_str).collect();
+        next_window_label(&existing_refs)
+    };
 
     WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
         .title("Norbert")
@@ -846,7 +850,7 @@ fn open_new_window(app: &AppHandle) -> tauri::Result<()> {
 ///
 /// Falls back to the first available window because users can close the
 /// original `main` window while other windows remain open.
-fn focus_any_existing_window(app: &AppHandle) {
+fn focus_any_existing_window<R: Runtime>(app: &AppHandle<R>) {
     let window = app
         .get_webview_window(DEFAULT_WINDOW_LABEL)
         .or_else(|| app.webview_windows().values().next().cloned());
@@ -857,11 +861,6 @@ fn focus_any_existing_window(app: &AppHandle) {
     }
 }
 
-/// IPC command: open a new Norbert window (invoked from the frontend).
-#[tauri::command]
-fn open_window(app: AppHandle) -> Result<(), String> {
-    open_new_window(&app).map_err(|e| e.to_string())
-}
 
 /// Theme identifiers matching the frontend CSS class suffixes.
 const THEME_IDS: [&str; 5] = ["theme_nb", "theme_cd", "theme_vd", "theme_cl", "theme_vl"];
@@ -1029,9 +1028,22 @@ pub fn run() {
                 }
             });
 
+            // Frontend keyboard shortcuts emit events that we handle here,
+            // in the event loop context — same execution path as menu clicks.
+            let handle = app.handle().clone();
+            app.listen("request-new-window", move |_| {
+                if let Err(e) = open_new_window(&handle) {
+                    eprintln!("norbert: failed to open new window: {}", e);
+                }
+            });
+            let handle = app.handle().clone();
+            app.listen("request-quit", move |_| {
+                handle.exit(0);
+            });
+
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet, get_status, get_latest_session, get_sessions, get_status_and_sessions, get_session_events, get_new_events_batch, get_metrics_for_session, get_session_metadata, get_all_session_metadata, get_transcript_usage, read_claude_config, open_window, sync_theme_menu])
+        .invoke_handler(tauri::generate_handler![greet, get_status, get_latest_session, get_sessions, get_status_and_sessions, get_session_events, get_new_events_batch, get_metrics_for_session, get_session_metadata, get_all_session_metadata, get_transcript_usage, read_claude_config, sync_theme_menu])
         .run(tauri::generate_context!())
         .expect("error while running Norbert");
 }
@@ -1082,4 +1094,5 @@ mod tests {
         assert_eq!(status.session_count, 7);
         assert_eq!(status.event_count, 123);
     }
+
 }
