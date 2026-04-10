@@ -6,31 +6,126 @@
  *
  * Driving ports:
  *   - getAvailableOptionalColumns() -> ColumnDefinition[]
- *   - toggleColumn(visibleColumns, columnId) -> ColumnId[]
+ *   - toggleColumn(visibleColumns, columnId) -> OptionalColumnId[]
  *   - formatCacheHitPct(cacheReadTokens, totalTokens) -> string
  *   - formatClaudeVersion (src/domain/sessionPresentation.ts)
  *   - formatPlatform (src/domain/sessionPresentation.ts)
+ *   - buildTableRows (extended with optional column fields)
  *
  * Traces to: Milestone 5 — Optional Columns
  */
 
 import { describe, it, expect } from "vitest";
+import type { SessionInfo } from "../../../../src/domain/status";
+import type { SessionMetrics } from "../../../../src/plugins/norbert-usage/domain/types";
+import type { SessionMetadata } from "../../../../src/views/SessionListView";
+import type { OptionalColumnId } from "../../../../src/plugins/norbert-session/domain/sessionMetricsTableTypes";
+import {
+  getAvailableOptionalColumns,
+  toggleColumn,
+  formatCacheHitPct,
+  buildTableRows,
+} from "../../../../src/plugins/norbert-session/domain/sessionMetricsTable";
+import {
+  formatClaudeVersion,
+  formatPlatform,
+} from "../../../../src/domain/sessionPresentation";
 
 // ---------------------------------------------------------------------------
-// PLACEHOLDER: imports will target production driving ports once implemented
+// Test helpers
 // ---------------------------------------------------------------------------
+
+const NOW = new Date("2026-04-10T12:00:00Z").getTime();
+
+function makeSession(
+  id: string,
+  startedMinutesAgo: number,
+  opts: { ended?: boolean; lastEventMinutesAgo?: number },
+): SessionInfo {
+  const started = new Date(NOW - startedMinutesAgo * 60_000).toISOString();
+  const lastEventAgo = opts.lastEventMinutesAgo ?? startedMinutesAgo;
+  return {
+    id,
+    started_at: started,
+    ended_at: opts.ended
+      ? new Date(NOW - lastEventAgo * 60_000).toISOString()
+      : null,
+    event_count: 10,
+    last_event_at: new Date(NOW - lastEventAgo * 60_000).toISOString(),
+  };
+}
+
+function makeMetadata(
+  sessionId: string,
+  cwd: string,
+  opts?: { service_version?: string | null; os_type?: string | null; host_arch?: string | null },
+): SessionMetadata {
+  return {
+    session_id: sessionId,
+    terminal_type: null,
+    service_version: opts?.service_version ?? null,
+    os_type: opts?.os_type ?? null,
+    host_arch: opts?.host_arch ?? null,
+    cwd,
+  };
+}
+
+function makeMetrics(
+  sessionId: string,
+  overrides?: Partial<Pick<SessionMetrics, "inputTokens" | "outputTokens" | "cacheReadTokens" | "totalTokens" | "activeAgentCount" | "totalEventCount">>,
+): SessionMetrics {
+  return {
+    sessionId,
+    sessionLabel: "",
+    totalTokens: overrides?.totalTokens ?? 100_000,
+    inputTokens: overrides?.inputTokens ?? 60_000,
+    outputTokens: overrides?.outputTokens ?? 40_000,
+    cacheReadTokens: overrides?.cacheReadTokens ?? 0,
+    cacheCreationTokens: 0,
+    sessionCost: 1.50,
+    toolCallCount: 0,
+    activeAgentCount: overrides?.activeAgentCount ?? 0,
+    contextWindowPct: 50,
+    contextWindowTokens: 0,
+    contextWindowMaxTokens: 0,
+    contextWindowModel: "",
+    lastApiLatencyMs: 0,
+    totalEventCount: overrides?.totalEventCount ?? 10,
+    apiErrorCount: 0,
+    apiRequestCount: 0,
+    apiErrorRate: 0,
+    sessionStartedAt: "",
+    lastEventAt: "",
+    burnRate: 100,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // COLUMN MENU
 // ---------------------------------------------------------------------------
 
 describe("Available optional columns listed for user selection", () => {
-  it.skip("7 optional columns are available beyond defaults", () => {
+  it("7 optional columns are available beyond defaults", () => {
     // When the available optional columns are queried
-    //
-    // Then the list includes:
-    //   "version", "platform", "inputTokens", "outputTokens",
-    //   "cacheHitPct", "activeAgents", "events"
+    const columns = getAvailableOptionalColumns();
+
+    // Then the list includes all 7 optional columns
+    const columnIds = columns.map((c) => c.id);
+    expect(columnIds).toEqual([
+      "version",
+      "platform",
+      "inputTokens",
+      "outputTokens",
+      "cacheHitPct",
+      "activeAgents",
+      "events",
+    ]);
+    expect(columns).toHaveLength(7);
+
+    // And each column has a human-readable label
+    for (const col of columns) {
+      expect(col.label).toBeTruthy();
+    }
   });
 });
 
@@ -39,53 +134,80 @@ describe("Available optional columns listed for user selection", () => {
 // ---------------------------------------------------------------------------
 
 describe("User enables Claude Code Version column", () => {
-  it.skip("version column added to visible column set", () => {
-    // Given default visible columns
-    //
+  it("version column added to visible column set", () => {
+    // Given default visible columns (empty optional set)
+    const visibleColumns: readonly OptionalColumnId[] = [];
+
     // When "version" is toggled on
-    //
+    const result = toggleColumn(visibleColumns, "version");
+
     // Then visible columns include "version"
+    expect(result).toContain("version");
   });
 });
 
 describe("User enables Platform column", () => {
-  it.skip("platform column added to visible column set", () => {
-    // Given default visible columns
-    //
+  it("platform column added to visible column set", () => {
+    // Given default visible columns (empty optional set)
+    const visibleColumns: readonly OptionalColumnId[] = [];
+
     // When "platform" is toggled on
-    //
+    const result = toggleColumn(visibleColumns, "platform");
+
     // Then visible columns include "platform"
+    expect(result).toContain("platform");
   });
 });
 
 describe("User enables Input and Output token split columns", () => {
-  it.skip("both token split columns added independently", () => {
-    // Given default visible columns
-    //
+  it("both token split columns added independently", () => {
+    // Given default visible columns (empty optional set)
+    const visibleColumns: readonly OptionalColumnId[] = [];
+
     // When "inputTokens" and "outputTokens" are toggled on
-    //
+    const afterInput = toggleColumn(visibleColumns, "inputTokens");
+    const afterBoth = toggleColumn(afterInput, "outputTokens");
+
     // Then visible columns include both "inputTokens" and "outputTokens"
+    expect(afterBoth).toContain("inputTokens");
+    expect(afterBoth).toContain("outputTokens");
   });
 });
 
 describe("User enables Cache Hit percentage column", () => {
-  it.skip("cache hit formatted as percentage of total tokens", () => {
+  it("cache hit formatted as percentage of total tokens", () => {
     // Given session with 40,000 cache read tokens and 100,000 total tokens
-    //
     // When cache hit percentage is computed
-    //
+    const result = formatCacheHitPct(40_000, 100_000);
+
     // Then the result is "40%"
+    expect(result).toBe("40%");
   });
 });
 
 describe("User enables Active Agents column", () => {
-  it.skip("agent count shown as integer for each session", () => {
+  it("agent count shown as integer for each session", () => {
     // Given session "norbert" has 3 active agents
     // And session "api-server" has 0 active agents
-    //
-    // When the active agents column value is extracted
-    //
+    const sessions: readonly SessionInfo[] = [
+      makeSession("s1", 30, { lastEventMinutesAgo: 1 }),
+      makeSession("s2", 20, { lastEventMinutesAgo: 1 }),
+    ];
+    const metadata: readonly SessionMetadata[] = [
+      makeMetadata("s1", "/home/phil/norbert"),
+      makeMetadata("s2", "/home/phil/api-server"),
+    ];
+    const metrics: readonly SessionMetrics[] = [
+      makeMetrics("s1", { activeAgentCount: 3 }),
+      makeMetrics("s2", { activeAgentCount: 0 }),
+    ];
+
+    // When the table rows are built
+    const rows = buildTableRows(sessions, metrics, metadata, NOW);
+
     // Then "norbert" shows 3 and "api-server" shows 0
+    expect(rows[0].activeAgents).toBe(3);
+    expect(rows[1].activeAgents).toBe(0);
   });
 });
 
@@ -94,12 +216,15 @@ describe("User enables Active Agents column", () => {
 // ---------------------------------------------------------------------------
 
 describe("User hides a previously enabled optional column", () => {
-  it.skip("toggling off removes column from visible set", () => {
+  it("toggling off removes column from visible set", () => {
     // Given visible columns include "platform"
-    //
+    const visibleColumns: readonly OptionalColumnId[] = ["platform"];
+
     // When "platform" is toggled off
-    //
+    const result = toggleColumn(visibleColumns, "platform");
+
     // Then visible columns no longer include "platform"
+    expect(result).not.toContain("platform");
   });
 });
 
@@ -108,21 +233,23 @@ describe("User hides a previously enabled optional column", () => {
 // ---------------------------------------------------------------------------
 
 describe("Optional column shows placeholder for sessions without data", () => {
-  it.skip("null service_version produces dash placeholder", () => {
+  it("null service_version produces dash placeholder", () => {
     // Given session metadata has service_version null
-    //
     // When formatClaudeVersion is called with null
-    //
+    const result = formatClaudeVersion(null);
+
     // Then the result is null (rendered as dash by the view)
+    expect(result).toBeNull();
   });
 });
 
 describe("Cache hit handles zero total tokens without division error", () => {
-  it.skip("zero total tokens produces 0% cache hit", () => {
+  it("zero total tokens produces 0% cache hit", () => {
     // Given session with 0 cache read tokens and 0 total tokens
-    //
     // When cache hit percentage is computed
-    //
+    const result = formatCacheHitPct(0, 0);
+
     // Then the result is "0%" (not NaN or error)
+    expect(result).toBe("0%");
   });
 });

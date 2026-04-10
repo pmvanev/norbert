@@ -5,7 +5,7 @@
 
 import type { SessionInfo } from "../../../domain/status";
 import { isSessionActive } from "../../../domain/status";
-import { deriveSessionName } from "../../../domain/sessionPresentation";
+import { deriveSessionName, formatClaudeVersion, formatPlatform } from "../../../domain/sessionPresentation";
 import type { SessionMetrics } from "../../norbert-usage/domain/types";
 import type { SessionMetadata } from "../../../views/SessionListView";
 import type {
@@ -17,6 +17,8 @@ import type {
   HeatLevel,
   HeatColumnId,
   StatusBarData,
+  OptionalColumnId,
+  ColumnDefinition,
 } from "./sessionMetricsTableTypes";
 
 // ---------------------------------------------------------------------------
@@ -32,6 +34,11 @@ function findMetricsForSession(
   readonly totalTokens: number;
   readonly burnRate: number;
   readonly contextPercent: number;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly cacheReadTokens: number;
+  readonly activeAgents: number;
+  readonly totalEventCount: number;
 } {
   const found = metrics.find((m) => m.sessionId === sessionId);
   return found
@@ -40,17 +47,41 @@ function findMetricsForSession(
         totalTokens: found.totalTokens,
         burnRate: found.burnRate,
         contextPercent: found.contextWindowPct,
+        inputTokens: found.inputTokens,
+        outputTokens: found.outputTokens,
+        cacheReadTokens: found.cacheReadTokens,
+        activeAgents: found.activeAgentCount,
+        totalEventCount: found.totalEventCount,
       }
-    : { cost: 0, totalTokens: 0, burnRate: 0, contextPercent: 0 };
+    : {
+        cost: 0,
+        totalTokens: 0,
+        burnRate: 0,
+        contextPercent: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        activeAgents: 0,
+        totalEventCount: 0,
+      };
 }
 
-/** Find the cwd from metadata for a session, returning null when absent. */
-function findCwdForSession(
+/** Find metadata for a session, returning null fields when absent. */
+function findMetadataForSession(
   sessionId: string,
   metadata: readonly SessionMetadata[],
-): string | null {
+): {
+  readonly cwd: string | null;
+  readonly version: string | null;
+  readonly platform: string | null;
+} {
   const found = metadata.find((m) => m.session_id === sessionId);
-  return found?.cwd ?? null;
+  if (!found) return { cwd: null, version: null, platform: null };
+  return {
+    cwd: found.cwd,
+    version: formatClaudeVersion(found.service_version),
+    platform: formatPlatform(found.os_type, found.host_arch),
+  };
 }
 
 /** Compute session duration in milliseconds from started_at to now (or ended_at). */
@@ -68,24 +99,28 @@ function sessionToTableRow(
   metadata: readonly SessionMetadata[],
   now: number,
 ): TableRow {
-  const cwd = findCwdForSession(session.id, metadata);
-  const name = deriveSessionName(cwd, session.id);
+  const sessionMetadata = findMetadataForSession(session.id, metadata);
+  const name = deriveSessionName(sessionMetadata.cwd, session.id);
   const active = isSessionActive(session, now);
-  const { cost, totalTokens, burnRate, contextPercent } = findMetricsForSession(
-    session.id,
-    metrics,
-  );
+  const metricsData = findMetricsForSession(session.id, metrics);
   const durationMs = computeDurationMs(session, now);
 
   return {
     sessionId: session.id,
     name,
     isActive: active,
-    cost,
-    totalTokens,
-    burnRate,
-    contextPercent,
+    cost: metricsData.cost,
+    totalTokens: metricsData.totalTokens,
+    burnRate: metricsData.burnRate,
+    contextPercent: metricsData.contextPercent,
     durationMs,
+    inputTokens: metricsData.inputTokens,
+    outputTokens: metricsData.outputTokens,
+    cacheReadTokens: metricsData.cacheReadTokens,
+    activeAgents: metricsData.activeAgents,
+    totalEventCount: metricsData.totalEventCount,
+    version: sessionMetadata.version,
+    platform: sessionMetadata.platform,
   };
 }
 
@@ -354,4 +389,53 @@ export function computeStatusBarData(
     }),
     { sessionCount: 0, totalCost: 0, totalTokens: 0 },
   );
+}
+
+// ---------------------------------------------------------------------------
+// Optional columns -- column menu, toggle, formatters
+// ---------------------------------------------------------------------------
+
+/** The 7 optional columns available for user selection. */
+const OPTIONAL_COLUMNS: readonly ColumnDefinition[] = [
+  { id: "version", label: "Version" },
+  { id: "platform", label: "Platform" },
+  { id: "inputTokens", label: "Input Tokens" },
+  { id: "outputTokens", label: "Output Tokens" },
+  { id: "cacheHitPct", label: "Cache Hit %" },
+  { id: "activeAgents", label: "Active Agents" },
+  { id: "events", label: "Events" },
+];
+
+/**
+ * Return the list of optional columns available for user selection.
+ * Each column has an id and a human-readable label.
+ */
+export function getAvailableOptionalColumns(): readonly ColumnDefinition[] {
+  return OPTIONAL_COLUMNS;
+}
+
+/**
+ * Toggle an optional column: add if absent, remove if present.
+ * Returns a new array without mutating the input.
+ */
+export function toggleColumn(
+  visibleColumns: readonly OptionalColumnId[],
+  columnId: OptionalColumnId,
+): readonly OptionalColumnId[] {
+  return visibleColumns.includes(columnId)
+    ? visibleColumns.filter((id) => id !== columnId)
+    : [...visibleColumns, columnId];
+}
+
+/**
+ * Format cache hit percentage from cache read tokens and total tokens.
+ * Returns "0%" when total tokens is zero to avoid division by zero.
+ */
+export function formatCacheHitPct(
+  cacheReadTokens: number,
+  totalTokens: number,
+): string {
+  if (totalTokens === 0) return "0%";
+  const percentage = Math.round((cacheReadTokens / totalTokens) * 100);
+  return `${percentage}%`;
 }

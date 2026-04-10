@@ -20,6 +20,36 @@ export interface TableRow {
   readonly burnRate: number;
   readonly contextPercent: number;
   readonly durationMs: number;
+  // Optional column fields -- always populated, available when columns toggled on
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly cacheReadTokens: number;
+  readonly activeAgents: number;
+  readonly totalEventCount: number;
+  readonly version: string | null;
+  readonly platform: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// OptionalColumnId -- identifiers for toggle-able optional columns
+// ---------------------------------------------------------------------------
+
+export type OptionalColumnId =
+  | "version"
+  | "platform"
+  | "inputTokens"
+  | "outputTokens"
+  | "cacheHitPct"
+  | "activeAgents"
+  | "events";
+
+// ---------------------------------------------------------------------------
+// ColumnDefinition -- describes an optional column for the column menu
+// ---------------------------------------------------------------------------
+
+export interface ColumnDefinition {
+  readonly id: OptionalColumnId;
+  readonly label: string;
 }
 
 // ---------------------------------------------------------------------------
