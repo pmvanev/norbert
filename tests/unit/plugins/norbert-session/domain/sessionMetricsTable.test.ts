@@ -16,7 +16,7 @@ import { describe, it, expect } from "vitest";
 import fc from "fast-check";
 import type { SessionInfo } from "../../../../../src/domain/status";
 import type { SessionMetrics } from "../../../../../src/plugins/norbert-usage/domain/types";
-import type { SessionMetadata } from "../../../../../src/views/SessionListView";
+import type { SessionMetadata } from "../../../../../src/plugins/norbert-session/domain/sessionMetricsTableTypes";
 import {
   buildTableRows,
   formatCostColumn,

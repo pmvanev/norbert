@@ -137,8 +137,8 @@ describe("Heat coloring adjusts when metrics update", () => {
     // When the cost increases to $3.00
     const updated = computeHeatLevel(3.0, "cost");
 
-    // Then the heat level is "amber" or "red"
-    expect(["amber", "red"]).toContain(updated);
+    // Then the heat level is "red" ($3.00 > $2.00 red threshold)
+    expect(updated).toBe("red");
   });
 });
 

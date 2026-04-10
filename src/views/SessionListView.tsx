@@ -34,19 +34,9 @@ import type {
   SortState,
   ColumnId,
   TableRow,
+  SessionMetadata,
 } from "../plugins/norbert-session/domain/sessionMetricsTableTypes";
 import { usageMultiSessionStore } from "../plugins/norbert-usage/index";
-
-/// Session metadata returned from the Tauri backend.
-/// Fields are nullable because metadata may not be available for all sessions.
-export interface SessionMetadata {
-  readonly session_id: string;
-  readonly terminal_type: string | null;
-  readonly service_version: string | null;
-  readonly os_type: string | null;
-  readonly host_arch: string | null;
-  readonly cwd: string | null;
-}
 
 /// Props for the SessionListView component.
 interface SessionListViewProps {
@@ -320,7 +310,7 @@ export function SessionListView({ sessions, onSessionSelect }: SessionListViewPr
                 label="Active Sessions"
                 count={grouped.activeCount}
                 collapsed={activeCollapsed}
-                onToggle={() => setActiveCollapsed(toggleGroupCollapsed)}
+                onToggle={() => setActiveCollapsed((prev) => toggleGroupCollapsed(prev))}
               />
               {!activeCollapsed &&
                 grouped.active.map((row) => (
@@ -337,7 +327,7 @@ export function SessionListView({ sessions, onSessionSelect }: SessionListViewPr
                 label="Recent Sessions"
                 count={grouped.recentCount}
                 collapsed={recentCollapsed}
-                onToggle={() => setRecentCollapsed(toggleGroupCollapsed)}
+                onToggle={() => setRecentCollapsed((prev) => toggleGroupCollapsed(prev))}
               />
               {!recentCollapsed &&
                 grouped.recent.map((row) => (

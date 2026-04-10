@@ -18,7 +18,7 @@
 import { describe, it, expect } from "vitest";
 import type { SessionInfo } from "../../../../src/domain/status";
 import type { SessionMetrics } from "../../../../src/plugins/norbert-usage/domain/types";
-import type { SessionMetadata } from "../../../../src/views/SessionListView";
+import type { SessionMetadata } from "../../../../src/plugins/norbert-session/domain/sessionMetricsTableTypes";
 import type { OptionalColumnId } from "../../../../src/plugins/norbert-session/domain/sessionMetricsTableTypes";
 import {
   getAvailableOptionalColumns,
@@ -30,75 +30,7 @@ import {
   formatClaudeVersion,
   formatPlatform,
 } from "../../../../src/domain/sessionPresentation";
-
-// ---------------------------------------------------------------------------
-// Test helpers
-// ---------------------------------------------------------------------------
-
-const NOW = new Date("2026-04-10T12:00:00Z").getTime();
-
-function makeSession(
-  id: string,
-  startedMinutesAgo: number,
-  opts: { ended?: boolean; lastEventMinutesAgo?: number },
-): SessionInfo {
-  const started = new Date(NOW - startedMinutesAgo * 60_000).toISOString();
-  const lastEventAgo = opts.lastEventMinutesAgo ?? startedMinutesAgo;
-  return {
-    id,
-    started_at: started,
-    ended_at: opts.ended
-      ? new Date(NOW - lastEventAgo * 60_000).toISOString()
-      : null,
-    event_count: 10,
-    last_event_at: new Date(NOW - lastEventAgo * 60_000).toISOString(),
-  };
-}
-
-function makeMetadata(
-  sessionId: string,
-  cwd: string,
-  opts?: { service_version?: string | null; os_type?: string | null; host_arch?: string | null },
-): SessionMetadata {
-  return {
-    session_id: sessionId,
-    terminal_type: null,
-    service_version: opts?.service_version ?? null,
-    os_type: opts?.os_type ?? null,
-    host_arch: opts?.host_arch ?? null,
-    cwd,
-  };
-}
-
-function makeMetrics(
-  sessionId: string,
-  overrides?: Partial<Pick<SessionMetrics, "inputTokens" | "outputTokens" | "cacheReadTokens" | "totalTokens" | "activeAgentCount" | "totalEventCount">>,
-): SessionMetrics {
-  return {
-    sessionId,
-    sessionLabel: "",
-    totalTokens: overrides?.totalTokens ?? 100_000,
-    inputTokens: overrides?.inputTokens ?? 60_000,
-    outputTokens: overrides?.outputTokens ?? 40_000,
-    cacheReadTokens: overrides?.cacheReadTokens ?? 0,
-    cacheCreationTokens: 0,
-    sessionCost: 1.50,
-    toolCallCount: 0,
-    activeAgentCount: overrides?.activeAgentCount ?? 0,
-    contextWindowPct: 50,
-    contextWindowTokens: 0,
-    contextWindowMaxTokens: 0,
-    contextWindowModel: "",
-    lastApiLatencyMs: 0,
-    totalEventCount: overrides?.totalEventCount ?? 10,
-    apiErrorCount: 0,
-    apiRequestCount: 0,
-    apiErrorRate: 0,
-    sessionStartedAt: "",
-    lastEventAt: "",
-    burnRate: 100,
-  };
-}
+import { NOW, makeSession, makeMetadata, makeMetrics } from "./fixtures";
 
 // ---------------------------------------------------------------------------
 // COLUMN MENU

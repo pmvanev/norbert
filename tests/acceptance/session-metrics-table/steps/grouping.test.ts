@@ -17,30 +17,7 @@ import {
   toggleGroupCollapsed,
 } from "../../../../src/plugins/norbert-session/domain/sessionMetricsTable";
 import type { TableRow } from "../../../../src/plugins/norbert-session/domain/sessionMetricsTableTypes";
-
-// ---------------------------------------------------------------------------
-// Test helpers -- build minimal TableRow fixtures
-// ---------------------------------------------------------------------------
-
-function makeRow(overrides: Partial<TableRow> & { sessionId: string }): TableRow {
-  return {
-    name: overrides.name ?? overrides.sessionId,
-    isActive: overrides.isActive ?? false,
-    cost: overrides.cost ?? 0,
-    totalTokens: overrides.totalTokens ?? 0,
-    burnRate: overrides.burnRate ?? 0,
-    contextPercent: overrides.contextPercent ?? 0,
-    durationMs: overrides.durationMs ?? 0,
-    inputTokens: 0,
-    outputTokens: 0,
-    cacheReadTokens: 0,
-    activeAgents: 0,
-    totalEventCount: 0,
-    version: null,
-    platform: null,
-    ...overrides,
-  };
-}
+import { makeTableRow as makeRow } from "./fixtures";
 
 // ---------------------------------------------------------------------------
 // BASIC GROUPING

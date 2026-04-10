@@ -3,9 +3,20 @@
 /// Pure type definitions -- no runtime side effects, no IO imports.
 /// All interfaces are readonly (immutable data throughout).
 
-import type { SessionInfo } from "../../../domain/status";
-import type { SessionMetrics } from "../../norbert-usage/domain/types";
-import type { SessionMetadata } from "../../../views/SessionListView";
+// ---------------------------------------------------------------------------
+// SessionMetadata -- session metadata from the Tauri backend.
+// Defined here (domain) rather than in the view layer to avoid
+// dependency inversion (domain must not import from views).
+// ---------------------------------------------------------------------------
+
+export interface SessionMetadata {
+  readonly session_id: string;
+  readonly terminal_type: string | null;
+  readonly service_version: string | null;
+  readonly os_type: string | null;
+  readonly host_arch: string | null;
+  readonly cwd: string | null;
+}
 
 // ---------------------------------------------------------------------------
 // TableRow -- one row of the session metrics table
@@ -107,8 +118,3 @@ export interface StatusBarData {
   readonly totalTokens: number;
 }
 
-export type {
-  SessionInfo,
-  SessionMetrics,
-  SessionMetadata,
-};

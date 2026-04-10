@@ -14,37 +14,13 @@
 
 import { describe, it, expect } from "vitest";
 import fc from "fast-check";
-import type { TableRow } from "../../../../src/plugins/norbert-session/domain/sessionMetricsTableTypes";
 import {
   computeStatusBarData,
   formatCostColumn,
   formatTokenColumn,
 } from "../../../../src/plugins/norbert-session/domain/sessionMetricsTable";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function makeRow(overrides: Partial<TableRow> = {}): TableRow {
-  return {
-    sessionId: overrides.sessionId ?? "s-1",
-    name: overrides.name ?? "test",
-    isActive: overrides.isActive ?? true,
-    cost: overrides.cost ?? 0,
-    totalTokens: overrides.totalTokens ?? 0,
-    burnRate: overrides.burnRate ?? 0,
-    contextPercent: overrides.contextPercent ?? 0,
-    durationMs: overrides.durationMs ?? 0,
-    inputTokens: 0,
-    outputTokens: 0,
-    cacheReadTokens: 0,
-    activeAgents: 0,
-    totalEventCount: 0,
-    version: null,
-    platform: null,
-    ...overrides,
-  };
-}
+import type { TableRow } from "../../../../src/plugins/norbert-session/domain/sessionMetricsTableTypes";
+import { makeTableRow as makeRow } from "./fixtures";
 
 // ---------------------------------------------------------------------------
 // AGGREGATE TOTALS
@@ -77,9 +53,9 @@ describe("Status bar shows totals across visible sessions", () => {
 describe("Status bar updates when time filter changes", () => {
   it("aggregates recompute for new set of visible rows", () => {
     const rows: readonly TableRow[] = [
-      makeRow({ cost: 1.24 }),
-      makeRow({ cost: 0.08 }),
-      makeRow({ cost: 0.78 }),
+      makeRow({ sessionId: "f-1", cost: 1.24 }),
+      makeRow({ sessionId: "f-2", cost: 0.08 }),
+      makeRow({ sessionId: "f-3", cost: 0.78 }),
     ];
 
     const result = computeStatusBarData(rows);
@@ -164,7 +140,8 @@ describe("Status bar total cost equals sum of individual session costs", () => {
         const expectedTokens = rows.reduce((sum, row) => sum + row.totalTokens, 0);
 
         expect(result.sessionCount).toBe(rows.length);
-        expect(result.totalCost).toBeCloseTo(expectedCost, 5);
+        // Cents-based rounding guarantees 2dp display accuracy, not 5dp float precision
+        expect(result.totalCost).toBeCloseTo(expectedCost, 2);
         expect(result.totalTokens).toBe(expectedTokens);
       }),
       { numRuns: 200 },

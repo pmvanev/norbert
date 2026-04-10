@@ -15,79 +15,14 @@
 import { describe, it, expect } from "vitest";
 import type { SessionInfo } from "../../../../src/domain/status";
 import type { SessionMetrics } from "../../../../src/plugins/norbert-usage/domain/types";
-import type { SessionMetadata } from "../../../../src/views/SessionListView";
+import type { SessionMetadata } from "../../../../src/plugins/norbert-session/domain/sessionMetricsTableTypes";
 import {
   buildTableRows,
   formatCostColumn,
   formatTokenColumn,
   selectFocusedRow,
 } from "../../../../src/plugins/norbert-session/domain/sessionMetricsTable";
-
-// ---------------------------------------------------------------------------
-// Test helpers: session fixtures
-// ---------------------------------------------------------------------------
-
-const NOW = new Date("2026-04-10T12:00:00Z").getTime();
-
-function makeSession(
-  id: string,
-  startedMinutesAgo: number,
-  opts: { ended?: boolean; lastEventMinutesAgo?: number },
-): SessionInfo {
-  const started = new Date(NOW - startedMinutesAgo * 60_000).toISOString();
-  const lastEventAgo = opts.lastEventMinutesAgo ?? startedMinutesAgo;
-  return {
-    id,
-    started_at: started,
-    ended_at: opts.ended
-      ? new Date(NOW - lastEventAgo * 60_000).toISOString()
-      : null,
-    event_count: 10,
-    last_event_at: new Date(NOW - lastEventAgo * 60_000).toISOString(),
-  };
-}
-
-function makeMetadata(sessionId: string, cwd: string): SessionMetadata {
-  return {
-    session_id: sessionId,
-    terminal_type: null,
-    service_version: null,
-    os_type: null,
-    host_arch: null,
-    cwd,
-  };
-}
-
-function makeMetrics(
-  sessionId: string,
-  cost: number,
-  tokens: number,
-): SessionMetrics {
-  return {
-    sessionId,
-    sessionLabel: "",
-    totalTokens: tokens,
-    inputTokens: 0,
-    outputTokens: 0,
-    cacheReadTokens: 0,
-    cacheCreationTokens: 0,
-    sessionCost: cost,
-    toolCallCount: 0,
-    activeAgentCount: 0,
-    contextWindowPct: 0,
-    contextWindowTokens: 0,
-    contextWindowMaxTokens: 0,
-    contextWindowModel: "",
-    lastApiLatencyMs: 0,
-    totalEventCount: 0,
-    apiErrorCount: 0,
-    apiRequestCount: 0,
-    apiErrorRate: 0,
-    sessionStartedAt: "",
-    lastEventAt: "",
-    burnRate: 0,
-  };
-}
+import { NOW, makeSession, makeMetadata, makeMetrics } from "./fixtures";
 
 // ---------------------------------------------------------------------------
 // WALKING SKELETON WS-1: Table renders with Status and Name columns
@@ -110,9 +45,9 @@ describe("User views sessions as a metrics table with status and name", () => {
     ];
 
     const metrics: readonly SessionMetrics[] = [
-      makeMetrics("s1", 1.24, 142500),
-      makeMetrics("s2", 0.08, 9300),
-      makeMetrics("s3", 0.52, 61000),
+      makeMetrics("s1", { sessionCost: 1.24, totalTokens: 142500 }),
+      makeMetrics("s2", { sessionCost: 0.08, totalTokens: 9300 }),
+      makeMetrics("s3", { sessionCost: 0.52, totalTokens: 61000 }),
     ];
 
     // When the table row data is built
@@ -152,9 +87,9 @@ describe("User compares session costs and token usage across sessions", () => {
     ];
 
     const metrics: readonly SessionMetrics[] = [
-      makeMetrics("s1", 1.24, 142500),
-      makeMetrics("s2", 0.08, 9300),
-      makeMetrics("s3", 0.52, 61000),
+      makeMetrics("s1", { sessionCost: 1.24, totalTokens: 142500 }),
+      makeMetrics("s2", { sessionCost: 0.08, totalTokens: 9300 }),
+      makeMetrics("s3", { sessionCost: 0.52, totalTokens: 61000 }),
     ];
 
     // When the table row data is built
@@ -188,8 +123,8 @@ describe("User selects a session row to view detailed metrics", () => {
       makeMetadata("def-456", "/home/phil/Git/api-server"),
     ];
     const metrics: readonly SessionMetrics[] = [
-      makeMetrics("abc-123", 1.24, 142500),
-      makeMetrics("def-456", 0.08, 9300),
+      makeMetrics("abc-123", { sessionCost: 1.24, totalTokens: 142500 }),
+      makeMetrics("def-456", { sessionCost: 0.08, totalTokens: 9300 }),
     ];
     const rows = buildTableRows(sessions, metrics, metadata, NOW);
 

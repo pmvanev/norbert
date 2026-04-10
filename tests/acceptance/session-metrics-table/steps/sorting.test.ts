@@ -18,30 +18,7 @@ import {
   sortTableRows,
   applySortToggle,
 } from "../../../../src/plugins/norbert-session/domain/sessionMetricsTable";
-
-// ---------------------------------------------------------------------------
-// Test helpers
-// ---------------------------------------------------------------------------
-
-function makeRow(overrides: Partial<TableRow> & { sessionId: string }): TableRow {
-  return {
-    name: overrides.sessionId,
-    isActive: false,
-    cost: 0,
-    totalTokens: 0,
-    burnRate: 0,
-    contextPercent: 0,
-    durationMs: 0,
-    inputTokens: 0,
-    outputTokens: 0,
-    cacheReadTokens: 0,
-    activeAgents: 0,
-    totalEventCount: 0,
-    version: null,
-    platform: null,
-    ...overrides,
-  };
-}
+import { makeTableRow as makeRow } from "./fixtures";
 
 // ---------------------------------------------------------------------------
 // DEFAULT SORT
