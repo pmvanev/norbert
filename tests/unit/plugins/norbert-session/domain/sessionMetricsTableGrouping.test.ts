@@ -32,6 +32,13 @@ const arbitraryTableRow: fc.Arbitrary<TableRow> = fc.record({
   burnRate: fc.float({ min: 0, max: 500, noNaN: true }),
   contextPercent: fc.float({ min: 0, max: 100, noNaN: true }),
   durationMs: fc.nat({ max: 86_400_000 }),
+  inputTokens: fc.nat({ max: 1_000_000 }),
+  outputTokens: fc.nat({ max: 1_000_000 }),
+  cacheReadTokens: fc.nat({ max: 1_000_000 }),
+  activeAgents: fc.nat({ max: 10 }),
+  totalEventCount: fc.nat({ max: 10_000 }),
+  version: fc.oneof(fc.constant(null), fc.string({ minLength: 1 })),
+  platform: fc.oneof(fc.constant(null), fc.string({ minLength: 1 })),
 });
 
 // ---------------------------------------------------------------------------

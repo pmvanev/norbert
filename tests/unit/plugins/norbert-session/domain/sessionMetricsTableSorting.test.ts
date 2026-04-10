@@ -49,6 +49,13 @@ const tableRowArb: fc.Arbitrary<TableRow> = fc.record({
   burnRate: fc.double({ min: 0, max: 500, noNaN: true }),
   contextPercent: fc.double({ min: 0, max: 100, noNaN: true }),
   durationMs: fc.integer({ min: 0, max: 24 * 60 * 60_000 }),
+  inputTokens: fc.nat({ max: 1_000_000 }),
+  outputTokens: fc.nat({ max: 1_000_000 }),
+  cacheReadTokens: fc.nat({ max: 1_000_000 }),
+  activeAgents: fc.nat({ max: 10 }),
+  totalEventCount: fc.nat({ max: 10_000 }),
+  version: fc.oneof(fc.constant(null), fc.string({ minLength: 1, maxLength: 10 })),
+  platform: fc.oneof(fc.constant(null), fc.string({ minLength: 1, maxLength: 10 })),
 });
 
 function makeRow(overrides: Partial<TableRow> & { sessionId: string }): TableRow {
@@ -60,6 +67,13 @@ function makeRow(overrides: Partial<TableRow> & { sessionId: string }): TableRow
     burnRate: 0,
     contextPercent: 0,
     durationMs: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    activeAgents: 0,
+    totalEventCount: 0,
+    version: null,
+    platform: null,
     ...overrides,
   };
 }

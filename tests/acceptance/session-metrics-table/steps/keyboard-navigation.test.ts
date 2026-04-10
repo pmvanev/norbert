@@ -23,7 +23,23 @@ import type { TableRow } from "../../../../src/plugins/norbert-session/domain/se
 // ---------------------------------------------------------------------------
 
 function makeRow(sessionId: string): TableRow {
-  return { sessionId, name: "test", isActive: true, cost: 0, totalTokens: 0 };
+  return {
+    sessionId,
+    name: "test",
+    isActive: true,
+    cost: 0,
+    totalTokens: 0,
+    burnRate: 0,
+    contextPercent: 0,
+    durationMs: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    activeAgents: 0,
+    totalEventCount: 0,
+    version: null,
+    platform: null,
+  };
 }
 
 // ---------------------------------------------------------------------------

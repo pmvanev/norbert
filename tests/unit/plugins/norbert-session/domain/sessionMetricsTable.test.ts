@@ -241,6 +241,13 @@ function makeTableRow(sessionId: string): TableRow {
     burnRate: 0,
     contextPercent: 0,
     durationMs: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    activeAgents: 0,
+    totalEventCount: 0,
+    version: null,
+    platform: null,
   };
 }
 

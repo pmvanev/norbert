@@ -35,6 +35,14 @@ function makeRow(overrides: Partial<TableRow> = {}): TableRow {
     burnRate: overrides.burnRate ?? 0,
     contextPercent: overrides.contextPercent ?? 0,
     durationMs: overrides.durationMs ?? 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    activeAgents: 0,
+    totalEventCount: 0,
+    version: null,
+    platform: null,
+    ...overrides,
   };
 }
 
@@ -140,6 +148,13 @@ describe("Status bar total cost equals sum of individual session costs", () => {
       burnRate: fc.double({ min: 0, max: 1000, noNaN: true, noDefaultInfinity: true }),
       contextPercent: fc.double({ min: 0, max: 100, noNaN: true, noDefaultInfinity: true }),
       durationMs: fc.nat({ max: 86_400_000 }),
+      inputTokens: fc.nat({ max: 1_000_000 }),
+      outputTokens: fc.nat({ max: 1_000_000 }),
+      cacheReadTokens: fc.nat({ max: 1_000_000 }),
+      activeAgents: fc.nat({ max: 10 }),
+      totalEventCount: fc.nat({ max: 10_000 }),
+      version: fc.oneof(fc.constant(null), fc.string({ minLength: 1, maxLength: 10 })),
+      platform: fc.oneof(fc.constant(null), fc.string({ minLength: 1, maxLength: 10 })),
     });
 
     fc.assert(
