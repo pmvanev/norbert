@@ -300,6 +300,125 @@ code, pre, .mono,
   50% { opacity: 1; }
 }
 
+/* ═══ METRICS TABLE ═══ */
+
+.metrics-tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-p);
+  outline: none;
+}
+
+.metrics-tbl thead th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-toolbar);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-s);
+  padding: 4px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-card);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.metrics-tbl thead th.sortable {
+  cursor: pointer;
+}
+
+.metrics-tbl thead th.sortable:hover {
+  color: var(--text-p);
+}
+
+.metrics-tbl .sort-indicator {
+  font-size: 8px;
+  opacity: 0.7;
+}
+
+.metrics-tbl tbody tr {
+  transition: background 0.1s;
+}
+
+.metrics-tbl tbody tr.srow {
+  cursor: pointer;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  display: table-row;
+  margin: 0;
+}
+
+.metrics-tbl tbody tr.srow:hover {
+  background: var(--bg-card-h);
+}
+
+.metrics-tbl tbody tr.srow.live-s {
+  background: var(--live-bg);
+}
+
+.metrics-tbl tbody tr.srow.focused {
+  outline: 1px solid var(--brand);
+  outline-offset: -1px;
+}
+
+.metrics-tbl tbody tr.srow::before {
+  display: none;
+}
+
+.metrics-tbl tbody td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border-card);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.metrics-tbl tbody td.sname {
+  font-weight: 600;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.metrics-tbl .group-header {
+  cursor: pointer;
+  user-select: none;
+}
+
+.metrics-tbl .group-header td {
+  padding: 6px 8px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-s);
+  background: var(--bg-toolbar);
+  border-bottom: 1px solid var(--border-card);
+}
+
+.metrics-tbl .group-toggle {
+  font-size: 8px;
+  margin-right: 4px;
+  opacity: 0.7;
+}
+
+/* Heat coloring for metric cells */
+.heat-neutral {
+  color: var(--text-p);
+}
+
+.heat-amber {
+  color: var(--amber, #f0a020);
+}
+
+.heat-red {
+  color: var(--red, #e04040);
+}
+
 /* ═══ EVENT DETAIL VIEW ═══ */
 
 .event-detail {
