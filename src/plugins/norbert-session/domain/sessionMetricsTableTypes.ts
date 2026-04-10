@@ -71,6 +71,16 @@ export type HeatColumnId =
   | "contextPercent"
   | "apiHealth";
 
+// ---------------------------------------------------------------------------
+// StatusBarData -- aggregated totals for the status bar
+// ---------------------------------------------------------------------------
+
+export interface StatusBarData {
+  readonly sessionCount: number;
+  readonly totalCost: number;
+  readonly totalTokens: number;
+}
+
 export type {
   SessionInfo,
   SessionMetrics,

@@ -16,6 +16,7 @@ import type {
   SortState,
   HeatLevel,
   HeatColumnId,
+  StatusBarData,
 } from "./sessionMetricsTableTypes";
 
 // ---------------------------------------------------------------------------
@@ -331,4 +332,26 @@ export function computeHeatLevel(value: number, columnId: HeatColumnId): HeatLev
 /** Map a HeatLevel to a CSS class string for styling. */
 export function deriveHeatClass(heatLevel: HeatLevel): string {
   return `heat-${heatLevel}`;
+}
+
+// ---------------------------------------------------------------------------
+// computeStatusBarData -- aggregate totals across visible rows
+// ---------------------------------------------------------------------------
+
+/**
+ * Compute status bar aggregates from visible table rows.
+ * Pure fold: session count, total cost, and total tokens.
+ * Empty input produces all-zero aggregates.
+ */
+export function computeStatusBarData(
+  visibleRows: readonly TableRow[],
+): StatusBarData {
+  return visibleRows.reduce<StatusBarData>(
+    (acc, row) => ({
+      sessionCount: acc.sessionCount + 1,
+      totalCost: acc.totalCost + row.cost,
+      totalTokens: acc.totalTokens + row.totalTokens,
+    }),
+    { sessionCount: 0, totalCost: 0, totalTokens: 0 },
+  );
 }

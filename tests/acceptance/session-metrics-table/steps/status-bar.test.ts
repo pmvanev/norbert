@@ -1,37 +1,64 @@
 /**
- * Acceptance tests: Session Metrics Table — Status Bar
+ * Acceptance tests: Session Metrics Table -- Status Bar
  *
  * Validates the aggregate status bar showing total session count,
  * total cost, and total tokens across all visible sessions.
  *
  * Driving ports:
  *   - computeStatusBarData(visibleRows) -> StatusBarData
- *   - formatCostDisplay(cost) -> string
- *   - formatTokenDisplay(tokens) -> string
+ *   - formatCostColumn(cost) -> string (from step 01-01)
+ *   - formatTokenColumn(tokens) -> string (from step 01-01)
  *
- * Traces to: Milestone 4 — Status Bar
+ * Traces to: Milestone 4 -- Status Bar
  */
 
 import { describe, it, expect } from "vitest";
+import fc from "fast-check";
+import type { TableRow } from "../../../../src/plugins/norbert-session/domain/sessionMetricsTableTypes";
+import {
+  computeStatusBarData,
+  formatCostColumn,
+  formatTokenColumn,
+} from "../../../../src/plugins/norbert-session/domain/sessionMetricsTable";
 
 // ---------------------------------------------------------------------------
-// PLACEHOLDER: imports will target production driving ports once implemented
+// Helpers
 // ---------------------------------------------------------------------------
+
+function makeRow(overrides: Partial<TableRow> = {}): TableRow {
+  return {
+    sessionId: overrides.sessionId ?? "s-1",
+    name: overrides.name ?? "test",
+    isActive: overrides.isActive ?? true,
+    cost: overrides.cost ?? 0,
+    totalTokens: overrides.totalTokens ?? 0,
+    burnRate: overrides.burnRate ?? 0,
+    contextPercent: overrides.contextPercent ?? 0,
+    durationMs: overrides.durationMs ?? 0,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // AGGREGATE TOTALS
 // ---------------------------------------------------------------------------
 
 describe("Status bar shows totals across visible sessions", () => {
-  it.skip("session count, total cost, and total tokens computed from visible rows", () => {
-    // Given 5 visible rows with costs [$1.24, $0.08, $0.52, $0.83, $0.80]
-    //   and token counts [142500, 9300, 61000, 42000, 30200]
-    //
-    // When status bar data is computed
-    //
-    // Then sessionCount is 5
-    // And totalCost is 3.47
-    // And totalTokens is 285000
+  it("session count, total cost, and total tokens computed from visible rows", () => {
+    const rows: readonly TableRow[] = [
+      makeRow({ sessionId: "s-1", cost: 1.24, totalTokens: 142500 }),
+      makeRow({ sessionId: "s-2", cost: 0.08, totalTokens: 9300 }),
+      makeRow({ sessionId: "s-3", cost: 0.52, totalTokens: 61000 }),
+      makeRow({ sessionId: "s-4", cost: 0.83, totalTokens: 42000 }),
+      makeRow({ sessionId: "s-5", cost: 0.80, totalTokens: 30200 }),
+    ];
+
+    const result = computeStatusBarData(rows);
+
+    expect(result.sessionCount).toBe(5);
+    expect(result.totalCost).toBeCloseTo(3.47, 2);
+    expect(result.totalTokens).toBe(285000);
+    expect(formatCostColumn(result.totalCost)).toBe("$3.47");
+    expect(formatTokenColumn(result.totalTokens)).toBe("285.0K");
   });
 });
 
@@ -40,13 +67,17 @@ describe("Status bar shows totals across visible sessions", () => {
 // ---------------------------------------------------------------------------
 
 describe("Status bar updates when time filter changes", () => {
-  it.skip("aggregates recompute for new set of visible rows", () => {
-    // Given 3 visible rows after filter with costs [$1.24, $0.08, $0.78]
-    //
-    // When status bar data is computed for those 3 rows
-    //
-    // Then sessionCount is 3
-    // And totalCost is 2.10
+  it("aggregates recompute for new set of visible rows", () => {
+    const rows: readonly TableRow[] = [
+      makeRow({ cost: 1.24 }),
+      makeRow({ cost: 0.08 }),
+      makeRow({ cost: 0.78 }),
+    ];
+
+    const result = computeStatusBarData(rows);
+
+    expect(result.sessionCount).toBe(3);
+    expect(result.totalCost).toBeCloseTo(2.10, 2);
   });
 });
 
@@ -55,13 +86,27 @@ describe("Status bar updates when time filter changes", () => {
 // ---------------------------------------------------------------------------
 
 describe("Status bar updates as session costs change", () => {
-  it.skip("recomputing after cost increase reflects new total", () => {
-    // Given previous total cost was $3.47 across 5 rows
-    // And one session's cost increases by $0.15
-    //
-    // When status bar data is recomputed
-    //
-    // Then totalCost is 3.62
+  it("recomputing after cost increase reflects new total", () => {
+    const originalRows: readonly TableRow[] = [
+      makeRow({ sessionId: "s-1", cost: 1.24, totalTokens: 142500 }),
+      makeRow({ sessionId: "s-2", cost: 0.08, totalTokens: 9300 }),
+      makeRow({ sessionId: "s-3", cost: 0.52, totalTokens: 61000 }),
+      makeRow({ sessionId: "s-4", cost: 0.83, totalTokens: 42000 }),
+      makeRow({ sessionId: "s-5", cost: 0.80, totalTokens: 30200 }),
+    ];
+
+    // One session's cost increases by $0.15
+    const updatedRows: readonly TableRow[] = [
+      makeRow({ sessionId: "s-1", cost: 1.39, totalTokens: 142500 }),
+      makeRow({ sessionId: "s-2", cost: 0.08, totalTokens: 9300 }),
+      makeRow({ sessionId: "s-3", cost: 0.52, totalTokens: 61000 }),
+      makeRow({ sessionId: "s-4", cost: 0.83, totalTokens: 42000 }),
+      makeRow({ sessionId: "s-5", cost: 0.80, totalTokens: 30200 }),
+    ];
+
+    const result = computeStatusBarData(updatedRows);
+
+    expect(result.totalCost).toBeCloseTo(3.62, 2);
   });
 });
 
@@ -70,14 +115,12 @@ describe("Status bar updates as session costs change", () => {
 // ---------------------------------------------------------------------------
 
 describe("Status bar shows zeros when no sessions are visible", () => {
-  it.skip("empty visible rows produce zero aggregates", () => {
-    // Given no rows are visible (empty array)
-    //
-    // When status bar data is computed
-    //
-    // Then sessionCount is 0
-    // And totalCost is 0
-    // And totalTokens is 0
+  it("empty visible rows produce zero aggregates", () => {
+    const result = computeStatusBarData([]);
+
+    expect(result.sessionCount).toBe(0);
+    expect(result.totalCost).toBe(0);
+    expect(result.totalTokens).toBe(0);
   });
 });
 
@@ -87,12 +130,29 @@ describe("Status bar shows zeros when no sessions are visible", () => {
 
 // @property
 describe("Status bar total cost equals sum of individual session costs", () => {
-  it.skip("for any set of rows, aggregate cost === sum of row costs", () => {
-    // Given any array of rows with sessionCost values
-    //
-    // When status bar data is computed
-    //
-    // Then totalCost equals the sum of all row sessionCost values
-    //   (within floating-point tolerance)
+  it("for any set of rows, aggregate cost === sum of row costs", () => {
+    const tableRowArb = fc.record({
+      sessionId: fc.string({ minLength: 1, maxLength: 10 }),
+      name: fc.string({ minLength: 1, maxLength: 20 }),
+      isActive: fc.boolean(),
+      cost: fc.double({ min: 0, max: 10000, noNaN: true, noDefaultInfinity: true }),
+      totalTokens: fc.nat({ max: 10_000_000 }),
+      burnRate: fc.double({ min: 0, max: 1000, noNaN: true, noDefaultInfinity: true }),
+      contextPercent: fc.double({ min: 0, max: 100, noNaN: true, noDefaultInfinity: true }),
+      durationMs: fc.nat({ max: 86_400_000 }),
+    });
+
+    fc.assert(
+      fc.property(fc.array(tableRowArb, { maxLength: 50 }), (rows) => {
+        const result = computeStatusBarData(rows);
+        const expectedCost = rows.reduce((sum, row) => sum + row.cost, 0);
+        const expectedTokens = rows.reduce((sum, row) => sum + row.totalTokens, 0);
+
+        expect(result.sessionCount).toBe(rows.length);
+        expect(result.totalCost).toBeCloseTo(expectedCost, 5);
+        expect(result.totalTokens).toBe(expectedTokens);
+      }),
+      { numRuns: 200 },
+    );
   });
 });
