@@ -17,6 +17,28 @@ export interface TableRow {
   readonly isActive: boolean;
   readonly cost: number;
   readonly totalTokens: number;
+  readonly burnRate: number;
+  readonly contextPercent: number;
+  readonly durationMs: number;
+}
+
+// ---------------------------------------------------------------------------
+// Sorting types
+// ---------------------------------------------------------------------------
+
+export type SortDirection = "asc" | "desc";
+
+export type ColumnId =
+  | "name"
+  | "cost"
+  | "totalTokens"
+  | "burnRate"
+  | "contextPercent"
+  | "durationMs";
+
+export interface SortState {
+  readonly columnId: ColumnId;
+  readonly direction: SortDirection;
 }
 
 // ---------------------------------------------------------------------------

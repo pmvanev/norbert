@@ -232,7 +232,16 @@ describe("formatTokenColumn", () => {
 // ---------------------------------------------------------------------------
 
 function makeTableRow(sessionId: string): TableRow {
-  return { sessionId, name: "test", isActive: true, cost: 0, totalTokens: 0 };
+  return {
+    sessionId,
+    name: "test",
+    isActive: true,
+    cost: 0,
+    totalTokens: 0,
+    burnRate: 0,
+    contextPercent: 0,
+    durationMs: 0,
+  };
 }
 
 // ---------------------------------------------------------------------------

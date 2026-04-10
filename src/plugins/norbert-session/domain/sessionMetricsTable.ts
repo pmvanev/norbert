@@ -8,7 +8,12 @@ import { isSessionActive } from "../../../domain/status";
 import { deriveSessionName } from "../../../domain/sessionPresentation";
 import type { SessionMetrics } from "../../norbert-usage/domain/types";
 import type { SessionMetadata } from "../../../views/SessionListView";
-import type { TableRow } from "./sessionMetricsTableTypes";
+import type {
+  TableRow,
+  ColumnId,
+  SortDirection,
+  SortState,
+} from "./sessionMetricsTableTypes";
 
 // ---------------------------------------------------------------------------
 // Internal helpers -- small, pure, composable
@@ -18,11 +23,21 @@ import type { TableRow } from "./sessionMetricsTableTypes";
 function findMetricsForSession(
   sessionId: string,
   metrics: readonly SessionMetrics[],
-): { readonly cost: number; readonly totalTokens: number } {
+): {
+  readonly cost: number;
+  readonly totalTokens: number;
+  readonly burnRate: number;
+  readonly contextPercent: number;
+} {
   const found = metrics.find((m) => m.sessionId === sessionId);
   return found
-    ? { cost: found.sessionCost, totalTokens: found.totalTokens }
-    : { cost: 0, totalTokens: 0 };
+    ? {
+        cost: found.sessionCost,
+        totalTokens: found.totalTokens,
+        burnRate: found.burnRate,
+        contextPercent: found.contextWindowPct,
+      }
+    : { cost: 0, totalTokens: 0, burnRate: 0, contextPercent: 0 };
 }
 
 /** Find the cwd from metadata for a session, returning null when absent. */
@@ -32,6 +47,14 @@ function findCwdForSession(
 ): string | null {
   const found = metadata.find((m) => m.session_id === sessionId);
   return found?.cwd ?? null;
+}
+
+/** Compute session duration in milliseconds from started_at to now (or ended_at). */
+function computeDurationMs(session: SessionInfo, now: number): number {
+  const startedAt = new Date(session.started_at).getTime();
+  const endedAt =
+    session.ended_at !== null ? new Date(session.ended_at).getTime() : now;
+  return Math.max(0, endedAt - startedAt);
 }
 
 /** Transform a single session into a TableRow. */
@@ -44,9 +67,22 @@ function sessionToTableRow(
   const cwd = findCwdForSession(session.id, metadata);
   const name = deriveSessionName(cwd, session.id);
   const active = isSessionActive(session, now);
-  const { cost, totalTokens } = findMetricsForSession(session.id, metrics);
+  const { cost, totalTokens, burnRate, contextPercent } = findMetricsForSession(
+    session.id,
+    metrics,
+  );
+  const durationMs = computeDurationMs(session, now);
 
-  return { sessionId: session.id, name, isActive: active, cost, totalTokens };
+  return {
+    sessionId: session.id,
+    name,
+    isActive: active,
+    cost,
+    totalTokens,
+    burnRate,
+    contextPercent,
+    durationMs,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -123,4 +159,82 @@ export function selectFocusedRow(
 ): string | null {
   if (focusedIndex < 0 || focusedIndex >= rows.length) return null;
   return rows[focusedIndex].sessionId;
+}
+
+// ---------------------------------------------------------------------------
+// sortTableRows -- sort rows by column with active-first grouping
+// ---------------------------------------------------------------------------
+
+/** Extract a comparable value from a row for the given column. */
+function columnValue(row: TableRow, columnId: ColumnId): number | string {
+  switch (columnId) {
+    case "name":
+      return row.name;
+    case "cost":
+      return row.cost;
+    case "totalTokens":
+      return row.totalTokens;
+    case "burnRate":
+      return row.burnRate;
+    case "contextPercent":
+      return row.contextPercent;
+    case "durationMs":
+      return row.durationMs;
+  }
+}
+
+/** Compare two values with direction applied. */
+function compareValues(
+  a: number | string,
+  b: number | string,
+  direction: SortDirection,
+): number {
+  const multiplier = direction === "asc" ? 1 : -1;
+  if (typeof a === "string" && typeof b === "string") {
+    return multiplier * a.localeCompare(b);
+  }
+  return multiplier * ((a as number) - (b as number));
+}
+
+/**
+ * Sort table rows by the given column and direction.
+ * Active sessions always sort above completed sessions.
+ * Within each group, rows are sorted by the specified column.
+ * Returns a new array without mutating the input.
+ */
+export function sortTableRows(
+  rows: readonly TableRow[],
+  columnId: ColumnId,
+  direction: SortDirection,
+): readonly TableRow[] {
+  return [...rows].sort((a, b) => {
+    // Active sessions always sort above completed
+    if (a.isActive !== b.isActive) {
+      return a.isActive ? -1 : 1;
+    }
+    // Within same active group, sort by column
+    return compareValues(columnValue(a, columnId), columnValue(b, columnId), direction);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// applySortToggle -- toggle sort direction or reset on new column
+// ---------------------------------------------------------------------------
+
+/**
+ * Compute the next sort state when a column header is clicked.
+ * Same column: flip direction (asc -> desc, desc -> asc).
+ * Different column: reset to ascending.
+ */
+export function applySortToggle(
+  currentSort: SortState,
+  clickedColumnId: ColumnId,
+): SortState {
+  if (currentSort.columnId === clickedColumnId) {
+    return {
+      columnId: clickedColumnId,
+      direction: currentSort.direction === "asc" ? "desc" : "asc",
+    };
+  }
+  return { columnId: clickedColumnId, direction: "asc" };
 }
