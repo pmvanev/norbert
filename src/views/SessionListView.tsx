@@ -59,7 +59,6 @@ const COLUMN_HEADERS: readonly ColumnHeaderDef[] = [
   { id: "name", label: "Name", sortable: true },
   { id: "cost", label: "Cost", sortable: true },
   { id: "totalTokens", label: "Tokens", sortable: true },
-  { id: "burnRate", label: "Burn Rate", sortable: true },
   { id: "contextPercent", label: "Context", sortable: true },
   { id: "durationMs", label: "Duration", sortable: true },
 ];
@@ -98,7 +97,6 @@ function MetricsTableRow({
 
   const costHeat = deriveHeatClass(computeHeatLevel(row.cost, "cost"));
   const tokenHeat = deriveHeatClass(computeHeatLevel(row.totalTokens, "totalTokens"));
-  const burnHeat = deriveHeatClass(computeHeatLevel(row.burnRate, "burnRate"));
   const contextHeat = deriveHeatClass(computeHeatLevel(row.contextPercent, "contextPercent"));
 
   return (
@@ -114,7 +112,6 @@ function MetricsTableRow({
       </td>
       <td className={costHeat}>{formatCostColumn(row.cost)}</td>
       <td className={tokenHeat}>{formatTokenColumn(row.totalTokens)}</td>
-      <td className={burnHeat}>{row.burnRate > 0 ? `${row.burnRate.toFixed(0)}/min` : "--"}</td>
       <td className={contextHeat}>{row.contextPercent > 0 ? `${row.contextPercent.toFixed(0)}%` : "--"}</td>
       <td>{formatDurationFromMs(row.durationMs)}</td>
     </tr>

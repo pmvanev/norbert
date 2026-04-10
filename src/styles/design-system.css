@@ -412,11 +412,11 @@ code, pre, .mono,
 }
 
 .heat-amber {
-  color: var(--amber, #f0a020);
+  color: var(--amber);
 }
 
 .heat-red {
-  color: var(--red, #e04040);
+  color: var(--error);
 }
 
 /* ═══ EVENT DETAIL VIEW ═══ */
