@@ -1,35 +1,92 @@
 /**
- * Acceptance tests: Session Metrics Table — Walking Skeletons
+ * Acceptance tests: Session Metrics Table -- Walking Skeletons
  *
  * End-to-end walking skeletons that validate the core user experience:
  * sessions displayed as a sortable metrics table with status, name,
  * cost, and token columns visible by default.
  *
  * Driving ports:
- *   - Session table data transformation (pure domain functions)
- *   - SessionMetrics from norbert-usage plugin domain
- *   - SessionInfo + isSessionActive from src/domain/status.ts
- *   - Presentation helpers from src/domain/sessionPresentation.ts
+ *   - buildTableRows (pure domain function)
+ *   - formatCostColumn, formatTokenColumn (pure formatters)
  *
  * Traces to: WS-1 (table renders), WS-2 (cost/token comparison), WS-3 (row selection)
  */
 
 import { describe, it, expect } from "vitest";
+import type { SessionInfo } from "../../../../src/domain/status";
+import type { SessionMetrics } from "../../../../src/plugins/norbert-usage/domain/types";
+import type { SessionMetadata } from "../../../../src/views/SessionListView";
+import {
+  buildTableRows,
+  formatCostColumn,
+  formatTokenColumn,
+} from "../../../../src/plugins/norbert-session/domain/sessionMetricsTable";
 
 // ---------------------------------------------------------------------------
-// PLACEHOLDER: imports will target production driving ports once implemented.
-//
-// Expected driving ports (pure domain functions):
-//   - buildTableRows(sessions, metrics, metadata, now) → TableRow[]
-//   - formatCostColumn(cost) → string
-//   - formatTokenColumn(tokens) → string
-//   - computeStatusBarAggregates(rows) → StatusBarData
-//
-// From existing domain:
-//   - isSessionActive (src/domain/status.ts)
-//   - deriveSessionName (src/domain/sessionPresentation.ts)
-//   - SessionMetrics (src/plugins/norbert-usage/domain/types.ts)
+// Test helpers: session fixtures
 // ---------------------------------------------------------------------------
+
+const NOW = new Date("2026-04-10T12:00:00Z").getTime();
+
+function makeSession(
+  id: string,
+  startedMinutesAgo: number,
+  opts: { ended?: boolean; lastEventMinutesAgo?: number },
+): SessionInfo {
+  const started = new Date(NOW - startedMinutesAgo * 60_000).toISOString();
+  const lastEventAgo = opts.lastEventMinutesAgo ?? startedMinutesAgo;
+  return {
+    id,
+    started_at: started,
+    ended_at: opts.ended
+      ? new Date(NOW - lastEventAgo * 60_000).toISOString()
+      : null,
+    event_count: 10,
+    last_event_at: new Date(NOW - lastEventAgo * 60_000).toISOString(),
+  };
+}
+
+function makeMetadata(sessionId: string, cwd: string): SessionMetadata {
+  return {
+    session_id: sessionId,
+    terminal_type: null,
+    service_version: null,
+    os_type: null,
+    host_arch: null,
+    cwd,
+  };
+}
+
+function makeMetrics(
+  sessionId: string,
+  cost: number,
+  tokens: number,
+): SessionMetrics {
+  return {
+    sessionId,
+    sessionLabel: "",
+    totalTokens: tokens,
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheCreationTokens: 0,
+    sessionCost: cost,
+    toolCallCount: 0,
+    activeAgentCount: 0,
+    contextWindowPct: 0,
+    contextWindowTokens: 0,
+    contextWindowMaxTokens: 0,
+    contextWindowModel: "",
+    lastApiLatencyMs: 0,
+    totalEventCount: 0,
+    apiErrorCount: 0,
+    apiRequestCount: 0,
+    apiErrorRate: 0,
+    sessionStartedAt: "",
+    lastEventAt: "",
+    burnRate: 0,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // WALKING SKELETON WS-1: Table renders with Status and Name columns
@@ -38,22 +95,38 @@ import { describe, it, expect } from "vitest";
 // @walking_skeleton
 describe("User views sessions as a metrics table with status and name", () => {
   it("table rows show status indicator and project name for each session", () => {
-    // Given three sessions are running: "norbert", "api-server", and "docs-site"
-    //   "norbert" cwd is "/home/phil/Git/norbert"
-    //   "api-server" cwd is "/home/phil/Git/api-server"
-    //   "docs-site" cwd is "/home/phil/Git/docs-site"
-    // And "norbert" and "api-server" are active (last event within 5 min)
-    // And "docs-site" completed 10 minutes ago
-    //
-    // When the table row data is built from sessions, metrics, and metadata
-    //
-    // Then each row has a name derived from the working directory last segment:
-    //   "norbert", "api-server", "docs-site"
-    // And "norbert" and "api-server" rows are marked as active (pulsing green dot)
-    // And "docs-site" row is marked as completed (dim dot)
+    // Given three sessions: "norbert" (active), "api-server" (active), "docs-site" (completed)
+    const sessions: readonly SessionInfo[] = [
+      makeSession("s1", 30, { lastEventMinutesAgo: 1 }), // active - recent event
+      makeSession("s2", 20, { lastEventMinutesAgo: 2 }), // active - recent event
+      makeSession("s3", 60, { ended: true, lastEventMinutesAgo: 10 }), // completed
+    ];
 
-    // PLACEHOLDER: implement once buildTableRows driving port exists
-    expect(true).toBe(true); // Skeleton compiles — first scenario to make fail
+    const metadata: readonly SessionMetadata[] = [
+      makeMetadata("s1", "/home/phil/Git/norbert"),
+      makeMetadata("s2", "/home/phil/Git/api-server"),
+      makeMetadata("s3", "/home/phil/Git/docs-site"),
+    ];
+
+    const metrics: readonly SessionMetrics[] = [
+      makeMetrics("s1", 1.24, 142500),
+      makeMetrics("s2", 0.08, 9300),
+      makeMetrics("s3", 0.52, 61000),
+    ];
+
+    // When the table row data is built
+    const rows = buildTableRows(sessions, metrics, metadata, NOW);
+
+    // Then each row has a name derived from the working directory last segment
+    expect(rows).toHaveLength(3);
+    expect(rows[0].name).toBe("norbert");
+    expect(rows[1].name).toBe("api-server");
+    expect(rows[2].name).toBe("docs-site");
+
+    // And active sessions are marked active, completed is not
+    expect(rows[0].isActive).toBe(true);
+    expect(rows[1].isActive).toBe(true);
+    expect(rows[2].isActive).toBe(false);
   });
 });
 
@@ -63,16 +136,37 @@ describe("User views sessions as a metrics table with status and name", () => {
 
 // @walking_skeleton
 describe("User compares session costs and token usage across sessions", () => {
-  it.skip("cost and token columns display formatted values for each session", () => {
-    // Given session "norbert" has spent $1.24 and used 142,500 tokens
-    // And session "api-server" has spent $0.08 and used 9,300 tokens
-    // And session "docs-site" has spent $0.52 and used 61,000 tokens
-    //
+  it("cost and token columns display formatted values for each session", () => {
+    // Given sessions with known cost and token values
+    const sessions: readonly SessionInfo[] = [
+      makeSession("s1", 30, { lastEventMinutesAgo: 1 }),
+      makeSession("s2", 20, { lastEventMinutesAgo: 2 }),
+      makeSession("s3", 60, { ended: true, lastEventMinutesAgo: 10 }),
+    ];
+
+    const metadata: readonly SessionMetadata[] = [
+      makeMetadata("s1", "/home/phil/Git/norbert"),
+      makeMetadata("s2", "/home/phil/Git/api-server"),
+      makeMetadata("s3", "/home/phil/Git/docs-site"),
+    ];
+
+    const metrics: readonly SessionMetrics[] = [
+      makeMetrics("s1", 1.24, 142500),
+      makeMetrics("s2", 0.08, 9300),
+      makeMetrics("s3", 0.52, 61000),
+    ];
+
     // When the table row data is built
-    //
-    // Then the "norbert" row shows cost "$1.24" and tokens "142.5K"
-    // And the "api-server" row shows cost "$0.08" and tokens "9.3K"
-    // And the "docs-site" row shows cost "$0.52" and tokens "61.0K"
+    const rows = buildTableRows(sessions, metrics, metadata, NOW);
+
+    // Then cost and token columns show formatted values
+    expect(formatCostColumn(rows[0].cost)).toBe("$1.24");
+    expect(formatCostColumn(rows[1].cost)).toBe("$0.08");
+    expect(formatCostColumn(rows[2].cost)).toBe("$0.52");
+
+    expect(formatTokenColumn(rows[0].totalTokens)).toBe("142.5K");
+    expect(formatTokenColumn(rows[1].totalTokens)).toBe("9.3K");
+    expect(formatTokenColumn(rows[2].totalTokens)).toBe("61.0K");
   });
 });
 
