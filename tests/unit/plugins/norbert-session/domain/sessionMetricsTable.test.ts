@@ -21,7 +21,10 @@ import {
   buildTableRows,
   formatCostColumn,
   formatTokenColumn,
+  moveFocus,
+  selectFocusedRow,
 } from "../../../../../src/plugins/norbert-session/domain/sessionMetricsTable";
+import type { TableRow } from "../../../../../src/plugins/norbert-session/domain/sessionMetricsTableTypes";
 
 // ---------------------------------------------------------------------------
 // Generators
@@ -221,5 +224,100 @@ describe("formatTokenColumn", () => {
     expect(formatTokenColumn(9300)).toBe("9.3K");
     expect(formatTokenColumn(61000)).toBe("61.0K");
     expect(formatTokenColumn(0)).toBe("0.0K");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Helpers for row selection / focus tests
+// ---------------------------------------------------------------------------
+
+function makeTableRow(sessionId: string): TableRow {
+  return { sessionId, name: "test", isActive: true, cost: 0, totalTokens: 0 };
+}
+
+// ---------------------------------------------------------------------------
+// PROPERTY: moveFocus clamps within [0, rowCount-1] or returns -1 for empty
+// ---------------------------------------------------------------------------
+
+describe("moveFocus", () => {
+  it("result is always within [0, rowCount-1] for non-empty tables", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 0, max: 100 }),
+        fc.constantFrom("up" as const, "down" as const),
+        fc.integer({ min: 1, max: 100 }),
+        (currentIndex, direction, rowCount) => {
+          const clamped = Math.min(currentIndex, rowCount - 1);
+          const result = moveFocus(clamped, direction, rowCount);
+          expect(result).toBeGreaterThanOrEqual(0);
+          expect(result).toBeLessThan(rowCount);
+        },
+      ),
+    );
+  });
+
+  it("returns -1 when row count is zero", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 0, max: 100 }),
+        fc.constantFrom("up" as const, "down" as const),
+        (currentIndex, direction) => {
+          expect(moveFocus(currentIndex, direction, 0)).toBe(-1);
+        },
+      ),
+    );
+  });
+
+  it("down increments by exactly one when not at boundary", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 2, max: 100 }),
+        (rowCount) => {
+          const midIndex = Math.floor(rowCount / 2) - 1;
+          expect(moveFocus(midIndex, "down", rowCount)).toBe(midIndex + 1);
+        },
+      ),
+    );
+  });
+
+  it("up decrements by exactly one when not at boundary", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 2, max: 100 }),
+        (rowCount) => {
+          const midIndex = Math.floor(rowCount / 2);
+          expect(moveFocus(midIndex, "up", rowCount)).toBe(midIndex - 1);
+        },
+      ),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PROPERTY: selectFocusedRow extracts session ID from focused row
+// ---------------------------------------------------------------------------
+
+describe("selectFocusedRow", () => {
+  it("returns the session ID at the focused index", () => {
+    fc.assert(
+      fc.property(
+        fc.array(sessionIdArb, { minLength: 1, maxLength: 10 }),
+        (ids) => {
+          const rows: readonly TableRow[] = ids.map(makeTableRow);
+          const index = 0;
+          expect(selectFocusedRow(index, rows)).toBe(ids[0]);
+        },
+      ),
+    );
+  });
+
+  it("returns null when index is out of bounds", () => {
+    const rows: readonly TableRow[] = [makeTableRow("a"), makeTableRow("b")];
+    expect(selectFocusedRow(-1, rows)).toBeNull();
+    expect(selectFocusedRow(2, rows)).toBeNull();
+  });
+
+  it("returns null for empty rows", () => {
+    expect(selectFocusedRow(0, [])).toBeNull();
   });
 });

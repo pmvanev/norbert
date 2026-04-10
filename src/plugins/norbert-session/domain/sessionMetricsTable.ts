@@ -83,3 +83,44 @@ export function formatTokenColumn(tokens: number): string {
   const inThousands = tokens / 1000;
   return `${inThousands.toFixed(1)}K`;
 }
+
+// ---------------------------------------------------------------------------
+// moveFocus -- compute next focus index with boundary clamping
+// ---------------------------------------------------------------------------
+
+/** Direction for keyboard navigation. */
+export type FocusDirection = "up" | "down";
+
+/**
+ * Compute the next focus index given current index, direction, and row count.
+ * Returns -1 when there are zero rows (no valid index).
+ * Clamps at 0 (top) and rowCount - 1 (bottom).
+ */
+export function moveFocus(
+  currentIndex: number,
+  direction: FocusDirection,
+  rowCount: number,
+): number {
+  if (rowCount === 0) return -1;
+
+  const delta = direction === "down" ? 1 : -1;
+  const nextIndex = currentIndex + delta;
+
+  return Math.max(0, Math.min(nextIndex, rowCount - 1));
+}
+
+// ---------------------------------------------------------------------------
+// selectFocusedRow -- extract session ID from focused row
+// ---------------------------------------------------------------------------
+
+/**
+ * Extract the session ID from the row at the given focus index.
+ * Returns null when the index is out of bounds or rows are empty.
+ */
+export function selectFocusedRow(
+  focusedIndex: number,
+  rows: readonly TableRow[],
+): string | null {
+  if (focusedIndex < 0 || focusedIndex >= rows.length) return null;
+  return rows[focusedIndex].sessionId;
+}

@@ -20,6 +20,7 @@ import {
   buildTableRows,
   formatCostColumn,
   formatTokenColumn,
+  selectFocusedRow,
 } from "../../../../src/plugins/norbert-session/domain/sessionMetricsTable";
 
 // ---------------------------------------------------------------------------
@@ -176,12 +177,26 @@ describe("User compares session costs and token usage across sessions", () => {
 
 // @walking_skeleton
 describe("User selects a session row to view detailed metrics", () => {
-  it.skip("clicking a row returns the session ID for detail panel navigation", () => {
+  it("clicking a row returns the session ID for detail panel navigation", () => {
     // Given session "norbert" with ID "abc-123" appears in the metrics table
-    //
-    // When the user selects the "norbert" row
-    //
+    const sessions: readonly SessionInfo[] = [
+      makeSession("abc-123", 30, { lastEventMinutesAgo: 1 }),
+      makeSession("def-456", 20, { lastEventMinutesAgo: 2 }),
+    ];
+    const metadata: readonly SessionMetadata[] = [
+      makeMetadata("abc-123", "/home/phil/Git/norbert"),
+      makeMetadata("def-456", "/home/phil/Git/api-server"),
+    ];
+    const metrics: readonly SessionMetrics[] = [
+      makeMetrics("abc-123", 1.24, 142500),
+      makeMetrics("def-456", 0.08, 9300),
+    ];
+    const rows = buildTableRows(sessions, metrics, metadata, NOW);
+
+    // When the user selects the "norbert" row (focus index 0)
+    const selectedId = selectFocusedRow(0, rows);
+
     // Then the onSessionSelect callback receives "abc-123"
-    // And the "norbert" row is marked as selected
+    expect(selectedId).toBe("abc-123");
   });
 });
