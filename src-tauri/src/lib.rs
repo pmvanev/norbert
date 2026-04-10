@@ -627,20 +627,23 @@ fn collect_plugin_configs(claude_dir: &std::path::Path) -> ClaudeConfig {
     let mut all_rules = Vec::new();
     let mut all_errors = Vec::new();
 
-    // Track which install paths we've already scanned (from installed_plugins.json)
-    let mut scanned_paths: std::collections::HashSet<String> = std::collections::HashSet::new();
+    // Track which plugin names we've already scanned (from installed_plugins.json)
+    // so the cache pass skips plugins that have a known installed version.
+    let mut scanned_plugins: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     // 1. Scan plugins listed in installed_plugins.json
     let plugins_file = claude_dir.join("plugins").join("installed_plugins.json");
     if let Ok(content) = std::fs::read_to_string(&plugins_file) {
         if let Ok(installed) = serde_json::from_str::<InstalledPluginsFile>(&content) {
             for (plugin_name, entries) in &installed.plugins {
-                for entry in entries {
+                // Only scan the first entry — it represents the currently installed version.
+                // Older entries are previous installations retained by Claude Code.
+                if let Some(entry) = entries.first() {
                     let install_path = std::path::Path::new(&entry.install_path);
                     if !install_path.exists() {
                         continue;
                     }
-                    scanned_paths.insert(install_path.to_string_lossy().to_string());
+                    scanned_plugins.insert(plugin_name.clone());
                     scan_plugin_directory(
                         install_path, plugin_name,
                         &mut all_agents, &mut all_commands, &mut all_skills,
@@ -665,8 +668,13 @@ fn collect_plugin_configs(claude_dir: &std::path::Path) -> ClaudeConfig {
                 for plugin_entry in plugins.flatten() {
                     let plugin_path = plugin_entry.path();
                     if !plugin_path.is_dir() { continue; }
-                    let plugin_name = plugin_path.file_name()
+                    let plugin_dir_name = plugin_path.file_name()
                         .unwrap_or_default().to_string_lossy().to_string();
+
+                    // The installed_plugins.json key format is "name@marketplace"
+                    let plugin_key = format!("{}@{}", plugin_dir_name, marketplace_name);
+                    // Skip if already scanned via installed_plugins.json
+                    if scanned_plugins.contains(&plugin_key) { continue; }
 
                     // Find the most recent version directory (by modification time)
                     let mut best_version: Option<std::path::PathBuf> = None;
@@ -689,16 +697,7 @@ fn collect_plugin_configs(claude_dir: &std::path::Path) -> ClaudeConfig {
                     }
 
                     if let Some(version_path) = best_version {
-                        let canonical = version_path.to_string_lossy().to_string();
-                        // Skip if already scanned via installed_plugins.json
-                        // Normalize path separators for comparison
-                        let normalized = canonical.replace('\\', "/");
-                        let already_scanned = scanned_paths.iter().any(|p| {
-                            p.replace('\\', "/") == normalized
-                        });
-                        if already_scanned { continue; }
-
-                        let source = format!("{}@{}", plugin_name, marketplace_name);
+                        let source = format!("{}@{}", plugin_dir_name, marketplace_name);
                         scan_plugin_directory(
                             &version_path, &source,
                             &mut all_agents, &mut all_commands, &mut all_skills,
