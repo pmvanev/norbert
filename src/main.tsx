@@ -1,6 +1,8 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { emit } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { resolveShortcut } from "./domain/keyboardShortcuts";
 import "./styles/themes.css";
 import "./styles/design-system.css";
 import App from "./App";
@@ -54,26 +56,30 @@ let currentZoom = readStoredZoom();
 applyZoom(currentZoom);
 
 document.addEventListener("keydown", (e) => {
-  if (!e.ctrlKey && !e.metaKey) return;
+  const action = resolveShortcut({
+    ctrlOrMeta: e.ctrlKey || e.metaKey,
+    shift: e.shiftKey,
+    key: e.key,
+  });
+  if (action === null) return;
 
-  if (e.shiftKey && e.key === "N") {
-    e.preventDefault();
-    emit("request-new-window");
-  } else if (e.key === "q") {
-    e.preventDefault();
-    emit("request-quit");
-  } else if (e.key === "=" || e.key === "+") {
-    e.preventDefault();
-    currentZoom = Math.min(ZOOM_MAX, currentZoom + ZOOM_STEP);
-    applyZoom(currentZoom);
-  } else if (e.key === "-") {
-    e.preventDefault();
-    currentZoom = Math.max(ZOOM_MIN, currentZoom - ZOOM_STEP);
-    applyZoom(currentZoom);
-  } else if (e.key === "0") {
-    e.preventDefault();
-    currentZoom = ZOOM_DEFAULT;
-    applyZoom(currentZoom);
+  e.preventDefault();
+  switch (action) {
+    case "new-window":   emit("request-new-window"); break;
+    case "close-window": getCurrentWindow().close();  break;
+    case "quit-all":     emit("request-quit");        break;
+    case "zoom-in":
+      currentZoom = Math.min(ZOOM_MAX, currentZoom + ZOOM_STEP);
+      applyZoom(currentZoom);
+      break;
+    case "zoom-out":
+      currentZoom = Math.max(ZOOM_MIN, currentZoom - ZOOM_STEP);
+      applyZoom(currentZoom);
+      break;
+    case "zoom-reset":
+      currentZoom = ZOOM_DEFAULT;
+      applyZoom(currentZoom);
+      break;
   }
 });
 

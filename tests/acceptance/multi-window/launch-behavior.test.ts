@@ -23,6 +23,8 @@ import { describe, it } from "vitest";
 const NEW_WINDOW_FLAG = "--new-window";
 const DEFAULT_WINDOW_LABEL = "main";
 const NEW_WINDOW_SHORTCUT = "Ctrl+Shift+N";
+const CLOSE_WINDOW_SHORTCUT = "Ctrl+Q";
+const QUIT_ALL_SHORTCUT = "Ctrl+Shift+Q";
 
 // ---------------------------------------------------------------------------
 // WALKING SKELETON
@@ -184,6 +186,86 @@ describe("All windows observe the same backend data", () => {
 });
 
 // ---------------------------------------------------------------------------
+// FOCUSED SCENARIOS: Window close behavior (Ctrl+Q / Ctrl+Shift+Q)
+// ---------------------------------------------------------------------------
+
+describe(`${CLOSE_WINDOW_SHORTCUT} closes the current window`, () => {
+  it.skip("pressing Ctrl+Q with multiple windows closes only the focused one", () => {
+    // GIVEN: Norbert has two windows open ("main" and "window-2")
+    // AND: "window-2" is focused
+    // WHEN: the user presses Ctrl+Q
+    // THEN: "window-2" closes
+    // AND: "main" remains open and responsive
+    // AND: the backend process keeps running
+    //
+    // Driving port: frontend keydown handler -> getCurrentWindow().close().
+  });
+
+  it.skip("pressing Ctrl+Q with only one window closes it and exits", () => {
+    // GIVEN: Norbert has only one window open
+    // WHEN: the user presses Ctrl+Q
+    // THEN: the window closes
+    // AND: the Norbert process exits cleanly
+    //
+    // Observable outcome: process is no longer running.
+  });
+});
+
+describe("File menu exposes a Close Window item", () => {
+  it.skip(`File -> Close Window is bound to ${CLOSE_WINDOW_SHORTCUT}`, () => {
+    // GIVEN: Norbert is running
+    // WHEN: the user opens the File menu
+    // THEN: the File menu contains an enabled "Close Window" item
+    // AND: the item displays accelerator "Ctrl+Q"
+    //
+    // Driving port: native application menu inspection.
+  });
+
+  it.skip("clicking File -> Close Window closes the focused window", () => {
+    // GIVEN: Norbert has two windows open
+    // AND: the user has one window focused
+    // WHEN: the user clicks File -> Close Window
+    // THEN: only the focused window closes
+    // AND: the other window remains open
+    //
+    // Driving port: native application menu "Close Window" item.
+  });
+});
+
+describe(`${QUIT_ALL_SHORTCUT} quits all windows`, () => {
+  it.skip("pressing Ctrl+Shift+Q with multiple windows closes all of them", () => {
+    // GIVEN: Norbert has three windows open
+    // WHEN: the user presses Ctrl+Shift+Q
+    // THEN: all windows close
+    // AND: the Norbert process exits cleanly
+    //
+    // Driving port: frontend keydown handler -> emit("request-quit") ->
+    // Rust app.listen("request-quit") -> app.exit(0).
+  });
+
+  it.skip("pressing Ctrl+Shift+Q with one window exits the application", () => {
+    // GIVEN: Norbert has only one window open
+    // WHEN: the user presses Ctrl+Shift+Q
+    // THEN: the window closes
+    // AND: the Norbert process exits cleanly
+    //
+    // Observable outcome: same as Ctrl+Q with one window, but uses the
+    // quit-all path (app.exit) rather than the close-window path.
+  });
+});
+
+describe("File menu exposes a Quit Norbert item", () => {
+  it.skip(`File -> Quit Norbert is bound to ${QUIT_ALL_SHORTCUT}`, () => {
+    // GIVEN: Norbert is running
+    // WHEN: the user opens the File menu
+    // THEN: the File menu contains an enabled "Quit Norbert" item
+    // AND: the item displays accelerator "Ctrl+Shift+Q"
+    //
+    // Driving port: native application menu inspection.
+  });
+});
+
+// ---------------------------------------------------------------------------
 // PHASE 2 SCENARIOS: Windows Jump List (right-click taskbar icon)
 // ---------------------------------------------------------------------------
 // These specs describe behavior that the Win32 jump list implementation
@@ -214,4 +296,4 @@ describe("Right-clicking the Norbert taskbar icon exposes a New Window task", ()
 // Exports for step reuse in other acceptance files
 // ---------------------------------------------------------------------------
 
-export { NEW_WINDOW_FLAG, DEFAULT_WINDOW_LABEL, NEW_WINDOW_SHORTCUT };
+export { NEW_WINDOW_FLAG, DEFAULT_WINDOW_LABEL, NEW_WINDOW_SHORTCUT, CLOSE_WINDOW_SHORTCUT, QUIT_ALL_SHORTCUT };

@@ -861,6 +861,16 @@ fn focus_any_existing_window<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
+/// Close the currently focused window. If it's the last window, quit the app.
+fn close_focused_window<R: Runtime>(app: &AppHandle<R>) {
+    let focused = {
+        let windows = app.webview_windows();
+        windows.values().find(|w| w.is_focused().unwrap_or(false)).cloned()
+    };
+    if let Some(window) = focused {
+        let _ = window.destroy();
+    }
+}
 
 /// Theme identifiers matching the frontend CSS class suffixes.
 const THEME_IDS: [&str; 5] = ["theme_nb", "theme_cd", "theme_vd", "theme_cl", "theme_vl"];
@@ -886,11 +896,15 @@ fn rebuild_menu_with_theme(app: &AppHandle, active_id: &str) {
         let new_window = MenuItemBuilder::with_id("new_window", "New Window")
             .accelerator("CmdOrCtrl+Shift+N")
             .build(app)?;
-        let quit = MenuItemBuilder::with_id("quit", "Quit Norbert")
+        let close_window = MenuItemBuilder::with_id("close_window", "Close Window")
             .accelerator("CmdOrCtrl+Q")
+            .build(app)?;
+        let quit = MenuItemBuilder::with_id("quit", "Quit Norbert")
+            .accelerator("CmdOrCtrl+Shift+Q")
             .build(app)?;
         let file_menu = SubmenuBuilder::new(app, "File")
             .item(&new_window)
+            .item(&close_window)
             .separator()
             .item(&quit)
             .build()?;
@@ -979,11 +993,15 @@ pub fn run() {
             let new_window = MenuItemBuilder::with_id("new_window", "New Window")
                 .accelerator("CmdOrCtrl+Shift+N")
                 .build(app)?;
-            let quit = MenuItemBuilder::with_id("quit", "Quit Norbert")
+            let close_window = MenuItemBuilder::with_id("close_window", "Close Window")
                 .accelerator("CmdOrCtrl+Q")
+                .build(app)?;
+            let quit = MenuItemBuilder::with_id("quit", "Quit Norbert")
+                .accelerator("CmdOrCtrl+Shift+Q")
                 .build(app)?;
             let file_menu = SubmenuBuilder::new(app, "File")
                 .item(&new_window)
+                .item(&close_window)
                 .separator()
                 .item(&quit)
                 .build()?;
@@ -1015,6 +1033,9 @@ pub fn run() {
                         if let Err(e) = open_new_window(app_handle) {
                             eprintln!("norbert: failed to open new window: {}", e);
                         }
+                    }
+                    "close_window" => {
+                        close_focused_window(app_handle);
                     }
                     "quit" => {
                         app_handle.exit(0);

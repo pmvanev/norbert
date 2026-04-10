@@ -4,6 +4,8 @@
   "description": "Default capabilities for the Norbert desktop application",
   "windows": ["main", "window-*"],
   "permissions": [
-    "core:default"
+    "core:default",
+    "core:window:allow-close",
+    "core:window:allow-destroy"
   ]
 }
