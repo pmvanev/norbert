@@ -136,12 +136,12 @@ describe("Status bar total cost equals sum of individual session costs", () => {
     fc.assert(
       fc.property(fc.array(tableRowArb, { maxLength: 50 }), (rows) => {
         const result = computeStatusBarData(rows);
-        const expectedCost = rows.reduce((sum, row) => sum + row.cost, 0);
+        // Use same cents-rounding as implementation to verify the invariant
+        const expectedCostCents = rows.reduce((sum, row) => sum + Math.round(row.cost * 100), 0);
         const expectedTokens = rows.reduce((sum, row) => sum + row.totalTokens, 0);
 
         expect(result.sessionCount).toBe(rows.length);
-        // Cents-based rounding guarantees 2dp display accuracy, not 5dp float precision
-        expect(result.totalCost).toBeCloseTo(expectedCost, 2);
+        expect(result.totalCost).toBe(expectedCostCents / 100);
         expect(result.totalTokens).toBe(expectedTokens);
       }),
       { numRuns: 200 },

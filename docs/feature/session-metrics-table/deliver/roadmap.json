@@ -1,0 +1,169 @@
+{
+  "project_id": "session-metrics-table",
+  "feature_id": "session-metrics-table",
+  "paradigm": "functional",
+  "created_at": "2026-04-10T00:00:00Z",
+  "total_steps": 8,
+  "phases": [
+    {"id": "01", "name": "Walking Skeleton", "steps": ["01-01", "01-02"]},
+    {"id": "02", "name": "Table Behaviors", "steps": ["02-01", "02-02", "02-03", "02-04", "02-05"]},
+    {"id": "03", "name": "View Integration", "steps": ["03-01"]}
+  ],
+  "validation": {
+    "step_ratio": 2.67,
+    "step_ratio_limit": 2.5,
+    "production_files": 3,
+    "note": "3 production files (types, domain, view). Ratio 2.67 slightly exceeds 2.5 but decomposition follows 1:1 acceptance-test-file mapping with no identical-pattern batching possible — each step covers a distinct pure-function concern.",
+    "status": "approved"
+  },
+  "steps": [
+    {
+      "step_id": "01-01",
+      "title": "Table row data with status, name, cost, and tokens",
+      "description": "Create types module and buildTableRows transforming sessions + metrics into TableRow[]. Include formatCostColumn and formatTokenColumn formatters.",
+      "story": "WS-1, WS-2",
+      "acceptance_criteria": [
+        "Each row has status derived from isSessionActive and name from cwd",
+        "Cost formatted as dollar string (e.g. '$1.24')",
+        "Token count formatted with K suffix (e.g. '142.5K')",
+        "Sessions with no metrics produce rows with zero/default values"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-session/domain/sessionMetricsTableTypes.ts",
+        "src/plugins/norbert-session/domain/sessionMetricsTable.ts"
+      ],
+      "domain_files_reused": [
+        "src/domain/status.ts",
+        "src/domain/sessionPresentation.ts",
+        "src/plugins/norbert-usage/domain/types.ts"
+      ]
+    },
+    {
+      "step_id": "01-02",
+      "title": "Row selection and keyboard navigation",
+      "description": "Implement selectFocusedRow returning session ID and moveFocus with boundary clamping.",
+      "story": "WS-3, M6",
+      "acceptance_criteria": [
+        "Selecting a row returns its session ID",
+        "Arrow down/up increments/decrements focus index by one",
+        "Focus clamps at 0 and rowCount-1 boundaries",
+        "Zero rows produces index -1",
+        "selectFocusedRow extracts session ID from focused row"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-session/domain/sessionMetricsTable.ts"
+      ],
+      "domain_files_reused": []
+    },
+    {
+      "step_id": "02-01",
+      "title": "Column sorting with toggle and persistence",
+      "description": "Implement sortTableRows for column-based sorting and applySortToggle for asc/desc cycling. Default sort: active-first then recency.",
+      "story": "M1",
+      "acceptance_criteria": [
+        "Default sort places active sessions above completed, each by recency",
+        "Clicking column header toggles between ascending and descending",
+        "Numeric columns sort numerically, not lexicographically",
+        "Sessions with missing metrics sort as zero",
+        "Re-sorting after data update preserves current sort state"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-session/domain/sessionMetricsTable.ts"
+      ],
+      "domain_files_reused": []
+    },
+    {
+      "step_id": "02-02",
+      "title": "Heat coloring for metric cells",
+      "description": "Implement computeHeatLevel mapping value+columnId to neutral/amber/red and deriveHeatClass producing CSS class string.",
+      "story": "M2",
+      "acceptance_criteria": [
+        "Cost, context, burn rate, tokens, and API health columns each have thresholds",
+        "Heat intensity is monotonic: higher value never produces lower heat",
+        "Zero and missing values produce neutral heat level",
+        "deriveHeatClass maps HeatLevel to a CSS class string"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-session/domain/sessionMetricsTable.ts"
+      ],
+      "domain_files_reused": []
+    },
+    {
+      "step_id": "02-03",
+      "title": "Active/Recent row grouping",
+      "description": "Implement groupSessionRows splitting rows into active and recent groups based on session activity status. Include toggleGroupCollapsed for collapse/expand state.",
+      "story": "M3",
+      "acceptance_criteria": [
+        "Active sessions (not ended, event within 5 min) grouped separately from recent",
+        "Each group includes a count of contained rows",
+        "Stale session (no event >5 min) appears in recent group",
+        "Empty groups return zero count with empty array",
+        "Toggling a group's collapsed state returns the opposite boolean value"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-session/domain/sessionMetricsTable.ts"
+      ],
+      "domain_files_reused": [
+        "src/domain/status.ts",
+        "src/domain/sessionFilter.ts"
+      ]
+    },
+    {
+      "step_id": "02-04",
+      "title": "Status bar aggregates",
+      "description": "Implement computeStatusBarData summing session count, total cost, and total tokens across visible rows. Uses formatCostColumn and formatTokenColumn from step 01-01 for display formatting.",
+      "story": "M4",
+      "acceptance_criteria": [
+        "Session count equals length of visible rows",
+        "Total cost equals sum of individual row costs",
+        "Total tokens equals sum of individual row token counts",
+        "Empty row array produces all-zero aggregates"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-session/domain/sessionMetricsTable.ts"
+      ],
+      "domain_files_reused": [
+        "src/domain/sessionFilter.ts"
+      ]
+    },
+    {
+      "step_id": "02-05",
+      "title": "Optional column toggle and formatters",
+      "description": "Implement toggleColumn add/remove, getAvailableOptionalColumns listing 7 optional columns, and formatCacheHitPct for cache percentage display.",
+      "story": "M5",
+      "acceptance_criteria": [
+        "7 optional columns available: version, platform, inputTokens, outputTokens, cacheHitPct, activeAgents, events",
+        "Toggle adds column if absent, removes if present",
+        "Cache hit formats as percentage string; zero total tokens yields '0%'",
+        "Missing metadata values produce null (view renders as dash)",
+        "activeAgents and events fields from SessionMetrics are available on TableRow for optional column rendering"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-session/domain/sessionMetricsTable.ts"
+      ],
+      "domain_files_reused": [
+        "src/domain/sessionPresentation.ts"
+      ]
+    },
+    {
+      "step_id": "03-01",
+      "title": "Wire domain functions into SessionListView",
+      "description": "Replace plain session list with sortable metrics table layout. Connect all domain functions (buildTableRows, sorting, grouping, heat, status bar, optional columns, keyboard nav) to the React view.",
+      "story": "Final integration",
+      "acceptance_criteria": [
+        "SessionListView renders a table with status, name, cost, tokens columns",
+        "Column headers are clickable for sorting",
+        "Rows grouped under Active/Recent expandable headers",
+        "Status bar displays aggregate totals at bottom",
+        "Arrow keys navigate rows, Enter selects"
+      ],
+      "files_to_modify": [
+        "src/views/SessionListView.tsx"
+      ],
+      "domain_files_reused": [
+        "src/plugins/norbert-session/domain/sessionMetricsTable.ts",
+        "src/plugins/norbert-session/domain/sessionMetricsTableTypes.ts"
+      ]
+    }
+  ]
+}
