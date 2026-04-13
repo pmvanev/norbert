@@ -42,6 +42,7 @@ export function makeMetadata(
     os_type: opts?.os_type ?? null,
     host_arch: opts?.host_arch ?? null,
     cwd,
+    git_branch: null,
   };
 }
 

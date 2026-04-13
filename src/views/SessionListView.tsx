@@ -9,9 +9,6 @@ import {
   formatDuration,
 } from "../domain/status";
 import {
-  mapTerminalType,
-} from "../domain/sessionPresentation";
-import {
   filterSessions,
   SESSION_FILTER_PRESETS,
   type SessionFilterId,
@@ -83,19 +80,14 @@ function MetricsTableRow({
   row,
   isFocused,
   onSelect,
-  metadataMap,
 }: {
   readonly row: TableRow;
   readonly isFocused: boolean;
   readonly onSelect?: (sessionId: string) => void;
-  readonly metadataMap: ReadonlyMap<string, SessionMetadata>;
 }) {
   const dotClass = row.isActive ? "sdot live" : "sdot done";
   const rowClass = row.isActive ? "srow live-s" : "srow";
   const focusClass = isFocused ? " focused" : "";
-  const metadata = metadataMap.get(row.sessionId);
-  const ideBadge = mapTerminalType(metadata?.terminal_type ?? null);
-
   const costHeat = deriveHeatClass(computeHeatLevel(row.cost, "cost"));
   const tokenHeat = deriveHeatClass(computeHeatLevel(row.totalTokens, "totalTokens"));
   const contextHeat = deriveHeatClass(computeHeatLevel(row.contextPercent, "contextPercent"));
@@ -107,10 +99,7 @@ function MetricsTableRow({
       data-session-id={row.sessionId}
     >
       <td><span className={dotClass} /></td>
-      <td className="sname">
-        {row.name}
-        {ideBadge !== null && <span className="sbadge br">{ideBadge}</span>}
-      </td>
+      <td className="sname">{row.name}</td>
       <td className={costHeat}>{formatCostColumn(row.cost)}</td>
       <td className={tokenHeat}>{formatTokenColumn(row.totalTokens)}</td>
       <td className={contextHeat}>{row.contextPercent > 0 ? `${row.contextPercent.toFixed(0)}%` : "--"}</td>
@@ -214,7 +203,6 @@ function PastGroupHeaderRow({
 /// Preserves: SessionListViewProps interface, metadata fetching, filter dropdown,
 /// sec-hdr title area, empty state handling, pulsing green dot for active sessions.
 export function SessionListView({ sessions, onSessionSelect }: SessionListViewProps) {
-  const [metadataMap, setMetadataMap] = useState<ReadonlyMap<string, SessionMetadata>>(new Map());
   const [metadataList, setMetadataList] = useState<readonly SessionMetadata[]>([]);
   const [selectedFilter, setSelectedFilter] = useState<SessionFilterId>("last-24h");
   const [sortState, setSortState] = useState<SortState>(DEFAULT_SORT);
@@ -237,14 +225,7 @@ export function SessionListView({ sessions, onSessionSelect }: SessionListViewPr
   useEffect(() => {
     if (sessions.length === 0) return;
     invoke<SessionMetadata[]>("get_all_session_metadata")
-      .then((list) => {
-        const map = new Map<string, SessionMetadata>();
-        for (const meta of list) {
-          map.set(meta.session_id, meta);
-        }
-        setMetadataMap(map);
-        setMetadataList(list);
-      })
+      .then(setMetadataList)
       .catch(() => {
         // Missing metadata is not an error -- badges simply won't display
       });
@@ -370,7 +351,6 @@ export function SessionListView({ sessions, onSessionSelect }: SessionListViewPr
                 row={row}
                 isFocused={visibleRows[focusIndex]?.sessionId === row.sessionId}
                 onSelect={onSessionSelect}
-                metadataMap={metadataMap}
               />
             ))}
           {!activeCollapsed && activeRows.length > 0 && (
@@ -391,7 +371,6 @@ export function SessionListView({ sessions, onSessionSelect }: SessionListViewPr
                 row={row}
                 isFocused={visibleRows[focusIndex]?.sessionId === row.sessionId}
                 onSelect={onSessionSelect}
-                metadataMap={metadataMap}
               />
             ))}
           {!recentCollapsed && pastRows.length > 0 && (

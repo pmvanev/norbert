@@ -300,6 +300,10 @@ pub struct SessionMetadata {
     /// (from the top-level `cwd` field on hook payloads). Used to render
     /// a meaningful project name in the Sessions view.
     pub cwd: Option<String>,
+    /// Git branch name active in the cwd when the session started.
+    /// Derived by running `git rev-parse --abbrev-ref HEAD` in the cwd.
+    /// None when cwd is not a git repo or git is not available.
+    pub git_branch: Option<String>,
 }
 
 /// Pre-aggregated cost and token totals for a single session.

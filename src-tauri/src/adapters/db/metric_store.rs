@@ -33,6 +33,7 @@ const CREATE_SESSION_METADATA_TABLE: &str = "
         os_type TEXT,
         host_arch TEXT,
         cwd TEXT,
+        git_branch TEXT,
         created_at TEXT NOT NULL
     )
 ";
@@ -42,6 +43,10 @@ const CREATE_SESSION_METADATA_TABLE: &str = "
 /// for the column first via PRAGMA table_info.
 const MIGRATE_ADD_CWD_COLUMN: &str =
     "ALTER TABLE session_metadata ADD COLUMN cwd TEXT";
+
+/// SQL migration: add git_branch column to existing session_metadata tables.
+const MIGRATE_ADD_GIT_BRANCH_COLUMN: &str =
+    "ALTER TABLE session_metadata ADD COLUMN git_branch TEXT";
 
 /// SQL for atomic upsert: accumulate delta onto existing value.
 const UPSERT_METRIC: &str = "
@@ -68,19 +73,20 @@ const SELECT_METRICS_FOR_SESSION: &str = "
 /// a strict first-write-wins policy would freeze a session at whatever
 /// happened to arrive first.
 const INSERT_SESSION_METADATA: &str = "
-    INSERT INTO session_metadata (session_id, terminal_type, service_version, os_type, host_arch, cwd, created_at)
-    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+    INSERT INTO session_metadata (session_id, terminal_type, service_version, os_type, host_arch, cwd, git_branch, created_at)
+    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
     ON CONFLICT (session_id) DO UPDATE SET
         terminal_type = COALESCE(terminal_type, excluded.terminal_type),
         service_version = COALESCE(service_version, excluded.service_version),
         os_type = COALESCE(os_type, excluded.os_type),
         host_arch = COALESCE(host_arch, excluded.host_arch),
-        cwd = COALESCE(cwd, excluded.cwd)
+        cwd = COALESCE(cwd, excluded.cwd),
+        git_branch = COALESCE(git_branch, excluded.git_branch)
 ";
 
 /// SQL to query session metadata by session_id.
 const SELECT_SESSION_METADATA: &str = "
-    SELECT session_id, terminal_type, service_version, os_type, host_arch, cwd
+    SELECT session_id, terminal_type, service_version, os_type, host_arch, cwd, git_branch
     FROM session_metadata
     WHERE session_id = ?1
 ";
@@ -104,7 +110,7 @@ const SELECT_SESSION_SUMMARIES: &str = "
 
 /// SQL to query all session metadata rows.
 const SELECT_ALL_SESSION_METADATA: &str = "
-    SELECT session_id, terminal_type, service_version, os_type, host_arch, cwd
+    SELECT session_id, terminal_type, service_version, os_type, host_arch, cwd, git_branch
     FROM session_metadata
     ORDER BY created_at DESC
 ";
@@ -139,6 +145,12 @@ impl SqliteMetricStore {
             connection
                 .execute_batch(MIGRATE_ADD_CWD_COLUMN)
                 .map_err(|e| format!("Failed to migrate session_metadata table: {}", e))?;
+        }
+        // Migrate: add git_branch column to pre-existing databases.
+        if !Self::session_metadata_has_column(connection, "git_branch")? {
+            connection
+                .execute_batch(MIGRATE_ADD_GIT_BRANCH_COLUMN)
+                .map_err(|e| format!("Failed to migrate session_metadata (git_branch): {}", e))?;
         }
         Ok(())
     }
@@ -208,6 +220,7 @@ impl MetricStore for SqliteMetricStore {
                     metadata.os_type,
                     metadata.host_arch,
                     metadata.cwd,
+                    metadata.git_branch,
                     now,
                 ],
             )
@@ -227,6 +240,7 @@ impl MetricStore for SqliteMetricStore {
                     os_type: row.get(3)?,
                     host_arch: row.get(4)?,
                     cwd: row.get(5)?,
+                    git_branch: row.get(6)?,
                 })
             },
         );
@@ -253,6 +267,7 @@ impl MetricStore for SqliteMetricStore {
                     os_type: row.get(3)?,
                     host_arch: row.get(4)?,
                     cwd: row.get(5)?,
+                    git_branch: row.get(6)?,
                 })
             })
             .map_err(|e| format!("Failed to query all session metadata: {}", e))?
@@ -320,6 +335,7 @@ mod tests {
             os_type: Some("linux".to_string()),
             host_arch: Some("x86_64".to_string()),
             cwd: None,
+            git_branch: None,
         }).unwrap();
         store.write_session_metadata(&SessionMetadata {
             session_id: "sess-B".to_string(),
@@ -328,6 +344,7 @@ mod tests {
             os_type: None,
             host_arch: None,
             cwd: None,
+            git_branch: None,
         }).unwrap();
 
         // AC: get_metrics_for_session returns accumulated metrics for a session
@@ -437,6 +454,7 @@ mod tests {
             os_type: Some("linux".to_string()),
             host_arch: Some("x86_64".to_string()),
             cwd: None,
+            git_branch: None,
         };
 
         store.write_session_metadata(&metadata).unwrap();
@@ -471,6 +489,7 @@ mod tests {
             os_type: Some("linux".to_string()),
             host_arch: Some("x86_64".to_string()),
             cwd: None,
+            git_branch: None,
         };
         let second = SessionMetadata {
             session_id: "sess-1".to_string(),
@@ -479,6 +498,7 @@ mod tests {
             os_type: None,
             host_arch: None,
             cwd: None,
+            git_branch: None,
         };
 
         store.write_session_metadata(&first).unwrap();
@@ -502,6 +522,7 @@ mod tests {
             os_type: Some("linux".to_string()),
             host_arch: Some("x86_64".to_string()),
             cwd: None,
+            git_branch: None,
         };
         let second = SessionMetadata {
             session_id: "sess-1".to_string(),
@@ -510,6 +531,7 @@ mod tests {
             os_type: Some("darwin".to_string()),
             host_arch: Some("arm64".to_string()),
             cwd: None,
+            git_branch: None,
         };
 
         store.write_session_metadata(&first).unwrap();
@@ -531,6 +553,7 @@ mod tests {
             os_type: None,
             host_arch: None,
             cwd: None,
+            git_branch: None,
         };
 
         store.write_session_metadata(&metadata).unwrap();
@@ -562,6 +585,7 @@ mod tests {
             os_type: Some("linux".to_string()),
             host_arch: Some("x86_64".to_string()),
             cwd: None,
+            git_branch: None,
         };
         let meta2 = SessionMetadata {
             session_id: "sess-2".to_string(),
@@ -570,6 +594,7 @@ mod tests {
             os_type: Some("darwin".to_string()),
             host_arch: Some("arm64".to_string()),
             cwd: None,
+            git_branch: None,
         };
 
         store.write_session_metadata(&meta1).unwrap();

@@ -56,6 +56,7 @@ function makeActiveSession(id: string, cwd: string): {
       os_type: null,
       host_arch: null,
       cwd: `/home/user/${cwd}`,
+      git_branch: null,
     },
   };
 }
@@ -152,6 +153,34 @@ describe("buildTableRows", () => {
 
     expect(rows[0].isActive).toBe(true);
     expect(rows[1].isActive).toBe(false);
+  });
+
+  it("includes git branch in session name when available", () => {
+    const session: SessionInfo = {
+      id: "s1",
+      started_at: new Date(NOW - 30 * 60_000).toISOString(),
+      ended_at: null,
+      event_count: 10,
+      last_event_at: new Date(NOW - 60_000).toISOString(),
+    };
+    const metadata: SessionMetadata = {
+      session_id: "s1",
+      terminal_type: null,
+      service_version: null,
+      os_type: null,
+      host_arch: null,
+      cwd: "/home/user/norbert",
+      git_branch: "feat/session-filter",
+    };
+    const rows = buildTableRows([session], [], [metadata], [], NOW);
+    expect(rows[0].name).toBe("norbert (feat/session-filter)");
+  });
+
+  it("omits branch parenthetical when git_branch is null", () => {
+    const { session, metadata } = makeActiveSession("s1", "norbert");
+    const rows = buildTableRows([session], [], [metadata], [], NOW);
+    expect(rows[0].name).toBe("norbert");
+    expect(rows[0].name).not.toContain("(");
   });
 
   it("sessions with no matching metrics produce rows with zero defaults", () => {

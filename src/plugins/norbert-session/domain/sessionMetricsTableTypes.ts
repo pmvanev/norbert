@@ -16,6 +16,7 @@ export interface SessionMetadata {
   readonly os_type: string | null;
   readonly host_arch: string | null;
   readonly cwd: string | null;
+  readonly git_branch: string | null;
 }
 
 // ---------------------------------------------------------------------------

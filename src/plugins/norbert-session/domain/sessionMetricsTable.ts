@@ -89,13 +89,15 @@ function findMetadataForSession(
   readonly cwd: string | null;
   readonly version: string | null;
   readonly platform: string | null;
+  readonly gitBranch: string | null;
 } {
   const found = metadata.find((m) => m.session_id === sessionId);
-  if (!found) return { cwd: null, version: null, platform: null };
+  if (!found) return { cwd: null, version: null, platform: null, gitBranch: null };
   return {
     cwd: found.cwd,
     version: formatClaudeVersion(found.service_version),
     platform: formatPlatform(found.os_type, found.host_arch),
+    gitBranch: found.git_branch ?? null,
   };
 }
 
@@ -116,7 +118,7 @@ function sessionToTableRow(
   now: number,
 ): TableRow {
   const sessionMetadata = findMetadataForSession(session.id, metadata);
-  const name = deriveSessionName(sessionMetadata.cwd, session.id);
+  const name = deriveSessionName(sessionMetadata.cwd, session.id, sessionMetadata.gitBranch);
   const active = isSessionActive(session, now);
   const metricsData = findMetricsForSession(session.id, metrics, summaries);
   const durationMs = computeDurationMs(session, now);

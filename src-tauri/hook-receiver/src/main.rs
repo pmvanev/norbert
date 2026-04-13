@@ -375,19 +375,21 @@ async fn handle_hook_event(
     };
     drop(store);
 
-    // Capture session cwd from the canonical event payload (Claude Code
-    // includes a top-level `cwd` on every hook event). This populates the
-    // session label immediately on SessionStart so the Sessions view can
-    // show a meaningful name without waiting for OTLP traffic.
+    // Capture session cwd and git branch from the canonical event payload
+    // (Claude Code includes a top-level `cwd` on every hook event). This
+    // populates the session label immediately on SessionStart so the
+    // Sessions view can show a meaningful name without waiting for OTLP traffic.
     if let Some(cwd) = canonical_event
         .payload
         .get("cwd")
         .and_then(|v| v.as_str())
     {
         if !cwd.is_empty() {
+            let git_branch = resolve_git_branch(cwd);
             let metadata = SessionMetadata {
                 session_id: canonical_event.session_id.clone(),
                 cwd: Some(cwd.to_string()),
+                git_branch,
                 ..Default::default()
             };
             let metric_store = state.metric_store.lock().unwrap();
@@ -439,6 +441,7 @@ async fn handle_otlp_logs(
                 os_type: os_type.clone(),
                 host_arch: host_arch.clone(),
                 cwd: None,
+                git_branch: None,
             };
             if let Err(e) = metric_store.write_session_metadata(&metadata) {
                 eprintln!("Failed to write session metadata from logs: {}", e);
@@ -503,6 +506,7 @@ async fn handle_otlp_metrics(
             os_type: os_type.clone(),
             host_arch: host_arch.clone(),
             cwd: None,
+            git_branch: None,
         };
         if let Err(e) = store.write_session_metadata(&metadata) {
             eprintln!("Failed to write session metadata: {}", e);
@@ -519,6 +523,30 @@ async fn handle_otlp_metrics(
 /// Reads one stored event payload per session that is missing a cwd in its
 /// metadata row, parses the JSON, and writes the cwd back through the regular
 /// metric store upsert (which COALESCEs, so other fields stay intact).
+/// Resolve the current git branch for a working directory.
+///
+/// Runs `git rev-parse --abbrev-ref HEAD` in the given cwd.
+/// Returns None when cwd is not a git repo, git is not installed,
+/// or the command fails for any reason. Never blocks the caller
+/// for more than a few hundred milliseconds on a healthy system.
+fn resolve_git_branch(cwd: &str) -> Option<String> {
+    let output = std::process::Command::new("git")
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .current_dir(cwd)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if branch.is_empty() || branch == "HEAD" {
+        return None;
+    }
+    Some(branch)
+}
+
 fn backfill_session_cwd_from_events(
     db_path: &std::path::Path,
     metric_store: &SqliteMetricStore,
