@@ -302,6 +302,21 @@ pub struct SessionMetadata {
     pub cwd: Option<String>,
 }
 
+/// Pre-aggregated cost and token totals for a single session.
+///
+/// Returned by bulk summary queries so the frontend can populate
+/// session table rows without per-session round trips.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionSummary {
+    /// Unique session identifier.
+    pub session_id: String,
+    /// Total accumulated cost (sum of all cost.usage rows).
+    pub total_cost: f64,
+    /// Total accumulated tokens (sum of all token.usage rows).
+    pub total_tokens: f64,
+}
+
 /// Calculate the duration in seconds between two ISO 8601 timestamps.
 ///
 /// Pure function: returns None if either timestamp cannot be parsed.

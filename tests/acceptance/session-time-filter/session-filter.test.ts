@@ -106,43 +106,6 @@ describe("filterSessions is a pure function testable without DOM", () => {
 });
 
 // ---------------------------------------------------------------------------
-// AC-1: Active Now filter (US-1)
-// ---------------------------------------------------------------------------
-
-describe("Active Now filter shows only currently active sessions", () => {
-  it("includes active sessions and excludes completed ones", () => {
-    // Given 3 active sessions and 10-ish completed/stale sessions
-    const sessions = [
-      activeSession1, activeSession2, activeSession3,
-      completed30m, completed2h, completed25h, completed48h,
-      staleSession, completed5m, completed10m,
-    ];
-
-    // When filtering to 'active-now'
-    const result = filterSessions(sessions, "active-now", NOW);
-
-    // Then only the 3 active sessions are returned
-    expect(result).toHaveLength(3);
-    expect(result.map((s) => s.id)).toEqual(
-      expect.arrayContaining(["active-1", "active-2", "active-3"]),
-    );
-  });
-});
-
-describe("Active Now filter with no active sessions returns empty", () => {
-  it("returns empty array when all sessions are completed or stale", () => {
-    // Given only completed and stale sessions
-    const sessions = [completed30m, completed2h, staleSession];
-
-    // When filtering to 'active-now'
-    const result = filterSessions(sessions, "active-now", NOW);
-
-    // Then no sessions match
-    expect(result).toHaveLength(0);
-  });
-});
-
-// ---------------------------------------------------------------------------
 // AC-2: Time window filters (US-2)
 // ---------------------------------------------------------------------------
 
@@ -328,7 +291,6 @@ describe("Session with null last_event_at is excluded from time windows", () => 
 describe("Empty sessions array returns empty for any filter", () => {
   it("no sessions in, no sessions out", () => {
     expect(filterSessions([], "all", NOW)).toHaveLength(0);
-    expect(filterSessions([], "active-now", NOW)).toHaveLength(0);
     expect(filterSessions([], "last-15m", NOW)).toHaveLength(0);
     expect(filterSessions([], "last-1h", NOW)).toHaveLength(0);
     expect(filterSessions([], "last-24h", NOW)).toHaveLength(0);
@@ -340,19 +302,19 @@ describe("Empty sessions array returns empty for any filter", () => {
 // ---------------------------------------------------------------------------
 
 describe("SESSION_FILTER_PRESETS has an entry for each filter ID", () => {
-  it("five presets with unique IDs and labels", () => {
-    expect(SESSION_FILTER_PRESETS).toHaveLength(5);
+  it("four presets with unique IDs, labels, and short labels", () => {
+    expect(SESSION_FILTER_PRESETS).toHaveLength(4);
 
     const ids = SESSION_FILTER_PRESETS.map((p) => p.id);
-    expect(ids).toContain("active-now");
     expect(ids).toContain("last-15m");
     expect(ids).toContain("last-1h");
     expect(ids).toContain("last-24h");
     expect(ids).toContain("all");
 
-    // Each preset has a non-empty label
+    // Each preset has a non-empty label and shortLabel
     for (const preset of SESSION_FILTER_PRESETS) {
       expect(preset.label.length).toBeGreaterThan(0);
+      expect(preset.shortLabel.length).toBeGreaterThan(0);
     }
   });
 });

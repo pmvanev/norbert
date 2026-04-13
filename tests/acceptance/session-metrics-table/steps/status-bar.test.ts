@@ -27,7 +27,7 @@ import { makeTableRow as makeRow } from "./fixtures";
 // ---------------------------------------------------------------------------
 
 describe("Status bar shows totals across visible sessions", () => {
-  it("session count, total cost, and total tokens computed from visible rows", () => {
+  it("session count, tracked count, total cost, and total tokens computed from visible rows", () => {
     const rows: readonly TableRow[] = [
       makeRow({ sessionId: "s-1", cost: 1.24, totalTokens: 142500 }),
       makeRow({ sessionId: "s-2", cost: 0.08, totalTokens: 9300 }),
@@ -39,6 +39,7 @@ describe("Status bar shows totals across visible sessions", () => {
     const result = computeStatusBarData(rows);
 
     expect(result.sessionCount).toBe(5);
+    expect(result.trackedCount).toBe(5);
     expect(result.totalCost).toBeCloseTo(3.47, 2);
     expect(result.totalTokens).toBe(285000);
     expect(formatCostColumn(result.totalCost)).toBe("$3.47");
@@ -98,11 +99,41 @@ describe("Status bar updates as session costs change", () => {
 // ERROR PATH: Empty state
 // ---------------------------------------------------------------------------
 
+describe("Status bar distinguishes tracked sessions from untracked", () => {
+  it("sessions with zero cost and tokens are not counted as tracked", () => {
+    const rows: readonly TableRow[] = [
+      makeRow({ sessionId: "s-1", cost: 1.50, totalTokens: 50000 }),
+      makeRow({ sessionId: "s-2", cost: 0, totalTokens: 0 }),
+      makeRow({ sessionId: "s-3", cost: 0, totalTokens: 0 }),
+      makeRow({ sessionId: "s-4", cost: 0.25, totalTokens: 10000 }),
+      makeRow({ sessionId: "s-5", cost: 0, totalTokens: 0 }),
+    ];
+
+    const result = computeStatusBarData(rows);
+
+    expect(result.sessionCount).toBe(5);
+    expect(result.trackedCount).toBe(2);
+    expect(result.totalCost).toBeCloseTo(1.75, 2);
+    expect(result.totalTokens).toBe(60000);
+  });
+
+  it("session with tokens but zero cost is still tracked", () => {
+    const rows: readonly TableRow[] = [
+      makeRow({ sessionId: "s-1", cost: 0, totalTokens: 5000 }),
+    ];
+
+    const result = computeStatusBarData(rows);
+
+    expect(result.trackedCount).toBe(1);
+  });
+});
+
 describe("Status bar shows zeros when no sessions are visible", () => {
   it("empty visible rows produce zero aggregates", () => {
     const result = computeStatusBarData([]);
 
     expect(result.sessionCount).toBe(0);
+    expect(result.trackedCount).toBe(0);
     expect(result.totalCost).toBe(0);
     expect(result.totalTokens).toBe(0);
   });
@@ -139,8 +170,10 @@ describe("Status bar total cost equals sum of individual session costs", () => {
         // Use same cents-rounding as implementation to verify the invariant
         const expectedCostCents = rows.reduce((sum, row) => sum + Math.round(row.cost * 100), 0);
         const expectedTokens = rows.reduce((sum, row) => sum + row.totalTokens, 0);
+        const expectedTracked = rows.filter((r) => r.cost > 0 || r.totalTokens > 0).length;
 
         expect(result.sessionCount).toBe(rows.length);
+        expect(result.trackedCount).toBe(expectedTracked);
         expect(result.totalCost).toBe(expectedCostCents / 100);
         expect(result.totalTokens).toBe(expectedTokens);
       }),

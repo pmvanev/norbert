@@ -51,7 +51,7 @@ describe("User views sessions as a metrics table with status and name", () => {
     ];
 
     // When the table row data is built
-    const rows = buildTableRows(sessions, metrics, metadata, NOW);
+    const rows = buildTableRows(sessions, metrics, metadata, [], NOW);
 
     // Then each row has a name derived from the working directory last segment
     expect(rows).toHaveLength(3);
@@ -93,7 +93,7 @@ describe("User compares session costs and token usage across sessions", () => {
     ];
 
     // When the table row data is built
-    const rows = buildTableRows(sessions, metrics, metadata, NOW);
+    const rows = buildTableRows(sessions, metrics, metadata, [], NOW);
 
     // Then cost and token columns show formatted values
     expect(formatCostColumn(rows[0].cost)).toBe("$1.24");
@@ -126,7 +126,7 @@ describe("User selects a session row to view detailed metrics", () => {
       makeMetrics("abc-123", { sessionCost: 1.24, totalTokens: 142500 }),
       makeMetrics("def-456", { sessionCost: 0.08, totalTokens: 9300 }),
     ];
-    const rows = buildTableRows(sessions, metrics, metadata, NOW);
+    const rows = buildTableRows(sessions, metrics, metadata, [], NOW);
 
     // When the user selects the "norbert" row (focus index 0)
     const selectedId = selectFocusedRow(0, rows);

@@ -19,6 +19,16 @@ export interface SessionMetadata {
 }
 
 // ---------------------------------------------------------------------------
+// SessionSummary -- pre-aggregated cost/token totals from the database
+// ---------------------------------------------------------------------------
+
+export interface SessionSummary {
+  readonly sessionId: string;
+  readonly totalCost: number;
+  readonly totalTokens: number;
+}
+
+// ---------------------------------------------------------------------------
 // TableRow -- one row of the session metrics table
 // ---------------------------------------------------------------------------
 
@@ -114,6 +124,7 @@ export type HeatColumnId =
 
 export interface StatusBarData {
   readonly sessionCount: number;
+  readonly trackedCount: number;
   readonly totalCost: number;
   readonly totalTokens: number;
 }

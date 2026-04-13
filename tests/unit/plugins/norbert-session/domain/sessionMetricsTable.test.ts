@@ -104,7 +104,7 @@ describe("buildTableRows", () => {
           const metadata = sessionsAndMeta.map((s) => s.metadata);
           const metrics = sessions.map((s) => makeEmptyMetrics(s.id));
 
-          const rows = buildTableRows(sessions, metrics, metadata, NOW);
+          const rows = buildTableRows(sessions, metrics, metadata, [], NOW);
           expect(rows).toHaveLength(sessions.length);
         },
       ),
@@ -117,7 +117,7 @@ describe("buildTableRows", () => {
         const { session, metadata } = makeActiveSession("s1", projectName);
         const metrics = [makeEmptyMetrics("s1")];
 
-        const rows = buildTableRows([session], metrics, [metadata], NOW);
+        const rows = buildTableRows([session], metrics, [metadata], [], NOW);
         expect(rows[0].name).toBe(projectName);
       }),
     );
@@ -148,7 +148,7 @@ describe("buildTableRows", () => {
     ];
 
     const metrics = [makeEmptyMetrics("active"), makeEmptyMetrics("ended")];
-    const rows = buildTableRows([activeSession, endedSession], metrics, metadata, NOW);
+    const rows = buildTableRows([activeSession, endedSession], metrics, metadata, [], NOW);
 
     expect(rows[0].isActive).toBe(true);
     expect(rows[1].isActive).toBe(false);
@@ -157,7 +157,7 @@ describe("buildTableRows", () => {
   it("sessions with no matching metrics produce rows with zero defaults", () => {
     const { session, metadata } = makeActiveSession("orphan", "myproject");
     // No metrics provided for this session
-    const rows = buildTableRows([session], [], [metadata], NOW);
+    const rows = buildTableRows([session], [], [metadata], [], NOW);
 
     expect(rows[0].cost).toBe(0);
     expect(rows[0].totalTokens).toBe(0);
@@ -172,7 +172,7 @@ describe("buildTableRows", () => {
       last_event_at: new Date(NOW - 60_000).toISOString(),
     };
     const metrics = [makeEmptyMetrics("no-meta")];
-    const rows = buildTableRows([session], metrics, [], NOW);
+    const rows = buildTableRows([session], metrics, [], [], NOW);
 
     expect(rows[0].name).toBe("no-meta");
   });

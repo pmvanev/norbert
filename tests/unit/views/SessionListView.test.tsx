@@ -96,25 +96,24 @@ describe("SessionListView metrics table", () => {
     expect(headerTexts.some((t) => t.includes("Tokens"))).toBe(true);
   });
 
-  it("renders grouped sections with Active and Recent headers", async () => {
+  it("renders grouped sections with Active and Past headers", async () => {
     render(
       <SessionListView sessions={twoSessions} onSessionSelect={vi.fn()} />,
     );
 
-    // Should show group headers for Active and Recent
+    // Should show group headers for Active and Past
     expect(screen.getByText(/Active Sessions/)).toBeInTheDocument();
-    expect(screen.getByText(/Recent Sessions/)).toBeInTheDocument();
+    expect(screen.getByText(/Past Sessions/)).toBeInTheDocument();
   });
 
-  it("renders a status bar with aggregate totals", async () => {
+  it("renders group total rows with cost and token aggregates", async () => {
     render(
       <SessionListView sessions={twoSessions} onSessionSelect={vi.fn()} />,
     );
 
-    // Status bar should show session count (default filter "active-now" shows 1 active)
-    const statusBar = screen.getByTestId("status-bar");
-    expect(statusBar).toBeInTheDocument();
-    expect(statusBar.textContent).toMatch(/\d+ sessions/);
+    // Should render total rows within the table (one per group with rows)
+    const totalRows = document.querySelectorAll(".group-total");
+    expect(totalRows.length).toBeGreaterThan(0);
   });
 
   it("selects a row when Enter is pressed on a focused row", async () => {
@@ -131,13 +130,43 @@ describe("SessionListView metrics table", () => {
     expect(onSelect).toHaveBeenCalled();
   });
 
-  it("preserves the sec-hdr title area with filter dropdown", async () => {
+  it("preserves the sec-hdr title area", async () => {
     render(
       <SessionListView sessions={twoSessions} onSessionSelect={vi.fn()} />,
     );
 
     expect(screen.getByText("Sessions")).toBeInTheDocument();
-    expect(screen.getByRole("combobox")).toBeInTheDocument(); // select dropdown
+  });
+
+  it("renders time-range pills in the Past Sessions header", async () => {
+    render(
+      <SessionListView sessions={twoSessions} onSessionSelect={vi.fn()} />,
+    );
+
+    // Should render pill buttons for time ranges
+    expect(screen.getByRole("button", { name: "15m" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "1h" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "24h" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "All" })).toBeInTheDocument();
+  });
+
+  it("group total row hides when group is collapsed", async () => {
+    render(
+      <SessionListView sessions={twoSessions} onSessionSelect={vi.fn()} />,
+    );
+
+    // Before collapse: total row(s) visible
+    const totalsBefore = document.querySelectorAll(".group-total");
+    const countBefore = totalsBefore.length;
+    expect(countBefore).toBeGreaterThan(0);
+
+    // Collapse the Active Sessions group by clicking its header
+    const activeHeader = screen.getByText(/Active Sessions/);
+    fireEvent.click(activeHeader);
+
+    // After collapse: one fewer total row
+    const totalsAfter = document.querySelectorAll(".group-total");
+    expect(totalsAfter.length).toBe(countBefore - 1);
   });
 
   it("renders empty state when no sessions exist", async () => {

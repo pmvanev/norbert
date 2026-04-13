@@ -9,8 +9,8 @@ use adapters::db::metric_store::SqliteMetricStore;
 use adapters::db::SqliteEventStore;
 use domain::{
     build_status_with_session, decide_launch_action, next_window_label, parse_launch_intent,
-    AccumulatedMetric, AppStatus, LaunchAction, Session, SessionMetadata, DEFAULT_WINDOW_LABEL,
-    VERSION,
+    AccumulatedMetric, AppStatus, LaunchAction, Session, SessionMetadata, SessionSummary,
+    DEFAULT_WINDOW_LABEL, VERSION,
 };
 use ports::{EventStore, MetricStore};
 use rusqlite::Connection;
@@ -137,6 +137,15 @@ fn get_session_metadata(
 fn get_all_session_metadata(state: tauri::State<AppState>) -> Vec<SessionMetadata> {
     let store = state.metric_store.lock().unwrap();
     store.get_all_session_metadata().unwrap_or_default()
+}
+
+/// Return pre-aggregated cost and token totals for all sessions.
+///
+/// Single bulk query — avoids per-session round trips for the session table.
+#[tauri::command]
+fn get_all_session_summaries(state: tauri::State<AppState>) -> Vec<SessionSummary> {
+    let store = state.metric_store.lock().unwrap();
+    store.get_all_session_summaries().unwrap_or_default()
 }
 
 /// Aggregated token usage from a Claude Code transcript file.
@@ -1064,7 +1073,7 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet, get_status, get_latest_session, get_sessions, get_status_and_sessions, get_session_events, get_new_events_batch, get_metrics_for_session, get_session_metadata, get_all_session_metadata, get_transcript_usage, read_claude_config, sync_theme_menu])
+        .invoke_handler(tauri::generate_handler![greet, get_status, get_latest_session, get_sessions, get_status_and_sessions, get_session_events, get_new_events_batch, get_metrics_for_session, get_session_metadata, get_all_session_metadata, get_all_session_summaries, get_transcript_usage, read_claude_config, sync_theme_menu])
         .run(tauri::generate_context!())
         .expect("error while running Norbert");
 }

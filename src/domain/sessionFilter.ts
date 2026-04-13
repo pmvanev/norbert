@@ -3,7 +3,7 @@
 /// Provides predicate-based filtering of sessions by recency.
 /// All functions are pure: `now` is injected, no Date.now() calls.
 
-import { isSessionActive, type SessionInfo } from "./status";
+import type { SessionInfo } from "./status";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -11,7 +11,6 @@ import { isSessionActive, type SessionInfo } from "./status";
 
 /// Discriminated union of all supported filter identifiers.
 export type SessionFilterId =
-  | "active-now"
   | "last-15m"
   | "last-1h"
   | "last-24h"
@@ -21,6 +20,7 @@ export type SessionFilterId =
 export interface SessionFilterPreset {
   readonly id: SessionFilterId;
   readonly label: string;
+  readonly shortLabel: string;
   readonly predicate: (session: SessionInfo, now: number) => boolean;
 }
 
@@ -53,31 +53,30 @@ const HOURS_24 = 24 * 60 * 60 * 1000;
 // Presets
 // ---------------------------------------------------------------------------
 
-/// All available filter presets, ordered for display.
+/// All available filter presets for past sessions, ordered for display.
 export const SESSION_FILTER_PRESETS: readonly SessionFilterPreset[] = [
-  {
-    id: "active-now",
-    label: "Active Now",
-    predicate: (session, now) => isSessionActive(session, now),
-  },
   {
     id: "last-15m",
     label: "Last 15 minutes",
+    shortLabel: "15m",
     predicate: (session, now) => isWithinWindow(session, MINUTES_15, now),
   },
   {
     id: "last-1h",
     label: "Last hour",
+    shortLabel: "1h",
     predicate: (session, now) => isWithinWindow(session, HOURS_1, now),
   },
   {
     id: "last-24h",
     label: "Last 24 hours",
+    shortLabel: "24h",
     predicate: (session, now) => isWithinWindow(session, HOURS_24, now),
   },
   {
     id: "all",
     label: "All sessions",
+    shortLabel: "All",
     predicate: () => true,
   },
 ] as const;

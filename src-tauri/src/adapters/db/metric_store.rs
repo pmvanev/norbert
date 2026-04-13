@@ -5,7 +5,7 @@
 
 use rusqlite::Connection;
 
-use crate::domain::{AccumulatedMetric, SessionMetadata};
+use crate::domain::{AccumulatedMetric, SessionMetadata, SessionSummary};
 use crate::ports::MetricStore;
 
 /// SQL to create the metrics table with compound primary key.
@@ -83,6 +83,15 @@ const SELECT_SESSION_METADATA: &str = "
     SELECT session_id, terminal_type, service_version, os_type, host_arch, cwd
     FROM session_metadata
     WHERE session_id = ?1
+";
+
+/// SQL to query aggregate cost and token totals per session in one pass.
+const SELECT_SESSION_SUMMARIES: &str = "
+    SELECT session_id,
+           COALESCE(SUM(CASE WHEN metric_name = 'cost.usage' THEN value ELSE 0 END), 0) AS total_cost,
+           COALESCE(SUM(CASE WHEN metric_name = 'token.usage' THEN value ELSE 0 END), 0) AS total_tokens
+    FROM metrics
+    GROUP BY session_id
 ";
 
 /// SQL to query all session metadata rows.
@@ -243,6 +252,27 @@ impl MetricStore for SqliteMetricStore {
             .map_err(|e| format!("Failed to read session metadata row: {}", e))?;
 
         Ok(metadata)
+    }
+
+    fn get_all_session_summaries(&self) -> Result<Vec<SessionSummary>, String> {
+        let mut stmt = self
+            .connection
+            .prepare(SELECT_SESSION_SUMMARIES)
+            .map_err(|e| format!("Failed to prepare session summaries query: {}", e))?;
+
+        let summaries = stmt
+            .query_map([], |row| {
+                Ok(SessionSummary {
+                    session_id: row.get(0)?,
+                    total_cost: row.get(1)?,
+                    total_tokens: row.get(2)?,
+                })
+            })
+            .map_err(|e| format!("Failed to query session summaries: {}", e))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("Failed to read session summary row: {}", e))?;
+
+        Ok(summaries)
     }
 }
 

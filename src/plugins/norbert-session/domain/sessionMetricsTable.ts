@@ -7,7 +7,7 @@ import type { SessionInfo } from "../../../domain/status";
 import { isSessionActive } from "../../../domain/status";
 import { deriveSessionName, formatClaudeVersion, formatPlatform } from "../../../domain/sessionPresentation";
 import type { SessionMetrics } from "../../norbert-usage/domain/types";
-import type { SessionMetadata } from "./sessionMetricsTableTypes";
+import type { SessionMetadata, SessionSummary } from "./sessionMetricsTableTypes";
 import type {
   TableRow,
   GroupedRows,
@@ -50,24 +50,35 @@ const ZERO_METRICS: ExtractedMetrics = {
   totalEventCount: 0,
 };
 
-/** Find metrics matching a session ID, returning zero defaults when absent. */
+/** Find metrics matching a session ID, falling back to DB summaries, then zeros. */
 function findMetricsForSession(
   sessionId: string,
   metrics: readonly SessionMetrics[],
+  summaries: readonly SessionSummary[],
 ): ExtractedMetrics {
   const found = metrics.find((m) => m.sessionId === sessionId);
-  if (!found) return ZERO_METRICS;
-  return {
-    cost: found.sessionCost,
-    totalTokens: found.totalTokens,
-    burnRate: found.burnRate,
-    contextPercent: found.contextWindowPct,
-    inputTokens: found.inputTokens,
-    outputTokens: found.outputTokens,
-    cacheReadTokens: found.cacheReadTokens,
-    activeAgents: found.activeAgentCount,
-    totalEventCount: found.totalEventCount,
-  };
+  if (found) {
+    return {
+      cost: found.sessionCost,
+      totalTokens: found.totalTokens,
+      burnRate: found.burnRate,
+      contextPercent: found.contextWindowPct,
+      inputTokens: found.inputTokens,
+      outputTokens: found.outputTokens,
+      cacheReadTokens: found.cacheReadTokens,
+      activeAgents: found.activeAgentCount,
+      totalEventCount: found.totalEventCount,
+    };
+  }
+  const summary = summaries.find((s) => s.sessionId === sessionId);
+  if (summary) {
+    return {
+      ...ZERO_METRICS,
+      cost: summary.totalCost,
+      totalTokens: summary.totalTokens,
+    };
+  }
+  return ZERO_METRICS;
 }
 
 /** Find metadata for a session, returning null fields when absent. */
@@ -101,12 +112,13 @@ function sessionToTableRow(
   session: SessionInfo,
   metrics: readonly SessionMetrics[],
   metadata: readonly SessionMetadata[],
+  summaries: readonly SessionSummary[],
   now: number,
 ): TableRow {
   const sessionMetadata = findMetadataForSession(session.id, metadata);
   const name = deriveSessionName(sessionMetadata.cwd, session.id);
   const active = isSessionActive(session, now);
-  const metricsData = findMetricsForSession(session.id, metrics);
+  const metricsData = findMetricsForSession(session.id, metrics, summaries);
   const durationMs = computeDurationMs(session, now);
 
   return {
@@ -137,10 +149,11 @@ export function buildTableRows(
   sessions: readonly SessionInfo[],
   metrics: readonly SessionMetrics[],
   metadata: readonly SessionMetadata[],
+  summaries: readonly SessionSummary[],
   now: number,
 ): readonly TableRow[] {
   return sessions.map((session) =>
-    sessionToTableRow(session, metrics, metadata, now),
+    sessionToTableRow(session, metrics, metadata, summaries, now),
   );
 }
 
@@ -389,11 +402,13 @@ export function computeStatusBarData(
     (acc, row) => ({
       costCents: acc.costCents + Math.round(row.cost * 100),
       totalTokens: acc.totalTokens + row.totalTokens,
+      tracked: acc.tracked + (row.cost > 0 || row.totalTokens > 0 ? 1 : 0),
     }),
-    { costCents: 0, totalTokens: 0 },
+    { costCents: 0, totalTokens: 0, tracked: 0 },
   );
   return {
     sessionCount: visibleRows.length,
+    trackedCount: raw.tracked,
     totalCost: raw.costCents / 100,
     totalTokens: raw.totalTokens,
   };

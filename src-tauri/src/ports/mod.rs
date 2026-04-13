@@ -4,7 +4,7 @@
 /// Each port is a trait with pure function signatures.
 /// Adapter implementations live in separate modules -- not here.
 
-use crate::domain::{AccumulatedMetric, Event, Session, SessionMetadata};
+use crate::domain::{AccumulatedMetric, Event, Session, SessionMetadata, SessionSummary};
 
 /// Storage abstraction for events and sessions.
 ///
@@ -70,6 +70,12 @@ pub trait MetricStore {
     ///
     /// Returns an empty Vec when no metadata has been recorded.
     fn get_all_session_metadata(&self) -> Result<Vec<SessionMetadata>, String>;
+
+    /// Retrieve pre-aggregated cost and token totals for all sessions.
+    ///
+    /// Single query returning one row per session with summed cost and tokens.
+    /// Returns an empty Vec when no metrics have been recorded.
+    fn get_all_session_summaries(&self) -> Result<Vec<SessionSummary>, String>;
 }
 
 /// Normalization contract for tool-specific event providers.

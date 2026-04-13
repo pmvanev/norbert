@@ -406,6 +406,69 @@ code, pre, .mono,
   opacity: 0.7;
 }
 
+.metrics-tbl .group-total td {
+  padding: 4px 8px;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-s);
+  border-top: 1px solid var(--border-card);
+  border-bottom: none;
+  font-family: var(--font-mono);
+}
+
+.metrics-tbl .group-total .sname {
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  font-size: 8px;
+}
+
+/* ═══ GROUP HEADER INNER LAYOUT ═══ */
+
+.group-header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.group-label {
+  cursor: pointer;
+}
+
+/* ═══ TIME-RANGE PILLS ═══ */
+
+.time-pills {
+  display: flex;
+  gap: 2px;
+}
+
+.time-pill {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  padding: 1px 6px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-m);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-transform: uppercase;
+}
+
+.time-pill:hover {
+  color: var(--text-p);
+  background: rgba(var(--brand-rgb), 0.08);
+  border-color: rgba(var(--brand-rgb), 0.15);
+}
+
+.time-pill.active {
+  color: var(--text-p);
+  background: rgba(var(--brand-rgb), 0.12);
+  border-color: rgba(var(--brand-rgb), 0.3);
+  box-shadow: 0 0 6px rgba(var(--brand-rgb), 0.15);
+}
+
 /* Heat coloring for metric cells */
 .heat-neutral {
   color: var(--text-p);

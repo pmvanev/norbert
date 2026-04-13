@@ -135,7 +135,7 @@ describe("User enables Active Agents column", () => {
     ];
 
     // When the table rows are built
-    const rows = buildTableRows(sessions, metrics, metadata, NOW);
+    const rows = buildTableRows(sessions, metrics, metadata, [], NOW);
 
     // Then "norbert" shows 3 and "api-server" shows 0
     expect(rows[0].activeAgents).toBe(3);
