@@ -1,0 +1,46 @@
+review_id: "arch_rev_20260413_mcp_discovery"
+reviewer: "solution-architect-reviewer (self-review)"
+artifact: "docs/feature/mcp-server-discovery/design/architecture.md, docs/adrs/ADR-047-mcp-server-multi-source-discovery.md"
+iteration: 1
+
+strengths:
+  - "Minimal change surface: extends existing pattern with additive field, no breaking changes"
+  - "Reuse of extractMcpServers parser for all sources reduces code and bug surface"
+  - "ADR-047 provides 3 concrete alternatives with evaluation criteria"
+  - "Roadmap step ratio 0.75 is well under 2.5 limit"
+  - "All AC are behavioral (WHAT), not implementation-coupled (HOW)"
+  - "C4 diagrams at L1, L2, L3 with labeled arrows"
+
+issues_identified:
+  architectural_bias:
+    - issue: "None detected. No new technology introduced. Pattern extension only."
+      severity: "none"
+
+  decision_quality:
+    - issue: "ADR-047 is well-structured with context, alternatives, and consequences"
+      severity: "none"
+
+  completeness_gaps:
+    - issue: "McpServerConfig.source field addition may require updating existing consumers that construct McpServerConfig"
+      severity: "medium"
+      location: "architecture.md, types.ts impact"
+      recommendation: "Roadmap step 02-01 already covers this. Crafter should update all call sites."
+
+  implementation_feasibility:
+    - issue: "None. Solo developer, all patterns already in codebase, no new deps."
+      severity: "none"
+
+  priority_validation:
+    q1_largest_bottleneck:
+      evidence: "Feature gap: user has 0 servers visible but 2+ servers configured in .claude.json and .mcp.json"
+      assessment: "YES"
+    q2_simple_alternatives:
+      assessment: "ADEQUATE"
+    q3_constraint_prioritization:
+      assessment: "CORRECT"
+    q4_data_justified:
+      assessment: "JUSTIFIED"
+
+approval_status: "approved"
+critical_issues_count: 0
+high_issues_count: 0

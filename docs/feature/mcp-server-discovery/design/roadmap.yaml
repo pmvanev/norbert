@@ -1,0 +1,79 @@
+roadmap:
+  feature_id: mcp-server-discovery
+  paradigm: functional
+  estimated_production_files: 4
+  # lib.rs, configAggregator.ts, types.ts, settingsParser.ts (minor)
+  # 3 steps / 4 files = 0.75 ratio (well under 2.5 limit)
+
+phases:
+  - id: "01"
+    title: "Rust backend reads additional MCP config files"
+    steps:
+      - id: "01-01"
+        title: "Add mcp_files field and read new sources"
+        description: >
+          Extend ClaudeConfig with mcp_files vec. Read ~/.claude.json (user scope),
+          .mcp.json (project scope), and plugin .mcp.json (plugin scope) using
+          existing read_optional_file. Wire through merge_configs.
+        acceptance_criteria:
+          - "ClaudeConfig includes mcp_files field serialized as camelCase"
+          - "User scope reads ~/.claude.json when present, absent produces empty"
+          - "Project scope reads <cwd>/.mcp.json when present"
+          - "Plugin scan reads .mcp.json from each plugin directory"
+          - "merge_configs concatenates mcp_files from both inputs"
+        architectural_constraints:
+          - "Use existing read_optional_file helper"
+          - "FileEntry source field distinguishes origin (.claude.json, .mcp.json, plugin name)"
+
+  - id: "02"
+    title: "TypeScript domain aggregates MCP servers from all sources"
+    steps:
+      - id: "02-01"
+        title: "Add source field to McpServerConfig and aggregate mcp files"
+        description: >
+          Add source field to McpServerConfig type. Add mcpFiles to RawClaudeConfig.
+          Create aggregateMcpFiles function that parses each FileEntry via
+          extractMcpServers, annotates with filePath/scope/source. Merge into
+          aggregateConfig output alongside existing settings-derived servers.
+        acceptance_criteria:
+          - "McpServerConfig includes source field populated from FileEntry"
+          - "MCP servers from all sources appear in aggregated config"
+          - "Each server has correct scope (user/project/plugin) and source attribution"
+          - "Empty/missing/malformed files produce no servers and no crash"
+        architectural_constraints:
+          - "Reuse extractMcpServers from settingsParser.ts"
+          - "All new functions are pure (no IO)"
+
+  - id: "03"
+    title: "View layer source attribution"
+    steps:
+      - id: "03-01"
+        title: "Display source origin in MCP server cards"
+        description: >
+          Update MCP server list and detail views to show source file origin
+          (e.g., ".claude.json", ".mcp.json", plugin name) so user can identify
+          where each server is configured.
+        acceptance_criteria:
+          - "MCP server cards show source file origin"
+          - "Servers from all sources render without layout issues"
+          - "Empty state message updated to reflect all config locations"
+        architectural_constraints:
+          - "Use existing McpServerConfig.source and filePath fields"
+
+implementation_scope:
+  in_scope:
+    - "~/.claude.json global config MCP server reading"
+    - "Project .mcp.json MCP server reading"
+    - "Plugin .mcp.json MCP server reading"
+    - "Source attribution in UI"
+  out_of_scope:
+    - "Anthropic cloud connectors (Gmail, Calendar, Miro)"
+    - "MCP server deduplication or precedence logic"
+    - "MCP server health checking or connectivity testing"
+
+validation:
+  quality_gates:
+    - "All MCP sources discoverable when files present"
+    - "Missing files produce graceful empty results"
+    - "Source attribution correct for each origin type"
+    - "Existing settings.json MCP parsing unaffected"

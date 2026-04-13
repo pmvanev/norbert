@@ -1,0 +1,51 @@
+handoff:
+  from: solution-architect
+  to: acceptance-designer
+  feature_id: mcp-server-discovery
+  paradigm: functional
+
+  artifacts:
+    architecture: docs/feature/mcp-server-discovery/design/architecture.md
+    roadmap: docs/feature/mcp-server-discovery/design/roadmap.yaml
+    adrs:
+      - docs/adrs/ADR-047-mcp-server-multi-source-discovery.md
+
+  summary: >
+    Extend norbert-config MCP Servers tab to discover servers from ~/.claude.json,
+    project .mcp.json, and plugin .mcp.json files. Backend adds mcp_files vec to
+    ClaudeConfig struct. Frontend reuses extractMcpServers parser for all sources.
+    McpServerConfig gains source field for origin attribution. 3-step roadmap.
+
+  key_decisions:
+    - "New mcp_files field on ClaudeConfig (additive, not breaking)"
+    - "Reuse extractMcpServers for all sources (same schema)"
+    - "No deduplication -- show all servers with source attribution"
+    - "McpServerConfig gains source field"
+
+  production_files_affected:
+    rust:
+      - src-tauri/src/lib.rs
+    typescript:
+      - src/plugins/norbert-config/domain/types.ts
+      - src/plugins/norbert-config/domain/configAggregator.ts
+      - src/plugins/norbert-config/views/McpTab.tsx
+      - src/plugins/norbert-config/views/ConfigListPanel.tsx
+      - src/plugins/norbert-config/views/ConfigDetailPanel.tsx
+
+  constraints_for_crafter:
+    - "All new TypeScript functions must be pure (no IO, no side effects)"
+    - "Rust file reading uses existing read_optional_file helper"
+    - "FileEntry source field must distinguish origin file type"
+    - "Missing files produce empty results, never errors"
+
+  quality_gates_passed:
+    - requirements_traced: true
+    - component_boundaries: true
+    - adrs_with_alternatives: true
+    - quality_attributes_addressed: true
+    - dependency_inversion: true
+    - c4_diagrams: true
+    - integration_patterns: true
+    - oss_validated: true
+    - step_ratio: "0.75 (3 steps / 4 files)"
+    - ac_behavioral: true
