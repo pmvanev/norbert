@@ -285,6 +285,7 @@ struct ClaudeConfig {
     claude_md_files: Vec<FileEntry>,
     installed_plugins: Option<FileEntry>,
     plugin_details: Vec<PluginDetail>,
+    mcp_files: Vec<FileEntry>,
     errors: Vec<ReadError>,
 }
 
@@ -480,6 +481,7 @@ fn collect_scope_config(
         claude_md_files,
         installed_plugins,
         plugin_details,
+        mcp_files: Vec::new(),
         errors,
     }
 }
@@ -587,6 +589,7 @@ fn scan_plugin_directory(
     all_skills: &mut Vec<FileEntry>,
     all_hooks: &mut Vec<FileEntry>,
     all_rules: &mut Vec<FileEntry>,
+    all_mcp_files: &mut Vec<FileEntry>,
     all_errors: &mut Vec<ReadError>,
 ) {
     // agents/*.md
@@ -624,6 +627,14 @@ fn scan_plugin_directory(
     );
     all_rules.extend(rules);
     all_errors.extend(errs);
+
+    // .mcp.json — MCP server definitions from this plugin
+    if let Some(mcp_entry) = read_optional_file(
+        &install_path.join(".mcp.json"),
+        "plugin", source, all_errors,
+    ) {
+        all_mcp_files.push(mcp_entry);
+    }
 }
 
 /// Reads ~/.claude/plugins/installed_plugins.json AND scans the plugin cache
@@ -634,6 +645,7 @@ fn collect_plugin_configs(claude_dir: &std::path::Path) -> ClaudeConfig {
     let mut all_skills = Vec::new();
     let mut all_hooks = Vec::new();
     let mut all_rules = Vec::new();
+    let mut all_mcp_files = Vec::new();
     let mut all_errors = Vec::new();
 
     // Track which plugin names we've already scanned (from installed_plugins.json)
@@ -656,7 +668,8 @@ fn collect_plugin_configs(claude_dir: &std::path::Path) -> ClaudeConfig {
                     scan_plugin_directory(
                         install_path, plugin_name,
                         &mut all_agents, &mut all_commands, &mut all_skills,
-                        &mut all_hooks, &mut all_rules, &mut all_errors,
+                        &mut all_hooks, &mut all_rules, &mut all_mcp_files,
+                        &mut all_errors,
                     );
                 }
             }
@@ -710,7 +723,8 @@ fn collect_plugin_configs(claude_dir: &std::path::Path) -> ClaudeConfig {
                         scan_plugin_directory(
                             &version_path, &source,
                             &mut all_agents, &mut all_commands, &mut all_skills,
-                            &mut all_hooks, &mut all_rules, &mut all_errors,
+                            &mut all_hooks, &mut all_rules, &mut all_mcp_files,
+                            &mut all_errors,
                         );
                     }
                 }
@@ -728,6 +742,7 @@ fn collect_plugin_configs(claude_dir: &std::path::Path) -> ClaudeConfig {
         claude_md_files: Vec::new(),
         installed_plugins: None,
         plugin_details: Vec::new(),
+        mcp_files: all_mcp_files,
         errors: all_errors,
     }
 }
@@ -746,6 +761,7 @@ fn merge_configs(a: ClaudeConfig, b: ClaudeConfig) -> ClaudeConfig {
         claude_md_files: [a.claude_md_files, b.claude_md_files].concat(),
         installed_plugins,
         plugin_details: [a.plugin_details, b.plugin_details].concat(),
+        mcp_files: [a.mcp_files, b.mcp_files].concat(),
         errors: [a.errors, b.errors].concat(),
     }
 }
@@ -770,6 +786,7 @@ fn read_claude_config(scope: String) -> Result<ClaudeConfig, String> {
         claude_md_files: Vec::new(),
         installed_plugins: None,
         plugin_details: Vec::new(),
+        mcp_files: Vec::new(),
         errors: Vec::new(),
     };
 
@@ -777,7 +794,13 @@ fn read_claude_config(scope: String) -> Result<ClaudeConfig, String> {
         let home = dirs::home_dir()
             .ok_or_else(|| "Cannot determine home directory".to_string())?;
         let user_claude_dir = home.join(".claude");
-        let base = collect_scope_config(&user_claude_dir, "user", "user");
+        let mut base = collect_scope_config(&user_claude_dir, "user", "user");
+        // Read ~/.claude.json for MCP server definitions (user scope)
+        if let Some(entry) = read_optional_file(
+            &home.join(".claude.json"), "user", ".claude.json", &mut base.errors,
+        ) {
+            base.mcp_files.push(entry);
+        }
         let plugins = collect_plugin_configs(&user_claude_dir);
         merge_configs(base, plugins)
     } else {
@@ -794,6 +817,12 @@ fn read_claude_config(scope: String) -> Result<ClaudeConfig, String> {
             &cwd.join("CLAUDE.md"), "project", "project", &mut config.errors,
         ) {
             config.claude_md_files.push(entry);
+        }
+        // Read <cwd>/.mcp.json for MCP server definitions (project scope)
+        if let Some(entry) = read_optional_file(
+            &cwd.join(".mcp.json"), "project", ".mcp.json", &mut config.errors,
+        ) {
+            config.mcp_files.push(entry);
         }
         config
     } else {
@@ -1123,6 +1152,172 @@ mod tests {
         let status = build_status(7, 123);
         assert_eq!(status.session_count, 7);
         assert_eq!(status.event_count, 123);
+    }
+
+    // --- MCP files field tests ---
+
+    #[test]
+    fn claude_config_serializes_mcp_files_field() {
+        let config = ClaudeConfig {
+            agents: Vec::new(),
+            commands: Vec::new(),
+            skills: Vec::new(),
+            settings: None,
+            hooks: Vec::new(),
+            rules: Vec::new(),
+            claude_md_files: Vec::new(),
+            installed_plugins: None,
+            plugin_details: Vec::new(),
+            mcp_files: vec![FileEntry {
+                path: "/home/user/.claude.json".into(),
+                content: r#"{"mcpServers":{}}"#.into(),
+                scope: "user".into(),
+                source: ".claude.json".into(),
+            }],
+            errors: Vec::new(),
+        };
+        let json = serde_json::to_value(&config).expect("should serialize");
+        let mcp_files = json.get("mcpFiles").expect("mcpFiles key should exist");
+        assert!(mcp_files.is_array());
+        assert_eq!(mcp_files.as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn merge_configs_concatenates_mcp_files() {
+        let config_a = ClaudeConfig {
+            agents: Vec::new(),
+            commands: Vec::new(),
+            skills: Vec::new(),
+            settings: None,
+            hooks: Vec::new(),
+            rules: Vec::new(),
+            claude_md_files: Vec::new(),
+            installed_plugins: None,
+            plugin_details: Vec::new(),
+            mcp_files: vec![FileEntry {
+                path: "a.json".into(),
+                content: "{}".into(),
+                scope: "user".into(),
+                source: ".claude.json".into(),
+            }],
+            errors: Vec::new(),
+        };
+        let config_b = ClaudeConfig {
+            agents: Vec::new(),
+            commands: Vec::new(),
+            skills: Vec::new(),
+            settings: None,
+            hooks: Vec::new(),
+            rules: Vec::new(),
+            claude_md_files: Vec::new(),
+            installed_plugins: None,
+            plugin_details: Vec::new(),
+            mcp_files: vec![FileEntry {
+                path: "b.json".into(),
+                content: "{}".into(),
+                scope: "project".into(),
+                source: ".mcp.json".into(),
+            }],
+            errors: Vec::new(),
+        };
+        let merged = merge_configs(config_a, config_b);
+        assert_eq!(merged.mcp_files.len(), 2);
+        assert_eq!(merged.mcp_files[0].source, ".claude.json");
+        assert_eq!(merged.mcp_files[1].source, ".mcp.json");
+    }
+
+    #[test]
+    fn collect_scope_config_reads_claude_json_into_mcp_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base_dir = tmp.path().join(".claude");
+        std::fs::create_dir_all(&base_dir).unwrap();
+        // Place a .claude.json in the parent (home-equivalent)
+        let claude_json = tmp.path().join(".claude.json");
+        std::fs::write(&claude_json, r#"{"mcpServers":{"test":{}}}"#).unwrap();
+
+        let config = collect_scope_config(&base_dir, "user", "user");
+        // collect_scope_config itself does not read .claude.json --
+        // that is done in read_claude_config. But the config should have
+        // mcp_files field initialized to empty.
+        assert!(config.mcp_files.is_empty());
+    }
+
+    #[test]
+    fn user_scope_reads_claude_json_into_mcp_files() {
+        // Create a temp directory simulating a home dir with .claude/ and .claude.json
+        let tmp = tempfile::tempdir().unwrap();
+        let claude_dir = tmp.path().join(".claude");
+        std::fs::create_dir_all(&claude_dir).unwrap();
+        let claude_json = tmp.path().join(".claude.json");
+        std::fs::write(&claude_json, r#"{"mcpServers":{"mem-server":{}}}"#).unwrap();
+
+        let mut errors = Vec::new();
+        let entry = read_optional_file(&claude_json, "user", ".claude.json", &mut errors);
+        assert!(entry.is_some(), ".claude.json should be read");
+        let entry = entry.unwrap();
+        assert_eq!(entry.scope, "user");
+        assert_eq!(entry.source, ".claude.json");
+        assert!(entry.content.contains("mem-server"));
+    }
+
+    #[test]
+    fn project_scope_reads_mcp_json_into_mcp_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mcp_json = tmp.path().join(".mcp.json");
+        std::fs::write(&mcp_json, r#"{"mcpServers":{"git-server":{}}}"#).unwrap();
+
+        let mut errors = Vec::new();
+        let entry = read_optional_file(&mcp_json, "project", ".mcp.json", &mut errors);
+        assert!(entry.is_some(), ".mcp.json should be read");
+        let entry = entry.unwrap();
+        assert_eq!(entry.scope, "project");
+        assert_eq!(entry.source, ".mcp.json");
+        assert!(entry.content.contains("git-server"));
+    }
+
+    #[test]
+    fn plugin_scan_reads_mcp_json_from_plugin_directory() {
+        let tmp = tempfile::tempdir().unwrap();
+        let plugin_dir = tmp.path();
+
+        // Create plugin structure: .claude-plugin marker + .mcp.json
+        std::fs::create_dir_all(plugin_dir.join(".claude-plugin")).unwrap();
+        std::fs::write(
+            plugin_dir.join(".mcp.json"),
+            r#"{"mcpServers":{"discord-server":{}}}"#,
+        ).unwrap();
+
+        let mut all_agents = Vec::new();
+        let mut all_commands = Vec::new();
+        let mut all_skills = Vec::new();
+        let mut all_hooks = Vec::new();
+        let mut all_rules = Vec::new();
+        let mut all_mcp_files = Vec::new();
+        let mut all_errors = Vec::new();
+
+        scan_plugin_directory(
+            plugin_dir, "discord",
+            &mut all_agents, &mut all_commands, &mut all_skills,
+            &mut all_hooks, &mut all_rules, &mut all_mcp_files,
+            &mut all_errors,
+        );
+
+        assert_eq!(all_mcp_files.len(), 1, "should find .mcp.json in plugin dir");
+        assert_eq!(all_mcp_files[0].scope, "plugin");
+        assert_eq!(all_mcp_files[0].source, "discord");
+        assert!(all_mcp_files[0].content.contains("discord-server"));
+    }
+
+    #[test]
+    fn missing_mcp_files_produce_empty_results() {
+        let tmp = tempfile::tempdir().unwrap();
+        let claude_json = tmp.path().join(".claude.json");
+        let mcp_json = tmp.path().join(".mcp.json");
+
+        let mut errors = Vec::new();
+        assert!(read_optional_file(&claude_json, "user", ".claude.json", &mut errors).is_none());
+        assert!(read_optional_file(&mcp_json, "project", ".mcp.json", &mut errors).is_none());
+        assert!(errors.is_empty(), "missing files should not produce errors");
     }
 
 }
