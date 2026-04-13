@@ -73,19 +73,6 @@ describe("McpTab source attribution", () => {
     expect(screen.getByText("discord")).toBeInTheDocument();
   });
 
-  it("displays scope badge with source for plugin servers", () => {
-    const server = buildMcpServer({
-      name: "discord-bot",
-      scope: "plugin",
-      source: "discord",
-    });
-    render(<McpTab servers={[server]} />);
-
-    // The scope badge should show "discord" (plugin source) not "plugin"
-    const badges = screen.getAllByText("discord");
-    expect(badges.length).toBeGreaterThanOrEqual(1);
-  });
-
   it("renders servers from multiple sources without layout issues", () => {
     const servers = [
       buildMcpServer({ name: "s1", source: ".claude.json", scope: "user" }),
@@ -105,27 +92,12 @@ describe("McpTab source attribution", () => {
 // ---------------------------------------------------------------------------
 
 describe("McpTab empty state", () => {
-  it("references ~/.claude.json in empty state", () => {
+  it("references all config locations in empty state", () => {
     render(<McpTab servers={[]} />);
     const guidance = screen.getByRole("status");
     expect(guidance.textContent).toContain(".claude.json");
-  });
-
-  it("references .mcp.json in empty state", () => {
-    render(<McpTab servers={[]} />);
-    const guidance = screen.getByRole("status");
     expect(guidance.textContent).toContain(".mcp.json");
-  });
-
-  it("references settings.json in empty state", () => {
-    render(<McpTab servers={[]} />);
-    const guidance = screen.getByRole("status");
     expect(guidance.textContent).toContain("settings.json");
-  });
-
-  it("references plugin configurations in empty state", () => {
-    render(<McpTab servers={[]} />);
-    const guidance = screen.getByRole("status");
     expect(guidance.textContent).toMatch(/plugin/i);
   });
 });

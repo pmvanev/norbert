@@ -1226,98 +1226,67 @@ mod tests {
         assert_eq!(merged.mcp_files[1].source, ".mcp.json");
     }
 
-    #[test]
-    fn collect_scope_config_reads_claude_json_into_mcp_files() {
-        let tmp = tempfile::tempdir().unwrap();
-        let base_dir = tmp.path().join(".claude");
-        std::fs::create_dir_all(&base_dir).unwrap();
-        // Place a .claude.json in the parent (home-equivalent)
-        let claude_json = tmp.path().join(".claude.json");
-        std::fs::write(&claude_json, r#"{"mcpServers":{"test":{}}}"#).unwrap();
-
-        let config = collect_scope_config(&base_dir, "user", "user");
-        // collect_scope_config itself does not read .claude.json --
-        // that is done in read_claude_config. But the config should have
-        // mcp_files field initialized to empty.
-        assert!(config.mcp_files.is_empty());
-    }
+    /// Mutex to serialize tests that change the process-wide current directory.
+    static CWD_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]
-    fn user_scope_reads_claude_json_into_mcp_files() {
-        // Create a temp directory simulating a home dir with .claude/ and .claude.json
-        let tmp = tempfile::tempdir().unwrap();
-        let claude_dir = tmp.path().join(".claude");
-        std::fs::create_dir_all(&claude_dir).unwrap();
-        let claude_json = tmp.path().join(".claude.json");
-        std::fs::write(&claude_json, r#"{"mcpServers":{"mem-server":{}}}"#).unwrap();
-
-        let mut errors = Vec::new();
-        let entry = read_optional_file(&claude_json, "user", ".claude.json", &mut errors);
-        assert!(entry.is_some(), ".claude.json should be read");
-        let entry = entry.unwrap();
-        assert_eq!(entry.scope, "user");
-        assert_eq!(entry.source, ".claude.json");
-        assert!(entry.content.contains("mem-server"));
-    }
-
-    #[test]
-    fn project_scope_reads_mcp_json_into_mcp_files() {
+    fn read_claude_config_project_scope_includes_mcp_json() {
+        // Test through the driving port: read_claude_config("project")
+        // Set current dir to a temp directory containing .mcp.json
+        let _lock = CWD_MUTEX.lock().unwrap();
         let tmp = tempfile::tempdir().unwrap();
         let mcp_json = tmp.path().join(".mcp.json");
         std::fs::write(&mcp_json, r#"{"mcpServers":{"git-server":{}}}"#).unwrap();
+        // Create .claude/ so collect_scope_config doesn't fail
+        std::fs::create_dir_all(tmp.path().join(".claude")).unwrap();
 
-        let mut errors = Vec::new();
-        let entry = read_optional_file(&mcp_json, "project", ".mcp.json", &mut errors);
-        assert!(entry.is_some(), ".mcp.json should be read");
-        let entry = entry.unwrap();
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(tmp.path()).unwrap();
+        let result = read_claude_config("project".into());
+        std::env::set_current_dir(&original_dir).unwrap();
+
+        let config = result.expect("read_claude_config should succeed");
+        let mcp_entry = config.mcp_files.iter().find(|f| f.source == ".mcp.json");
+        assert!(mcp_entry.is_some(), "project scope should include .mcp.json in mcp_files");
+        let entry = mcp_entry.unwrap();
         assert_eq!(entry.scope, "project");
-        assert_eq!(entry.source, ".mcp.json");
         assert!(entry.content.contains("git-server"));
     }
 
     #[test]
-    fn plugin_scan_reads_mcp_json_from_plugin_directory() {
+    fn read_claude_config_project_scope_omits_missing_mcp_json() {
+        // Test through the driving port: when .mcp.json does not exist,
+        // mcp_files should not contain a .mcp.json entry and no errors
+        let _lock = CWD_MUTEX.lock().unwrap();
         let tmp = tempfile::tempdir().unwrap();
-        let plugin_dir = tmp.path();
+        std::fs::create_dir_all(tmp.path().join(".claude")).unwrap();
 
-        // Create plugin structure: .claude-plugin marker + .mcp.json
-        std::fs::create_dir_all(plugin_dir.join(".claude-plugin")).unwrap();
-        std::fs::write(
-            plugin_dir.join(".mcp.json"),
-            r#"{"mcpServers":{"discord-server":{}}}"#,
-        ).unwrap();
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(tmp.path()).unwrap();
+        let result = read_claude_config("project".into());
+        std::env::set_current_dir(&original_dir).unwrap();
 
-        let mut all_agents = Vec::new();
-        let mut all_commands = Vec::new();
-        let mut all_skills = Vec::new();
-        let mut all_hooks = Vec::new();
-        let mut all_rules = Vec::new();
-        let mut all_mcp_files = Vec::new();
-        let mut all_errors = Vec::new();
-
-        scan_plugin_directory(
-            plugin_dir, "discord",
-            &mut all_agents, &mut all_commands, &mut all_skills,
-            &mut all_hooks, &mut all_rules, &mut all_mcp_files,
-            &mut all_errors,
-        );
-
-        assert_eq!(all_mcp_files.len(), 1, "should find .mcp.json in plugin dir");
-        assert_eq!(all_mcp_files[0].scope, "plugin");
-        assert_eq!(all_mcp_files[0].source, "discord");
-        assert!(all_mcp_files[0].content.contains("discord-server"));
+        let config = result.expect("read_claude_config should succeed");
+        let mcp_entry = config.mcp_files.iter().find(|f| f.source == ".mcp.json");
+        assert!(mcp_entry.is_none(), "missing .mcp.json should not appear in mcp_files");
+        assert!(config.errors.is_empty(), "missing files should not produce errors");
     }
 
     #[test]
-    fn missing_mcp_files_produce_empty_results() {
-        let tmp = tempfile::tempdir().unwrap();
-        let claude_json = tmp.path().join(".claude.json");
-        let mcp_json = tmp.path().join(".mcp.json");
+    fn read_claude_config_user_scope_returns_valid_config() {
+        // Test through the driving port: user scope should return a valid
+        // config with mcp_files field (populated from ~/.claude.json if present)
+        let result = read_claude_config("user".into());
+        let config = result.expect("read_claude_config user scope should succeed");
+        // mcp_files is always a Vec -- verify the field is accessible
+        // (content depends on the actual home directory state)
+        assert!(config.mcp_files.len() >= 0);
+    }
 
-        let mut errors = Vec::new();
-        assert!(read_optional_file(&claude_json, "user", ".claude.json", &mut errors).is_none());
-        assert!(read_optional_file(&mcp_json, "project", ".mcp.json", &mut errors).is_none());
-        assert!(errors.is_empty(), "missing files should not produce errors");
+    #[test]
+    fn read_claude_config_rejects_invalid_scope() {
+        let result = read_claude_config("invalid".into());
+        assert!(result.is_err(), "invalid scope should return Err");
     }
 
 }

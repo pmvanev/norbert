@@ -57,7 +57,7 @@ export interface RawClaudeConfig {
   readonly claudeMdFiles: readonly FileEntry[];
   readonly installedPlugins: FileEntry | null;
   readonly pluginDetails: readonly RawPluginDetail[];
-  readonly mcpFiles: readonly FileEntry[];
+  readonly mcpFiles?: readonly FileEntry[];
   readonly errors: readonly ReadErrorInfo[];
   readonly scope?: ConfigScope | "both";
 }
