@@ -235,7 +235,7 @@ const McpRow: FC<{
     type="button"
   >
     <span className="config-list-name">{server.name}</span>
-    <ScopeBadge scope={server.scope} />
+    <ScopeBadge scope={server.scope} source={server.source} />
     <span className="config-list-meta" data-mono="">{server.type}</span>
   </button>
 );
@@ -488,7 +488,7 @@ export const ConfigListPanel: FC<ConfigListPanelProps> = ({
 
     case "mcp": {
       if (config.mcpServers.length === 0) {
-        return <EmptyState category="MCP servers" guidance="Configure MCP servers in settings.json under the mcpServers key." />;
+        return <EmptyState category="MCP servers" guidance="Configure MCP servers in ~/.claude.json, .mcp.json (project root), ~/.claude/settings.json, or plugin .mcp.json files." />;
       }
       return (
         <div className="config-list" role="listbox" aria-label="MCP Servers">

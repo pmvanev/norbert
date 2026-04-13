@@ -136,7 +136,10 @@ const McpDetail: FC<{ readonly server: McpServerConfig }> = ({ server }) => (
   <div className="config-detail-content">
     <div className="config-detail-header">
       <span className="config-detail-title">{server.name}</span>
-      <ScopeBadge scope={server.scope} />
+      <ScopeBadge scope={server.scope} source={server.source} />
+      {server.scope !== "plugin" && (
+        <span className="config-scope-badge" data-mono="">{server.source}</span>
+      )}
       <span className="config-card-meta" data-mono="">{server.type}</span>
     </div>
     <div className="config-card-section">

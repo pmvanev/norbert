@@ -6,6 +6,7 @@
 import { useState, type FC } from "react";
 import type { EnvVar, McpServerConfig } from "../domain/types";
 import { EmptyState } from "./EmptyState";
+import { ScopeBadge } from "./shared";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -51,7 +52,10 @@ const McpServerCard: FC<{ readonly server: McpServerConfig }> = ({ server }) => 
   <div className="config-card">
     <div className="config-card-header config-card-header-static">
       <span className="config-card-title">{server.name}</span>
-      <span className="config-scope-badge">{server.scope}</span>
+      <ScopeBadge scope={server.scope} source={server.source} />
+      {server.scope !== "plugin" && (
+        <span className="config-scope-badge" data-mono="">{server.source}</span>
+      )}
       <span className="config-card-meta" data-mono="">{server.type}</span>
     </div>
     <div className="config-card-body">
@@ -96,7 +100,7 @@ export const McpTab: FC<McpTabProps> = ({ servers }) => {
     return (
       <EmptyState
         category="MCP servers"
-        guidance="Configure MCP servers in settings.json under the mcpServers key."
+        guidance="Configure MCP servers in ~/.claude.json, .mcp.json (project root), ~/.claude/settings.json, or plugin .mcp.json files."
       />
     );
   }
