@@ -13,6 +13,7 @@ import type {
   CommandDefinition,
   ConfigScope,
   DocFile,
+  EnvVar,
   EnvVarEntry,
   HookConfig,
   McpServerConfig,
@@ -57,6 +58,7 @@ export interface RawClaudeConfig {
   readonly claudeMdFiles: readonly FileEntry[];
   readonly installedPlugins: FileEntry | null;
   readonly pluginDetails: readonly RawPluginDetail[];
+  readonly mcpFiles: readonly FileEntry[];
   readonly errors: readonly ReadErrorInfo[];
   readonly scope?: ConfigScope | "both";
 }
@@ -343,6 +345,91 @@ function aggregateInstalledPlugins(
 }
 
 // ---------------------------------------------------------------------------
+// MCP file aggregation
+// ---------------------------------------------------------------------------
+
+export function aggregateMcpFiles(mcpFiles: readonly FileEntry[]): readonly McpServerConfig[] {
+  return mcpFiles.flatMap(parseMcpFileEntry);
+}
+
+function parseMcpFileEntry(entry: FileEntry): readonly McpServerConfig[] {
+  try {
+    const parsed = JSON.parse(entry.content);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      return [];
+    }
+
+    const serversRaw = (parsed as Record<string, unknown>).mcpServers;
+    if (typeof serversRaw !== "object" || serversRaw === null || Array.isArray(serversRaw)) {
+      return [];
+    }
+
+    const serversObj = serversRaw as Record<string, unknown>;
+    return Object.entries(serversObj).map(([name, config]) =>
+      createMcpFileServerConfig(name, config, entry),
+    );
+  } catch {
+    return [];
+  }
+}
+
+function createMcpFileServerConfig(
+  name: string,
+  config: unknown,
+  entry: FileEntry,
+): McpServerConfig {
+  if (typeof config !== "object" || config === null || Array.isArray(config)) {
+    return {
+      name,
+      type: "",
+      command: "",
+      args: [],
+      env: [],
+      filePath: entry.path,
+      scope: entry.scope,
+      source: entry.source,
+      warnings: ["Invalid server configuration"],
+    };
+  }
+
+  const serverObj = config as Record<string, unknown>;
+  const warnings: string[] = [];
+  if (typeof serverObj.command !== "string" || serverObj.command === "") {
+    warnings.push("Missing required field: command");
+  }
+
+  const type = typeof serverObj.type === "string" ? serverObj.type : "";
+  const command = typeof serverObj.command === "string" ? serverObj.command : "";
+  const args = Array.isArray(serverObj.args)
+    ? serverObj.args.filter((a): a is string => typeof a === "string")
+    : [];
+  const env = extractMcpEnvVars(serverObj.env);
+
+  return {
+    name,
+    type,
+    command,
+    args,
+    env,
+    filePath: entry.path,
+    scope: entry.scope,
+    source: entry.source,
+    warnings,
+  };
+}
+
+function extractMcpEnvVars(envRaw: unknown): readonly EnvVar[] {
+  if (typeof envRaw !== "object" || envRaw === null || Array.isArray(envRaw)) {
+    return [];
+  }
+
+  const envObj = envRaw as Record<string, unknown>;
+  return Object.entries(envObj)
+    .filter(([, value]) => typeof value === "string")
+    .map(([key, value]) => ({ key, value: value as string }));
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -374,7 +461,7 @@ export function aggregateConfig(rawConfig: RawClaudeConfig): AggregatedConfig {
     commands,
     skills,
     hooks: allHooks,
-    mcpServers: settings.mcpServers,
+    mcpServers: [...settings.mcpServers, ...aggregateMcpFiles(rawConfig.mcpFiles ?? [])],
     rules: allRules,
     plugins: allPlugins,
     envVars: settings.envVars,

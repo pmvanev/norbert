@@ -79,6 +79,7 @@ export interface McpServerConfig {
   readonly env: readonly EnvVar[];
   readonly filePath: string;
   readonly scope: ConfigScope;
+  readonly source: string;
   readonly warnings: readonly string[];
 }
 

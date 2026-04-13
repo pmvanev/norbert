@@ -123,7 +123,7 @@ function createMcpServerConfig(
     : [];
   const env = extractEnvVars(serverObj.env);
 
-  return { name, type, command, args, env, filePath: "", scope, warnings };
+  return { name, type, command, args, env, filePath: "", scope, source: "settings.json", warnings };
 }
 
 function emptyServerConfig(
@@ -131,7 +131,7 @@ function emptyServerConfig(
   scope: ConfigScope,
   warnings: readonly string[],
 ): McpServerConfig {
-  return { name, type: "", command: "", args: [], env: [], filePath: "", scope, warnings };
+  return { name, type: "", command: "", args: [], env: [], filePath: "", scope, source: "settings.json", warnings };
 }
 
 function collectServerWarnings(serverObj: Record<string, unknown>): readonly string[] {
