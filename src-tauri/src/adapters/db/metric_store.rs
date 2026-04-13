@@ -86,10 +86,18 @@ const SELECT_SESSION_METADATA: &str = "
 ";
 
 /// SQL to query aggregate cost and token totals per session in one pass.
+/// Token sum is restricted to the 4 known types (input, output, cache_read,
+/// cache_creation) to stay consistent with reconstructMetricsFromDb on the
+/// frontend, which filters by the same set.
 const SELECT_SESSION_SUMMARIES: &str = "
     SELECT session_id,
            COALESCE(SUM(CASE WHEN metric_name = 'cost.usage' THEN value ELSE 0 END), 0) AS total_cost,
-           COALESCE(SUM(CASE WHEN metric_name = 'token.usage' THEN value ELSE 0 END), 0) AS total_tokens
+           COALESCE(SUM(CASE WHEN metric_name = 'token.usage' AND (
+               attribute_key LIKE '%type=input%'
+               OR attribute_key LIKE '%type=output%'
+               OR attribute_key LIKE '%type=cache_read%'
+               OR attribute_key LIKE '%type=cache_creation%'
+           ) THEN value ELSE 0 END), 0) AS total_tokens
     FROM metrics
     GROUP BY session_id
 ";
@@ -582,5 +590,69 @@ mod tests {
 
         let result = SqliteMetricStore::initialize_schema(&store.connection);
         assert!(result.is_ok(), "Re-initialization should succeed: {:?}", result.err());
+    }
+
+    #[test]
+    fn session_summaries_aggregate_cost_and_known_token_types() {
+        let store = create_test_store();
+
+        // Known token types — should be included
+        store.accumulate_delta("sess-1", "token.usage", "model=opus,type=input", 1000.0, "t1").unwrap();
+        store.accumulate_delta("sess-1", "token.usage", "model=opus,type=output", 500.0, "t2").unwrap();
+        store.accumulate_delta("sess-1", "token.usage", "model=opus,type=cache_read", 200.0, "t3").unwrap();
+        store.accumulate_delta("sess-1", "token.usage", "model=opus,type=cache_creation", 100.0, "t4").unwrap();
+        store.accumulate_delta("sess-1", "cost.usage", "model=opus", 1.50, "t5").unwrap();
+
+        let summaries = store.get_all_session_summaries().unwrap();
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].session_id, "sess-1");
+        assert!((summaries[0].total_cost - 1.50).abs() < f64::EPSILON);
+        assert!((summaries[0].total_tokens - 1800.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn session_summaries_exclude_unknown_token_types() {
+        let store = create_test_store();
+
+        // Known types
+        store.accumulate_delta("sess-1", "token.usage", "type=input", 1000.0, "t1").unwrap();
+        store.accumulate_delta("sess-1", "token.usage", "type=output", 500.0, "t2").unwrap();
+
+        // Unknown type — must NOT be counted
+        store.accumulate_delta("sess-1", "token.usage", "type=future_unknown", 9999.0, "t3").unwrap();
+
+        let summaries = store.get_all_session_summaries().unwrap();
+        assert_eq!(summaries.len(), 1);
+        // Only known types counted: 1000 + 500 = 1500 (not 11499)
+        assert!((summaries[0].total_tokens - 1500.0).abs() < f64::EPSILON,
+            "Unknown token type should be excluded, got {}", summaries[0].total_tokens);
+    }
+
+    #[test]
+    fn session_summaries_return_empty_when_no_metrics() {
+        let store = create_test_store();
+        let summaries = store.get_all_session_summaries().unwrap();
+        assert!(summaries.is_empty());
+    }
+
+    #[test]
+    fn session_summaries_span_multiple_sessions() {
+        let store = create_test_store();
+
+        store.accumulate_delta("sess-A", "cost.usage", "model=opus", 2.00, "t1").unwrap();
+        store.accumulate_delta("sess-A", "token.usage", "type=input", 5000.0, "t2").unwrap();
+        store.accumulate_delta("sess-B", "cost.usage", "model=sonnet", 0.50, "t3").unwrap();
+        store.accumulate_delta("sess-B", "token.usage", "type=output", 3000.0, "t4").unwrap();
+
+        let mut summaries = store.get_all_session_summaries().unwrap();
+        summaries.sort_by(|a, b| a.session_id.cmp(&b.session_id));
+
+        assert_eq!(summaries.len(), 2);
+        assert_eq!(summaries[0].session_id, "sess-A");
+        assert!((summaries[0].total_cost - 2.00).abs() < f64::EPSILON);
+        assert!((summaries[0].total_tokens - 5000.0).abs() < f64::EPSILON);
+        assert_eq!(summaries[1].session_id, "sess-B");
+        assert!((summaries[1].total_cost - 0.50).abs() < f64::EPSILON);
+        assert!((summaries[1].total_tokens - 3000.0).abs() < f64::EPSILON);
     }
 }

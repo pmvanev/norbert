@@ -163,6 +163,28 @@ describe("buildTableRows", () => {
     expect(rows[0].totalTokens).toBe(0);
   });
 
+  it("sessions with no live metrics fall back to DB summaries", () => {
+    const { session, metadata } = makeActiveSession("historical", "myproject");
+    const summaries = [{ sessionId: "historical", totalCost: 12.50, totalTokens: 8_000_000 }];
+    // No live metrics, but summaries available
+    const rows = buildTableRows([session], [], [metadata], summaries, NOW);
+
+    expect(rows[0].cost).toBe(12.50);
+    expect(rows[0].totalTokens).toBe(8_000_000);
+  });
+
+  it("live metrics take priority over DB summaries", () => {
+    const { session, metadata } = makeActiveSession("active-s", "myproject");
+    const metrics = [makeEmptyMetrics("active-s")];
+    // Live metrics have different values than summaries
+    const summaries = [{ sessionId: "active-s", totalCost: 99.99, totalTokens: 99_000_000 }];
+    const rows = buildTableRows([session], metrics, [metadata], summaries, NOW);
+
+    // Should use live metrics (which are zero from makeEmptyMetrics), not summaries
+    expect(rows[0].cost).toBe(0);
+    expect(rows[0].totalTokens).toBe(0);
+  });
+
   it("sessions with no matching metadata use session ID as fallback name", () => {
     const session: SessionInfo = {
       id: "no-meta",
