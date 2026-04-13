@@ -142,7 +142,7 @@ function collectServerWarnings(serverObj: Record<string, unknown>): readonly str
   return warnings;
 }
 
-function extractEnvVars(envRaw: unknown): readonly EnvVar[] {
+export function extractEnvVars(envRaw: unknown): readonly EnvVar[] {
   if (typeof envRaw !== "object" || envRaw === null || Array.isArray(envRaw)) {
     return [];
   }

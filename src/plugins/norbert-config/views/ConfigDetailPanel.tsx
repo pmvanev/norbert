@@ -16,34 +16,9 @@ import type {
   RuleEntry,
   PluginInfo,
   DocFile,
-  EnvVar,
   EnvVarEntry,
 } from "../domain/types";
-import { ScopeBadge, formatAgentDisplayName, deriveFilename } from "./shared";
-
-// ---------------------------------------------------------------------------
-// Masked env var row (MCP detail)
-// ---------------------------------------------------------------------------
-
-const MASK = "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022";
-
-const EnvVarRow: FC<{ readonly envVar: EnvVar }> = ({ envVar }) => {
-  const [revealed, setRevealed] = useState(false);
-
-  return (
-    <div className="config-env-row">
-      <span className="config-env-key" data-mono="">{envVar.key}</span>
-      <button
-        className="config-env-value-btn"
-        onClick={() => setRevealed((c) => !c)}
-        type="button"
-        aria-label={revealed ? `Hide value for ${envVar.key}` : `Reveal value for ${envVar.key}`}
-      >
-        <span data-mono="">{revealed ? envVar.value : MASK}</span>
-      </button>
-    </div>
-  );
-};
+import { ScopeBadge, MaskedEnvVarRow, formatAgentDisplayName, deriveFilename } from "./shared";
 
 // ---------------------------------------------------------------------------
 // Detail renderers
@@ -153,7 +128,7 @@ const McpDetail: FC<{ readonly server: McpServerConfig }> = ({ server }) => (
         <span className="config-card-section-label">Environment</span>
         <div className="config-env-list">
           {server.env.map((envVar) => (
-            <EnvVarRow key={envVar.key} envVar={envVar} />
+            <MaskedEnvVarRow key={envVar.key} envVar={envVar} />
           ))}
         </div>
       </div>
@@ -286,6 +261,8 @@ const PluginDetail: FC<{ readonly plugin: PluginInfo }> = ({ plugin }) => (
   </div>
 );
 
+const MASKED_VALUE = "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022";
+
 const MaskedValue: FC<{ readonly label: string; readonly value: string }> = ({ label, value }) => {
   const [revealed, setRevealed] = useState(false);
   return (
@@ -295,7 +272,7 @@ const MaskedValue: FC<{ readonly label: string; readonly value: string }> = ({ l
       type="button"
       aria-label={revealed ? `Hide value for ${label}` : `Reveal value for ${label}`}
     >
-      <span data-mono="">{revealed ? value : MASK}</span>
+      <span data-mono="">{revealed ? value : MASKED_VALUE}</span>
     </button>
   );
 };

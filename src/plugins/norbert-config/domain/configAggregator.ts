@@ -13,7 +13,6 @@ import type {
   CommandDefinition,
   ConfigScope,
   DocFile,
-  EnvVar,
   EnvVarEntry,
   HookConfig,
   McpServerConfig,
@@ -24,7 +23,7 @@ import type {
   SkillDefinition,
 } from "./types";
 import { parseAgentFile } from "./agentParser";
-import { parseSettings } from "./settingsParser";
+import { parseSettings, extractEnvVars } from "./settingsParser";
 import { parseSkillFile } from "./skillParser";
 
 // ---------------------------------------------------------------------------
@@ -403,7 +402,7 @@ function createMcpFileServerConfig(
   const args = Array.isArray(serverObj.args)
     ? serverObj.args.filter((a): a is string => typeof a === "string")
     : [];
-  const env = extractMcpEnvVars(serverObj.env);
+  const env = extractEnvVars(serverObj.env);
 
   return {
     name,
@@ -416,17 +415,6 @@ function createMcpFileServerConfig(
     source: entry.source,
     warnings,
   };
-}
-
-function extractMcpEnvVars(envRaw: unknown): readonly EnvVar[] {
-  if (typeof envRaw !== "object" || envRaw === null || Array.isArray(envRaw)) {
-    return [];
-  }
-
-  const envObj = envRaw as Record<string, unknown>;
-  return Object.entries(envObj)
-    .filter(([, value]) => typeof value === "string")
-    .map(([key, value]) => ({ key, value: value as string }));
 }
 
 // ---------------------------------------------------------------------------

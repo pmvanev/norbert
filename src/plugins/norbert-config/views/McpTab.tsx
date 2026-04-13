@@ -3,10 +3,10 @@
 /// Env var values are masked by default with click-to-reveal per variable.
 /// Env values are NEVER logged to console. Empty state when no servers.
 
-import { useState, type FC } from "react";
-import type { EnvVar, McpServerConfig } from "../domain/types";
+import type { FC } from "react";
+import type { McpServerConfig } from "../domain/types";
 import { EmptyState } from "./EmptyState";
-import { ScopeBadge } from "./shared";
+import { ScopeBadge, MaskedEnvVarRow } from "./shared";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -15,34 +15,6 @@ import { ScopeBadge } from "./shared";
 export interface McpTabProps {
   readonly servers: readonly McpServerConfig[];
 }
-
-// ---------------------------------------------------------------------------
-// Masked env var row
-// ---------------------------------------------------------------------------
-
-const MASK = "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022";
-
-const EnvVarRow: FC<{ readonly envVar: EnvVar }> = ({ envVar }) => {
-  const [revealed, setRevealed] = useState(false);
-
-  const handleReveal = () => {
-    setRevealed((current) => !current);
-  };
-
-  return (
-    <div className="config-env-row">
-      <span className="config-env-key" data-mono="">{envVar.key}</span>
-      <button
-        className="config-env-value-btn"
-        onClick={handleReveal}
-        type="button"
-        aria-label={revealed ? `Hide value for ${envVar.key}` : `Reveal value for ${envVar.key}`}
-      >
-        <span data-mono="">{revealed ? envVar.value : MASK}</span>
-      </button>
-    </div>
-  );
-};
 
 // ---------------------------------------------------------------------------
 // MCP server card
@@ -70,7 +42,7 @@ const McpServerCard: FC<{ readonly server: McpServerConfig }> = ({ server }) => 
           <span className="config-card-section-label">Environment</span>
           <div className="config-env-list">
             {server.env.map((envVar) => (
-              <EnvVarRow key={envVar.key} envVar={envVar} />
+              <MaskedEnvVarRow key={envVar.key} envVar={envVar} />
             ))}
           </div>
         </div>
