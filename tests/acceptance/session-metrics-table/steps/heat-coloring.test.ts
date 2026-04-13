@@ -36,12 +36,12 @@ const HEAT_ORDINAL: Record<HeatLevel, number> = {
 
 describe("Cost cell shading reflects spending level", () => {
   it("high cost gets red, medium gets amber, low gets neutral", () => {
-    // Given session "norbert" has cost $4.50
-    // And session "api-server" has cost $0.08
-    // And session "docs-site" has cost $0.80
-    const norbert = computeHeatLevel(4.5, "cost");
-    const apiServer = computeHeatLevel(0.08, "cost");
-    const docsSite = computeHeatLevel(0.8, "cost");
+    // Given session "norbert" has cost $25.00
+    // And session "api-server" has cost $0.80
+    // And session "docs-site" has cost $8.00
+    const norbert = computeHeatLevel(25.0, "cost");
+    const apiServer = computeHeatLevel(0.80, "cost");
+    const docsSite = computeHeatLevel(8.0, "cost");
 
     // Then "norbert" cost heat level is "red"
     expect(norbert).toBe("red");
@@ -94,10 +94,10 @@ describe("Burn rate cell shading highlights fast token consumption", () => {
 
 describe("Token count cell shading reflects volume", () => {
   it("high token count gets red, low gets neutral", () => {
-    // Given session "norbert" has used 500,000 tokens
-    // And session "api-server" has used 5,000 tokens
-    const norbert = computeHeatLevel(500_000, "totalTokens");
-    const apiServer = computeHeatLevel(5_000, "totalTokens");
+    // Given session "norbert" has used 75,000,000 tokens
+    // And session "api-server" has used 500,000 tokens
+    const norbert = computeHeatLevel(75_000_000, "totalTokens");
+    const apiServer = computeHeatLevel(500_000, "totalTokens");
 
     // Then "norbert" tokens heat level is "red"
     expect(norbert).toBe("red");
@@ -134,10 +134,10 @@ describe("Heat coloring adjusts when metrics update", () => {
     const initial = computeHeatLevel(0.1, "cost");
     expect(initial).toBe("neutral");
 
-    // When the cost increases to $3.00
-    const updated = computeHeatLevel(3.0, "cost");
+    // When the cost increases to $25.00
+    const updated = computeHeatLevel(25.0, "cost");
 
-    // Then the heat level is "red" ($3.00 > $2.00 red threshold)
+    // Then the heat level is "red" ($25.00 > $20.00 red threshold)
     expect(updated).toBe("red");
   });
 });

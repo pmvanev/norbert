@@ -336,8 +336,8 @@ interface HeatThresholds {
 }
 
 const HEAT_THRESHOLDS: Record<string, HeatThresholds> = {
-  cost: { amber: 0.50, red: 2.00 },
-  totalTokens: { amber: 50_000, red: 200_000 },
+  cost: { amber: 5.00, red: 20.00 },
+  totalTokens: { amber: 5_000_000, red: 50_000_000 },
   burnRate: { amber: 100, red: 300 },
   contextPercent: { amber: 60, red: 80 },
 };
