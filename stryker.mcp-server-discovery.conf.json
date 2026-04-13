@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stryker-mutator/stryker/master/packages/core/schema/stryker-schema.json",
+  "mutate": [
+    "src/plugins/norbert-config/domain/configAggregator.ts:350-418",
+    "src/plugins/norbert-config/domain/configAggregator.ts:449-453",
+    "src/plugins/norbert-config/domain/settingsParser.ts:107-155",
+    "src/plugins/norbert-config/views/shared.tsx"
+  ],
+  "testRunner": "vitest",
+  "reporters": ["clear-text", "json"],
+  "jsonReporter": { "fileName": "docs/feature/mcp-server-discovery/deliver/mutation/stryker-report.json" },
+  "vitest": {
+    "configFile": "vitest.mutation.config.ts"
+  },
+  "tempDirName": ".stryker-tmp"
+}

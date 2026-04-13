@@ -90,7 +90,7 @@ graph TB
 - `types.ts`: add `source` field to `McpServerConfig` (currently missing, needed to show origin file)
 - `RawClaudeConfig` interface: add `mcpFiles: readonly FileEntry[]`
 
-**React Views** -- no changes expected. `McpTab` and `ConfigDetailPanel` already render from `McpServerConfig[]`. The `filePath` and new `source` field provide origin attribution.
+**React Views** (`src/plugins/norbert-config/views/`) -- `McpTab`, `ConfigDetailPanel`, and `ConfigListPanel` need updates to display the new `source` field as a visible origin indicator on each server card, and to update the empty state message to reference all discoverable config locations.
 
 ### Source Attribution Strategy
 

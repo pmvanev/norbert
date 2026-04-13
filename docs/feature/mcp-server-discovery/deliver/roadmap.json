@@ -1,0 +1,116 @@
+{
+  "roadmap": {
+    "project_id": "mcp-server-discovery",
+    "created_at": "2026-04-13T21:49:16Z",
+    "total_steps": 3,
+    "phases": 3
+  },
+  "phases": [
+    {
+      "id": "01",
+      "name": "Rust backend reads additional MCP config files",
+      "steps": [
+        {
+          "id": "01-01",
+          "name": "Add mcp_files field and read new sources",
+          "description": "Extend ClaudeConfig with mcp_files vec. Read ~/.claude.json (user scope), .mcp.json (project scope), and plugin .mcp.json using existing read_optional_file. Wire through merge_configs and empty_config.",
+          "criteria": [
+            "Frontend receives an mcp_files collection from the IPC config call",
+            "User scope reads ~/.claude.json when present; absent produces empty",
+            "Project scope reads <cwd>/.mcp.json when present",
+            "Plugin scan reads .mcp.json from each plugin directory",
+            "Reading both scopes returns MCP file entries from all sources combined"
+          ],
+          "time_estimate": "2h",
+          "dependencies": [],
+          "files_to_modify": [
+            "src-tauri/src/lib.rs"
+          ],
+          "agent": "nw-software-crafter",
+          "acceptance_tests": [
+            "tests/acceptance/mcp-server-discovery/walking-skeleton.feature",
+            "tests/acceptance/mcp-server-discovery/milestone-1-rust-backend.feature"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "02",
+      "name": "TypeScript domain aggregates MCP servers from all sources",
+      "steps": [
+        {
+          "id": "02-01",
+          "name": "Add source attribution and aggregate MCP files",
+          "description": "Add source field to McpServerConfig. Add mcpFiles to RawClaudeConfig. Create aggregateMcpFiles function that parses each mcp file entry via extractMcpServers, annotates with scope/source. Extend extractMcpServers to accept and return source attribution. Merge into aggregateConfig output.",
+          "criteria": [
+            "Each aggregated MCP server identifies the file it originated from",
+            "MCP servers from all sources appear in aggregated config output",
+            "Each server carries correct scope (user/project/plugin) and source",
+            "Empty, missing, or malformed mcp files produce no servers and no crash"
+          ],
+          "time_estimate": "2h",
+          "dependencies": [
+            "01-01"
+          ],
+          "files_to_modify": [
+            "src/plugins/norbert-config/domain/types.ts",
+            "src/plugins/norbert-config/domain/configAggregator.ts",
+            "src/plugins/norbert-config/domain/settingsParser.ts"
+          ],
+          "agent": "nw-software-crafter",
+          "acceptance_tests": [
+            "tests/acceptance/mcp-server-discovery/milestone-2-domain-aggregation.feature"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "03",
+      "name": "View layer source attribution",
+      "steps": [
+        {
+          "id": "03-01",
+          "name": "Display source origin in MCP server cards",
+          "description": "Show source file origin on MCP server list items and detail panel so users can identify where each server is configured. Update empty state to reference all config locations.",
+          "criteria": [
+            "Each MCP server card shows the source file that defines it",
+            "Servers from all config sources render without layout issues",
+            "Empty state message references all discoverable config locations"
+          ],
+          "time_estimate": "1.5h",
+          "dependencies": [
+            "02-01"
+          ],
+          "files_to_modify": [
+            "src/plugins/norbert-config/views/McpTab.tsx",
+            "src/plugins/norbert-config/views/ConfigDetailPanel.tsx",
+            "src/plugins/norbert-config/views/ConfigListPanel.tsx"
+          ],
+          "agent": "nw-software-crafter",
+          "acceptance_tests": [
+            "tests/acceptance/mcp-server-discovery/milestone-3-view-attribution.feature"
+          ]
+        }
+      ]
+    }
+  ],
+  "implementation_scope": {
+    "source_directories": [
+      "src-tauri/src/",
+      "src/plugins/norbert-config/domain/",
+      "src/plugins/norbert-config/views/"
+    ],
+    "test_directories": [
+      "tests/acceptance/mcp-server-discovery/"
+    ],
+    "excluded_patterns": [
+      "__pycache__/**",
+      "node_modules/**"
+    ]
+  },
+  "validation": {
+    "status": "approved",
+    "reviewer": "software-crafter-reviewer",
+    "approved_at": "2026-04-13T22:10:00Z"
+  }
+}
