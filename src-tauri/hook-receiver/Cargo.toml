@@ -1,6 +1,6 @@
 [package]
 name = "norbert-hook-receiver"
-version = "0.4.4"
+version = "0.5.0"
 description = "Norbert Hook Receiver sidecar -- captures Claude Code hook and OTel events"
 authors = ["pmvanev"]
 edition = "2021"

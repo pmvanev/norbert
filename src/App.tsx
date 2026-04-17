@@ -20,6 +20,11 @@ import {
   storeTheme,
   themeToClassName,
 } from "./domain/theme";
+import {
+  readStoredOpacity,
+  storeOpacity,
+  type OpacityPercent,
+} from "./domain/windowOpacity";
 import { loadPlugins } from "./plugins/lifecycleManager";
 import { createNorbertAPI } from "./plugins/apiFactory";
 import { createPluginRegistry, getAllViews } from "./plugins/pluginRegistry";
@@ -202,6 +207,9 @@ function App() {
   const [theme, setTheme] = useState<ThemeName>(() =>
     readStoredTheme(localStorage)
   );
+  const [opacity, setOpacity] = useState<OpacityPercent>(() =>
+    readStoredOpacity(localStorage)
+  );
   const [layout, setLayout] = useState<TwoZoneLayoutState>(createInitialLayout);
 
   /// Initialize plugin system once on mount.
@@ -243,6 +251,25 @@ function App() {
     });
     return () => { unlisten.then((f) => f()); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /// Apply opacity to the native window (true translucency — the window
+  /// becomes see-through to whatever sits behind it). Also drives the
+  /// active-marker in the View > Opacity submenu.
+  useEffect(() => {
+    invoke("sync_opacity_menu", { percent: opacity }).catch(() => {});
+  }, [opacity]);
+
+  /// Listen for opacity changes driven by the native View > Opacity submenu.
+  useEffect(() => {
+    const unlisten = listen<number>("opacity-changed", (event) => {
+      const next = event.payload;
+      if (typeof next === "number") {
+        setOpacity(next);
+        storeOpacity(next, localStorage);
+      }
+    });
+    return () => { unlisten.then((f) => f()); };
+  }, []);
 
   /// Handler for selecting a session row to view its events.
   /// Opens session-detail in the secondary zone (side-by-side layout).

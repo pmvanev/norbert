@@ -916,8 +916,14 @@ const THEME_IDS: [&str; 5] = ["theme_nb", "theme_cd", "theme_vd", "theme_cl", "t
 /// Base labels for each theme (no prefix).
 const THEME_LABELS: [&str; 5] = ["Norbert", "Claude Dark", "VS Code Dark", "Claude Light", "VS Code Light"];
 
-/// Format a theme label with a bullet prefix for the active theme.
-fn theme_label(base: &str, is_active: bool) -> String {
+/// Opacity presets shown under View > Opacity, in descending order.
+/// Native menus can't host continuous sliders, so we offer discrete steps.
+const OPACITY_PRESETS: [u8; 15] = [
+    100, 95, 90, 85, 80, 75, 70, 65, 60, 55, 50, 45, 40, 35, 30,
+];
+
+/// Format a menu label with a bullet prefix when the entry is the active one.
+fn selection_label(base: &str, is_active: bool) -> String {
     if is_active {
         format!("\u{2022}  {}", base)
     } else {
@@ -925,11 +931,39 @@ fn theme_label(base: &str, is_active: bool) -> String {
     }
 }
 
-/// Rebuild and reassign the entire app menu with the given theme active.
-/// On Windows, individual menu item mutations may not propagate to
-/// window-level copies, so we rebuild the full menu instead.
-fn rebuild_menu_with_theme(app: &AppHandle, active_id: &str) {
+fn opacity_label(percent: u8, is_active: bool) -> String {
+    selection_label(&format!("{}%", percent), is_active)
+}
+
+/// Current native menu selection — kept in Tauri's managed state so menu
+/// rebuilds triggered by any source (theme click, opacity click, frontend sync)
+/// can reconstruct the full menu with both active markers in place.
+pub struct MenuSelection {
+    pub theme_id: String,
+    pub opacity: u8,
+}
+
+impl Default for MenuSelection {
+    fn default() -> Self {
+        Self {
+            theme_id: "theme_nb".to_string(),
+            opacity: 100,
+        }
+    }
+}
+
+fn read_menu_selection(app: &AppHandle) -> (String, u8) {
+    let state = app.state::<Mutex<MenuSelection>>();
+    let guard = state.lock().expect("menu selection mutex poisoned");
+    (guard.theme_id.clone(), guard.opacity)
+}
+
+/// Rebuild and reassign the entire app menu from the current managed selection.
+/// On Windows, individual menu item mutations may not propagate to window-level
+/// copies, so we rebuild the full menu instead.
+fn rebuild_menu(app: &AppHandle) {
     use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+    let (active_theme_id, active_opacity) = read_menu_selection(app);
     let build = || -> tauri::Result<()> {
         let new_window = MenuItemBuilder::with_id("new_window", "New Window")
             .accelerator("CmdOrCtrl+Shift+N")
@@ -949,14 +983,25 @@ fn rebuild_menu_with_theme(app: &AppHandle, active_id: &str) {
 
         let mut theme_submenu = SubmenuBuilder::new(app, "Theme");
         for (id, label) in THEME_IDS.iter().zip(THEME_LABELS.iter()) {
-            let item = MenuItemBuilder::with_id(*id, theme_label(label, *id == active_id))
+            let item = MenuItemBuilder::with_id(*id, selection_label(label, *id == active_theme_id))
                 .build(app)?;
             theme_submenu = theme_submenu.item(&item);
         }
         let theme_menu = theme_submenu.build()?;
 
+        let mut opacity_submenu = SubmenuBuilder::new(app, "Opacity");
+        for percent in OPACITY_PRESETS.iter() {
+            let id = format!("opacity_{}", percent);
+            let item = MenuItemBuilder::with_id(&id, opacity_label(*percent, *percent == active_opacity))
+                .build(app)?;
+            opacity_submenu = opacity_submenu.item(&item);
+        }
+        let opacity_menu = opacity_submenu.build()?;
+
         let view_menu = SubmenuBuilder::new(app, "View")
             .item(&theme_menu)
+            .separator()
+            .item(&opacity_menu)
             .build()?;
 
         let menu = MenuBuilder::new(app)
@@ -974,9 +1019,62 @@ fn rebuild_menu_with_theme(app: &AppHandle, active_id: &str) {
 /// IPC command: sync native menu theme selection with the frontend's stored theme.
 #[tauri::command]
 fn sync_theme_menu(app: AppHandle, theme: String) {
-    let active_id = format!("theme_{}", theme);
-    rebuild_menu_with_theme(&app, &active_id);
+    {
+        let state = app.state::<Mutex<MenuSelection>>();
+        let mut guard = state.lock().expect("menu selection mutex poisoned");
+        guard.theme_id = format!("theme_{}", theme);
+    }
+    rebuild_menu(&app);
 }
+
+/// IPC command: sync native menu opacity selection with the frontend's stored
+/// opacity, and apply it to every open webview window.
+#[tauri::command]
+fn sync_opacity_menu(app: AppHandle, percent: u8) {
+    let clamped = percent.min(100);
+    {
+        let state = app.state::<Mutex<MenuSelection>>();
+        let mut guard = state.lock().expect("menu selection mutex poisoned");
+        guard.opacity = clamped;
+    }
+    apply_window_opacity_to_all(&app, clamped);
+    rebuild_menu(&app);
+}
+
+/// Apply a 0..=100 percent opacity to every open webview window.
+/// Windows uses layered window attributes; other platforms are no-ops today.
+#[cfg(target_os = "windows")]
+fn apply_window_opacity_to_all(app: &AppHandle, percent: u8) {
+    use windows::Win32::Foundation::{COLORREF, HWND};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetWindowLongW, SetLayeredWindowAttributes, SetWindowLongW,
+        GWL_EXSTYLE, LWA_ALPHA, WS_EX_LAYERED,
+    };
+    // LWA_ALPHA blends linearly (out = src*α + bg*(1-α)), but human perception
+    // of transparency is non-linear. A cube-root mapping (gamma ~3.0) keeps the
+    // window readable at low slider values: 50% slider → α≈0.79, 30% → α≈0.67.
+    let fraction = (percent.min(100) as f64) / 100.0;
+    let alpha: u8 = (fraction.cbrt() * 255.0).round() as u8;
+    for (_label, window) in app.webview_windows() {
+        let hwnd = match window.hwnd() {
+            Ok(h) => HWND(h.0 as *mut _),
+            Err(e) => {
+                eprintln!("norbert: hwnd unavailable: {}", e);
+                continue;
+            }
+        };
+        unsafe {
+            let ex_style = GetWindowLongW(hwnd, GWL_EXSTYLE);
+            let _ = SetWindowLongW(hwnd, GWL_EXSTYLE, ex_style | (WS_EX_LAYERED.0 as i32));
+            if let Err(e) = SetLayeredWindowAttributes(hwnd, COLORREF(0), alpha, LWA_ALPHA) {
+                eprintln!("norbert: SetLayeredWindowAttributes failed: {}", e);
+            }
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn apply_window_opacity_to_all(_app: &AppHandle, _percent: u8) {}
 
 /// Build and configure the Tauri application.
 ///
@@ -1025,44 +1123,12 @@ pub fn run() {
             }
         }))
         .manage(app_state)
+        .manage(Mutex::new(MenuSelection::default()))
         .setup(|app| {
-            use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
-
-            let new_window = MenuItemBuilder::with_id("new_window", "New Window")
-                .accelerator("CmdOrCtrl+Shift+N")
-                .build(app)?;
-            let close_window = MenuItemBuilder::with_id("close_window", "Close Window")
-                .accelerator("CmdOrCtrl+Q")
-                .build(app)?;
-            let quit = MenuItemBuilder::with_id("quit", "Quit Norbert")
-                .accelerator("CmdOrCtrl+Shift+Q")
-                .build(app)?;
-            let file_menu = SubmenuBuilder::new(app, "File")
-                .item(&new_window)
-                .item(&close_window)
-                .separator()
-                .item(&quit)
-                .build()?;
-
-            // View > Theme submenu with bullet-prefixed labels (select-one).
-            // The frontend calls sync_theme_menu on startup to match localStorage.
-            let mut theme_submenu = SubmenuBuilder::new(app, "Theme");
-            for (id, label) in THEME_IDS.iter().zip(THEME_LABELS.iter()) {
-                let item = MenuItemBuilder::with_id(*id, theme_label(label, *id == "theme_nb"))
-                    .build(app)?;
-                theme_submenu = theme_submenu.item(&item);
-            }
-            let theme_menu = theme_submenu.build()?;
-
-            let view_menu = SubmenuBuilder::new(app, "View")
-                .item(&theme_menu)
-                .build()?;
-
-            let menu = MenuBuilder::new(app)
-                .item(&file_menu)
-                .item(&view_menu)
-                .build()?;
-            app.set_menu(menu)?;
+            // Build the initial menu from the default MenuSelection. The
+            // frontend will call sync_theme_menu / sync_opacity_menu once
+            // localStorage has been read and adjust markers + native opacity.
+            rebuild_menu(&app.handle());
 
             app.on_menu_event(|app_handle, event| {
                 let id = event.id().as_ref();
@@ -1079,9 +1145,30 @@ pub fn run() {
                         app_handle.exit(0);
                     }
                     _ if id.starts_with("theme_") => {
-                        rebuild_menu_with_theme(app_handle, id);
+                        {
+                            let state = app_handle.state::<Mutex<MenuSelection>>();
+                            let mut guard = state.lock().expect("menu selection mutex poisoned");
+                            guard.theme_id = id.to_string();
+                        }
+                        rebuild_menu(app_handle);
                         let theme_name = id.strip_prefix("theme_").unwrap_or("nb");
                         let _ = app_handle.emit("theme-changed", theme_name);
+                    }
+                    _ if id.starts_with("opacity_") => {
+                        if let Some(percent) = id
+                            .strip_prefix("opacity_")
+                            .and_then(|s| s.parse::<u8>().ok())
+                        {
+                            let clamped = percent.min(100);
+                            {
+                                let state = app_handle.state::<Mutex<MenuSelection>>();
+                                let mut guard = state.lock().expect("menu selection mutex poisoned");
+                                guard.opacity = clamped;
+                            }
+                            apply_window_opacity_to_all(app_handle, clamped);
+                            rebuild_menu(app_handle);
+                            let _ = app_handle.emit("opacity-changed", clamped);
+                        }
                     }
                     _ => {}
                 }
@@ -1102,7 +1189,7 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet, get_status, get_latest_session, get_sessions, get_status_and_sessions, get_session_events, get_new_events_batch, get_metrics_for_session, get_session_metadata, get_all_session_metadata, get_all_session_summaries, get_transcript_usage, read_claude_config, sync_theme_menu])
+        .invoke_handler(tauri::generate_handler![greet, get_status, get_latest_session, get_sessions, get_status_and_sessions, get_session_events, get_new_events_batch, get_metrics_for_session, get_session_metadata, get_all_session_metadata, get_all_session_summaries, get_transcript_usage, read_claude_config, sync_theme_menu, sync_opacity_menu])
         .run(tauri::generate_context!())
         .expect("error while running Norbert");
 }
