@@ -147,7 +147,7 @@ describe("M1-S3: A stalled session shows a flatline from the last arrived value,
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("M1-S4: A session with no arrived history yet produces an empty trace", () => {
+describe("M1-S4: A session with no arrived history yet produces an empty trace", () => {
   it("trace carries no samples and legend shows placeholder latest value", () => {
     // Given session-1 has just been added with no rate samples
     const store = createMultiSessionStore();
@@ -230,7 +230,7 @@ describe("M1-S6: Five concurrent sessions each receive a distinct color from the
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("M1-S7: No active sessions yields an empty scope with a clear legend", () => {
+describe("M1-S7: No active sessions yields an empty scope with a clear legend", () => {
   it("frame contains zero traces and an empty legend; yMax reflects current metric", () => {
     // Given no sessions are active
     const store = createMultiSessionStore();
