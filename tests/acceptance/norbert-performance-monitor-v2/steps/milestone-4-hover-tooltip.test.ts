@@ -246,7 +246,7 @@ describe("M4-S5: Hover outside the scope area produces no selection", () => {
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("M4-S6: Hover with no active sessions produces no selection", () => {
+describe("M4-S6: Hover with no active sessions produces no selection", () => {
   it("returns null when the frame has no traces", () => {
     // Given no sessions are active
     const store = createMultiSessionStore();
