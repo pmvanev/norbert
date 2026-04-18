@@ -12,9 +12,10 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { createHookProcessor } from "../../../../src/plugins/norbert-usage/hookProcessor";
+import { createHookProcessor, emitPulse } from "../../../../src/plugins/norbert-usage/hookProcessor";
 import { createInitialMetrics } from "../../../../src/plugins/norbert-usage/domain/metricsAggregator";
 import { DEFAULT_PRICING_TABLE } from "../../../../src/plugins/norbert-usage/domain/pricingModel";
+import { PULSE_STRENGTHS } from "../../../../src/plugins/norbert-usage/domain/phosphor/phosphorMetricConfig";
 import type { SessionMetrics, PricingTable } from "../../../../src/plugins/norbert-usage/domain/types";
 
 // ---------------------------------------------------------------------------
@@ -517,5 +518,50 @@ describe("hookProcessor: mixed hook + OTel stream never double-counts cost", () 
     // totalTokens reflects exactly ONE api_request worth of tokens.
     expect(metrics.totalTokens).toBe(150);
     expect(metrics.apiRequestCount).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// emitPulse — pure helper that builds a Pulse from a kind and timestamp,
+// deriving strength from PULSE_STRENGTHS. Step 04-02.
+// ---------------------------------------------------------------------------
+
+describe("emitPulse — derives pulse strength from kind", () => {
+  it("builds a tool-kind pulse with strength = PULSE_STRENGTHS.tool (1.0)", () => {
+    const t = 1_000_000_000;
+    const pulse = emitPulse("tool", t);
+    expect(pulse).toEqual({
+      t,
+      kind: "tool",
+      strength: PULSE_STRENGTHS.tool,
+    });
+    expect(pulse.strength).toBe(1.0);
+  });
+
+  it("builds a subagent-kind pulse with strength = PULSE_STRENGTHS.subagent (0.75)", () => {
+    const t = 1_000_000_000;
+    const pulse = emitPulse("subagent", t);
+    expect(pulse).toEqual({
+      t,
+      kind: "subagent",
+      strength: PULSE_STRENGTHS.subagent,
+    });
+    expect(pulse.strength).toBe(0.75);
+  });
+
+  it("builds a lifecycle-kind pulse with strength = PULSE_STRENGTHS.lifecycle (0.5)", () => {
+    const t = 1_000_000_000;
+    const pulse = emitPulse("lifecycle", t);
+    expect(pulse).toEqual({
+      t,
+      kind: "lifecycle",
+      strength: PULSE_STRENGTHS.lifecycle,
+    });
+    expect(pulse.strength).toBe(0.5);
+  });
+
+  it("preserves the timestamp argument verbatim", () => {
+    const pulse = emitPulse("tool", 42);
+    expect(pulse.t).toBe(42);
   });
 });

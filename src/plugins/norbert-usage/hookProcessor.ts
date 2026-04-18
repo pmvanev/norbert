@@ -13,6 +13,11 @@ import type { AggregatorEvent } from "./domain/metricsAggregator";
 import type { CategorySampleInput } from "./adapters/multiSessionStore";
 import { aggregateEvent } from "./domain/metricsAggregator";
 import { computeInstantaneousRates } from "./domain/instantaneousRate";
+import {
+  PULSE_STRENGTHS,
+  type Pulse,
+  type PulseKind,
+} from "./domain/phosphor/phosphorMetricConfig";
 
 // ---------------------------------------------------------------------------
 // Dependencies — injected at construction
@@ -100,6 +105,28 @@ const buildAggregatorEvent = (
   eventType,
   payload: extractInnerPayload(payload),
   receivedAt: new Date().toISOString(),
+});
+
+// ---------------------------------------------------------------------------
+// emitPulse — pure helper that builds a Pulse from a kind and timestamp.
+//
+// The strength for each kind is looked up from the `PULSE_STRENGTHS` table
+// in `domain/phosphor/phosphorMetricConfig` (the single source of truth).
+// Keeping the lookup as pure data means this helper has no effects and is
+// trivially composable at the hookProcessor effect boundary.
+//
+// Strength convention (see DESIGN §5 Q1): tool > subagent > lifecycle.
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a `Pulse` for a hook event of the given `kind` observed at time `t`.
+ * Pure: derives `strength` from `PULSE_STRENGTHS[kind]`. Callers inject the
+ * timestamp so this helper remains clock-free (effects at the boundary).
+ */
+export const emitPulse = (kind: PulseKind, t: number): Pulse => ({
+  t,
+  kind,
+  strength: PULSE_STRENGTHS[kind],
 });
 
 // ---------------------------------------------------------------------------

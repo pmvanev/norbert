@@ -21,9 +21,18 @@
  */
 
 import { describe, it, expect } from "vitest";
+import fc from "fast-check";
 
 import { buildFrame, type PhosphorStoreSurface } from "./scopeProjection";
-import { METRICS, SESSION_COLORS, type MetricId, type RateSample } from "./phosphorMetricConfig";
+import {
+  METRICS,
+  PULSE_STRENGTHS,
+  SESSION_COLORS,
+  type MetricId,
+  type Pulse,
+  type PulseKind,
+  type RateSample,
+} from "./phosphorMetricConfig";
 
 // ---------------------------------------------------------------------------
 // Minimal store fixture — structural surface, no adapter coupling
@@ -33,23 +42,26 @@ interface FakeStoreSeed {
   readonly sessions: ReadonlyArray<{
     readonly id: string;
     readonly rates?: Partial<Record<MetricId, ReadonlyArray<RateSample>>>;
+    readonly pulses?: ReadonlyArray<Pulse>;
   }>;
 }
 
 const makeFakeStore = (seed: FakeStoreSeed): PhosphorStoreSurface => {
   const order = seed.sessions.map((s) => s.id);
   const rateMap = new Map<string, Map<MetricId, ReadonlyArray<RateSample>>>();
+  const pulseMap = new Map<string, ReadonlyArray<Pulse>>();
   for (const s of seed.sessions) {
     const metricMap = new Map<MetricId, ReadonlyArray<RateSample>>();
     for (const metric of ["events", "tokens", "toolcalls"] as const) {
       metricMap.set(metric, s.rates?.[metric] ?? []);
     }
     rateMap.set(s.id, metricMap);
+    pulseMap.set(s.id, s.pulses ?? []);
   }
   return {
     getSessionIds: () => order,
     getRateHistory: (sessionId, metric) => rateMap.get(sessionId)?.get(metric) ?? [],
-    getPulses: () => [],
+    getPulses: (sessionId) => pulseMap.get(sessionId) ?? [],
   };
 };
 
@@ -194,5 +206,93 @@ describe("buildFrame — legend", () => {
     const store = makeFakeStore({ sessions: [{ id: "silent" }] });
     const frame = buildFrame(store, "events", NOW);
     expect(frame.legend[0].latestValue).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Pulse ordering (Step 04-02 / PA finding 3)
+//
+// When multiple pulse kinds coexist within a single frame, the projection
+// must expose them sorted by strength descending. This guarantees renderers
+// paint the dominant flare (tool) on top and the softest (lifecycle) beneath,
+// regardless of store insertion order.
+// ---------------------------------------------------------------------------
+
+describe("buildFrame — pulse ordering by strength", () => {
+  const pulseAtNow = (kind: PulseKind): Pulse => ({
+    t: NOW,
+    kind,
+    strength: PULSE_STRENGTHS[kind],
+  });
+
+  it("sorts three coexisting kinds as tool, subagent, lifecycle descending", () => {
+    const store = makeFakeStore({
+      sessions: [
+        {
+          id: "s1",
+          rates: { events: history(3, () => 5) },
+          // Intentional non-strength insertion order.
+          pulses: [
+            pulseAtNow("lifecycle"),
+            pulseAtNow("tool"),
+            pulseAtNow("subagent"),
+          ],
+        },
+      ],
+    });
+    const frame = buildFrame(store, "events", NOW);
+    expect(frame.pulses.map((p) => p.kind)).toEqual([
+      "tool",
+      "subagent",
+      "lifecycle",
+    ]);
+  });
+
+  it("places higher-strength pulses before equal-or-lower-strength pulses", () => {
+    fc.assert(
+      fc.property(
+        fc.array(
+          fc.constantFrom<PulseKind>("tool", "subagent", "lifecycle"),
+          { minLength: 2, maxLength: 8 },
+        ),
+        (kinds) => {
+          const store = makeFakeStore({
+            sessions: [
+              {
+                id: "s1",
+                rates: { events: history(3, () => 5) },
+                pulses: kinds.map((kind) => pulseAtNow(kind)),
+              },
+            ],
+          });
+          const frame = buildFrame(store, "events", NOW);
+          for (let i = 1; i < frame.pulses.length; i++) {
+            expect(frame.pulses[i - 1].strength).toBeGreaterThanOrEqual(
+              frame.pulses[i].strength,
+            );
+          }
+        },
+      ),
+    );
+  });
+
+  it("is stable within the same strength: preserves relative insertion order", () => {
+    // Three tool pulses at distinct timestamps; stable sort must keep them
+    // in their original order since all share the same strength.
+    const store = makeFakeStore({
+      sessions: [
+        {
+          id: "s1",
+          rates: { events: history(3, () => 5) },
+          pulses: [
+            { t: NOW - 100, kind: "tool", strength: PULSE_STRENGTHS.tool },
+            { t: NOW - 300, kind: "tool", strength: PULSE_STRENGTHS.tool },
+            { t: NOW - 200, kind: "tool", strength: PULSE_STRENGTHS.tool },
+          ],
+        },
+      ],
+    });
+    const frame = buildFrame(store, "events", NOW);
+    expect(frame.pulses.map((p) => p.t)).toEqual([NOW - 100, NOW - 300, NOW - 200]);
   });
 });

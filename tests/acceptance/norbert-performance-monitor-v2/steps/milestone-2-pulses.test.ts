@@ -104,7 +104,7 @@ describe("M2-S2: A mid-life pulse carries a decay factor proportional to its age
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("M2-S3: Pulse strength varies with event kind", () => {
+describe("M2-S3: Pulse strength varies with event kind", () => {
   it("tool call pulse strength exceeds lifecycle pulse strength", () => {
     // Given session-1 has a steady envelope and two kinds of event arrive now
     const store = createMultiSessionStore();
@@ -134,6 +134,55 @@ describe.skip("M2-S3: Pulse strength varies with event kind", () => {
     expect(tool).toBeDefined();
     expect(lifecycle).toBeDefined();
     expect(tool!.strength).toBeGreaterThan(lifecycle!.strength);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// M2-S3b (PA finding 3): Three pulse kinds exhibit the full
+// tool-subagent-lifecycle strength ordering.
+// Tag: @driving_port @US-PM-001
+// ---------------------------------------------------------------------------
+
+describe("M2-S3b: Three pulse kinds exhibit the full strength ordering", () => {
+  it("tool > subagent > lifecycle — pulses sort by strength descending", () => {
+    // Given session-1 has a steady envelope and three kinds of event arrive now
+    const store = createMultiSessionStore();
+    store.addSession("session-1");
+    const history = synthesizeArrivedHistory(12, () => 6);
+    for (const s of history) store.appendRateSample("session-1", "events", s.t, s.v);
+
+    // Append in a non-strength order so the test exercises ordering by strength,
+    // not insertion order.
+    store.appendPulse("session-1", {
+      t: NOW,
+      kind: "lifecycle",
+      strength: PULSE_STRENGTHS.lifecycle,
+    });
+    store.appendPulse("session-1", {
+      t: NOW,
+      kind: "tool",
+      strength: PULSE_STRENGTHS.tool,
+    });
+    store.appendPulse("session-1", {
+      t: NOW,
+      kind: "subagent",
+      strength: PULSE_STRENGTHS.subagent,
+    });
+
+    // When the scope projects the current frame
+    const frame = buildFrame(store, "events", NOW);
+
+    // Then three pulses appear on session-1, ordered by strength descending
+    const pulses = frame.pulses.filter((p) => p.sessionId === "session-1");
+    expect(pulses).toHaveLength(3);
+    expect(pulses.map((p) => p.kind)).toEqual(["tool", "subagent", "lifecycle"]);
+    // Strengths must strictly decrease
+    expect(pulses[0].strength).toBeGreaterThan(pulses[1].strength);
+    expect(pulses[1].strength).toBeGreaterThan(pulses[2].strength);
+    // And match the canonical PULSE_STRENGTHS values
+    expect(pulses[0].strength).toBe(PULSE_STRENGTHS.tool);
+    expect(pulses[1].strength).toBe(PULSE_STRENGTHS.subagent);
+    expect(pulses[2].strength).toBe(PULSE_STRENGTHS.lifecycle);
   });
 });
 

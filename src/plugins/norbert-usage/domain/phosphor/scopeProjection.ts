@@ -209,6 +209,32 @@ const projectPulsesForTrace = (
   return projected;
 };
 
+/**
+ * Stable sort by strength descending. Pulses with higher strength appear
+ * first; equal-strength pulses preserve their input relative order (stable).
+ *
+ * Renderer contract: the dominant flare (tool, strength 1.0) paints on top
+ * of softer pulses (subagent 0.75, lifecycle 0.5), so the frame must expose
+ * pulses in strength-descending order regardless of store insertion order.
+ *
+ * Returns a NEW array; the input is never mutated.
+ */
+const sortPulsesByStrengthDescending = (
+  pulses: ReadonlyArray<FramePulse>,
+): ReadonlyArray<FramePulse> => {
+  // Decorate-sort-undecorate to guarantee stability under engines whose
+  // Array#sort is stable (Node/V8 since 10.x). The index tiebreak keeps
+  // equal-strength pulses in their original relative order.
+  const decorated = pulses.map((pulse, index) => ({ pulse, index }));
+  decorated.sort((a, b) => {
+    if (b.pulse.strength !== a.pulse.strength) {
+      return b.pulse.strength - a.pulse.strength;
+    }
+    return a.index - b.index;
+  });
+  return decorated.map((entry) => entry.pulse);
+};
+
 // ---------------------------------------------------------------------------
 // buildFrame — the driving port
 // ---------------------------------------------------------------------------
@@ -228,7 +254,9 @@ const projectPulsesForTrace = (
  *   - `pulses` contains one `FramePulse` per still-visible pulse across
  *     all sessions. A pulse is visible iff `decay(age, PULSE_LIFETIME_MS)`
  *     is greater than 0; pulses at or past the lifetime are absent even
- *     if the store retains them (retention > lifetime by design).
+ *     if the store retains them (retention > lifetime by design). Pulses
+ *     are sorted by strength descending (stable within equal strength),
+ *     so the dominant flare renders on top of softer ones.
  *   - `legend` parallels `traces` 1:1.
  */
 export const buildFrame = (
@@ -240,8 +268,8 @@ export const buildFrame = (
   const traces = sessionIds.map((sessionId, index) =>
     projectTrace(sessionId, index, store, metric, now),
   );
-  const pulses = traces.flatMap((trace) =>
-    projectPulsesForTrace(trace, store, now),
+  const pulses = sortPulsesByStrengthDescending(
+    traces.flatMap((trace) => projectPulsesForTrace(trace, store, now)),
   );
   const legend = traces.map(legendEntryFor);
   const config = METRICS[metric];
