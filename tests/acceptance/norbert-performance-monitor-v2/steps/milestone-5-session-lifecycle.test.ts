@@ -132,7 +132,7 @@ describe("M5-S3: The legend reflects the latest arrived value for each session",
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("M5-S4: Ambient 60-second window excludes samples older than the window", () => {
+describe("M5-S4: Ambient 60-second window excludes samples older than the window", () => {
   it("samples at 70s and 90s ago are not projected; 30s and 45s remain", () => {
     // Given session-1 has samples at 30, 45, 70, and 90 seconds ago
     const store = createMultiSessionStore();
@@ -160,7 +160,7 @@ describe.skip("M5-S4: Ambient 60-second window excludes samples older than the w
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("M5-S5: Pulses older than their retention are absent from the store", () => {
+describe("M5-S5: Pulses older than their retention are absent from the store", () => {
   it("6s-old pulse is not retained; pulses within 5s remain", () => {
     // Given session-1 had a tool-call pulse 6 seconds ago and a recent one 2s ago
     const store = createMultiSessionStore();
@@ -176,8 +176,9 @@ describe.skip("M5-S5: Pulses older than their retention are absent from the stor
       strength: PULSE_STRENGTHS.tool,
     });
 
-    // When the store is queried
-    const pulses = store.getPulses("session-1");
+    // When the store is queried (NOW passed as the reference clock so
+    // retention trim aligns with the test's logical clock)
+    const pulses = store.getPulses("session-1", NOW);
 
     // Then the 6s-old pulse is absent; the 2s-old pulse remains
     const stalePulse = pulses.find((p) => p.t === NOW - 6000);
