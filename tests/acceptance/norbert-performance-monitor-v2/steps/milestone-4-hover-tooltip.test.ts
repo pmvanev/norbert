@@ -269,7 +269,7 @@ describe("M4-S6: Hover with no active sessions produces no selection", () => {
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("M4-S7: Hover at the right edge reports an age near zero", () => {
+describe("M4-S7: Hover at the right edge reports an age near zero", () => {
   it("age is less than 0.5 seconds at the current-time edge of the scope", () => {
     // Given session-1 has a recent arrived sample at the current moment
     const store = createMultiSessionStore();
@@ -297,7 +297,7 @@ describe.skip("M4-S7: Hover at the right edge reports an age near zero", () => {
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("M4-S8: Hover at the left edge reports an age near the window length", () => {
+describe("M4-S8: Hover at the left edge reports an age near the window length", () => {
   it("age is approximately 60 seconds at the left edge of the scope", () => {
     // Given session-1 has arrived samples spanning the full 60s window
     const store = createMultiSessionStore();
