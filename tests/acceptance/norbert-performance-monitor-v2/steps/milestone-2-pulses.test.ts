@@ -191,7 +191,7 @@ describe("M2-S3b: Three pulse kinds exhibit the full strength ordering", () => {
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("M2-S4: Multiple pulses coexist on a single session's trace", () => {
+describe("M2-S4: Multiple pulses coexist on a single session's trace", () => {
   it("three pulses keep their own arrival times and decay factors", () => {
     // Given session-1 has a steady envelope and three tool calls at 0.5s, 1.0s, 2.0s ago
     const store = createMultiSessionStore();
@@ -232,7 +232,7 @@ describe.skip("M2-S4: Multiple pulses coexist on a single session's trace", () =
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("M2-S5: A pulse older than 2.5 seconds is absent from the frame", () => {
+describe("M2-S5: A pulse older than 2.5 seconds is absent from the frame", () => {
   it("3s-old pulse is not projected into the frame", () => {
     // Given session-1 has a steady envelope and a tool call arrived 3s ago
     const store = createMultiSessionStore();
