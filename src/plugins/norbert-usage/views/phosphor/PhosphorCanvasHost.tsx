@@ -55,6 +55,35 @@ const PULSE_BASE_RADIUS = 10;
 // ~0.5s, older traces fade into background.
 const PERSISTENCE_DECAY_ALPHA = 0.08;
 
+// Grid reference — subtle horizontal lines at quarter-scale intervals give
+// the eye an anchor for relative magnitude without stealing attention from
+// the trace. Vertical tickmarks at 15-second intervals mark the 60-second
+// window's four quarters (the newest edge sits at x = width).
+const GRID_Y_FRACTIONS: ReadonlyArray<number> = [0.25, 0.5, 0.75];
+const GRID_TIME_INTERVAL_MS = 15_000;
+const GRID_WINDOW_MS = 60_000;
+const GRID_TICK_HEIGHT_PX = 4;
+const GRID_DASH_PATTERN: ReadonlyArray<number> = [2, 6];
+const AXIS_LABEL_FONT = "10px monospace";
+const AXIS_LABEL_PAD_PX = 4;
+// Fallback colors — theme tokens are preferred, these are used only when
+// getComputedStyle cannot resolve the CSS custom properties (tests / SSR).
+const GRID_COLOR_PROP = "--phosphor-grid";
+const GRID_COLOR_FALLBACK = "rgba(255, 255, 255, 0.06)";
+const AXIS_LABEL_COLOR_PROP = "--phosphor-axis-label";
+const AXIS_LABEL_COLOR_FALLBACK = "rgba(200, 200, 200, 0.75)";
+
+/** Resolve a CSS custom property from a container, with a safe fallback. */
+const resolveThemeColor = (
+  container: HTMLElement | null,
+  prop: string,
+  fallback: string,
+): string => {
+  if (container === null || typeof window === "undefined") return fallback;
+  const value = window.getComputedStyle(container).getPropertyValue(prop).trim();
+  return value === "" ? fallback : value;
+};
+
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
@@ -70,6 +99,77 @@ interface PhosphorCanvasHostProps {
 // render stay structurally coherent — any change to the projection is
 // observed by both consumers in lockstep.
 // ---------------------------------------------------------------------------
+
+/**
+ * Format the scope's yMax as a short axis label, e.g. `15 evt/s`. Integer
+ * yMax values render unadorned; fractional values get a single decimal so
+ * the label stays compact.
+ */
+const formatYMaxLabel = (yMax: number, unit: string): string => {
+  const rendered = Number.isInteger(yMax) ? `${yMax}` : yMax.toFixed(1);
+  return `${rendered} ${unit}`;
+};
+
+/**
+ * Draw the reference grid — dashed horizontal lines at quarter-scale
+ * intervals, short vertical tickmarks at 15-second intervals, and yMax /
+ * 0 axis labels in the top-left / bottom-left corners. Painted into the
+ * persistence buffer BEFORE traces/pulses so the signal always reads on
+ * top of the grid; the afterglow decay picks up the grid too, but
+ * because the grid is very faint (alpha ~0.06) this is visually
+ * indistinguishable from a re-painted grid each frame.
+ */
+const drawGrid = (
+  bufferCtx: CanvasRenderingContext2D,
+  frame: Frame,
+  width: number,
+  height: number,
+  gridColor: string,
+  axisLabelColor: string,
+): void => {
+  bufferCtx.save();
+  bufferCtx.strokeStyle = gridColor;
+  bufferCtx.lineWidth = 1;
+  bufferCtx.setLineDash([...GRID_DASH_PATTERN]);
+
+  // Horizontal reference lines at 25%, 50%, 75% of the y-scale.
+  for (const fraction of GRID_Y_FRACTIONS) {
+    const y = height - height * fraction;
+    bufferCtx.beginPath();
+    bufferCtx.moveTo(0, y);
+    bufferCtx.lineTo(width, y);
+    bufferCtx.stroke();
+  }
+
+  // Vertical tickmarks at 15s intervals. Short marks from the bottom edge
+  // keep the scope uncluttered versus full-height grid lines.
+  bufferCtx.setLineDash([]);
+  for (
+    let ageMs = GRID_TIME_INTERVAL_MS;
+    ageMs < GRID_WINDOW_MS;
+    ageMs += GRID_TIME_INTERVAL_MS
+  ) {
+    const x = width * (1 - ageMs / GRID_WINDOW_MS);
+    bufferCtx.beginPath();
+    bufferCtx.moveTo(x, height);
+    bufferCtx.lineTo(x, height - GRID_TICK_HEIGHT_PX);
+    bufferCtx.stroke();
+  }
+
+  // yMax label top-left and 0 baseline bottom-left.
+  bufferCtx.fillStyle = axisLabelColor;
+  bufferCtx.font = AXIS_LABEL_FONT;
+  bufferCtx.textBaseline = "top";
+  bufferCtx.fillText(
+    formatYMaxLabel(frame.yMax, frame.unit),
+    AXIS_LABEL_PAD_PX,
+    AXIS_LABEL_PAD_PX,
+  );
+  bufferCtx.textBaseline = "bottom";
+  bufferCtx.fillText("0", AXIS_LABEL_PAD_PX, height - AXIS_LABEL_PAD_PX);
+
+  bufferCtx.restore();
+};
 
 const drawTrace = (
   ctx: CanvasRenderingContext2D,
@@ -116,6 +216,8 @@ const drawFrame = (
   frame: Frame,
   width: number,
   height: number,
+  gridColor: string,
+  axisLabelColor: string,
 ): void => {
   // Decay the persistence buffer by erasing a small alpha each frame. This
   // produces the phosphor afterglow: recent strokes remain visible briefly,
@@ -125,6 +227,10 @@ const drawFrame = (
   bufferCtx.fillStyle = `rgba(0, 0, 0, ${PERSISTENCE_DECAY_ALPHA})`;
   bufferCtx.fillRect(0, 0, width, height);
   bufferCtx.restore();
+
+  // Draw the reference grid BEFORE signal so traces and pulses always paint
+  // on top. The grid is very faint so afterglow accumulation is imperceptible.
+  drawGrid(bufferCtx, frame, width, height, gridColor, axisLabelColor);
 
   // Draw this frame's traces + pulses INTO the persistence buffer (not the
   // primary canvas). Traces accumulate; older points are erased by the decay
@@ -166,6 +272,11 @@ export const PhosphorCanvasHost = ({
   });
   const rafIdRef = useRef<number | null>(null);
   const frameRef = useRef<Frame>(frame);
+  // Theme colors cached per resize — resolved via getComputedStyle once per
+  // dimension change rather than every rAF tick. The resize-coupled cadence
+  // matches the OscilloscopeView pattern and keeps the render loop allocation-free.
+  const gridColorRef = useRef<string>(GRID_COLOR_FALLBACK);
+  const axisLabelColorRef = useRef<string>(AXIS_LABEL_COLOR_FALLBACK);
 
   // Always push the latest frame into the ref so the rAF loop reads fresh
   // state without re-subscribing.
@@ -182,10 +293,34 @@ export const PhosphorCanvasHost = ({
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    // Resolve theme tokens on mount so the first render already has
+    // container-derived colors rather than fallbacks.
+    gridColorRef.current = resolveThemeColor(
+      container,
+      GRID_COLOR_PROP,
+      GRID_COLOR_FALLBACK,
+    );
+    axisLabelColorRef.current = resolveThemeColor(
+      container,
+      AXIS_LABEL_COLOR_PROP,
+      AXIS_LABEL_COLOR_FALLBACK,
+    );
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
         if (width > 0 && height > 0) {
+          // Refresh theme tokens alongside dimensions — a theme change
+          // without a resize is rare enough to skip dedicated tracking.
+          gridColorRef.current = resolveThemeColor(
+            container,
+            GRID_COLOR_PROP,
+            GRID_COLOR_FALLBACK,
+          );
+          axisLabelColorRef.current = resolveThemeColor(
+            container,
+            AXIS_LABEL_COLOR_PROP,
+            AXIS_LABEL_COLOR_FALLBACK,
+          );
           setDimensions({ width, height });
         }
       }
@@ -238,7 +373,15 @@ export const PhosphorCanvasHost = ({
     // CSS-pixel math draws correctly onto the DPR-backed pixel grid.
     bufferCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    drawFrame(ctx, bufferCtx, activeFrame, cssW, cssH);
+    drawFrame(
+      ctx,
+      bufferCtx,
+      activeFrame,
+      cssW,
+      cssH,
+      gridColorRef.current,
+      axisLabelColorRef.current,
+    );
   }, [dimensions]);
 
   useEffect(() => {

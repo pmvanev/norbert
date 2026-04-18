@@ -1540,6 +1540,13 @@ code, pre, .mono,
   flex-direction: column;
   height: 100%;
   gap: 2px;
+
+  /* Grid colors are exposed as CSS custom properties so the imperative
+     canvas renderer can read them via getComputedStyle() and theme-aware
+     tokens continue to drive the visual. Keeping them subtle — the grid
+     is meant as reference, not chart furniture. */
+  --phosphor-grid: rgba(255, 255, 255, 0.06);
+  --phosphor-axis-label: var(--text-m);
 }
 
 .phosphor-controls {
