@@ -33,10 +33,10 @@ import fc from "fast-check";
 
 import { HOVER_SNAP_DISTANCE_PX, scopeHitTest } from "./scopeHitTest";
 import type { Frame } from "./scopeProjection";
+import { timeToX, valueToY } from "./canvasGeometry";
 import {
   METRICS,
   SESSION_COLORS,
-  WINDOW_MS,
   type RateSample,
 } from "./phosphorMetricConfig";
 
@@ -45,13 +45,9 @@ const NOW = 1_000_000_000;
 // ---------------------------------------------------------------------------
 // Frame construction helpers — avoid depending on buildFrame so hit-test
 // unit tests remain narrow and decoupled from projection behavior.
+// Projection math imported from `canvasGeometry` so test expectations
+// match production exactly.
 // ---------------------------------------------------------------------------
-
-const timeToX = (t: number, width: number, now: number): number =>
-  width * (1 - (now - t) / WINDOW_MS);
-
-const valueToY = (v: number, height: number, yMax: number): number =>
-  height * (1 - v / yMax);
 
 const buildTestFrame = (
   traceSpecs: ReadonlyArray<{

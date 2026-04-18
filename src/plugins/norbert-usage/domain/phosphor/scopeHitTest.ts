@@ -30,7 +30,7 @@
  * HOVER_SNAP_DISTANCE_PX constant.
  */
 
-import { WINDOW_MS } from "./phosphorMetricConfig";
+import { timeToX, valueToY, xToTime } from "./canvasGeometry";
 import type { Frame, FrameTrace } from "./scopeProjection";
 
 // ---------------------------------------------------------------------------
@@ -66,20 +66,8 @@ export interface HoverSelection {
 }
 
 // ---------------------------------------------------------------------------
-// Pure geometry helpers — mirror the canvas host's projection math
+// Hit-test-specific helpers (pure projection math lives in canvasGeometry)
 // ---------------------------------------------------------------------------
-
-/** Map a sample time `t` to x pixels within `[0, width]` given `now`. */
-const timeToX = (t: number, width: number, now: number): number =>
-  width * (1 - (now - t) / WINDOW_MS);
-
-/** Inverse of timeToX: map a pointer x to a cursor-time given `now`. */
-const xToTime = (x: number, width: number, now: number): number =>
-  now - (1 - x / width) * WINDOW_MS;
-
-/** Map a sample value `v` to y pixels within `[0, height]` given `yMax`. */
-const valueToY = (v: number, height: number, yMax: number): number =>
-  height * (1 - v / yMax);
 
 /**
  * Whether a sample's displayY falls outside the visible canvas (above the

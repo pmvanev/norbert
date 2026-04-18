@@ -36,7 +36,7 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import type { Frame, FramePulse, FrameTrace } from "../../domain/phosphor/scopeProjection";
 import { scopeHitTest, type HoverSelection } from "../../domain/phosphor/scopeHitTest";
-import { WINDOW_MS } from "../../domain/phosphor/phosphorMetricConfig";
+import { timeToX, valueToY } from "../../domain/phosphor/canvasGeometry";
 import {
   ensurePersistenceBuffer,
   type PersistenceBufferCell,
@@ -65,20 +65,10 @@ interface PhosphorCanvasHostProps {
 }
 
 // ---------------------------------------------------------------------------
-// Pure geometry helpers — mirror scopeHitTest's projection math exactly so
-// hover and render stay coherent (see scopeHitTest.ts for the contract).
-// ---------------------------------------------------------------------------
-
-/** Map a sample time `t` to x pixels within `[0, width]` given `now`. */
-const timeToX = (t: number, width: number, now: number): number =>
-  width * (1 - (now - t) / WINDOW_MS);
-
-/** Map a sample value `v` to y pixels within `[0, height]` given `yMax`. */
-const valueToY = (v: number, height: number, yMax: number): number =>
-  height * (1 - v / yMax);
-
-// ---------------------------------------------------------------------------
-// Canvas drawing (effects-only)
+// Canvas drawing (effects-only). Projection math (timeToX / valueToY) is
+// imported from `domain/phosphor/canvasGeometry` so hover hit-test and
+// render stay structurally coherent — any change to the projection is
+// observed by both consumers in lockstep.
 // ---------------------------------------------------------------------------
 
 const drawTrace = (

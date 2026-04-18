@@ -1,6 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/stryker-mutator/stryker/master/packages/core/schema/stryker-schema.json",
   "mutate": [
+    "src/plugins/norbert-usage/domain/phosphor/canvasGeometry.ts",
     "src/plugins/norbert-usage/domain/phosphor/pulseTiming.ts",
     "src/plugins/norbert-usage/domain/phosphor/rateDerivation.ts",
     "src/plugins/norbert-usage/domain/phosphor/scopeHitTest.ts",
