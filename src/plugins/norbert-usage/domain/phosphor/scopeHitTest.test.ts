@@ -652,46 +652,56 @@ describe("scopeHitTest — sample time strictly after cursor vs. equal-to cursor
     expect(selection?.sessionId).toBe("after-only");
   });
 
-  it("fallback-earliest chooses the sample with the strictly smallest time when duplicates exist", () => {
-    // To exercise `sample.t < earliest.t` vs. `<=`: make two samples share
-    // the minimum time. Whichever is seen first is kept by `<`; `<=` would
-    // overwrite to the second. Because samples share t, their values must
-    // also match to keep the test behavior-observable. We therefore use a
-    // single-time sample array with a distinct LATER sample — the earliest
-    // is unique, and the loop body picks it on the first iteration. The
-    // `<` → `<=` flip is still detectable because in the alt case the
-    // loop would replace earliest with the later sample incorrectly (the
-    // later sample's .t > earliest.t, so neither `<` nor `<=` is true).
-    // Concretely: construct samples [earliest, later]. With `<`, earliest
-    // stays. With `<=`, earliest stays. So this test won't distinguish.
+  it("fallback-earliest chooses the FIRST sample encountered at the minimum timestamp (strict < semantics)", () => {
+    // To exercise `sample.t < earliest.t` vs. `<=`: construct two samples
+    // sharing the minimum timestamp but with DIFFERENT values. Under the
+    // correct strict `<`, the first-seen sample is kept (a later equal-time
+    // sample does NOT satisfy `sample.t < earliest.t`). Under a mutant `<=`,
+    // the second sample WOULD satisfy the condition and overwrite the first,
+    // flipping the returned value.
     //
-    // Key insight: the mutator `< → <=` only affects behavior when
-    // sample.t === earliest.t. That requires duplicate timestamps with
-    // DIFFERENT values — which the scope tolerates via an "append in order"
-    // contract. We emulate that here.
+    // Both samples' y-positions are placed within HOVER_SNAP_DISTANCE_PX of
+    // the pointer so hit-test returns a non-null selection under BOTH the
+    // production and mutant variants. The distinction is observable purely
+    // via `selection.value`: production returns the FIRST sample's value,
+    // mutant returns the SECOND.
     const width = 1000;
     const height = 400;
-    const yMax = METRICS.events.yMax;
+    const yMax = METRICS.events.yMax; // 15
     const sharedTime = NOW - 1000;
-    const firstValue = yMax / 4;
-    const duplicateTimeValue = yMax / 3; // different value, same timestamp
+    // Place the two values close enough that their projected y-positions
+    // are ~10 px apart — well inside HOVER_SNAP_DISTANCE_PX (28).
+    //   yOfFirst  = height * (1 - firstValue/yMax)
+    //   yOfSecond = height * (1 - secondValue/yMax)
+    //   dy        = height * (secondValue - firstValue) / yMax
+    // With height=400, yMax=15, Δv=yMax/40=0.375, dy ≈ 10 px.
+    const firstValue = yMax / 4; // 3.75  -> y ≈ 300
+    const secondValue = firstValue + yMax / 40; // 4.125 -> y ≈ 290 (10 px above)
     const frame = buildTestFrame([
       {
         sessionId: "duplicate-time",
         color: SESSION_COLORS[0],
         samples: [
           { t: sharedTime, v: firstValue },
-          { t: sharedTime, v: duplicateTimeValue },
+          { t: sharedTime, v: secondValue },
         ],
       },
     ]);
-    // Pointer at x=0 → cursor time ≪ sharedTime. Fallback-earliest picks
-    // the first-seen minimum. With `<`, the first sample (firstValue) wins.
-    // With `<=`, the second overwrites (duplicateTimeValue wins).
+    // Pointer x=0 → cursorTime = NOW - WINDOW_MS, which is strictly before
+    // sharedTime, forcing the fallback-earliest branch. Pointer y is set
+    // exactly at yOfFirst so:
+    //   - Under `<` (production): earliest.v stays `firstValue`,
+    //     displayY = yOfFirst, distance = 0 → selection.value === firstValue.
+    //   - Under `<=` (mutant): earliest.v becomes `secondValue`,
+    //     displayY = yOfSecond, distance ≈ 10 px (still < 28 snap) →
+    //     selection.value === secondValue (FAILS the assertion below).
     const yOfFirst = valueToY(firstValue, height, yMax);
     const selection = scopeHitTest({ x: 0, y: yOfFirst, width, height }, frame);
     expect(selection).not.toBeNull();
     expect(selection?.value).toBe(firstValue);
+    // Explicit mutant-guard: the SECOND sample's value must NOT win under
+    // strict `<`. This assertion makes the `< → <=` distinction loud.
+    expect(selection?.value).not.toBe(secondValue);
   });
 });
 

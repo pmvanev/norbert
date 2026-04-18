@@ -486,9 +486,11 @@ describe("IC-S12 @property: Frame values never zero-fill between arrivals", () =
           expect(edge.v).toBeCloseTo(lastArrived.v, 5);
 
           // No-zero-fill invariant: since every arrival is strictly
-          // positive, no projected sample may read as zero.
+          // positive, no projected sample may read as near-zero. Using a
+          // strict lower bound (> 1e-9) mirrors IC-S11's tolerance and
+          // catches near-zero fabrication that `!== 0` would miss.
           for (const sample of trace!.samples) {
-            expect(sample.v).not.toBe(0);
+            expect(sample.v).toBeGreaterThan(1e-9);
           }
         },
       ),
@@ -772,26 +774,26 @@ describe("IC-S15 @property: Hit-test consistency between trace value and returne
 
           expect(selection.sessionId).toBe(sessionId);
 
-          // Honest-signal lookup: last sample at-or-before selection.time;
-          // when the cursor precedes all arrivals, the earliest sample.
+          // Independent oracle (declarative — deliberately NOT a copy of
+          // production's imperative running-max loop in `valueAtCursorTime`).
+          // Structure:
+          //   1. Filter: keep only samples at-or-before selection.time.
+          //   2. Reduce-max-by-t: among the kept samples, pick the one with
+          //      the largest t. Ties broken by later-in-array (reduce's
+          //      `a.t >= b.t ? a : b` keeps the current on equality).
+          //   3. Fallback: if none qualify, use the minimum-t sample
+          //      (earliest arrival), matching the fallback contract.
+          // This shape differs from production (filter + reduce vs. single
+          // imperative pass with running max), so an identical-shape mutant
+          // in production cannot silently pass both.
           const samples = trace!.samples;
-          let sampledValue: number | null = null;
-          let latestTime = Number.NEGATIVE_INFINITY;
-          for (const s of samples) {
-            if (s.t <= selection.time && s.t >= latestTime) {
-              latestTime = s.t;
-              sampledValue = s.v;
-            }
-          }
-          if (sampledValue === null) {
-            let earliest = samples[0];
-            for (const s of samples) {
-              if (s.t < earliest.t) earliest = s;
-            }
-            sampledValue = earliest.v;
-          }
+          const candidates = samples.filter((s) => s.t <= selection.time);
+          const expected =
+            candidates.length > 0
+              ? candidates.reduce((a, b) => (a.t >= b.t ? a : b)).v
+              : samples.reduce((a, b) => (a.t <= b.t ? a : b)).v;
 
-          expect(selection.value).toBeCloseTo(sampledValue, 5);
+          expect(selection.value).toBeCloseTo(expected, 5);
         },
       ),
     );

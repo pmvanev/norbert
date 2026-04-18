@@ -6,8 +6,7 @@ Feature: Integration Checkpoints — Store and Derivation Seams
   preserves the temporal contracts the scope depends on.
 
   Background:
-    Given the multi-session store is available
-    And the hook-processor derivation helpers are available
+    Given the Performance Monitor is ready to process session telemetry
 
   # --- Derivation seam: event -> rate sample ---
 

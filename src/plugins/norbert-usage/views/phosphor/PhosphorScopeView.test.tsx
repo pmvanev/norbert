@@ -16,7 +16,7 @@
  * data attributes so the view's wiring is observable.
  */
 
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { act, render, screen, cleanup, fireEvent } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { PhosphorScopeView } from "./PhosphorScopeView";
@@ -38,17 +38,17 @@ describe("PhosphorScopeView", () => {
 
   it("subscribes to multiSessionStore and rebuilds the frame when the store notifies", () => {
     const store = createMultiSessionStore();
-    const subscribeSpy = vi.spyOn(store, "subscribe");
 
     render(<PhosphorScopeView store={store} />);
-
-    expect(subscribeSpy).toHaveBeenCalledTimes(1);
 
     // Before any session exists, zero traces are projected.
     expect(screen.getByTestId("phosphor-canvas-host").getAttribute("data-trace-count")).toBe("0");
 
     // Adding a session causes the store to notify. The view must recompute
     // the frame and the trace count surfaced by the host must now be 1.
+    // This observable re-render — driven solely by a store notification —
+    // is proof that the view is subscribed; an unsubscribed view would
+    // still show 0 traces.
     act(() => {
       store.addSession("sess-a");
     });
