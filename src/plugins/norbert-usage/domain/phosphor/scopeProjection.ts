@@ -12,8 +12,9 @@
  *     modulo `SESSION_COLORS.length`.
  *   - `latestValue` is the most recent arrived sample value (raw, not
  *     EWMA-smoothed) so the legend and trace edge stay honest with the data.
- *   - `pulses` is projected from the store's per-session pulse log (empty
- *     for WS-1 scenarios; populated once WS-2 lands).
+ *   - `pulses` is projected from the store's per-session pulse log; empty
+ *     when the store has no pulses for any session (fresh sessions, or all
+ *     pulses aged out past the retention cutoff).
  *   - `yMax` and `unit` come from the METRICS config for the requested metric.
  *
  * Pure: no imports from `react`, `adapters`, `views`, `window`, `document`,
@@ -123,9 +124,9 @@ const latestValueOf = (samples: ReadonlyArray<RateSample>): number | null =>
 /**
  * Honest-signal sample lookup for a pulse's vertical position: find the
  * value at (or most recently before) time `t` in the session's rate
- * history. Returns `0` when no sample at-or-before `t` exists (baseline
- * position — see M2-S8: a session with no arrived history still projects
- * pulses at baseline, without fabricating rate samples).
+ * history. Returns `0` (baseline) when no sample at-or-before `t` exists
+ * — a session with no arrived history still projects its pulses at
+ * baseline, without fabricating rate samples that were never observed.
  *
  * No interpolation between samples. The vertical position is literally
  * the last observed arrival value, which is what "honest signal" means

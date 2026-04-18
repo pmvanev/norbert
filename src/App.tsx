@@ -36,8 +36,8 @@ import { NotificationCenterStandalone } from "./plugins/norbert-notif/views/Noti
 import { ConfigViewerView } from "./plugins/norbert-config/views/ConfigViewerView";
 import { ConfigDetailPanel } from "./plugins/norbert-config/views/ConfigDetailPanel";
 import type { SelectedConfigItem } from "./plugins/norbert-config/domain/types";
-// v1 PerformanceMonitorView is unused post-09-02 (swap to PhosphorScopeView);
-// deletion is owned by Step 10-01 per v2-phosphor-architecture.md §5 Q5.
+// v2 PhosphorScopeView is the production Performance Monitor view. v1
+// PerformanceMonitorView was removed in Step 10-01 per v2-phosphor-architecture.md §5 Q5.
 import { PhosphorScopeView } from "./plugins/norbert-usage/views/phosphor/PhosphorScopeView";
 import { CostTicker } from "./plugins/norbert-usage/views/CostTicker";
 import { SessionStatusView, type SessionEvent as DashboardSessionEvent } from "./plugins/norbert-usage/views/SessionStatusView";

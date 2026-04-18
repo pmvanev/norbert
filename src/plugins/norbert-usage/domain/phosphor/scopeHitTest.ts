@@ -106,7 +106,12 @@ const isPointerInsideCanvas = (pointer: PointerPosition): boolean =>
 // Sample-at-cursor — honest-signal lookup for the trace value at the
 // cursor-time. Returns the value of the latest sample whose time is at-or-
 // before `cursorTime`, mirroring scopeProjection's `sampleAt` semantics so
-// hit-test and trace projection stay consistent (see IC-S15).
+// hit-test and trace projection stay consistent (the hover tooltip's
+// reported value must equal the value that would be drawn at the pointer's
+// x-column). The difference from `sampleAt`: this returns `null` (not 0)
+// when the trace is empty, and falls back to the EARLIEST sample when all
+// samples sit strictly after the cursor — a hit-test concern that doesn't
+// apply to trace drawing.
 // ---------------------------------------------------------------------------
 
 /** Value of the latest sample at-or-before `cursorTime`, or `null` when no such sample exists. */

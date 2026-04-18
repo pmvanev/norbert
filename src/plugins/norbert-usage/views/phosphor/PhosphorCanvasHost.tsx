@@ -1,9 +1,7 @@
 /**
  * PhosphorCanvasHost — the sole effect component for the phosphor scope.
  *
- * Step 09-02 replaces the 09-01 stub with the real canvas host. This
- * component:
- *
+ * Responsibilities:
  *   - Owns a primary `<canvas>` (ref) and an offscreen persistence buffer
  *     (ref, managed by `ensurePersistenceBuffer`).
  *   - Tracks its container's size via `ResizeObserver` and the device pixel
@@ -18,19 +16,21 @@
  *
  * Canvas drawing follows the pure/effect split: `buildFrame` (upstream, pure)
  * produces the Frame; all drawing routines here are effect-only and read the
- * Frame. The drawing itself is intentionally minimal for Step 09-02 (trace
- * polyline + pulse flares + afterglow overlay) — visual polish can be
- * layered on later without changing the prop contract.
+ * Frame. The drawing itself is intentionally minimal (trace polyline + pulse
+ * flares + afterglow overlay) — visual polish can be layered on later without
+ * changing the prop contract.
  *
- * Test observability: the container div preserves the data attributes used
- * by the 09-01 stub (`data-metric`, `data-y-max`, `data-unit`, `data-trace-count`,
- * `data-pulse-count`) so existing PhosphorScopeView tests continue to pass
- * without canvas-specific test infrastructure.
+ * Test observability: the container div exposes `data-metric`, `data-y-max`,
+ * `data-unit`, `data-trace-count`, and `data-pulse-count` attributes so the
+ * component is assertable from React Testing Library without reading the
+ * canvas's pixel buffer.
  *
  * Pure-core boundary: this file is the ONE place inside the phosphor view
  * subtree that touches `requestAnimationFrame`, `document`, `ResizeObserver`,
- * and the CanvasRenderingContext2D. All projection math lives in
- * `domain/phosphor/scopeProjection.ts` and `scopeHitTest.ts`.
+ * and the `CanvasRenderingContext2D`. Projection math lives in
+ * `domain/phosphor/canvasGeometry.ts`; Frame construction in
+ * `domain/phosphor/scopeProjection.ts`; hit-testing in
+ * `domain/phosphor/scopeHitTest.ts`.
  */
 
 import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";

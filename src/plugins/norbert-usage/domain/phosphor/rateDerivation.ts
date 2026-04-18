@@ -13,10 +13,11 @@
  *   deriveToolCallsRate(toolCallCount, windowMs, tickBoundaryT)
  *     = { t: tickBoundaryT, v: toolCallCount / (windowMs / 1000) }
  *
- * Steps 08-01 / 08-02 / 08-03 deliver the derivation surface in sequence:
  * `deriveEventsRate`, `deriveTokensRate`, and `deriveToolCallsRate` share
- * this module so the full set stays discoverable in a single pure file
- * under `domain/phosphor/`.
+ * this module so the full derivation surface stays discoverable in a single
+ * pure file under `domain/phosphor/`. The three helpers mirror the three
+ * MetricIds (events / tokens / toolcalls) so the hookProcessor effect
+ * boundary can select the right derivation by metric id.
  *
  * Pure: no effects, no imports outside `phosphorMetricConfig` (seam types).
  * Composes trivially at the hookProcessor effect boundary.
