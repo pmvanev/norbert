@@ -511,56 +511,169 @@ describe("IC-S12 @property: Frame values never zero-fill between arrivals", () =
 // ---------------------------------------------------------------------------
 // IC-S13: @property Rate-sample append then read preserves timestamp order
 // Tag: @driving_port @property @US-PM-001
+//
+// Generators:
+//   - sessionId: non-empty string
+//   - metric: one of the three MetricIds
+//   - rate samples: a non-empty, strictly-ascending-timestamp sequence built
+//     from unique `ageMs` offsets inside the 60s window, each paired with a
+//     finite positive double value. Samples are appended oldest-to-newest.
+//   - nowOffset: integer offset around a fixed logical NOW for variety
+//
+// Invariant: getRateHistory returns samples in the exact append order, which
+// is ascending by timestamp (strict monotonicity — unique ageMs guarantees no
+// ties) and preserves both `t` and `v` values at each index.
 // ---------------------------------------------------------------------------
 
-describe.skip("IC-S13 @property: Rate-sample append then read preserves timestamp order", () => {
-  it("any finite sequence appended in timestamp order reads back in the same order", () => {
-    // DELIVER wave will generalize to fast-check.
-    const store = createMultiSessionStore();
-    store.addSession("session-1");
-    const timestamps = [
-      NOW - 55_000,
-      NOW - 40_000,
-      NOW - 25_000,
-      NOW - 10_000,
-    ];
-    for (const [i, t] of timestamps.entries()) {
-      store.appendRateSample("session-1", "events", t, i + 1);
-    }
+describe("IC-S13 @property: Rate-sample append then read preserves timestamp order", () => {
+  it("any in-order append sequence reads back in the same order with identical values", () => {
+    const metricArb: fc.Arbitrary<MetricId> = fc.constantFrom<MetricId>(
+      "events",
+      "tokens",
+      "toolcalls",
+    );
 
-    const history = store.getRateHistory("session-1", "events");
-    for (let i = 1; i < history.length; i++) {
-      expect(history[i].t).toBeGreaterThan(history[i - 1].t);
-    }
+    // A non-empty, strictly-ascending-timestamp sequence inside the 60s
+    // window. Unique `ageMs` sorted descending yields a strictly ascending
+    // `t = now - ageMs` append sequence.
+    const appendSequenceArb = fc
+      .uniqueArray(fc.integer({ min: 0, max: WINDOW_MS - 1 }), {
+        minLength: 1,
+        maxLength: 16,
+      })
+      .chain((ages) => {
+        const sortedAgesDesc = [...ages].sort((a, b) => b - a);
+        return fc
+          .array(
+            fc.double({ min: 0, max: 1000, noNaN: true, noDefaultInfinity: true }),
+            {
+              minLength: sortedAgesDesc.length,
+              maxLength: sortedAgesDesc.length,
+            },
+          )
+          .map((values) =>
+            sortedAgesDesc.map((ageMs, i) => ({ ageMs, v: values[i] })),
+          );
+      });
+
+    fc.assert(
+      fc.property(
+        fc.string({ minLength: 1, maxLength: 12 }),
+        metricArb,
+        appendSequenceArb,
+        fc.integer({ min: -1000, max: 1000 }),
+        (sessionId, metric, samples, nowOffset) => {
+          const now = NOW + nowOffset;
+          const store = createMultiSessionStore();
+          store.addSession(sessionId);
+
+          // Append in ascending-t order (samples already sorted oldest-first).
+          const appended: ReadonlyArray<{ t: number; v: number }> = samples.map(
+            (s) => ({ t: now - s.ageMs, v: s.v }),
+          );
+          for (const s of appended) {
+            store.appendRateSample(sessionId, metric, s.t, s.v);
+          }
+
+          const history = store.getRateHistory(sessionId, metric);
+
+          // Same length and identical (t, v) sequence as appended.
+          expect(history).toHaveLength(appended.length);
+          for (let i = 0; i < appended.length; i++) {
+            expect(history[i].t).toBe(appended[i].t);
+            expect(history[i].v).toBe(appended[i].v);
+          }
+
+          // Strict monotonicity in `t` — append order is timestamp order.
+          for (let i = 1; i < history.length; i++) {
+            expect(history[i].t).toBeGreaterThan(history[i - 1].t);
+          }
+        },
+      ),
+    );
   });
 });
 
 // ---------------------------------------------------------------------------
 // IC-S14: @property Window trim is consistent across reads (idempotent)
 // Tag: @driving_port @property @US-PM-001
+//
+// Generators:
+//   - sessionId: non-empty string
+//   - metric: one of the three MetricIds
+//   - rate samples: a non-empty, strictly-ascending-timestamp sequence built
+//     from unique `ageMs` offsets inside the 60s window, each paired with a
+//     finite double value.
+//   - queryCount: number of consecutive reads to perform (2..5)
+//   - nowOffset: integer offset around a fixed logical NOW for variety
+//
+// Invariant: consecutive getRateHistory calls return arrays with identical
+// contents (same length, same (t, v) pairs at each index). Reads must not
+// mutate store state — the window-trim semantics (today: identity; later:
+// window-bounded) are consistent across any sequence of reads.
 // ---------------------------------------------------------------------------
 
-describe.skip("IC-S14 @property: Window trim is consistent across reads", () => {
-  it("trimming is idempotent; repeat reads all return only in-window samples", () => {
-    // DELIVER wave will generalize to fast-check.
-    const store = createMultiSessionStore();
-    store.addSession("session-1");
-    const ages = [90_000, 70_000, 55_000, 30_000, 10_000];
-    for (const ageMs of ages) {
-      store.appendRateSample("session-1", "events", NOW - ageMs, 5);
-    }
+describe("IC-S14 @property: Window trim is consistent across reads", () => {
+  it("consecutive getRateHistory calls return arrays with identical contents", () => {
+    const metricArb: fc.Arbitrary<MetricId> = fc.constantFrom<MetricId>(
+      "events",
+      "tokens",
+      "toolcalls",
+    );
 
-    const first = store.getRateHistory("session-1", "events");
-    const second = store.getRateHistory("session-1", "events");
+    const appendSequenceArb = fc
+      .uniqueArray(fc.integer({ min: 0, max: WINDOW_MS - 1 }), {
+        minLength: 1,
+        maxLength: 16,
+      })
+      .chain((ages) => {
+        const sortedAgesDesc = [...ages].sort((a, b) => b - a);
+        return fc
+          .array(
+            fc.double({ min: 0, max: 1000, noNaN: true, noDefaultInfinity: true }),
+            {
+              minLength: sortedAgesDesc.length,
+              maxLength: sortedAgesDesc.length,
+            },
+          )
+          .map((values) =>
+            sortedAgesDesc.map((ageMs, i) => ({ ageMs, v: values[i] })),
+          );
+      });
 
-    // All returned samples are within window
-    for (const sample of first) {
-      expect(NOW - sample.t).toBeLessThanOrEqual(WINDOW_MS);
-    }
+    fc.assert(
+      fc.property(
+        fc.string({ minLength: 1, maxLength: 12 }),
+        metricArb,
+        appendSequenceArb,
+        fc.integer({ min: 2, max: 5 }),
+        fc.integer({ min: -1000, max: 1000 }),
+        (sessionId, metric, samples, queryCount, nowOffset) => {
+          const now = NOW + nowOffset;
+          const store = createMultiSessionStore();
+          store.addSession(sessionId);
 
-    // Idempotence: repeat reads return the same in-window sample sequence
-    expect(second.map((s) => s.t)).toEqual(first.map((s) => s.t));
-    expect(second.map((s) => s.v)).toEqual(first.map((s) => s.v));
+          for (const s of samples) {
+            store.appendRateSample(sessionId, metric, now - s.ageMs, s.v);
+          }
+
+          // Perform `queryCount` consecutive reads; each must return the
+          // same (t, v) sequence as the first.
+          const reads: Array<ReadonlyArray<{ t: number; v: number }>> = [];
+          for (let i = 0; i < queryCount; i++) {
+            reads.push(store.getRateHistory(sessionId, metric));
+          }
+
+          const first = reads[0];
+          for (let i = 1; i < reads.length; i++) {
+            const other = reads[i];
+            expect(other).toHaveLength(first.length);
+            expect(other.map((s) => s.t)).toEqual(first.map((s) => s.t));
+            expect(other.map((s) => s.v)).toEqual(first.map((s) => s.v));
+          }
+        },
+      ),
+    );
   });
 });
 
