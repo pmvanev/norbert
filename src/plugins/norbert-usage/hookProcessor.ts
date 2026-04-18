@@ -25,7 +25,10 @@ import {
 // shape declared in the acceptance test. Implementation lives in the
 // pure `domain/phosphor/rateDerivation` module to keep this file's
 // effect-boundary concerns separate from the pure rate math.
-export { deriveEventsRate } from "./domain/phosphor/rateDerivation";
+export {
+  deriveEventsRate,
+  deriveTokensRate,
+} from "./domain/phosphor/rateDerivation";
 
 // ---------------------------------------------------------------------------
 // Dependencies — injected at construction

@@ -43,9 +43,11 @@ import {
 
 // Driving ports (uncomment as DELIVER lands modules).
 // import { createMultiSessionStore } from "../../../../src/plugins/norbert-usage/adapters/multiSessionStore";
-import { deriveEventsRate } from "../../../../src/plugins/norbert-usage/hookProcessor";
+import {
+  deriveEventsRate,
+  deriveTokensRate,
+} from "../../../../src/plugins/norbert-usage/hookProcessor";
 // import {
-//   deriveTokensRate,
 //   deriveToolCallsRate,
 //   emitPulse,
 // } from "../../../../src/plugins/norbert-usage/hookProcessor";
@@ -73,11 +75,6 @@ declare const decayFactor: (ageMs: number, lifetimeMs: number) => number;
  * real module (delivered in step 08-01); the remaining helpers stay `declare`d
  * until their respective IC scenarios are un-skipped.
  */
-declare const deriveTokensRate: (
-  totalTokens: number,
-  durationMs: number,
-  tickBoundaryT: number,
-) => RateSample;
 declare const deriveToolCallsRate: (
   toolCallCount: number,
   windowMs: number,
@@ -115,7 +112,7 @@ describe("IC-S1: A 5-second tick of hook arrivals derives an events-per-second s
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("IC-S2: An OTel api-request event derives a tokens-per-second sample", () => {
+describe("IC-S2: An OTel api-request event derives a tokens-per-second sample", () => {
   it("500 tokens over 2 seconds yields a sample of 250", () => {
     // Given an OTel api-request event with 500 tokens and 2-second duration
     const totalTokens = 500;
