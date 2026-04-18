@@ -34,13 +34,8 @@ import {
 // Driving ports (resolved as DELIVER wave lands modules).
 import { buildFrame } from "../../../../src/plugins/norbert-usage/domain/phosphor/scopeProjection";
 import { DEFAULT_METRIC } from "../../../../src/plugins/norbert-usage/domain/phosphor/phosphorMetricConfig";
+import { scopeHitTest } from "../../../../src/plugins/norbert-usage/domain/phosphor/scopeHitTest";
 import { createMultiSessionStore } from "../../../../src/plugins/norbert-usage/adapters/multiSessionStore";
-
-// Not yet landed — still declared for later scenarios in this file.
-declare const scopeHitTest: (
-  pointer: { x: number; y: number; width: number; height: number },
-  frame: Frame,
-) => HoverSelection | null;
 
 // ---------------------------------------------------------------------------
 // M3-S1: Default metric at first launch is Events per second
@@ -229,7 +224,7 @@ describe("M3-S5: Toggling back to the original metric re-projects from its own h
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("M3-S6: A session with history for one metric but not another projects an empty trace after toggle", () => {
+describe("M3-S6: A session with history for one metric but not another projects an empty trace after toggle", () => {
   it("session appears but with empty samples and placeholder legend value", () => {
     // Given session-1 has events history but no tokens history
     const store = createMultiSessionStore();
@@ -265,7 +260,7 @@ describe.skip("M3-S6: A session with history for one metric but not another proj
 // scopeHitTest, both listed in D7 / §Q7.
 // ---------------------------------------------------------------------------
 
-describe.skip("M3-S7: Hover is cleared when the metric changes", () => {
+describe("M3-S7: Hover is cleared when the metric changes", () => {
   it("the same pointer position yields a hover under the events scale but no hover under the tokens scale", () => {
     // Given session-1 has Events per second history at 12 evt/s and no tokens
     // history, so the events-scale trace sits near the top of the scope but the
