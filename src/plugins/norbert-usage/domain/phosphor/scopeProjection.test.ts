@@ -296,3 +296,92 @@ describe("buildFrame — pulse ordering by strength", () => {
     expect(frame.pulses.map((p) => p.t)).toEqual([NOW - 100, NOW - 300, NOW - 200]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Pulse vertical-position honesty (Step 04-05 / M2-S7, M2-S8)
+//
+// A pulse's `v` is the session's arrived rate value at (or most recently
+// before) the pulse's time. No interpolation, no fabrication. When the
+// session has no arrived history at all, the pulse degrades to the zero
+// baseline WITHOUT any fabricated sample being inserted into the trace.
+//
+// These behaviors are lightweight but easy to regress — the branch in
+// `sampleAt` that returns 0 for empty history, and the exact-match lookup
+// for a sample coincident with the pulse time.
+// ---------------------------------------------------------------------------
+
+describe("buildFrame — pulse vertical-position honesty", () => {
+  it("pulse v equals the arrived rate value exactly at the pulse's time", () => {
+    // Arrived rate of 10 at NOW - 1000; pulse also at NOW - 1000 -> v = 10 exactly.
+    const store = makeFakeStore({
+      sessions: [
+        {
+          id: "s1",
+          rates: {
+            events: [
+              { t: NOW - 5000, v: 10 },
+              { t: NOW - 1000, v: 10 },
+            ],
+          },
+          pulses: [
+            { t: NOW - 1000, kind: "tool", strength: PULSE_STRENGTHS.tool },
+          ],
+        },
+      ],
+    });
+    const frame = buildFrame(store, "events", NOW);
+    const pulse = frame.pulses.find((p) => p.sessionId === "s1");
+    expect(pulse).toBeDefined();
+    expect(pulse!.v).toBe(10);
+  });
+
+  it("pulse v uses the most recent arrived value at-or-before the pulse time (no interpolation)", () => {
+    // Two bracketing samples: 4 at NOW - 2000 and 12 at NOW - 500.
+    // Pulse at NOW - 1000 falls between them. Honest lookup returns 4
+    // (the sample at-or-before the pulse), NOT an interpolated 8.
+    const store = makeFakeStore({
+      sessions: [
+        {
+          id: "s1",
+          rates: {
+            events: [
+              { t: NOW - 2000, v: 4 },
+              { t: NOW - 500, v: 12 },
+            ],
+          },
+          pulses: [
+            { t: NOW - 1000, kind: "tool", strength: PULSE_STRENGTHS.tool },
+          ],
+        },
+      ],
+    });
+    const frame = buildFrame(store, "events", NOW);
+    const pulse = frame.pulses.find((p) => p.sessionId === "s1");
+    expect(pulse).toBeDefined();
+    expect(pulse!.v).toBe(4);
+  });
+
+  it("pulse v is 0 when the session has no arrived rate history (baseline)", () => {
+    // Session exists with a pulse but zero arrived samples.
+    // Pulse must degrade to v = 0, and the trace must remain empty
+    // (no fabricated sample).
+    const store = makeFakeStore({
+      sessions: [
+        {
+          id: "s1",
+          pulses: [
+            { t: NOW, kind: "lifecycle", strength: PULSE_STRENGTHS.lifecycle },
+          ],
+        },
+      ],
+    });
+    const frame = buildFrame(store, "events", NOW);
+    const pulse = frame.pulses.find((p) => p.sessionId === "s1");
+    expect(pulse).toBeDefined();
+    expect(pulse!.v).toBe(0);
+
+    const trace = frame.traces.find((t) => t.sessionId === "s1");
+    expect(trace).toBeDefined();
+    expect(trace!.samples).toHaveLength(0);
+  });
+});

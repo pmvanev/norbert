@@ -295,7 +295,7 @@ describe("M2-S6: The store trims pulses older than the retention cutoff", () => 
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("M2-S7: A pulse references a session value from the same arrived history", () => {
+describe("M2-S7: A pulse references a session value from the same arrived history", () => {
   it("pulse's vertical value matches the arrived rate sample at its time", () => {
     // Given session-1 has an arrived rate of 10 at 1s ago and a pulse also at 1s ago
     const store = createMultiSessionStore();
@@ -325,7 +325,7 @@ describe.skip("M2-S7: A pulse references a session value from the same arrived h
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("M2-S8: A session with pulses but no arrived rate history produces pulses at baseline", () => {
+describe("M2-S8: A session with pulses but no arrived rate history produces pulses at baseline", () => {
   it("pulse sits at zero baseline and no fabricated rate sample appears on the trace", () => {
     // Given session-1 has been added but has no rate samples
     const store = createMultiSessionStore();
