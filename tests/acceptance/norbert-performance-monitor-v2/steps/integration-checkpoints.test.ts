@@ -37,7 +37,6 @@ import {
   type MultiSessionStoreSurface,
   type Pulse,
   type PulseKind,
-  type RateSample,
   synthesizeArrivedHistory,
 } from "./fixtures";
 
@@ -46,9 +45,9 @@ import {
 import {
   deriveEventsRate,
   deriveTokensRate,
+  deriveToolCallsRate,
 } from "../../../../src/plugins/norbert-usage/hookProcessor";
 // import {
-//   deriveToolCallsRate,
 //   emitPulse,
 // } from "../../../../src/plugins/norbert-usage/hookProcessor";
 // import { buildFrame } from "../../../../src/plugins/norbert-usage/domain/phosphor/scopeProjection";
@@ -71,15 +70,11 @@ declare const decayFactor: (ageMs: number, lifetimeMs: number) => number;
 /**
  * Derivation helpers — signatures target the hookProcessor shape. Each returns
  * the derived RateSample (or pulse) for a single tick/event, without mutating
- * store state. The caller appends. `deriveEventsRate` is imported from the
- * real module (delivered in step 08-01); the remaining helpers stay `declare`d
- * until their respective IC scenarios are un-skipped.
+ * store state. The caller appends. `deriveEventsRate`, `deriveTokensRate`, and
+ * `deriveToolCallsRate` are imported from the real module (delivered in steps
+ * 08-01 / 08-02 / 08-03); the remaining helpers stay `declare`d until their
+ * respective IC scenarios are un-skipped.
  */
-declare const deriveToolCallsRate: (
-  toolCallCount: number,
-  windowMs: number,
-  tickBoundaryT: number,
-) => RateSample;
 declare const emitPulse: (
   kind: PulseKind,
   t: number,
@@ -133,7 +128,7 @@ describe("IC-S2: An OTel api-request event derives a tokens-per-second sample", 
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("IC-S3: Tool-call events within a 5-second tick derive a tool-calls-per-second sample", () => {
+describe("IC-S3: Tool-call events within a 5-second tick derive a tool-calls-per-second sample", () => {
   it("10 tool calls over 5 seconds yields a sample of 2", () => {
     // Given 10 tool-call events arrive across a 5-second tick
     const sample = deriveToolCallsRate(10, RATE_TICK_MS, NOW);

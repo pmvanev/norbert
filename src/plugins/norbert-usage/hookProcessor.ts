@@ -28,6 +28,7 @@ import {
 export {
   deriveEventsRate,
   deriveTokensRate,
+  deriveToolCallsRate,
 } from "./domain/phosphor/rateDerivation";
 
 // ---------------------------------------------------------------------------

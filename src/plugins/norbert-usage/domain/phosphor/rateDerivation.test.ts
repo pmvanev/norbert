@@ -6,6 +6,8 @@
  *     = { t: tickBoundaryT, v: count / (windowMs / 1000) }
  *   deriveTokensRate(totalTokens, durationMs, tickBoundaryT)
  *     = { t: tickBoundaryT, v: totalTokens / (durationMs / 1000) }
+ *   deriveToolCallsRate(toolCallCount, windowMs, tickBoundaryT)
+ *     = { t: tickBoundaryT, v: toolCallCount / (windowMs / 1000) }
  *   Zero-duration lock: deriveTokensRate(_, 0, t) = { t, v: 0 }
  *     (defensive — prefer a safe sample over throwing, so pipelines do not
  *      crash on malformed OTel api-request events).
@@ -26,6 +28,13 @@
  *     4. Very-large totals — 10M tokens over 1s yields 10M tok/s (no overflow).
  *     5. Property: timestamp round-trip — returned t always equals input tickBoundaryT.
  *
+ *   deriveToolCallsRate (mirrors deriveEventsRate — same windowed-counter shape):
+ *     1. Reference example — 10 tool calls over 5s yields 2 calls/s at the tick boundary.
+ *     2. Zero tool calls — toolCallCount=0 yields v=0 regardless of window size.
+ *     3. Fractional rate — counts not divisible by (windowMs/1000) yield fractional v.
+ *     4. Property: timestamp round-trip — returned t always equals input tickBoundaryT.
+ *     5. Property: rate scales linearly with count for a fixed window.
+ *
  * Pure: no effects. Each function under test is a total pure function of three
  * finite numbers. Port-to-port at domain scope: the public function signature
  * IS the port.
@@ -34,7 +43,11 @@
 import { describe, it, expect } from "vitest";
 import fc from "fast-check";
 
-import { deriveEventsRate, deriveTokensRate } from "./rateDerivation";
+import {
+  deriveEventsRate,
+  deriveTokensRate,
+  deriveToolCallsRate,
+} from "./rateDerivation";
 
 describe("deriveEventsRate — reference example from IC-S1", () => {
   it("15 events over a 5-second window yields 3 evt/s at the tick boundary", () => {
@@ -158,6 +171,74 @@ describe("deriveTokensRate — timestamp preservation (property)", () => {
           expect(sample.t).toBe(tickBoundary);
           expect(Number.isFinite(sample.v)).toBe(true);
           expect(sample.v).toBeGreaterThanOrEqual(0);
+        },
+      ),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// deriveToolCallsRate — windowed-counter semantics (IC-S3)
+//
+// Mirrors deriveEventsRate: a windowed count divided by the window length in
+// seconds. Shares the same purity and permissiveness contract — callers
+// upstream guarantee windowMs > 0 and toolCallCount >= 0.
+// ---------------------------------------------------------------------------
+
+describe("deriveToolCallsRate — reference example from IC-S3", () => {
+  it("10 tool calls over a 5-second window yields 2 calls/s at the tick boundary", () => {
+    const sample = deriveToolCallsRate(10, 5000, 1_000_000_000);
+
+    expect(sample.v).toBeCloseTo(2, 5);
+    expect(sample.t).toBe(1_000_000_000);
+  });
+});
+
+describe("deriveToolCallsRate — zero tool calls", () => {
+  it("a count of zero yields a rate of zero", () => {
+    const sample = deriveToolCallsRate(0, 5000, 42);
+
+    expect(sample.v).toBe(0);
+    expect(sample.t).toBe(42);
+  });
+});
+
+describe("deriveToolCallsRate — fractional rate", () => {
+  it("3 tool calls over a 5-second window yields a fractional 0.6 calls/s", () => {
+    const sample = deriveToolCallsRate(3, 5000, 0);
+
+    expect(sample.v).toBeCloseTo(0.6, 5);
+    expect(sample.t).toBe(0);
+  });
+});
+
+describe("deriveToolCallsRate — timestamp preservation (property)", () => {
+  it("the returned t equals the input tickBoundaryT for any valid triplet", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 0, max: 10_000 }),
+        fc.integer({ min: 1, max: 60_000 }),
+        fc.integer({ min: 0, max: 2_000_000_000 }),
+        (toolCallCount, windowMs, tickBoundary) => {
+          const sample = deriveToolCallsRate(toolCallCount, windowMs, tickBoundary);
+          expect(sample.t).toBe(tickBoundary);
+        },
+      ),
+    );
+  });
+});
+
+describe("deriveToolCallsRate — linear scaling with count (property)", () => {
+  it("doubling the count doubles the rate for a fixed window", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 0, max: 1_000 }),
+        fc.integer({ min: 1_000, max: 60_000 }),
+        fc.integer({ min: 0, max: 2_000_000_000 }),
+        (toolCallCount, windowMs, tickBoundary) => {
+          const single = deriveToolCallsRate(toolCallCount, windowMs, tickBoundary);
+          const doubled = deriveToolCallsRate(toolCallCount * 2, windowMs, tickBoundary);
+          expect(doubled.v).toBeCloseTo(single.v * 2, 5);
         },
       ),
     );
