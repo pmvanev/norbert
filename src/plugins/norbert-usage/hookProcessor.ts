@@ -19,6 +19,14 @@ import {
   type PulseKind,
 } from "./domain/phosphor/phosphorMetricConfig";
 
+// Re-export phosphor rate-derivation helpers so acceptance tests and
+// upstream wiring can import the full derivation surface from a single
+// hookProcessor module, matching the v2 derivation-seam driving-port
+// shape declared in the acceptance test. Implementation lives in the
+// pure `domain/phosphor/rateDerivation` module to keep this file's
+// effect-boundary concerns separate from the pure rate math.
+export { deriveEventsRate } from "./domain/phosphor/rateDerivation";
+
 // ---------------------------------------------------------------------------
 // Dependencies — injected at construction
 // ---------------------------------------------------------------------------
