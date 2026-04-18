@@ -225,7 +225,7 @@ describe("IC-S7: Appending pulses preserves arrival order on read", () => {
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("IC-S8: Querying a non-existent session returns empty history and pulses", () => {
+describe("IC-S8: Querying a non-existent session returns empty history and pulses", () => {
   it("returns empty collections for a never-added session id", () => {
     const store = createMultiSessionStore();
 
