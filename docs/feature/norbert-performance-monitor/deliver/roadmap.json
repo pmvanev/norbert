@@ -1,305 +1,1995 @@
 {
-  "roadmap": {
-    "project_id": "norbert-performance-monitor",
-    "created_at": "2026-03-18T21:29:59Z",
-    "total_steps": 9,
-    "phases": 4
+  "feature": "norbert-performance-monitor",
+  "wave": "DELIVER",
+  "version": "v2-phosphor",
+  "generated_at": "2026-04-17",
+  "generated_by": "nw-solution-architect (Morgan)",
+  "paradigm": "functional",
+  "supersedes": "docs/feature/norbert-performance-monitor/deliver/v1-archive/roadmap.json",
+  "notes": "1 Step = 1 Scenario = 1 TDD cycle. A small number of steps pair two closely related scenarios that exercise the same module contract (never more than 2). Infrastructure steps (ADRs, dependency-cruiser, fast-check) are at the top because they unblock later TDD cycles. Walking skeleton (WS-1..WS-4) activates first scenarios across all load-bearing driving ports, then milestone-focused scenarios flesh out boundaries. Views + registration swap land after the pure-domain seam is green. V1 deletions come last, each gated by a grep precondition.",
+  "context_inputs": [
+    "docs/feature/norbert-performance-monitor/design/v2-phosphor-architecture.md",
+    "docs/feature/norbert-performance-monitor/design/v2-adr-delta.md",
+    "docs/feature/norbert-performance-monitor/design/upstream-changes.md",
+    "docs/feature/norbert-performance-monitor/design/wave-decisions.md",
+    "docs/feature/norbert-performance-monitor/distill/test-scenarios.md",
+    "docs/feature/norbert-performance-monitor/distill/walking-skeleton.md",
+    "docs/feature/norbert-performance-monitor/distill/handoff-deliver.md",
+    "docs/feature/norbert-performance-monitor/distill/wave-decisions.md"
+  ],
+  "seam_contract": {
+    "pure_domain_ports": [
+      "buildFrame(store, metric, now): Frame",
+      "scopeHitTest(pointer, frame): HoverSelection | null",
+      "decayFactor(ageMs, lifetimeMs): number",
+      "prunePulses(log, now, cutoffMs): readonly Pulse[]",
+      "ewmaStep(current, target, alpha): number",
+      "deriveEventsRate(count, windowMs, tickBoundaryT): RateSample",
+      "deriveTokensRate(totalTokens, durationMs, tickBoundaryT): RateSample",
+      "deriveToolCallsRate(count, windowMs, tickBoundaryT): RateSample",
+      "emitPulse(kind, t): Pulse"
+    ],
+    "adapter_ports": [
+      "multiSessionStore.addSession",
+      "multiSessionStore.removeSession",
+      "multiSessionStore.appendRateSample",
+      "multiSessionStore.appendPulse",
+      "multiSessionStore.getRateHistory",
+      "multiSessionStore.getPulses",
+      "multiSessionStore.getSessionIds",
+      "multiSessionStore.subscribe"
+    ],
+    "constants": {
+      "WINDOW_MS": 60000,
+      "RATE_TICK_MS": 5000,
+      "PULSE_LIFETIME_MS": 2500,
+      "PULSE_RETENTION_MS": 5000,
+      "HOVER_SNAP_DISTANCE_PX": 28,
+      "YMAX_EVENTS": 15,
+      "YMAX_TOKENS": 100,
+      "YMAX_TOOLCALLS": 3,
+      "PULSE_STRENGTH_TOOL": 1.0,
+      "PULSE_STRENGTH_SUBAGENT": 0.75,
+      "PULSE_STRENGTH_LIFECYCLE": 0.5
+    }
+  },
+  "milestones": [
+    {
+      "id": "01",
+      "title": "Infrastructure",
+      "step_count": 5,
+      "description": "Author the three new ADRs (ADR-048, ADR-049, ADR-050) documenting v2 architecture; add dependency-cruiser dev-dep with the phosphor-domain purity boundary rule (DESIGN D9 / DISTILL PO F-1); add fast-check dev-dep needed for IC-S11..IC-S16 property-shaped scenarios (DISTILL PO F-3 / PA finding 2)."
+    },
+    {
+      "id": "02",
+      "title": "Walking skeleton (WS-1..WS-4)",
+      "step_count": 4,
+      "description": "Activate the four walking-skeleton scenarios end-to-end through the pure domain seam. These cut through phosphorMetricConfig, scopeProjection, pulseTiming, scopeHitTest, and the v2 shape of multiSessionStore. When all four are green Phil can glance, see pulses, switch metrics, and hover-identify \u2014 the whole anchor job."
+    },
+    {
+      "id": "03",
+      "title": "Milestone 1 \u2014 per-session rate envelope traces",
+      "step_count": 4,
+      "description": "Flesh out honest-signal invariants (no sub-interval spike, no zero-fill flatline) and boundary cases (empty trace, no sessions, 60s window trim, 5-color palette) for the rate-envelope projection path."
+    },
+    {
+      "id": "04",
+      "title": "Milestone 2 \u2014 hook event pulses",
+      "step_count": 5,
+      "description": "Fresh pulse at arrival, mid-life decay, kind-strength ordering (including the full three-way tool>subagent>lifecycle ordering added per DISTILL PA finding 3), multi-pulse coexistence, lifetime cutoff, retention trim, trace-consistency (no fabricated values), baseline-without-history edge."
+    },
+    {
+      "id": "05",
+      "title": "Milestone 3 \u2014 metric toggle",
+      "step_count": 4,
+      "description": "Default metric = Events/s; per-metric buffer independence (tokens, toolcalls); persistence-buffer reset at the metric-change boundary (observable through buildFrame post-toggle state); hover-clear at metric change (observable through scopeHitTest yielding null on same pointer position)."
+    },
+    {
+      "id": "06",
+      "title": "Milestone 4 \u2014 hover tooltip",
+      "step_count": 5,
+      "description": "Nearest-snap semantic, overlapping-trace disambiguation, inter-sample interpolation consistency between trace and hover value, snap-threshold boundary, outside-scope boundary, no-sessions boundary, right/left edge age semantics."
+    },
+    {
+      "id": "07",
+      "title": "Milestone 5 \u2014 session lifecycle and ambient window",
+      "step_count": 4,
+      "description": "Session add/remove reflected in next frame, legend reflects latest arrived value, 60s window trim, pulse retention, removal cleans associated buffers and pulses."
+    },
+    {
+      "id": "08",
+      "title": "Integration checkpoints (derivation + store contract + properties)",
+      "step_count": 11,
+      "description": "hookProcessor derivation helpers (deriveEventsRate / deriveTokensRate / deriveToolCallsRate / emitPulse), store append/read contract (order preservation, ghost-session boundary), subscriber notification contract split into appends (08-07) and session lifecycle (08-08; resolves DISTILL PA finding 1), and the six property-shaped invariants rewritten via fast-check generators across 08-09..08-11."
+    },
+    {
+      "id": "09",
+      "title": "Views and registration swap",
+      "step_count": 2,
+      "description": "Compose the phosphor view components (PhosphorScopeView, PhosphorControls, PhosphorLegend, PhosphorHoverTooltip), then author the sole effect component PhosphorCanvasHost with its view-internal ensurePersistenceBuffer invariant (unit test at DELIVER time) and swap the performance-monitor view-ID registration in index.ts."
+    },
+    {
+      "id": "10",
+      "title": "V1 cleanup and enforcement",
+      "step_count": 2,
+      "description": "Delete v1 PM view components and v1 PM-only domain modules (after grep preconditions); delete v1 acceptance test files under tests/acceptance/norbert-performance-monitor-v2/ that describe v1 behavior; confirm dependency-cruiser rule passes on the final tree."
+    }
+  ],
+  "steps": [
+    {
+      "step_id": "01-01",
+      "title": "Author ADR-048 \u2014 Phosphor Scope View architecture",
+      "description": "Write the accepted text of ADR-048 sketching the PhosphorScopeView component set, offscreen persistence-buffer canvas strategy, and the removal of v1 master/detail / sidebar / navigation.",
+      "test_file": null,
+      "scenario_name": null,
+      "acceptance_criteria": [
+        "docs/adrs/ADR-048-pm-v2-phosphor-scope-view-architecture.md exists",
+        "Document captures Context, Decision, Alternatives Considered (3+), Consequences, and Supersedes/Amends references to ADR-007, ADR-028, ADR-010",
+        "Status header reads Accepted with 2026-04-17 date"
+      ],
+      "files_to_modify": [
+        "docs/adrs/ADR-048-pm-v2-phosphor-scope-view-architecture.md"
+      ],
+      "implementation_notes": "Base text on v2-adr-delta.md \u00a7ADR-048. Author in propose \u2192 accepted pattern. No code implications for this step.",
+      "depends_on": [],
+      "estimated_hours": 0.75,
+      "deliverables": [
+        "New ADR file",
+        "Cross-reference index updated in docs/adrs/ if applicable"
+      ],
+      "quality_gates": [
+        "ADR format matches repo convention (Status / Context / Decision / Alternatives / Consequences / Supersedes-Amends)",
+        "3+ alternatives with rejection rationale (mandated by Morgan's core principles)"
+      ]
+    },
+    {
+      "step_id": "01-02",
+      "title": "Author ADR-049 \u2014 Per-session rate buffers and pulse log",
+      "description": "Write the accepted text of ADR-049 documenting the replacement of category-based buffers with per-session per-metric RateBuffers plus the per-session PulseLog. Include the PA finding 1 resolution: which subscriber-notification contract applies to addSession / removeSession (choose A = lifecycle notifies via the same pub/sub, unless DELIVER's own spike produces evidence for B).",
+      "test_file": null,
+      "scenario_name": null,
+      "acceptance_criteria": [
+        "docs/adrs/ADR-049-pm-v2-rate-buffers-and-pulse-log.md exists",
+        "Documents the MetricId = events|tokens|toolcalls enumeration, RateSample/Pulse shapes, 60s rate retention (idempotent window trim), 5s pulse retention",
+        "Declares the subscriber-notification contract for addSession / removeSession (Contract A recommended unless evidence shows otherwise); 08-08 asserts the chosen contract in an acceptance scenario",
+        "3+ alternatives with rejection rationale"
+      ],
+      "files_to_modify": [
+        "docs/adrs/ADR-049-pm-v2-rate-buffers-and-pulse-log.md"
+      ],
+      "implementation_notes": "Base text on v2-adr-delta.md \u00a7ADR-049. Supersedes ADR-008, ADR-009; amends ADR-026. Resolves DISTILL PA finding 1 by locking in a contract before adapter steps implement it.",
+      "depends_on": [],
+      "estimated_hours": 0.75,
+      "deliverables": [
+        "New ADR file with contract A/B resolution"
+      ],
+      "quality_gates": [
+        "Subscriber contract explicitly stated (not left implicit)",
+        "Memory-budget numbers captured (v1 ~520KB \u2192 v2 ~20KB per ADR delta)"
+      ]
+    },
+    {
+      "step_id": "01-03",
+      "title": "Author ADR-050 \u2014 Single fixed 60s time window",
+      "description": "Write the accepted text of ADR-050 documenting the single fixed 60s rolling window for v2 and the removal of the multi-window selector (supersedes ADR-027).",
+      "test_file": null,
+      "scenario_name": null,
+      "acceptance_criteria": [
+        "docs/adrs/ADR-050-pm-v2-single-fixed-time-window.md exists",
+        "Captures 60s window, 5s rate-tick cadence, and the delegation of historical analysis to future history views",
+        "3+ alternatives with rejection rationale"
+      ],
+      "files_to_modify": [
+        "docs/adrs/ADR-050-pm-v2-single-fixed-time-window.md"
+      ],
+      "implementation_notes": "Base text on v2-adr-delta.md \u00a7ADR-050.",
+      "depends_on": [],
+      "estimated_hours": 0.5,
+      "deliverables": [
+        "New ADR file"
+      ],
+      "quality_gates": [
+        "Supersedes ADR-027 explicitly"
+      ]
+    },
+    {
+      "step_id": "01-04",
+      "title": "Add dependency-cruiser dev-dep + phosphor-domain purity rule",
+      "description": "Install dependency-cruiser as a dev dependency and author a boundary rule named `no-effects-in-phosphor-domain` forbidding `src/plugins/norbert-usage/domain/phosphor/**` from importing `react`, `src/plugins/norbert-usage/adapters/**`, `src/plugins/norbert-usage/views/**`, `window`, `document`, `requestAnimationFrame`, and `domain/oscilloscope.ts` (the last line enforces US-PM-007's amended AC). Wire the rule into the test/CI command.",
+      "test_file": null,
+      "scenario_name": null,
+      "acceptance_criteria": [
+        "dependency-cruiser appears in package.json devDependencies",
+        ".dependency-cruiser.cjs (or equivalent) declares the `no-effects-in-phosphor-domain` rule at severity:error",
+        "Running `npx depcruise src` currently passes (nothing in domain/phosphor yet, so trivially green)",
+        "npm script `lint:boundaries` added to package.json"
+      ],
+      "files_to_modify": [
+        "package.json",
+        ".dependency-cruiser.cjs"
+      ],
+      "implementation_notes": "Follow the rule sketch in v2-phosphor-architecture.md \u00a77. Rule body: `{ name: 'no-effects-in-phosphor-domain', severity: 'error', from: { path: '^src/plugins/norbert-usage/domain/phosphor' }, to: { path: '^(react|src/plugins/norbert-usage/adapters|src/plugins/norbert-usage/views|window|document|src/plugins/norbert-usage/domain/oscilloscope)' } }`.",
+      "depends_on": [],
+      "estimated_hours": 1.0,
+      "deliverables": [
+        "package.json dev-dep entry",
+        "dependency-cruiser config file",
+        "npm script for the boundary lint"
+      ],
+      "quality_gates": [
+        "Lint runs clean on current tree",
+        "Rule severity is error (will fail CI on violation)"
+      ]
+    },
+    {
+      "step_id": "01-05",
+      "title": "Add fast-check dev-dep for property-shaped acceptance tests",
+      "description": "Install fast-check as a dev dependency. No test rewrites in this step; IC-S11..IC-S16 are rewritten in their own steps within milestone 08. Confirms the dep is available before those steps begin.",
+      "test_file": null,
+      "scenario_name": null,
+      "acceptance_criteria": [
+        "fast-check appears in package.json devDependencies",
+        "`npm install` completes cleanly",
+        "A trivial `fc.assert(fc.property(fc.integer(), (n) => Number.isInteger(n)))` runs in a throwaway test to verify the import works"
+      ],
+      "files_to_modify": [
+        "package.json"
+      ],
+      "implementation_notes": "Pin to a recent major. DISTILL PO F-3 and PA finding 2 both converge here. Gate for 08-09 / 08-10 / 08-11.",
+      "depends_on": [],
+      "estimated_hours": 0.25,
+      "deliverables": [
+        "package.json dev-dep entry"
+      ],
+      "quality_gates": [
+        "Dep installs and imports without error"
+      ]
+    },
+    {
+      "step_id": "02-01",
+      "title": "Walking skeleton 1 \u2014 glance sees two sessions alive and churning",
+      "description": "Activate WS-1. First scenario to cut through the pure-domain seam end-to-end. Implement phosphorMetricConfig (MetricId, METRICS config, SESSION_COLORS palette, at least the rose/violet entries), a skeletal scopeProjection.buildFrame (honest sampling against arrived rate history over the 60s window, per-metric lookup for yMax/unit, legend projection), and the v2 shape of multiSessionStore (addSession, appendRateSample, getRateHistory, getSessionIds, subscribe keyed on (sessionId, metric) for rate buffers). WS-1 green = the core rendering pipeline is real through the pure seam.",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/walking-skeleton.feature",
+      "scenario_name": "User glances at the scope and sees two sessions alive and churning",
+      "acceptance_criteria": [
+        "describe.skip removed for WS-1 in steps/walking-skeleton.test.ts",
+        "Running the scenario produces a Frame with two traces, each with the session's color identity from SESSION_COLORS, each sampling arrived rate history across the 60s window, and a legend listing both sessions with latest events-per-second values",
+        "scopeProjection.ts declared inside domain/phosphor with zero imports from adapters, views, react, window, document (dependency-cruiser passes)"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/domain/phosphor/phosphorMetricConfig.ts",
+        "src/plugins/norbert-usage/domain/phosphor/scopeProjection.ts",
+        "src/plugins/norbert-usage/domain/phosphor/ewma.ts",
+        "src/plugins/norbert-usage/adapters/multiSessionStore.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/steps/walking-skeleton.test.ts"
+      ],
+      "implementation_notes": "Per DISTILL handoff \u00a73 types and the DESIGN \u00a74 component diagram. multiSessionStore amend strategy: additively declare the new rate buffer + pulse log shape; leave v1 category code untouched until milestone 10 cleanup so existing v1 views don't fail to import during the intermediate commits. Use timeSeriesSampler's createBuffer/appendSample ring-buffer primitives under the hood. ewmaStep lands in this step because buildFrame's honest smoothing uses it for the current-edge value attraction; keep it pure per DESIGN Q4.",
+      "depends_on": [
+        "01-04"
+      ],
+      "estimated_hours": 3.5,
+      "deliverables": [
+        "New domain/phosphor/phosphorMetricConfig.ts, scopeProjection.ts, ewma.ts (pure)",
+        "Amended multiSessionStore.ts with new public methods alongside v1 methods",
+        "Unit tests for buildFrame trace projection, legend projection, and ewmaStep",
+        "WS-1 scenario activated and green"
+      ],
+      "quality_gates": [
+        "WS-1 passes in Vitest",
+        "dependency-cruiser no-effects-in-phosphor-domain rule passes",
+        "No import of react|adapters|views|window|document from any domain/phosphor file"
+      ]
+    },
+    {
+      "step_id": "02-02",
+      "title": "Walking skeleton 2 \u2014 fresh hook event flare as a pulse",
+      "description": "Activate WS-2. Adds pulseTiming.decayFactor and prunePulses; extends buildFrame to project FramePulse entries (position by arrival time, vertical value from trace sample at pulse time, decay factor from pulse age vs PULSE_LIFETIME_MS=2500ms, session color); extends multiSessionStore with appendPulse and getPulses with 5s retention on read.",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/walking-skeleton.feature",
+      "scenario_name": "User sees a fresh hook event flare as a pulse on its session's trace",
+      "acceptance_criteria": [
+        "describe.skip removed for WS-2",
+        "Frame contains a FramePulse on session-1 positioned at the hook event's arrival time, with decay factor equal to decayFactor(1200, 2500) \u2248 0.52, and session color matching session-1",
+        "Unit tests for decayFactor covering age=0 (returns 1), age=lifetime (returns 0), age>lifetime (returns 0), negative age (clamped to 1)"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/domain/phosphor/pulseTiming.ts",
+        "src/plugins/norbert-usage/domain/phosphor/scopeProjection.ts",
+        "src/plugins/norbert-usage/adapters/multiSessionStore.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/steps/walking-skeleton.test.ts"
+      ],
+      "implementation_notes": "decayFactor(ageMs, lifetimeMs) = clamp(1 - ageMs/lifetimeMs, 0, 1). prunePulses filters by (now - p.t) <= cutoffMs. buildFrame pulse projection: look up trace value at pulse.t via the same sampleAt used for traces \u2014 this enforces the honest-signal pulse-value invariant exercised by M2-S7.",
+      "depends_on": [
+        "02-01"
+      ],
+      "estimated_hours": 2.0,
+      "deliverables": [
+        "New domain/phosphor/pulseTiming.ts (pure)",
+        "scopeProjection extended with pulse projection",
+        "multiSessionStore extended with appendPulse / getPulses (5s retention applied on read)",
+        "WS-2 activated and green"
+      ],
+      "quality_gates": [
+        "WS-2 passes",
+        "prunePulses returns a new readonly array (no mutation of input)",
+        "dependency-cruiser clean"
+      ]
+    },
+    {
+      "step_id": "02-03",
+      "title": "Walking skeleton 3 \u2014 metric toggle re-projects with new scale",
+      "description": "Activate WS-3. Confirms per-metric buffer separation works end-to-end: buildFrame called with metric='tokens' reads tokens rate history (not events), uses METRICS.tokens.yMax=100, and emits the correct unit label. No new modules \u2014 this step validates that the (sessionId, metric) keying in 02-01 is correct and adds missing METRICS entries if any.",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/walking-skeleton.feature",
+      "scenario_name": "User switches the metric and the scope re-projects with the new scale",
+      "acceptance_criteria": [
+        "describe.skip removed for WS-3",
+        "Frame projected with metric='tokens' uses yMax=100 and tokens-per-second arrived history",
+        "METRICS has entries for events, tokens, and toolcalls with yMax values 15 / 100 / 3 and unit strings 'events/s' / 'tokens/s' / 'tool calls/s' (or equivalent per fixtures.ts)",
+        "The persistence-buffer reset assertion in this scenario is satisfied through frame-observable state (frame.yMax matches new metric; no carryover of sample values); the view-internal ensurePersistenceBuffer unit test lands in step 09-02"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/domain/phosphor/phosphorMetricConfig.ts",
+        "src/plugins/norbert-usage/domain/phosphor/scopeProjection.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/steps/walking-skeleton.test.ts"
+      ],
+      "implementation_notes": "If 02-01 keyed rate buffers by (sessionId, metric), this step is largely a config completion + test activation. Otherwise, refactor multiSessionStore keying first in the same step. No view-side changes \u2014 the skeleton observes only through the pure seam.",
+      "depends_on": [
+        "02-01"
+      ],
+      "estimated_hours": 1.5,
+      "deliverables": [
+        "Completed METRICS config for all three metric ids",
+        "WS-3 activated and green"
+      ],
+      "quality_gates": [
+        "WS-3 passes",
+        "Per-metric buffers genuinely separate (populating tokens rate history has no effect on events frame)"
+      ]
+    },
+    {
+      "step_id": "02-04",
+      "title": "Walking skeleton 4 \u2014 hover tooltip identifies session, value, and age",
+      "description": "Activate WS-4. Implements scopeHitTest as a pure function: given a pointer {x,y,width,height} and a frame, returns the HoverSelection for the nearest trace within HOVER_SNAP_DISTANCE_PX=28, or null. Relies on the Frame trace samples projected by scopeProjection.",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/walking-skeleton.feature",
+      "scenario_name": "User hovers over a trace and a tooltip identifies the session, value, and age",
+      "acceptance_criteria": [
+        "describe.skip removed for WS-4",
+        "scopeHitTest returns a HoverSelection with sessionId='session-2', value\u224847, ageMs\u22481500, color matching the trace, and displayX/displayY within the pointer region",
+        "Unit tests for scopeHitTest covering within-snap, beyond-snap, outside-bounds, empty-frame, and nearest-of-two cases (drive M4-S2/4/5/6 later)"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/domain/phosphor/scopeHitTest.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/steps/walking-skeleton.test.ts"
+      ],
+      "implementation_notes": "Pure function signature per DISTILL \u00a73: scopeHitTest(pointer, frame) => HoverSelection | null. Implementation walks frame.traces; for each trace, finds the sample nearest pointer.x in pixel-space (via the same timeToX mapping exposed by scopeProjection) and computes vertical distance from pointer.y to that sample's valueToY; returns the minimum-distance hit within HOVER_SNAP_DISTANCE_PX. ageMs = frame.now - selection.time.",
+      "depends_on": [
+        "02-01"
+      ],
+      "estimated_hours": 2.0,
+      "deliverables": [
+        "New domain/phosphor/scopeHitTest.ts (pure)",
+        "WS-4 activated and green",
+        "scopeHitTest unit test file in domain/phosphor/"
+      ],
+      "quality_gates": [
+        "WS-4 passes",
+        "scopeHitTest has zero dependencies on react, window, document, adapters",
+        "Mutation kill rate \u226580% on scopeHitTest pure logic (validated at step 10 mutation run)"
+      ]
+    },
+    {
+      "step_id": "03-01",
+      "title": "Milestone 1 \u2014 distinct color identity and 5-color palette",
+      "description": "Activate M1-S1 (each active session gets its own color identity) and M1-S6 (five concurrent sessions each receive a distinct color from the rose/violet/emerald/amber/sky palette). Both exercise the palette lookup + stable-color-across-frames contract in buildFrame / phosphorMetricConfig.",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/milestone-1-per-session-traces.feature",
+      "scenario_name": "Each active session gets its own color identity on the scope",
+      "acceptance_criteria": [
+        "describe.skip removed for M1-S1 and M1-S6",
+        "Three-session frame has three distinct trace colors; same three colors on a second call to buildFrame with identical store state",
+        "Five-session frame uses colors from the fixed palette {rose, violet, emerald, amber, sky}",
+        "Color-assignment function is deterministic given session-id ordering"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/domain/phosphor/phosphorMetricConfig.ts",
+        "src/plugins/norbert-usage/domain/phosphor/scopeProjection.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/steps/milestone-1-per-session-traces.test.ts"
+      ],
+      "implementation_notes": "SESSION_COLORS at least ['rose','violet','emerald','amber','sky']; color assignment is index-into-palette by session order in multiSessionStore.getSessionIds(). Stability means the sessionId \u2192 palette-index mapping is derived from a stable enumeration (insertion order, preserved across frames).",
+      "depends_on": [
+        "02-01"
+      ],
+      "estimated_hours": 1.0,
+      "deliverables": [
+        "Palette expanded to 5 entries",
+        "Color stability test in domain/phosphor/",
+        "M1-S1 and M1-S6 activated and green"
+      ],
+      "quality_gates": [
+        "Both scenarios pass",
+        "Palette is exported as a readonly tuple (compile-time length guarantee)"
+      ]
+    },
+    {
+      "step_id": "03-02",
+      "title": "Milestone 1 \u2014 honest sampling and bracketing invariant",
+      "description": "Activate M1-S2 (trace samples arrived rate history across the window, no sub-interval spike) and M1-S3 (stalled session shows flatline from last arrived value, not zero). Both enforce honest-signal invariants in scopeProjection's sampleAt + EWMA step.",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/milestone-1-per-session-traces.feature",
+      "scenario_name": "A trace samples its session's arrived rate history across the window",
+      "acceptance_criteria": [
+        "describe.skip removed for M1-S2 and M1-S3",
+        "For a session with arrived samples at 5s intervals, no projected trace point's value exceeds the max (or falls below the min) of its two bracketing arrived samples",
+        "For a session that last arrived v=8 twenty seconds ago with no newer sample, the trace value at the current-time edge equals 8; no point on the trace is 0 while last arrived value is non-zero"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/domain/phosphor/scopeProjection.ts",
+        "src/plugins/norbert-usage/domain/phosphor/ewma.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/steps/milestone-1-per-session-traces.test.ts"
+      ],
+      "implementation_notes": "sampleAt must interpolate only between arrived samples, never extrapolate beyond the most recent. If pointer time > most-recent.t, return most-recent.v (flatline). If pointer time < oldest-in-window.t, either return oldest.v or mark as out-of-trace per fixtures contract. ewmaStep attracts toward target; when target is a flatline carry-over the EWMA's current converges to target, preserving the invariant.",
+      "depends_on": [
+        "02-01"
+      ],
+      "estimated_hours": 2.0,
+      "deliverables": [
+        "Refined sampleAt with documented bracketing contract",
+        "Refined ewmaStep target-attraction semantics",
+        "Honest-signal unit tests",
+        "M1-S2 and M1-S3 activated and green"
+      ],
+      "quality_gates": [
+        "Both scenarios pass",
+        "Honest-signal invariants documented in module JSDoc"
+      ]
+    },
+    {
+      "step_id": "03-03",
+      "title": "Milestone 1 \u2014 empty states (no history, no sessions)",
+      "description": "Activate M1-S4 (session with no arrived history produces empty trace with placeholder legend value) and M1-S7 (no active sessions yields empty scope with empty legend and current metric's Y-axis scale).",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/milestone-1-per-session-traces.feature",
+      "scenario_name": "A session with no arrived history yet produces an empty trace",
+      "acceptance_criteria": [
+        "describe.skip removed for M1-S4 and M1-S7",
+        "A session just added with no rate samples produces a trace with empty samples array and latestValue=null; legend entry for that session has latestValue=null",
+        "No active sessions: frame.traces is empty, frame.legend is empty, frame.yMax reflects the current metric's scale (events=15 default)"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/domain/phosphor/scopeProjection.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/steps/milestone-1-per-session-traces.test.ts"
+      ],
+      "implementation_notes": "Empty-history branch in buildFrame: return FrameTrace with samples=[], latestValue=null, preserve color identity. Zero-session branch: frame.yMax still reads from METRICS[metric].yMax. LegendEntry.latestValue = null for empty-history sessions \u2014 fixtures.ts is the truth on null vs 0 representation.",
+      "depends_on": [
+        "02-01"
+      ],
+      "estimated_hours": 1.0,
+      "deliverables": [
+        "Empty-state branches in buildFrame",
+        "M1-S4 and M1-S7 activated and green"
+      ],
+      "quality_gates": [
+        "Both scenarios pass",
+        "latestValue=null semantics consistent across Frame/Legend"
+      ]
+    },
+    {
+      "step_id": "03-04",
+      "title": "Milestone 1 \u2014 60-second window trim",
+      "description": "Activate M1-S5 (samples older than the 60-second window are excluded from the trace). This is the first scenario where the idempotent window-trim contract is exercised through a read; the contract is stated in ADR-049 (01-02).",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/milestone-1-per-session-traces.feature",
+      "scenario_name": "Samples older than the 60-second window are excluded from the trace",
+      "acceptance_criteria": [
+        "describe.skip removed for M1-S5",
+        "For session with samples spanning 120 seconds, the projected trace reflects only samples within the last 60 seconds",
+        "No projected trace point uses a sample timestamped more than 60 seconds ago"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/domain/phosphor/scopeProjection.ts",
+        "src/plugins/norbert-usage/adapters/multiSessionStore.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/steps/milestone-1-per-session-traces.test.ts"
+      ],
+      "implementation_notes": "Either the store's getRateHistory filters on read, or scopeProjection filters inside buildFrame. Per DISTILL \u00a73 invariants the filter must be idempotent on repeat reads \u2014 implement once in the store to centralize the contract.",
+      "depends_on": [
+        "02-01"
+      ],
+      "estimated_hours": 0.75,
+      "deliverables": [
+        "Idempotent 60s window trim in multiSessionStore.getRateHistory",
+        "M1-S5 activated and green"
+      ],
+      "quality_gates": [
+        "Scenario passes",
+        "Repeat calls to getRateHistory return arrays with identical contents (idempotence)"
+      ]
+    },
+    {
+      "step_id": "04-01",
+      "title": "Milestone 2 \u2014 fresh tool-call pulse flares brightest + mid-life decay",
+      "description": "Activate M2-S1 (fresh tool-call pulse has maximum decay factor at arrival) and M2-S2 (mid-life pulse decay factor equals age-to-lifetime ratio). Both exercise pulseTiming.decayFactor inside the buildFrame pulse projection.",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/milestone-2-pulses.feature",
+      "scenario_name": "A fresh tool call pulse flares brightest at arrival",
+      "acceptance_criteria": [
+        "describe.skip removed for M2-S1 and M2-S2",
+        "Pulse appended at t=now produces a FramePulse with decay=1.0 (maximum)",
+        "Pulse appended at t=now-1250 (half lifetime) produces decay\u22480.5"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/domain/phosphor/pulseTiming.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/steps/milestone-2-pulses.test.ts"
+      ],
+      "implementation_notes": "Already implemented in 02-02; this step activates the scenarios and adds any missing unit tests (age=0, age=lifetime/2, age slightly under/over lifetime edges).",
+      "depends_on": [
+        "02-02"
+      ],
+      "estimated_hours": 0.75,
+      "deliverables": [
+        "M2-S1 and M2-S2 activated and green",
+        "Decay-factor unit tests at boundary values"
+      ],
+      "quality_gates": [
+        "Both scenarios pass",
+        "Mutation kill rate \u226580% on pulseTiming (measured at step 10)"
+      ]
+    },
+    {
+      "step_id": "04-02",
+      "title": "Milestone 2 \u2014 pulse-kind strength and full three-way ordering",
+      "description": "Activate M2-S3 (tool-call pulse greater strength than lifecycle pulse) and author + activate the new scenario from DISTILL PA finding 3: append all three kinds (tool / subagent / lifecycle) at the same timestamp and assert the full tool > subagent > lifecycle strength ordering in a single frame.",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/milestone-2-pulses.feature",
+      "scenario_name": "Pulse strength varies with event kind",
+      "acceptance_criteria": [
+        "describe.skip removed for M2-S3",
+        "New scenario 'Three pulse kinds exhibit the full tool-subagent-lifecycle strength ordering' added to milestone-2-pulses.feature and its step-def; activated green",
+        "Strength constants: tool=1.0, subagent=0.75, lifecycle=0.5 (per fixtures)",
+        "Framed pulses when three kinds co-exist sort by strength descending: tool, subagent, lifecycle"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/hookProcessor.ts",
+        "src/plugins/norbert-usage/domain/phosphor/phosphorMetricConfig.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/milestone-2-pulses.feature",
+        "tests/acceptance/norbert-performance-monitor-v2/steps/milestone-2-pulses.test.ts"
+      ],
+      "implementation_notes": "emitPulse(kind, t) returns the Pulse with the correct strength per the constant table. Strength table may live in phosphorMetricConfig.ts or a new pulseStrength export \u2014 either is fine as long as it's a single source of truth. The new three-way scenario lands here to close PA finding 3.",
+      "depends_on": [
+        "02-02"
+      ],
+      "estimated_hours": 1.25,
+      "deliverables": [
+        "emitPulse with kind\u2192strength table",
+        "M2-S3 activated and green",
+        "New three-way ordering scenario authored and green"
+      ],
+      "quality_gates": [
+        "Both (original + new) pass",
+        "Strength table is a single named constant, not scattered magic numbers"
+      ]
+    },
+    {
+      "step_id": "04-03",
+      "title": "Milestone 2 \u2014 multiple coexisting pulses and lifetime cutoff",
+      "description": "Activate M2-S4 (three pulses at 0.5/1.0/2.0 seconds ago each at their own arrival time with their own decay factors) and M2-S5 (pulse >2.5 seconds old absent from the frame).",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/milestone-2-pulses.feature",
+      "scenario_name": "Multiple pulses coexist on a single session's trace",
+      "acceptance_criteria": [
+        "describe.skip removed for M2-S4 and M2-S5",
+        "Frame contains three FramePulse entries at the three arrival times, each with age-appropriate decay",
+        "A pulse with age 3000ms (>PULSE_LIFETIME_MS=2500) is absent from frame.pulses even if still in store"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/domain/phosphor/scopeProjection.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/steps/milestone-2-pulses.test.ts"
+      ],
+      "implementation_notes": "The lifetime-cutoff filter runs inside buildFrame (visual pulse lifetime); the retention cutoff runs inside the store (appendPulse window). These are two different constants and two different boundaries.",
+      "depends_on": [
+        "02-02"
+      ],
+      "estimated_hours": 0.75,
+      "deliverables": [
+        "Lifetime-cutoff filter in buildFrame pulse projection",
+        "M2-S4 and M2-S5 activated and green"
+      ],
+      "quality_gates": [
+        "Both scenarios pass",
+        "Frame-level cutoff is independent of store-level retention (separation of concerns)"
+      ]
+    },
+    {
+      "step_id": "04-04",
+      "title": "Milestone 2 \u2014 pulse retention trim in store",
+      "description": "Activate M2-S6 (store retains pulses for only 5 seconds; 6-second-old pulse absent from getPulses). Validates the store's retention cutoff (PULSE_RETENTION_MS=5000) applies on read or append-trim.",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/milestone-2-pulses.feature",
+      "scenario_name": "The store trims pulses older than the retention cutoff",
+      "acceptance_criteria": [
+        "describe.skip removed for M2-S6",
+        "getPulses(sessionId) returns no pulse older than 5 seconds against now passed as a parameter, and returns all pulses younger than 5 seconds"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/adapters/multiSessionStore.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/steps/milestone-2-pulses.test.ts"
+      ],
+      "implementation_notes": "Apply retention filter on read (cheap; preserves append as O(1)). Now is the time-source the store accepts \u2014 either accept a clock function at construction or rely on Date.now() and let tests mock it (fixtures.ts is the truth on the signature).",
+      "depends_on": [
+        "02-02"
+      ],
+      "estimated_hours": 0.75,
+      "deliverables": [
+        "Idempotent 5s retention trim in multiSessionStore.getPulses",
+        "M2-S6 activated and green"
+      ],
+      "quality_gates": [
+        "Scenario passes",
+        "Retention trim is idempotent on repeat reads"
+      ]
+    },
+    {
+      "step_id": "04-05",
+      "title": "Milestone 2 \u2014 pulse vertical position honesty + baseline without history",
+      "description": "Activate M2-S7 (pulse vertical position on trace matches arrived value at pulse's time \u2014 no fabricated inter-arrival value) and M2-S8 (session with pulses but no arrived rate history produces pulses at a zero-value baseline with no fabricated rate sample in the trace).",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/milestone-2-pulses.feature",
+      "scenario_name": "A pulse references a session value from the same arrived history",
+      "acceptance_criteria": [
+        "describe.skip removed for M2-S7 and M2-S8",
+        "A pulse at t-1000 for a session whose arrived v=10 at t-1000 produces FramePulse.v=10 (exact arrived value, not interpolated)",
+        "A session with pulses but no rate history produces FramePulse entries with v=0 baseline and no fabricated sample points in the trace"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/domain/phosphor/scopeProjection.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/steps/milestone-2-pulses.test.ts"
+      ],
+      "implementation_notes": "Pulse value uses the same sampleAt used for trace samples. When a pulse time has no bracketing arrived samples (history is empty) the pulse-value source must degrade to 0, not to any fabricated extrapolation. Unit-test this branch directly \u2014 it's easy to regress.",
+      "depends_on": [
+        "02-02"
+      ],
+      "estimated_hours": 1.0,
+      "deliverables": [
+        "Pulse-value honesty branch in buildFrame",
+        "M2-S7 and M2-S8 activated and green"
+      ],
+      "quality_gates": [
+        "Both scenarios pass",
+        "No code path fabricates a sample into a trace in order to position a pulse"
+      ]
+    },
+    {
+      "step_id": "05-01",
+      "title": "Milestone 3 \u2014 default metric at first launch is Events per second",
+      "description": "Activate M3-S1 (first launch frame has metric='events' and yMax=15). This is structural: phosphorMetricConfig exports an explicit DEFAULT_METRIC='events' constant and the view (later in step 09-01) initializes selectedMetric from it.",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/milestone-3-metric-toggle.feature",
+      "scenario_name": "Default metric at first launch is Events per second",
+      "acceptance_criteria": [
+        "describe.skip removed for M3-S1",
+        "phosphorMetricConfig exports DEFAULT_METRIC='events'",
+        "Calling buildFrame with metric=DEFAULT_METRIC yields frame.metric='events' and frame.yMax=15"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/domain/phosphor/phosphorMetricConfig.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/steps/milestone-3-metric-toggle.test.ts"
+      ],
+      "implementation_notes": "Explicitly declare the default so 09-01 can reuse it without reintroducing magic strings. Aligns with DISTILL wave-decisions resolved-items entry confirming Events/s default (Phil, 2026-04-17).",
+      "depends_on": [
+        "02-03"
+      ],
+      "estimated_hours": 0.5,
+      "deliverables": [
+        "DEFAULT_METRIC constant",
+        "M3-S1 activated and green"
+      ],
+      "quality_gates": [
+        "Scenario passes",
+        "DEFAULT_METRIC is the single source of truth for first-launch metric"
+      ]
+    },
+    {
+      "step_id": "05-02",
+      "title": "Milestone 3 \u2014 toggle to Tokens/s and Tool-calls/s re-projects with new scale",
+      "description": "Activate M3-S2 (switch to tokens re-projects with yMax=100 and unit='tokens/s') and M3-S3 (switch to toolcalls re-projects with yMax=3 and unit 'tool calls/s').",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/milestone-3-metric-toggle.feature",
+      "scenario_name": "Switching to Tokens per second re-projects with the tokens scale",
+      "acceptance_criteria": [
+        "describe.skip removed for M3-S2 and M3-S3",
+        "Frame with metric='tokens' has yMax=100 and unit label reflecting tokens per second",
+        "Frame with metric='toolcalls' has yMax=3 and unit label reflecting tool calls per second"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/domain/phosphor/phosphorMetricConfig.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/steps/milestone-3-metric-toggle.test.ts"
+      ],
+      "implementation_notes": "METRICS must have complete entries for all three ids. Unit label exact string matches fixtures.ts expectations.",
+      "depends_on": [
+        "05-01"
+      ],
+      "estimated_hours": 0.75,
+      "deliverables": [
+        "Complete METRICS config",
+        "M3-S2 and M3-S3 activated and green"
+      ],
+      "quality_gates": [
+        "Both scenarios pass",
+        "Unit-label strings match fixtures.ts verbatim"
+      ]
+    },
+    {
+      "step_id": "05-03",
+      "title": "Milestone 3 \u2014 persistence-buffer reset (frame-observable) and toggle-back",
+      "description": "Activate M3-S4 (post-toggle frame carries no sample values from the prior metric's history; yMax reflects new metric) and M3-S5 (toggling back to Events re-projects from its own history). Per DISTILL DD8 these assert frame-observable consequences only; the view-internal ensurePersistenceBuffer unit test lands in step 09-02.",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/milestone-3-metric-toggle.feature",
+      "scenario_name": "Persistence buffer is reset at the metric-change boundary",
+      "acceptance_criteria": [
+        "describe.skip removed for M3-S4 and M3-S5",
+        "After toggling from events to tokens, post-toggle frame.yMax=100, no sample values carried from the events history appear on any trace, session-1's trace carries no tokens samples (no tokens history yet)",
+        "After subsequently toggling back to events, frame uses events history (unchanged in store since last events-metric frame)"
+      ],
+      "files_to_modify": [
+        "tests/acceptance/norbert-performance-monitor-v2/steps/milestone-3-metric-toggle.test.ts"
+      ],
+      "implementation_notes": "No production-code changes expected \u2014 this validates the (sessionId, metric) keying and buffer independence established in 02-01 / 02-03 / 05-02. The step exists to activate the scenarios and add any missing assertion glue.",
+      "depends_on": [
+        "05-02"
+      ],
+      "estimated_hours": 0.75,
+      "deliverables": [
+        "M3-S4 and M3-S5 activated and green"
+      ],
+      "quality_gates": [
+        "Both scenarios pass through the pure seam (no access to view-internal refs)"
+      ]
+    },
+    {
+      "step_id": "05-04",
+      "title": "Milestone 3 \u2014 empty-trace-after-toggle and hover-clear-on-metric-change",
+      "description": "Activate M3-S6 (session with events history but no tokens history: after toggle, its trace has no sample values and legend shows placeholder latest value) and M3-S7 (hover selection that identified a session on events-scale frame is null at the same pointer position on tokens-scale frame). Both observe view-internal effects through pure-seam consequences per DISTILL DD9.",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/milestone-3-metric-toggle.feature",
+      "scenario_name": "A session with history for one metric but not another projects an empty trace after toggle",
+      "acceptance_criteria": [
+        "describe.skip removed for M3-S6 and M3-S7",
+        "Post-toggle frame contains session-1 with empty samples and null latestValue in legend",
+        "Same pointer (x,y) on events-scale frame yields non-null HoverSelection; on tokens-scale frame (different yMax and possibly empty trace) yields null"
+      ],
+      "files_to_modify": [
+        "tests/acceptance/norbert-performance-monitor-v2/steps/milestone-3-metric-toggle.test.ts"
+      ],
+      "implementation_notes": "M3-S7 validates the hover contract across metric change: the pointer is identical, the frame is different, the selection changes from non-null to null because the trace under the pointer no longer exists (empty tokens history) or because the pointer's trace value falls outside the tokens yMax vertical scale. No view-reducer involved \u2014 this is a pure buildFrame + scopeHitTest composition.",
+      "depends_on": [
+        "05-02",
+        "02-04"
+      ],
+      "estimated_hours": 0.75,
+      "deliverables": [
+        "M3-S6 and M3-S7 activated and green"
+      ],
+      "quality_gates": [
+        "Both scenarios pass",
+        "Neither scenario references view-internal state (ensurePersistenceBuffer, onMetricChange)"
+      ]
+    },
+    {
+      "step_id": "06-01",
+      "title": "Milestone 4 \u2014 hover near a trace and nearest-of-overlapping",
+      "description": "Activate M4-S1 (pointer near session-1's trace returns HoverSelection for session-1 with correct value + age) and M4-S2 (two overlapping traces: nearest vertical trace wins).",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/milestone-4-hover-tooltip.feature",
+      "scenario_name": "Hover near a trace snaps to that session's nearest value",
+      "acceptance_criteria": [
+        "describe.skip removed for M4-S1 and M4-S2",
+        "Pointer 2 seconds ago at session-1's arrived rate of 12 returns HoverSelection(session-1, value\u224812, age\u22482000ms)",
+        "With two overlapping traces near the pointer, the trace with smallest vertical distance to the pointer wins; the other is not selected"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/domain/phosphor/scopeHitTest.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/steps/milestone-4-hover-tooltip.test.ts"
+      ],
+      "implementation_notes": "Refine scopeHitTest's nearest-selection logic: iterate traces, compute vertical distance for each at pointer.x, select min. Ties (exact-equal distance) should be deterministic \u2014 lowest session-index in palette order wins.",
+      "depends_on": [
+        "02-04"
+      ],
+      "estimated_hours": 1.0,
+      "deliverables": [
+        "Nearest-of-overlapping logic in scopeHitTest",
+        "M4-S1 and M4-S2 activated and green"
+      ],
+      "quality_gates": [
+        "Both scenarios pass",
+        "Tie-breaking is deterministic and documented"
+      ]
+    },
+    {
+      "step_id": "06-02",
+      "title": "Milestone 4 \u2014 hover value consistent with trace interpolation",
+      "description": "Activate M4-S3 (hover value equals arrived-history interpolation at pointer's time, matching trace value at same time position). Validates the hit-test/trace consistency invariant that also drives the property IC-S15.",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/milestone-4-hover-tooltip.feature",
+      "scenario_name": "Hover value comes from sampling the arrived history at the pointer's time",
+      "acceptance_criteria": [
+        "describe.skip removed for M4-S3",
+        "Pointer at a time between two arrived samples returns a HoverSelection.value that matches the trace value at the same time (within epsilon)"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/domain/phosphor/scopeHitTest.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/steps/milestone-4-hover-tooltip.test.ts"
+      ],
+      "implementation_notes": "scopeHitTest must reuse the same sampleAt that scopeProjection uses \u2014 ideally by calling into a shared helper. Do not reimplement sampling inside scopeHitTest; this creates drift and kills the invariant.",
+      "depends_on": [
+        "02-04",
+        "03-02"
+      ],
+      "estimated_hours": 0.5,
+      "deliverables": [
+        "Shared sampling helper used by both scopeProjection and scopeHitTest",
+        "M4-S3 activated and green"
+      ],
+      "quality_gates": [
+        "Scenario passes",
+        "A single exported sampleAt function is the sole source of sample-value truth"
+      ]
+    },
+    {
+      "step_id": "06-03",
+      "title": "Milestone 4 \u2014 snap-threshold and outside-scope boundaries",
+      "description": "Activate M4-S4 (pointer beyond HOVER_SNAP_DISTANCE_PX from nearest trace returns null) and M4-S5 (pointer outside the scope rectangle returns null).",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/milestone-4-hover-tooltip.feature",
+      "scenario_name": "Hover beyond the snap threshold produces no selection",
+      "acceptance_criteria": [
+        "describe.skip removed for M4-S4 and M4-S5",
+        "When vertical distance from pointer to nearest trace exceeds HOVER_SNAP_DISTANCE_PX=28, returns null",
+        "When pointer.x or pointer.y is outside [0, width] or [0, height], returns null"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/domain/phosphor/scopeHitTest.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/steps/milestone-4-hover-tooltip.test.ts"
+      ],
+      "implementation_notes": "Early-return on out-of-bounds before walking traces. Snap-threshold is a strict > comparison; at exactly 28 the pointer is still in-range per fixtures convention (verify fixture numbers).",
+      "depends_on": [
+        "02-04"
+      ],
+      "estimated_hours": 0.5,
+      "deliverables": [
+        "Threshold + bounds guards in scopeHitTest",
+        "M4-S4 and M4-S5 activated and green"
+      ],
+      "quality_gates": [
+        "Both scenarios pass",
+        "Bounds-check runs before per-trace iteration (correctness + cheap perf)"
+      ]
+    },
+    {
+      "step_id": "06-04",
+      "title": "Milestone 4 \u2014 no-sessions pointer returns null",
+      "description": "Activate M4-S6 (pointer inside scope area but no active sessions returns null). Empty-traces branch of scopeHitTest.",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/milestone-4-hover-tooltip.feature",
+      "scenario_name": "Hover with no active sessions produces no selection",
+      "acceptance_criteria": [
+        "describe.skip removed for M4-S6",
+        "scopeHitTest on a frame with empty traces returns null"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/domain/phosphor/scopeHitTest.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/steps/milestone-4-hover-tooltip.test.ts"
+      ],
+      "implementation_notes": "Trivial branch; add dedicated unit test to lock in behavior against future refactors.",
+      "depends_on": [
+        "02-04"
+      ],
+      "estimated_hours": 0.25,
+      "deliverables": [
+        "Empty-traces guard in scopeHitTest",
+        "M4-S6 activated and green"
+      ],
+      "quality_gates": [
+        "Scenario passes"
+      ]
+    },
+    {
+      "step_id": "06-05",
+      "title": "Milestone 4 \u2014 right-edge and left-edge age semantics",
+      "description": "Activate M4-S7 (pointer at right edge over a trace with a recent sample: age < 0.5s) and M4-S8 (pointer at left edge over a trace with full 60s history: age \u2248 60s). Exercises the timeToX inverse mapping accuracy.",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/milestone-4-hover-tooltip.feature",
+      "scenario_name": "Hover at the right edge reports an age near zero",
+      "acceptance_criteria": [
+        "describe.skip removed for M4-S7 and M4-S8",
+        "Pointer at x\u2248width with arrived sample at now returns ageMs < 500",
+        "Pointer at x\u22480 with arrived sample at now-60000 returns ageMs \u2248 60000 (within test epsilon)"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/domain/phosphor/scopeHitTest.ts",
+        "src/plugins/norbert-usage/domain/phosphor/scopeProjection.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/steps/milestone-4-hover-tooltip.test.ts"
+      ],
+      "implementation_notes": "scopeHitTest converts pointer.x \u2192 time via the inverse of timeToX; that helper must be exported from scopeProjection or duplicated identically. Prefer exporting xToTime alongside timeToX from scopeProjection.",
+      "depends_on": [
+        "02-04"
+      ],
+      "estimated_hours": 0.75,
+      "deliverables": [
+        "xToTime exported from scopeProjection",
+        "M4-S7 and M4-S8 activated and green"
+      ],
+      "quality_gates": [
+        "Both scenarios pass",
+        "timeToX and xToTime are mathematical inverses (round-trip unit test)"
+      ]
+    },
+    {
+      "step_id": "07-01",
+      "title": "Milestone 5 \u2014 adding and removing sessions reflected in next frame",
+      "description": "Activate M5-S1 (add a second session and it appears in the next frame with a legend entry) and M5-S2 (remove the middle session and the next frame excludes it from traces and legend). Exercises addSession / removeSession lifecycle integration with buildFrame.",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/milestone-5-session-lifecycle.feature",
+      "scenario_name": "Adding a session makes it appear on the scope in the next frame",
+      "acceptance_criteria": [
+        "describe.skip removed for M5-S1 and M5-S2",
+        "addSession(newId); next buildFrame includes a trace and legend entry for newId",
+        "removeSession(middleId); next buildFrame excludes middleId from traces and legend"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/adapters/multiSessionStore.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/steps/milestone-5-session-lifecycle.test.ts"
+      ],
+      "implementation_notes": "removeSession must also clear per-metric rate buffers and pulse log for that session (validated by M5-S6). Mark this step as satisfying part of that contract.",
+      "depends_on": [
+        "02-01"
+      ],
+      "estimated_hours": 0.75,
+      "deliverables": [
+        "addSession / removeSession implementations (or verification they already work)",
+        "M5-S1 and M5-S2 activated and green"
+      ],
+      "quality_gates": [
+        "Both scenarios pass"
+      ]
+    },
+    {
+      "step_id": "07-02",
+      "title": "Milestone 5 \u2014 legend reflects latest arrived value",
+      "description": "Activate M5-S3 (legend per-session latestValue equals the most recent arrived rate sample for the current metric).",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/milestone-5-session-lifecycle.feature",
+      "scenario_name": "The legend reflects the latest arrived value for each session",
+      "acceptance_criteria": [
+        "describe.skip removed for M5-S3",
+        "Legend for session-1 shows 7 and session-2 shows 22 when those are their most recent arrived events-per-second values"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/domain/phosphor/scopeProjection.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/steps/milestone-5-session-lifecycle.test.ts"
+      ],
+      "implementation_notes": "LegendEntry.latestValue = last arrived rate sample within the window for the current metric, or null if none. Empty-history case already covered by 03-03.",
+      "depends_on": [
+        "02-01",
+        "03-03"
+      ],
+      "estimated_hours": 0.5,
+      "deliverables": [
+        "LegendEntry.latestValue semantics locked",
+        "M5-S3 activated and green"
+      ],
+      "quality_gates": [
+        "Scenario passes",
+        "latestValue is always the most-recent arrived sample (never an interpolated/EWMA value)"
+      ]
+    },
+    {
+      "step_id": "07-03",
+      "title": "Milestone 5 \u2014 ambient 60s window trim and pulse retention",
+      "description": "Activate M5-S4 (60s window trim for rate samples at 30/45/70/90s-ago history) and M5-S5 (6-second-old pulse is absent from store).",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/milestone-5-session-lifecycle.feature",
+      "scenario_name": "Ambient 60-second window excludes samples older than the window",
+      "acceptance_criteria": [
+        "describe.skip removed for M5-S4 and M5-S5",
+        "Trace projected for samples at 30/45/70/90s-ago contains only the 30s and 45s samples",
+        "getPulses returns no 6-second-old pulse and includes any \u22645-second-old pulses"
+      ],
+      "files_to_modify": [
+        "tests/acceptance/norbert-performance-monitor-v2/steps/milestone-5-session-lifecycle.test.ts"
+      ],
+      "implementation_notes": "No production changes expected \u2014 03-04 delivered the 60s window trim and 04-04 delivered the pulse retention trim. This step activates the scenarios and asserts through the already-in-place trims.",
+      "depends_on": [
+        "03-04",
+        "04-04"
+      ],
+      "estimated_hours": 0.5,
+      "deliverables": [
+        "M5-S4 and M5-S5 activated and green"
+      ],
+      "quality_gates": [
+        "Both scenarios pass via existing trim logic (no new prod code needed)"
+      ]
+    },
+    {
+      "step_id": "07-04",
+      "title": "Milestone 5 \u2014 removing a session clears its buffers and pulses",
+      "description": "Activate M5-S6 (removeSession removes rate history and pulse log for that session; subsequent frames exclude it). Locks in the removal-contract.",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/milestone-5-session-lifecycle.feature",
+      "scenario_name": "Removing a session removes its associated rate buffers and pulses",
+      "acceptance_criteria": [
+        "describe.skip removed for M5-S6",
+        "After removeSession('session-1'): getRateHistory('session-1', metric) returns empty for all metrics, getPulses('session-1') returns empty, session-1 absent from all subsequent frames"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/adapters/multiSessionStore.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/steps/milestone-5-session-lifecycle.test.ts"
+      ],
+      "implementation_notes": "removeSession deletes the entries from the per-(sessionId, metric) buffer map AND the per-session pulse log AND the session-ids list. Any lingering reference means stale data leaks into future frames. Add a focused unit test on multiSessionStore.",
+      "depends_on": [
+        "07-01"
+      ],
+      "estimated_hours": 0.75,
+      "deliverables": [
+        "removeSession buffer+pulse cleanup",
+        "M5-S6 activated and green"
+      ],
+      "quality_gates": [
+        "Scenario passes",
+        "No getter returns data for a removed session"
+      ]
+    },
+    {
+      "step_id": "08-01",
+      "title": "Integration checkpoint \u2014 events/s derivation (windowed counter)",
+      "description": "Activate IC-S1 (15 events in a 5s tick derives events-per-second sample of 3 at tick boundary). Implements deriveEventsRate in rateDerivation.ts and wires it into hookProcessor.",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/integration-checkpoints.feature",
+      "scenario_name": "A 5-second tick of hook arrivals derives an events-per-second sample",
+      "acceptance_criteria": [
+        "describe.skip removed for IC-S1",
+        "deriveEventsRate(15, 5000, tickBoundaryT) returns { t: tickBoundaryT, v: 3 }",
+        "Unit tests for count=0 \u2192 v=0, count non-multiple-of-5 (fractional rate), and boundary cases"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/domain/phosphor/rateDerivation.ts",
+        "src/plugins/norbert-usage/hookProcessor.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/steps/integration-checkpoints.test.ts"
+      ],
+      "implementation_notes": "Pure signature per DISTILL \u00a73: deriveEventsRate(count: number, windowMs: number, tickBoundaryT: number): RateSample. Formula: v = count / (windowMs/1000). hookProcessor re-exports it or imports it directly.",
+      "depends_on": [
+        "02-01",
+        "01-04"
+      ],
+      "estimated_hours": 0.75,
+      "deliverables": [
+        "New domain/phosphor/rateDerivation.ts (pure)",
+        "hookProcessor wiring",
+        "IC-S1 activated and green"
+      ],
+      "quality_gates": [
+        "Scenario passes",
+        "rateDerivation.ts has zero adapter/view/react imports"
+      ]
+    },
+    {
+      "step_id": "08-02",
+      "title": "Integration checkpoint \u2014 tokens/s derivation (delta-over-duration)",
+      "description": "Activate IC-S2 (OTel api-request event with 500 tokens over 2s duration derives tokens-per-second sample of 250). Implements deriveTokensRate.",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/integration-checkpoints.feature",
+      "scenario_name": "An OTel api-request event derives a tokens-per-second sample",
+      "acceptance_criteria": [
+        "describe.skip removed for IC-S2",
+        "deriveTokensRate(500, 2000, tickBoundaryT) returns { t: tickBoundaryT, v: 250 }",
+        "Unit tests for zero-duration (defined behavior: returns 0 or throws \u2014 lock the fixture expectation), total=0, very-large totals"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/domain/phosphor/rateDerivation.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/steps/integration-checkpoints.test.ts"
+      ],
+      "implementation_notes": "Signature differs from event/toolcall rates: this one takes totalTokens and duration directly (not a windowed counter). Formula: v = totalTokens / (durationMs/1000). Zero-duration branch must not NaN \u2014 return 0.",
+      "depends_on": [
+        "08-01"
+      ],
+      "estimated_hours": 0.5,
+      "deliverables": [
+        "deriveTokensRate in rateDerivation.ts",
+        "IC-S2 activated and green"
+      ],
+      "quality_gates": [
+        "Scenario passes",
+        "Zero-duration never produces NaN or Infinity"
+      ]
+    },
+    {
+      "step_id": "08-03",
+      "title": "Integration checkpoint \u2014 tool-calls/s derivation (windowed counter)",
+      "description": "Activate IC-S3 (10 tool-call events in a 5s tick derives tool-calls-per-second sample of 2). Implements deriveToolCallsRate.",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/integration-checkpoints.feature",
+      "scenario_name": "Tool-call events within a 5-second tick derive a tool-calls-per-second sample",
+      "acceptance_criteria": [
+        "describe.skip removed for IC-S3",
+        "deriveToolCallsRate(10, 5000, tickBoundaryT) returns { t: tickBoundaryT, v: 2 }"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/domain/phosphor/rateDerivation.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/steps/integration-checkpoints.test.ts"
+      ],
+      "implementation_notes": "Same signature shape as deriveEventsRate. Consider factoring a shared windowedRate(count, windowMs, t) helper but export the typed wrappers for clarity at the seam.",
+      "depends_on": [
+        "08-01"
+      ],
+      "estimated_hours": 0.25,
+      "deliverables": [
+        "deriveToolCallsRate in rateDerivation.ts",
+        "IC-S3 activated and green"
+      ],
+      "quality_gates": [
+        "Scenario passes"
+      ]
+    },
+    {
+      "step_id": "08-04",
+      "title": "Integration checkpoint \u2014 pulse emitter and kind strength",
+      "description": "Activate IC-S4 (tool-use hook event emits pulse at event timestamp with kind='tool') and IC-S5 (tool-use vs lifecycle strength ordering; tool > lifecycle).",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/integration-checkpoints.feature",
+      "scenario_name": "A tool-use hook event emits a pulse at the event's timestamp",
+      "acceptance_criteria": [
+        "describe.skip removed for IC-S4 and IC-S5",
+        "emitPulse('tool', t) returns { t, kind: 'tool', strength: 1.0 }",
+        "emitPulse('lifecycle', t).strength < emitPulse('tool', t).strength"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/hookProcessor.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/steps/integration-checkpoints.test.ts"
+      ],
+      "implementation_notes": "emitPulse already implemented in 04-02; this step exercises it from the integration-checkpoint seam. Ensure hookProcessor re-exports the function so tests can import it directly without reaching into phosphor config.",
+      "depends_on": [
+        "04-02"
+      ],
+      "estimated_hours": 0.5,
+      "deliverables": [
+        "IC-S4 and IC-S5 activated and green"
+      ],
+      "quality_gates": [
+        "Both scenarios pass"
+      ]
+    },
+    {
+      "step_id": "08-05",
+      "title": "Integration checkpoint \u2014 store order preservation (rate samples + pulses)",
+      "description": "Activate IC-S6 (rate samples appended in order read back oldest-to-newest) and IC-S7 (pulses appended in order read back in arrival order).",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/integration-checkpoints.feature",
+      "scenario_name": "Appending rate samples preserves temporal order on read",
+      "acceptance_criteria": [
+        "describe.skip removed for IC-S6 and IC-S7",
+        "getRateHistory returns samples in oldest-to-newest timestamp order",
+        "getPulses returns pulses in arrival order"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/adapters/multiSessionStore.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/steps/integration-checkpoints.test.ts"
+      ],
+      "implementation_notes": "If the underlying buffer is an append-ordered ring (from timeSeriesSampler), order is preserved structurally. Verify and lock in with the test.",
+      "depends_on": [
+        "02-01",
+        "02-02"
+      ],
+      "estimated_hours": 0.5,
+      "deliverables": [
+        "IC-S6 and IC-S7 activated and green"
+      ],
+      "quality_gates": [
+        "Both scenarios pass"
+      ]
+    },
+    {
+      "step_id": "08-06",
+      "title": "Integration checkpoint \u2014 ghost-session query returns empty",
+      "description": "Activate IC-S8 (querying a session never added returns empty rate history and pulses).",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/integration-checkpoints.feature",
+      "scenario_name": "Querying a non-existent session returns empty history and pulses",
+      "acceptance_criteria": [
+        "describe.skip removed for IC-S8",
+        "getRateHistory('session-ghost', 'events') returns an empty readonly array",
+        "getPulses('session-ghost') returns an empty readonly array"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/adapters/multiSessionStore.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/steps/integration-checkpoints.test.ts"
+      ],
+      "implementation_notes": "Return empty (not throw, not undefined). Maps-with-default-empty pattern.",
+      "depends_on": [
+        "02-01"
+      ],
+      "estimated_hours": 0.25,
+      "deliverables": [
+        "IC-S8 activated and green"
+      ],
+      "quality_gates": [
+        "Scenario passes",
+        "Reads never throw for unknown session ids"
+      ]
+    },
+    {
+      "step_id": "08-07",
+      "title": "Integration checkpoint \u2014 subscriber notification contract (appends)",
+      "description": "Activate IC-S9 (subscriber notified after appendRateSample) and IC-S10 (subscriber notified after appendPulse). Both scenarios exercise the same append-then-notify half of the subscriber contract on the same module; the lifecycle half (addSession / removeSession) is covered in the next step (08-08) per the ADR-049 contract.",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/integration-checkpoints.feature",
+      "scenario_name": "Subscribers are notified after appendRateSample",
+      "acceptance_criteria": [
+        "describe.skip removed for IC-S9 and IC-S10",
+        "Each notification increments the counter exactly once",
+        "Both scenarios green"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/adapters/multiSessionStore.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/steps/integration-checkpoints.test.ts"
+      ],
+      "implementation_notes": "Pub/sub: subscribe(cb) returns an unsubscribe function; appendRateSample and appendPulse each notify synchronously after the mutation. Exactly-once per call. Lifecycle notifications (addSession / removeSession) land in 08-08 against the new PA-finding-1 scenario.",
+      "depends_on": [
+        "01-02",
+        "02-01",
+        "02-02"
+      ],
+      "estimated_hours": 0.75,
+      "deliverables": [
+        "Subscriber notification wiring on appendRateSample and appendPulse",
+        "IC-S9 and IC-S10 activated and green"
+      ],
+      "quality_gates": [
+        "Both scenarios pass",
+        "Subscriber contract for appends matches ADR-049"
+      ]
+    },
+    {
+      "step_id": "08-08",
+      "title": "Integration checkpoint \u2014 subscriber notification contract (session lifecycle)",
+      "description": "Author and activate the new scenario from DISTILL PA finding 1: subscriber is notified after addSession and removeSession per the contract locked in ADR-049 (Contract A: lifecycle notifies via the same pub/sub). Extends the subscriber wiring from 08-07 to cover the lifecycle half of the contract.",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/integration-checkpoints.feature",
+      "scenario_name": "Subscribers are notified after addSession and removeSession",
+      "acceptance_criteria": [
+        "New scenario 'Subscribers are notified after addSession and removeSession' added to integration-checkpoints.feature and activated green \u2014 without a counter reset between setup and assertion \u2014 per the contract locked in ADR-049",
+        "addSession and removeSession each notify synchronously after the mutation, exactly-once per call",
+        "Scenario green"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/adapters/multiSessionStore.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/integration-checkpoints.feature",
+        "tests/acceptance/norbert-performance-monitor-v2/steps/integration-checkpoints.test.ts"
+      ],
+      "implementation_notes": "Adds lifecycle notifications onto the subscriber pub/sub already wired in 08-07. Contract A per ADR-049 resolution in 01-02: addSession / removeSession notify synchronously after the mutation. Depends on 07-01 because the PA-finding-1 assertion requires the removeSession semantics (buffer + pulse log cleanup) already landed in milestone 7.",
+      "depends_on": [
+        "08-07",
+        "07-01"
+      ],
+      "estimated_hours": 0.5,
+      "deliverables": [
+        "Subscriber notification wiring on addSession and removeSession",
+        "PA-finding-1 lifecycle scenario authored and green"
+      ],
+      "quality_gates": [
+        "Scenario passes",
+        "Lifecycle subscriber contract matches ADR-049"
+      ]
+    },
+    {
+      "step_id": "08-09",
+      "title": "Integration checkpoint \u2014 honest-signal properties (no spike, no zero-fill)",
+      "description": "Activate IC-S11 (frame values never exceed bracketing arrived samples \u2014 no sub-interval spike) and IC-S12 (frame values never zero-fill between arrivals when last arrived value is non-zero). Rewrite their single-example bodies to use fast-check generators with `fc.assert(fc.property(...))` per DISTILL PO F-3 / PA finding 2.",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/integration-checkpoints.feature",
+      "scenario_name": "Frame values never invent sub-interval spikes beyond bracketing arrived values",
+      "acceptance_criteria": [
+        "describe.skip removed for IC-S11 and IC-S12",
+        "Test body uses fc.assert(fc.property(...)) with generators for (sessionId, metric, arrived-samples, now)",
+        "Property bodies assert the bracketing and zero-fill invariants hold for every generated sample"
+      ],
+      "files_to_modify": [
+        "tests/acceptance/norbert-performance-monitor-v2/steps/integration-checkpoints.test.ts"
+      ],
+      "implementation_notes": "Generators: fc.array(fc.record({ t: fc.integer(), v: fc.float({min:0, noNaN: true}) }), {minLength:1, maxLength:12}). Use fc.constant for metric id (restrict to one metric per property to simplify). Seed fc explicitly for reproducibility.",
+      "depends_on": [
+        "03-02",
+        "01-05"
+      ],
+      "estimated_hours": 1.25,
+      "deliverables": [
+        "Property-based IC-S11 and IC-S12 bodies",
+        "Both activated and green"
+      ],
+      "quality_gates": [
+        "fc.assert runs with \u2265100 samples per property",
+        "No flakiness across consecutive runs (seeded)"
+      ]
+    },
+    {
+      "step_id": "08-10",
+      "title": "Integration checkpoint \u2014 store order and window-trim idempotence properties",
+      "description": "Activate IC-S13 (append-then-read preserves timestamp order across any finite sequence) and IC-S14 (window trim is idempotent across repeat reads). Rewrite with fast-check generators.",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/integration-checkpoints.feature",
+      "scenario_name": "Rate-sample append then read preserves timestamp order",
+      "acceptance_criteria": [
+        "describe.skip removed for IC-S13 and IC-S14",
+        "Both properties use fc.assert(fc.property(...))",
+        "Order property: for any finite in-order append sequence, read returns same order",
+        "Idempotence property: two consecutive getRateHistory calls return arrays with identical contents"
+      ],
+      "files_to_modify": [
+        "tests/acceptance/norbert-performance-monitor-v2/steps/integration-checkpoints.test.ts"
+      ],
+      "implementation_notes": "Generators similar to 08-09. Idempotence is a round-trip equality assertion; guard against the store mutating on read (it must not).",
+      "depends_on": [
+        "03-04",
+        "08-05",
+        "01-05"
+      ],
+      "estimated_hours": 1.0,
+      "deliverables": [
+        "Property-based IC-S13 and IC-S14 bodies",
+        "Both activated and green"
+      ],
+      "quality_gates": [
+        "Properties pass with \u2265100 samples each",
+        "Idempotence holds across any interleaving of reads"
+      ]
+    },
+    {
+      "step_id": "08-11",
+      "title": "Integration checkpoint \u2014 hit-test consistency and pulse-decay monotonicity properties",
+      "description": "Activate IC-S15 (hit-test consistency: selection.value matches trace value at selection.time within epsilon) and IC-S16 (pulse decay factor monotonically decreases with age; pulse beyond lifetime absent from frame). Rewrite with fast-check.",
+      "test_file": "tests/acceptance/norbert-performance-monitor-v2/integration-checkpoints.feature",
+      "scenario_name": "Hit-test consistency between trace value and returned value",
+      "acceptance_criteria": [
+        "describe.skip removed for IC-S15 and IC-S16",
+        "Hit-test consistency: for any frame and any pointer position inside the scope area, if scopeHitTest returns non-null then the selected trace's sampled value at selection.time equals selection.value within a small epsilon",
+        "Decay monotonicity: for any pulse in its lifetime, decayFactor at later time \u2264 decayFactor at earlier time; pulse at age > lifetime absent from frame.pulses"
+      ],
+      "files_to_modify": [
+        "tests/acceptance/norbert-performance-monitor-v2/steps/integration-checkpoints.test.ts"
+      ],
+      "implementation_notes": "Hit-test property: generate frame via fc (multiple traces, random samples), generate pointer, check consistency only when the returned hover is non-null (null case is a 'no obligation' path). Decay property: generate a single pulse age + a pair of later times within lifetime; assert monotonic non-increasing.",
+      "depends_on": [
+        "02-04",
+        "04-01",
+        "01-05"
+      ],
+      "estimated_hours": 1.25,
+      "deliverables": [
+        "Property-based IC-S15 and IC-S16 bodies",
+        "Both activated and green"
+      ],
+      "quality_gates": [
+        "Properties pass with \u2265100 samples each",
+        "Shared sampleAt helper is the only value-sampling path (enforces hit-test/trace consistency by construction)"
+      ]
+    },
+    {
+      "step_id": "09-01",
+      "title": "Phosphor view components (shell, controls, legend, hover tooltip)",
+      "description": "Author the pure-presentation React components: PhosphorScopeView (shell owning selectedMetric state, subscribing to multiSessionStore), PhosphorControls (Events/Tokens/Tool-calls segmented control; Events default from DEFAULT_METRIC), PhosphorLegend (color dot + session + latest value), PhosphorHoverTooltip (session \u00b7 value \u00b7 age, edge-flipping). Not exercised by the acceptance suite; exists so Phil can visually validate the build.",
+      "test_file": null,
+      "scenario_name": null,
+      "acceptance_criteria": [
+        "Four new files under src/plugins/norbert-usage/views/phosphor/ exist and type-check",
+        "PhosphorScopeView subscribes to multiSessionStore and calls buildFrame on each notification",
+        "PhosphorControls binds to DEFAULT_METRIC at first render",
+        "PhosphorLegend consumes frame.legend read-only; no rendering side effects",
+        "PhosphorHoverTooltip is a prop-in functional component"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/views/phosphor/PhosphorScopeView.tsx",
+        "src/plugins/norbert-usage/views/phosphor/PhosphorControls.tsx",
+        "src/plugins/norbert-usage/views/phosphor/PhosphorLegend.tsx",
+        "src/plugins/norbert-usage/views/phosphor/PhosphorHoverTooltip.tsx"
+      ],
+      "implementation_notes": "Per DESIGN \u00a72 C4 Component diagram. PhosphorScopeView renders Controls + CanvasHost + HoverTooltip + Legend. Hover tooltip state lives in PhosphorScopeView (one useState<HoverSelection | null>). Metric toggle clears hover state \u2014 this is the view-side half of M3-S7's invariant (paired with the pure-seam assertion in 05-04).",
+      "depends_on": [
+        "02-03",
+        "05-01"
+      ],
+      "estimated_hours": 2.5,
+      "deliverables": [
+        "PhosphorScopeView, PhosphorControls, PhosphorLegend, PhosphorHoverTooltip",
+        "Component-level unit tests covering metric-toggle-clears-hover-state"
+      ],
+      "quality_gates": [
+        "Components type-check",
+        "Hover state clears on selectedMetric change (unit test)"
+      ]
+    },
+    {
+      "step_id": "09-02",
+      "title": "PhosphorCanvasHost + ensurePersistenceBuffer invariant + registration swap",
+      "description": "Author PhosphorCanvasHost \u2014 the sole effect component \u2014 with canvas ref, offscreen persistence-buffer ref, rAF loop (paused on visibilitychange), ResizeObserver for DPR scaling, pointer events wired to scopeHitTest. Implement `ensurePersistenceBuffer(w, h, metric, dpr)` with the invariant: discards and recreates the offscreen buffer whenever any of (w, h, metric, dpr) changes. Add the view-internal unit test required by DISTILL follow-up 3 and DESIGN Q3 invariant. Then swap `src/plugins/norbert-usage/index.ts` to register PhosphorScopeView for the `performance-monitor` view id (string unchanged).",
+      "test_file": null,
+      "scenario_name": null,
+      "acceptance_criteria": [
+        "PhosphorCanvasHost.tsx exists",
+        "ensurePersistenceBuffer unit test asserts buffer identity changes when any of (w, h, metric, dpr) changes and remains stable otherwise",
+        "rAF loop pauses when document.visibilityState === 'hidden'",
+        "index.ts renders PhosphorScopeView for performance-monitor view id; floatMetric / primaryView / minWidth / minHeight unchanged"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/views/phosphor/PhosphorCanvasHost.tsx",
+        "src/plugins/norbert-usage/index.ts"
+      ],
+      "implementation_notes": "Per DESIGN Q3 and DISTILL \u00a72.4. Canvas width/height derived from ResizeObserver; persistenceBuffer is a createElement('canvas') attached only to the DPR-scaled context. ensurePersistenceBuffer: compare a packed key (e.g. `${w}x${h}:${metric}:${dpr}`) against lastKeyRef; if different, replace the ref and return the new buffer. Unit test uses a jsdom canvas stub or a mock of the CanvasRenderingContext2D \u2014 jest-canvas-mock was declined at DESIGN time (wave-decisions Resolved Items); a handcrafted minimal stub suffices for the identity test.",
+      "depends_on": [
+        "09-01"
+      ],
+      "estimated_hours": 3.0,
+      "deliverables": [
+        "PhosphorCanvasHost.tsx",
+        "ensurePersistenceBuffer unit test",
+        "index.ts registration swap",
+        "Manual visual validation against docs/design/performance-monitor-phosphor-prototype.html (Phil's eye)"
+      ],
+      "quality_gates": [
+        "Plugin builds and runs; PM view visibly renders per prototype",
+        "ensurePersistenceBuffer unit test green",
+        "dependency-cruiser still clean (domain/phosphor is pure)"
+      ]
+    },
+    {
+      "step_id": "10-01",
+      "title": "Delete v1 PM view components and v1 PM-only domain modules",
+      "description": "Delete v1 PM view components and domain modules that v2 replaces. Grep precondition: for each file, verify that after step 09-02's registration swap there are no remaining in-tree importers except each other. Flag any cross-reference to a non-PM view (e.g. GaugeClusterView importing categoryConfig) before deleting the depended-upon module.",
+      "test_file": null,
+      "scenario_name": null,
+      "acceptance_criteria": [
+        "Grep precondition run and documented for each file below",
+        "Deleted: views/PerformanceMonitorView.tsx, views/PMSidebar.tsx, views/PMChart.tsx, views/PMDetailPane.tsx, views/PMStatsGrid.tsx, views/PMSessionTable.tsx, views/PMTooltip.tsx",
+        "Deleted: domain/categoryConfig.ts, domain/heartbeat.ts, domain/multiWindowSampler.ts (after grep shows no remaining importers)",
+        "domain/crossSessionAggregator.ts: deleted only if grep shows zero importers; else left in place with a 'non-PM usage only' JSDoc",
+        "Build still green; npm test still green"
+      ],
+      "files_to_modify": [
+        "src/plugins/norbert-usage/views/PerformanceMonitorView.tsx",
+        "src/plugins/norbert-usage/views/PMSidebar.tsx",
+        "src/plugins/norbert-usage/views/PMChart.tsx",
+        "src/plugins/norbert-usage/views/PMDetailPane.tsx",
+        "src/plugins/norbert-usage/views/PMStatsGrid.tsx",
+        "src/plugins/norbert-usage/views/PMSessionTable.tsx",
+        "src/plugins/norbert-usage/views/PMTooltip.tsx",
+        "src/plugins/norbert-usage/domain/categoryConfig.ts",
+        "src/plugins/norbert-usage/domain/heartbeat.ts",
+        "src/plugins/norbert-usage/domain/multiWindowSampler.ts",
+        "src/plugins/norbert-usage/domain/crossSessionAggregator.ts"
+      ],
+      "implementation_notes": "Use Grep (rg) for each deletion candidate: `rg \"from.*categoryConfig\"`, `rg \"from.*heartbeat\"`, etc. If any hit is outside the deletion set, either extract the referenced API into a surviving home (e.g. a tiny `domain/urgencyThresholds.ts`-adjacent file) or postpone the deletion and flag it in upstream-issues.md. v1 PM view component deletions are safe once 09-02 has swapped the registration. Also strip any dead imports from multiSessionStore.ts and hookProcessor.ts that referenced v1 category/heartbeat code.",
+      "depends_on": [
+        "09-02"
+      ],
+      "estimated_hours": 2.0,
+      "deliverables": [
+        "Deleted files list confirmed via git status",
+        "Grep log captured in deliver/upstream-issues.md if any external importers surface",
+        "Build + tests still green"
+      ],
+      "quality_gates": [
+        "Full test suite green after deletions",
+        "dependency-cruiser still clean",
+        "No dead imports remain in multiSessionStore.ts or hookProcessor.ts"
+      ]
+    },
+    {
+      "step_id": "10-02",
+      "title": "Delete v1 acceptance test files + final mutation gate",
+      "description": "Delete v1 acceptance test files that describe v1 PM behavior (they will regress once v1 view code is removed): category-configuration.test.ts, chart-renderer.test.ts, hover-tooltip.test.ts, sidebar-and-detail-layout.test.ts, per-session-category-buffers.test.ts (all directly under tests/acceptance/norbert-performance-monitor-v2/, NOT under steps/). Then run Stryker mutation testing per \u00a75 of DISTILL handoff; confirm thresholds (\u226420% for domain/phosphor and hookProcessor helpers, \u226430% for multiSessionStore rate/pulse pathways).",
+      "test_file": null,
+      "scenario_name": null,
+      "acceptance_criteria": [
+        "Five v1 test files deleted",
+        "Full acceptance suite green after deletions (56 scenarios pass; 1 new M2 scenario; 1 new IC scenario; total 58 if the two new ones both landed)",
+        "Stryker mutation report shows \u226420% surviving mutants on domain/phosphor/**/*.ts",
+        "Stryker mutation report shows \u226420% surviving mutants on the new hookProcessor helpers (deriveEvents/deriveTokens/deriveToolCalls/emitPulse)",
+        "Stryker mutation report shows \u226430% surviving mutants on the new multiSessionStore rate/pulse pathways"
+      ],
+      "files_to_modify": [
+        "tests/acceptance/norbert-performance-monitor-v2/category-configuration.test.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/chart-renderer.test.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/hover-tooltip.test.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/sidebar-and-detail-layout.test.ts",
+        "tests/acceptance/norbert-performance-monitor-v2/per-session-category-buffers.test.ts"
+      ],
+      "implementation_notes": "These five files are v1-shaped; they regress as soon as v1 code is gone (10-01). Delete them atomically with the v1 code removal \u2014 or in this follow-up step if staging the commits is cleaner. Then run `npx stryker run` scoped to the files in DISTILL handoff \u00a75. Capture the mutation report under deliver/mutation/.",
+      "depends_on": [
+        "10-01"
+      ],
+      "estimated_hours": 2.5,
+      "deliverables": [
+        "Five v1 test files deleted",
+        "Full suite green",
+        "Stryker report under deliver/mutation/mutation-report.md with thresholds met"
+      ],
+      "quality_gates": [
+        "Mutation thresholds met per \u00a75",
+        "All 58 acceptance scenarios green",
+        "Phil visual validation against prototype completed"
+      ]
+    }
+  ],
+  "validation": {
+    "status": "approved",
+    "architect_notes": "Roadmap structure: 46 steps across 10 milestones. Each step linked to exactly one DISTILL-inventoried scenario (or zero for infra/view/cleanup steps). A handful of steps pair two scenarios that share a module contract (per guidance allowance, never more than 2). All walking-skeleton scenarios activate after the infrastructure block; pure-domain modules land bottom-up (phosphorMetricConfig + scopeProjection + ewma in WS-1, pulseTiming in WS-2, no-new-module WS-3, scopeHitTest in WS-4, rateDerivation in IC-S1). Adapter/store lands in WS-1 and is progressively extended (pulse log in WS-2, removal semantics in 07-04, append subscriber contract in 08-07, lifecycle subscriber contract in 08-08). Views + registration swap come after the pure seam is green. Deletions are last and gated by a grep precondition per file. Two new scenarios authored (one in M2 for DISTILL PA finding 3, one in IC for PA finding 1) in their own activation steps (04-02 and 08-08). No cycles \u2014 dependency graph flows infra \u2192 WS \u2192 milestones \u2192 views \u2192 cleanup. Every step has files_to_modify (no validation-only steps). Zero steps populate execution-log.json (crafter subagents handle that via DES CLI). No files under v1-archive/ touched.",
+    "step_count": 46,
+    "step_id_range": "01-01..10-02",
+    "risks_flagged": [
+      "Step 10-01 hinges on grep preconditions; if a non-PM view imports categoryConfig or heartbeat, the deletion must be postponed and logged in deliver/upstream-issues.md. Not a roadmap defect but a DELIVER-time contingency.",
+      "Step 09-02's visual validation is subjective (Phil's eye). This is by design per DISTILL Definition of Done \u2014 stakeholder validation is Phil + green suite."
+    ],
+    "review_cycle_summary": "Rev 1: MAJOR D4 granularity defect (08-07 bundled 3 scenarios) fixed by splitting into 08-07 (IC-S9+IC-S10) + new 08-08 (PA-finding-1 lifecycle); old 08-08..08-10 renumbered to 08-09..08-11. Metadata step_count corrected 44->46, milestone-08 step_count 9->11. All reviewer dimensions pass. Automated quality gate: PASS."
   },
   "phases": [
     {
       "id": "01",
-      "name": "Foundation",
+      "name": "Infrastructure",
       "steps": [
         {
           "id": "01-01",
-          "name": "Domain types and multi-session store",
-          "description": "Add new algebraic types (AggregateMetrics, SessionSummary, TimeWindowConfig, PMViewMode, CompactionEstimate, AgentMetrics, SessionDetailData) to types.ts. Create multiSessionStore adapter to track SessionMetrics for all active sessions. Create sessionDiscovery adapter to poll sessions table.",
+          "name": "Author ADR-048 \u2014 Phosphor Scope View architecture",
           "criteria": [
-            "Empty aggregate yields zero totals and empty session list",
-            "Single session aggregate equals that session's metrics",
-            "Multi-session store tracks add/remove of sessions independently"
-          ],
-          "time_estimate": "4h",
-          "dependencies": [],
-          "implementation_scope": {
-            "files_to_modify": [
-              "src/plugins/norbert-usage/domain/types.ts"
-            ],
-            "files_to_create": [
-              "src/plugins/norbert-usage/adapters/multiSessionStore.ts",
-              "src/plugins/norbert-usage/adapters/sessionDiscovery.ts"
-            ],
-            "tests": [
-              "tests/acceptance/norbert-performance-monitor/cross-session-aggregation.test.ts#Empty aggregate when no sessions are active",
-              "tests/acceptance/norbert-performance-monitor/cross-session-aggregation.test.ts#Single session aggregate equals that session's metrics"
-            ]
-          }
+            "docs/adrs/ADR-048-pm-v2-phosphor-scope-view-architecture.md exists",
+            "Document captures Context, Decision, Alternatives Considered (3+), Consequences, and Supersedes/Amends references to ADR-007, ADR-028, ADR-010",
+            "Status header reads Accepted with 2026-04-17 date"
+          ]
         },
         {
           "id": "01-02",
-          "name": "View registration and backward compatibility",
-          "description": "Register Performance Monitor as a new mode view alongside Oscilloscope and Dashboard. Wire multi-session store initialization in plugin onLoad. Verify existing oscilloscope data pipeline unchanged.",
+          "name": "Author ADR-049 \u2014 Per-session rate buffers and pulse log",
           "criteria": [
-            "Performance Monitor registered as a mode view in Usage tab",
-            "Existing oscilloscope buffer operations produce unchanged results",
-            "Existing view registrations preserved, floating panels unbroken",
-            "Shared time-series buffer identical when read from PM or oscilloscope"
-          ],
-          "time_estimate": "3h",
-          "dependencies": ["01-01"],
-          "implementation_scope": {
-            "files_to_modify": [
-              "src/plugins/norbert-usage/index.ts",
-              "src/plugins/norbert-usage/hookProcessor.ts"
-            ],
-            "files_to_create": [
-              "src/plugins/norbert-usage/views/PerformanceMonitorView.tsx"
-            ],
-            "tests": [
-              "tests/acceptance/norbert-performance-monitor/backward-compatibility.test.ts#Existing time-series buffer operations produce unchanged results",
-              "tests/acceptance/norbert-performance-monitor/backward-compatibility.test.ts#Oscilloscope waveform data is identical when accessed from PM context",
-              "tests/acceptance/norbert-performance-monitor/backward-compatibility.test.ts#Token rate from shared buffer matches between oscilloscope and PM",
-              "tests/acceptance/norbert-performance-monitor/backward-compatibility.test.ts#Data pipeline remains valid across mode switches"
-            ]
-          }
+            "docs/adrs/ADR-049-pm-v2-rate-buffers-and-pulse-log.md exists",
+            "Documents the MetricId = events|tokens|toolcalls enumeration, RateSample/Pulse shapes, 60s rate retention (idempotent window trim), 5s pulse retention",
+            "Declares the subscriber-notification contract for addSession / removeSession (Contract A recommended unless evidence shows otherwise); 08-08 asserts the chosen contract in an acceptance scenario",
+            "3+ alternatives with rejection rationale"
+          ]
+        },
+        {
+          "id": "01-03",
+          "name": "Author ADR-050 \u2014 Single fixed 60s time window",
+          "criteria": [
+            "docs/adrs/ADR-050-pm-v2-single-fixed-time-window.md exists",
+            "Captures 60s window, 5s rate-tick cadence, and the delegation of historical analysis to future history views",
+            "3+ alternatives with rejection rationale"
+          ]
+        },
+        {
+          "id": "01-04",
+          "name": "Add dependency-cruiser dev-dep + phosphor-domain purity rule",
+          "criteria": [
+            "dependency-cruiser appears in package.json devDependencies",
+            ".dependency-cruiser.cjs (or equivalent) declares the `no-effects-in-phosphor-domain` rule at severity:error",
+            "Running `npx depcruise src` currently passes (nothing in domain/phosphor yet, so trivially green)",
+            "npm script `lint:boundaries` added to package.json"
+          ]
+        },
+        {
+          "id": "01-05",
+          "name": "Add fast-check dev-dep for property-shaped acceptance tests",
+          "criteria": [
+            "fast-check appears in package.json devDependencies",
+            "`npm install` completes cleanly",
+            "A trivial `fc.assert(fc.property(fc.integer(), (n) => Number.isInteger(n)))` runs in a throwaway test to verify the import works"
+          ]
         }
       ]
     },
     {
       "id": "02",
-      "name": "Aggregate Metrics",
+      "name": "Walking skeleton (WS-1..WS-4)",
       "steps": [
         {
           "id": "02-01",
-          "name": "Cross-session aggregator pure functions",
-          "description": "Create crossSessionAggregator.ts: pure function mapping Array<SessionMetrics> to AggregateMetrics. Sum token rates, cost rates, agent counts. Sort sessions by rate descending. Create urgencyThresholds.ts with shared threshold constants.",
+          "name": "Walking skeleton 1 \u2014 glance sees two sessions alive and",
           "criteria": [
-            "Aggregate token rate equals sum of per-session burn rates",
-            "Aggregate active agents equals sum of per-session agent counts",
-            "Per-session breakdown sorted by token rate descending",
-            "Aggregate updates correctly when sessions added or removed",
-            "Sum invariant holds for any combination of session metrics"
-          ],
-          "time_estimate": "4h",
-          "dependencies": ["01-01"],
-          "implementation_scope": {
-            "files_to_create": [
-              "src/plugins/norbert-usage/domain/crossSessionAggregator.ts",
-              "src/plugins/norbert-usage/domain/urgencyThresholds.ts"
-            ],
-            "files_to_modify": [
-              "src/plugins/norbert-usage/domain/gaugeCluster.ts"
-            ],
-            "tests": [
-              "tests/acceptance/norbert-performance-monitor/cross-session-aggregation.test.ts#User views aggregate resource consumption across all active sessions",
-              "tests/acceptance/norbert-performance-monitor/cross-session-aggregation.test.ts#Aggregate token rate is the sum of per-session burn rates",
-              "tests/acceptance/norbert-performance-monitor/cross-session-aggregation.test.ts#Aggregate active agents is the sum of per-session agent counts",
-              "tests/acceptance/norbert-performance-monitor/cross-session-aggregation.test.ts#Per-session breakdown is sorted by token rate descending",
-              "tests/acceptance/norbert-performance-monitor/cross-session-aggregation.test.ts#Aggregate updates when a new session is added",
-              "tests/acceptance/norbert-performance-monitor/cross-session-aggregation.test.ts#Aggregate updates when a session ends",
-              "tests/acceptance/norbert-performance-monitor/cross-session-aggregation.test.ts#@property: aggregate total always equals sum of per-session values"
-            ]
-          }
+            "describe.skip removed for WS-1 in steps/walking-skeleton.test.ts",
+            "Running the scenario produces a Frame with two traces, each with the session's color identity from SESSION_COLORS, each sampling arrived rate history across the 60s window, and a legend listing",
+            "scopeProjection.ts declared inside domain/phosphor with zero imports from adapters, views, react, window, document (dependency-cruiser passes)"
+          ]
         },
         {
           "id": "02-02",
-          "name": "Context pressure tracker pure functions",
-          "description": "Add classifyContextUrgency and computeCompactionEstimate to performanceMonitor.ts. Urgency zones: normal (<70%), amber (70-89%), red (>=90%). Compaction estimate from remaining headroom and burn rate with confidence indicator.",
+          "name": "Walking skeleton 2 \u2014 fresh hook event flare as a",
           "criteria": [
-            "Context below 70% classified as normal, at 70% as amber, at 90% as red",
-            "Boundary values 69%/70% and 89%/90% produce correct urgency transition",
-            "Compaction estimate computed from remaining tokens and burn rate",
-            "Low confidence when burn rate near zero",
-            "Threshold constants match Gauge Cluster values (shared config)"
-          ],
-          "time_estimate": "3h",
-          "dependencies": ["02-01"],
-          "implementation_scope": {
-            "files_to_create": [
-              "src/plugins/norbert-usage/domain/performanceMonitor.ts"
-            ],
-            "tests": [
-              "tests/acceptance/norbert-performance-monitor/context-pressure.test.ts#User sees context utilization with urgency zones and compaction estimate",
-              "tests/acceptance/norbert-performance-monitor/context-pressure.test.ts#Context below 70% shows normal urgency",
-              "tests/acceptance/norbert-performance-monitor/context-pressure.test.ts#Context at 70% triggers amber urgency zone",
-              "tests/acceptance/norbert-performance-monitor/context-pressure.test.ts#Context at 72% is within amber urgency zone",
-              "tests/acceptance/norbert-performance-monitor/context-pressure.test.ts#Context at 90% triggers red urgency zone",
-              "tests/acceptance/norbert-performance-monitor/context-pressure.test.ts#Context at 93% is deep in red urgency zone",
-              "tests/acceptance/norbert-performance-monitor/context-pressure.test.ts#Context at 69% is the last normal level before amber",
-              "tests/acceptance/norbert-performance-monitor/context-pressure.test.ts#Context at 89% is the last amber level before red",
-              "tests/acceptance/norbert-performance-monitor/context-pressure.test.ts#Context at 100% is in red urgency zone",
-              "tests/acceptance/norbert-performance-monitor/context-pressure.test.ts#Compaction estimate calculated from remaining headroom and burn rate",
-              "tests/acceptance/norbert-performance-monitor/context-pressure.test.ts#Compaction estimate shows low confidence when burn rate near zero",
-              "tests/acceptance/norbert-performance-monitor/context-pressure.test.ts#Context data unavailable produces safe default values",
-              "tests/acceptance/norbert-performance-monitor/context-pressure.test.ts#@property: context urgency thresholds match Gauge Cluster thresholds"
-            ]
-          }
+            "describe.skip removed for WS-2",
+            "Frame contains a FramePulse on session-1 positioned at the hook event's arrival time, with decay factor equal to decayFactor(1200, 2500) \u2248 0.52, and session color matching session-1",
+            "Unit tests for decayFactor covering age=0 (returns 1), age=lifetime (returns 0), age>lifetime (returns 0), negative age (clamped to 1)"
+          ]
         },
         {
           "id": "02-03",
-          "name": "Cost rate computation and aggregate view component",
-          "description": "Add computeCostRatePerMinute to performanceMonitor.ts. Build PMAggregateGrid.tsx (2x2 chart grid + breakdown panel) and PMChart.tsx (reusable Canvas chart cell reusing oscilloscope rendering functions).",
+          "name": "Walking skeleton 3 \u2014 metric toggle re-projects with new scale",
           "criteria": [
-            "Cost rate per minute computed from aggregate cost rate",
-            "Zero cost rate correctly displayed during idle periods",
-            "Aggregate grid renders tokens/s, cost/min, agents, and context charts",
-            "Per-session breakdown panel lists sessions with individual metrics"
-          ],
-          "time_estimate": "5h",
-          "dependencies": ["02-01", "02-02"],
-          "implementation_scope": {
-            "files_to_modify": [
-              "src/plugins/norbert-usage/domain/performanceMonitor.ts"
-            ],
-            "files_to_create": [
-              "src/plugins/norbert-usage/views/PMAggregateGrid.tsx",
-              "src/plugins/norbert-usage/views/PMChart.tsx"
-            ],
-            "tests": [
-              "tests/acceptance/norbert-performance-monitor/cross-session-aggregation.test.ts#User sees rolling cost rate across all active sessions",
-              "tests/acceptance/norbert-performance-monitor/cross-session-aggregation.test.ts#Zero cost rate when all sessions are idle"
-            ]
-          }
+            "describe.skip removed for WS-3",
+            "Frame projected with metric='tokens' uses yMax=100 and tokens-per-second arrived history",
+            "METRICS has entries for events, tokens, and toolcalls with yMax values 15 / 100 / 3 and unit strings 'events/s' / 'tokens/s' / 'tool calls/s' (or equivalent per fixtures.ts)",
+            "The persistence-buffer reset assertion in this scenario is satisfied through frame-observable state (frame.yMax matches new metric; no carryover of sample values); the view-internal ensurePersistenceBuffer unit test lands in step 09-02"
+          ]
+        },
+        {
+          "id": "02-04",
+          "name": "Walking skeleton 4 \u2014 hover tooltip identifies session, value, and",
+          "criteria": [
+            "describe.skip removed for WS-4",
+            "scopeHitTest returns a HoverSelection with sessionId='session-2', value\u224847, ageMs\u22481500, color matching the trace, and displayX/displayY within the pointer region",
+            "Unit tests for scopeHitTest covering within-snap, beyond-snap, outside-bounds, empty-frame, and nearest-of-two cases (drive M4-S2/4/5/6 later)"
+          ]
         }
       ]
     },
     {
       "id": "03",
-      "name": "Drill-Down Navigation",
+      "name": "Milestone 1 \u2014 per-session rate envelope traces",
       "steps": [
         {
           "id": "03-01",
-          "name": "Navigation state machine",
-          "description": "Add discriminated union routing functions to performanceMonitor.ts: createAggregateViewMode, createSessionDetailViewMode, computeBreadcrumb, computeSessionDetailData. PMViewMode routes aggregate vs session-detail.",
+          "name": "Milestone 1 \u2014 distinct color identity and 5-color palette",
           "criteria": [
-            "Aggregate view mode is the default navigation state",
-            "Session detail mode captures selected session identifier",
-            "Breadcrumb reflects current path: 'Performance Monitor' or 'PM > session'",
-            "Session detail data computable from frozen metrics after session ends"
-          ],
-          "time_estimate": "4h",
-          "dependencies": ["02-01", "02-02"],
-          "implementation_scope": {
-            "files_to_modify": [
-              "src/plugins/norbert-usage/domain/performanceMonitor.ts"
-            ],
-            "tests": [
-              "tests/acceptance/norbert-performance-monitor/session-drill-down.test.ts#User drills into a session to investigate a token rate spike",
-              "tests/acceptance/norbert-performance-monitor/session-drill-down.test.ts#Aggregate view mode is the default",
-              "tests/acceptance/norbert-performance-monitor/session-drill-down.test.ts#Session detail view mode captures the selected session",
-              "tests/acceptance/norbert-performance-monitor/session-drill-down.test.ts#Breadcrumb reflects current navigation path",
-              "tests/acceptance/norbert-performance-monitor/session-drill-down.test.ts#Navigation back from detail to aggregate preserves time window",
-              "tests/acceptance/norbert-performance-monitor/session-drill-down.test.ts#Session end during detail view produces frozen state indicator",
-              "tests/acceptance/norbert-performance-monitor/session-drill-down.test.ts#Ended session removed from aggregate after back navigation"
-            ]
-          }
+            "describe.skip removed for M1-S1 and M1-S6",
+            "Three-session frame has three distinct trace colors; same three colors on a second call to buildFrame with identical store state",
+            "Five-session frame uses colors from the fixed palette {rose, violet, emerald, amber, sky}",
+            "Color-assignment function is deterministic given session-id ordering"
+          ]
         },
         {
           "id": "03-02",
-          "name": "Session detail view component",
-          "description": "Build PMSessionDetail.tsx: session-scoped charts, agent breakdown panel, operational metrics bar, back navigation. Handles graceful degradation when agent data absent and session-end indicator.",
+          "name": "Milestone 1 \u2014 honest sampling and bracketing invariant",
           "criteria": [
-            "Session detail shows session-scoped charts and agent breakdown",
-            "Agent breakdown degrades gracefully when agent data absent",
-            "Session end during detail view shows frozen state indicator",
-            "Back button returns to aggregate view"
-          ],
-          "time_estimate": "4h",
-          "dependencies": ["02-03", "03-01"],
-          "implementation_scope": {
-            "files_to_create": [
-              "src/plugins/norbert-usage/views/PMSessionDetail.tsx"
-            ],
-            "files_to_modify": [
-              "src/plugins/norbert-usage/views/PerformanceMonitorView.tsx"
-            ],
-            "tests": [
-              "tests/acceptance/norbert-performance-monitor/session-drill-down.test.ts#Session detail includes agent breakdown when agent data is available",
-              "tests/acceptance/norbert-performance-monitor/session-drill-down.test.ts#Session detail degrades gracefully when agent data is absent"
-            ]
-          }
+            "describe.skip removed for M1-S2 and M1-S3",
+            "For a session with arrived samples at 5s intervals, no projected trace point's value exceeds the max (or falls below the min) of its two bracketing arrived samples",
+            "For a session that last arrived v=8 twenty seconds ago with no newer sample, the trace value at the current-time edge equals 8; no point on the trace is 0"
+          ]
+        },
+        {
+          "id": "03-03",
+          "name": "Milestone 1 \u2014 empty states (no history, no sessions)",
+          "criteria": [
+            "describe.skip removed for M1-S4 and M1-S7",
+            "A session just added with no rate samples produces a trace with empty samples array and latestValue=null; legend entry for that session has latestValue=null",
+            "No active sessions: frame.traces is empty, frame.legend is empty, frame.yMax reflects the current metric's scale (events=15 default)"
+          ]
+        },
+        {
+          "id": "03-04",
+          "name": "Milestone 1 \u2014 60-second window trim",
+          "criteria": [
+            "describe.skip removed for M1-S5",
+            "For session with samples spanning 120 seconds, the projected trace reflects only samples within the last 60 seconds",
+            "No projected trace point uses a sample timestamped more than 60 seconds ago"
+          ]
         }
       ]
     },
     {
       "id": "04",
-      "name": "Time Windows",
+      "name": "Milestone 2 \u2014 hook event pulses",
       "steps": [
         {
           "id": "04-01",
-          "name": "Multi-window sampler with downsampling",
-          "description": "Create multiWindowSampler.ts: TIME_WINDOW_PRESETS const array, createMultiWindowBuffer, appendMultiWindowSample, getActiveWindowSamples, computeMultiWindowStats, resolveSessionWindowConfig. Maintains ring buffers at 1m/5m/15m/session resolutions.",
+          "name": "Milestone 2 \u2014 fresh tool-call pulse flares brightest + mid-life",
           "criteria": [
-            "1m preset: 600 samples at 100ms; 5m: 600 at 500ms; 15m: 900 at 1s",
-            "Session-length window computes dynamic resolution targeting 300-900 points",
-            "Buffer at capacity wraps correctly evicting oldest samples",
-            "Partially filled window produces valid stats from available data"
-          ],
-          "time_estimate": "5h",
-          "dependencies": ["01-01"],
-          "implementation_scope": {
-            "files_to_create": [
-              "src/plugins/norbert-usage/domain/multiWindowSampler.ts"
-            ],
-            "tests": [
-              "tests/acceptance/norbert-performance-monitor/time-window.test.ts#User switches from 1-minute to 15-minute window to see resource trend",
-              "tests/acceptance/norbert-performance-monitor/time-window.test.ts#Time window presets have correct resolution and capacity",
-              "tests/acceptance/norbert-performance-monitor/time-window.test.ts#Session-length window computes dynamic resolution for full history",
-              "tests/acceptance/norbert-performance-monitor/time-window.test.ts#Stats computed from 5-minute window differ from 1-minute window",
-              "tests/acceptance/norbert-performance-monitor/time-window.test.ts#Time window selection is independent of view mode",
-              "tests/acceptance/norbert-performance-monitor/time-window.test.ts#1-minute window buffer at capacity wraps correctly",
-              "tests/acceptance/norbert-performance-monitor/time-window.test.ts#Partially filled window still produces valid stats"
-            ]
-          }
+            "describe.skip removed for M2-S1 and M2-S2",
+            "Pulse appended at t=now produces a FramePulse with decay=1.0 (maximum)",
+            "Pulse appended at t=now-1250 (half lifetime) produces decay\u22480.5"
+          ]
         },
         {
           "id": "04-02",
-          "name": "Time window selector UI and integration",
-          "description": "Build PMTimeWindowSelector.tsx: button group for 1m/5m/15m/Session. Wire multi-window sampler into multi-session store and PM view container. Time window state preserved across aggregate/detail navigation.",
+          "name": "Milestone 2 \u2014 pulse-kind strength and full three-way ordering",
           "criteria": [
-            "Time window selector offers 1m, 5m, 15m, and Session options",
-            "All charts respond to time window changes",
-            "Time window persists across aggregate/detail navigation",
-            "1-minute window preserves approximately 10Hz update feel"
-          ],
-          "time_estimate": "4h",
-          "dependencies": ["04-01", "03-02"],
-          "implementation_scope": {
-            "files_to_create": [
-              "src/plugins/norbert-usage/views/PMTimeWindowSelector.tsx"
-            ],
-            "files_to_modify": [
-              "src/plugins/norbert-usage/views/PerformanceMonitorView.tsx",
-              "src/plugins/norbert-usage/adapters/multiSessionStore.ts"
-            ],
-            "tests": [
-              "tests/acceptance/norbert-performance-monitor/time-window.test.ts#Time window persists when switching from aggregate to session detail",
-              "tests/acceptance/norbert-performance-monitor/time-window.test.ts#Charts update when time window selection changes"
-            ]
-          }
+            "describe.skip removed for M2-S3",
+            "New scenario 'Three pulse kinds exhibit the full tool-subagent-lifecycle strength ordering' added to milestone-2-pulses.feature and its step-def; activated green",
+            "Strength constants: tool=1.0, subagent=0.75, lifecycle=0.5 (per fixtures)",
+            "Framed pulses when three kinds co-exist sort by strength descending: tool, subagent, lifecycle"
+          ]
+        },
+        {
+          "id": "04-03",
+          "name": "Milestone 2 \u2014 multiple coexisting pulses and lifetime cutoff",
+          "criteria": [
+            "describe.skip removed for M2-S4 and M2-S5",
+            "Frame contains three FramePulse entries at the three arrival times, each with age-appropriate decay",
+            "A pulse with age 3000ms (>PULSE_LIFETIME_MS=2500) is absent from frame.pulses even if still in store"
+          ]
+        },
+        {
+          "id": "04-04",
+          "name": "Milestone 2 \u2014 pulse retention trim in store",
+          "criteria": [
+            "describe.skip removed for M2-S6",
+            "getPulses(sessionId) returns no pulse older than 5 seconds against now passed as a parameter, and returns all pulses younger than 5 seconds"
+          ]
+        },
+        {
+          "id": "04-05",
+          "name": "Milestone 2 \u2014 pulse vertical position honesty + baseline without",
+          "criteria": [
+            "describe.skip removed for M2-S7 and M2-S8",
+            "A pulse at t-1000 for a session whose arrived v=10 at t-1000 produces FramePulse.v=10 (exact arrived value, not interpolated)",
+            "A session with pulses but no rate history produces FramePulse entries with v=0 baseline and no fabricated sample points in the trace"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "05",
+      "name": "Milestone 3 \u2014 metric toggle",
+      "steps": [
+        {
+          "id": "05-01",
+          "name": "Milestone 3 \u2014 default metric at first launch is Events",
+          "criteria": [
+            "describe.skip removed for M3-S1",
+            "phosphorMetricConfig exports DEFAULT_METRIC='events'",
+            "Calling buildFrame with metric=DEFAULT_METRIC yields frame.metric='events' and frame.yMax=15"
+          ]
+        },
+        {
+          "id": "05-02",
+          "name": "Milestone 3 \u2014 toggle to Tokens/s and Tool-calls/s re-projects with",
+          "criteria": [
+            "describe.skip removed for M3-S2 and M3-S3",
+            "Frame with metric='tokens' has yMax=100 and unit label reflecting tokens per second",
+            "Frame with metric='toolcalls' has yMax=3 and unit label reflecting tool calls per second"
+          ]
+        },
+        {
+          "id": "05-03",
+          "name": "Milestone 3 \u2014 persistence-buffer reset (frame-observable) and toggle-back",
+          "criteria": [
+            "describe.skip removed for M3-S4 and M3-S5",
+            "After toggling from events to tokens, post-toggle frame.yMax=100, no sample values carried from the events history appear on any trace, session-1's trace carries no tokens samples (no tokens history yet)",
+            "After subsequently toggling back to events, frame uses events history (unchanged in store since last events-metric frame)"
+          ]
+        },
+        {
+          "id": "05-04",
+          "name": "Milestone 3 \u2014 empty-trace-after-toggle and hover-clear-on-metric-change",
+          "criteria": [
+            "describe.skip removed for M3-S6 and M3-S7",
+            "Post-toggle frame contains session-1 with empty samples and null latestValue in legend",
+            "Same pointer (x,y) on events-scale frame yields non-null HoverSelection; on tokens-scale frame (different yMax and possibly empty trace) yields null"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "06",
+      "name": "Milestone 4 \u2014 hover tooltip",
+      "steps": [
+        {
+          "id": "06-01",
+          "name": "Milestone 4 \u2014 hover near a trace and nearest-of-overlapping",
+          "criteria": [
+            "describe.skip removed for M4-S1 and M4-S2",
+            "Pointer 2 seconds ago at session-1's arrived rate of 12 returns HoverSelection(session-1, value\u224812, age\u22482000ms)",
+            "With two overlapping traces near the pointer, the trace with smallest vertical distance to the pointer wins; the other is not selected"
+          ]
+        },
+        {
+          "id": "06-02",
+          "name": "Milestone 4 \u2014 hover value consistent with trace interpolation",
+          "criteria": [
+            "describe.skip removed for M4-S3",
+            "Pointer at a time between two arrived samples returns a HoverSelection.value that matches the trace value at the same time (within epsilon)"
+          ]
+        },
+        {
+          "id": "06-03",
+          "name": "Milestone 4 \u2014 snap-threshold and outside-scope boundaries",
+          "criteria": [
+            "describe.skip removed for M4-S4 and M4-S5",
+            "When vertical distance from pointer to nearest trace exceeds HOVER_SNAP_DISTANCE_PX=28, returns null",
+            "When pointer.x or pointer.y is outside [0, width] or [0, height], returns null"
+          ]
+        },
+        {
+          "id": "06-04",
+          "name": "Milestone 4 \u2014 no-sessions pointer returns null",
+          "criteria": [
+            "describe.skip removed for M4-S6",
+            "scopeHitTest on a frame with empty traces returns null"
+          ]
+        },
+        {
+          "id": "06-05",
+          "name": "Milestone 4 \u2014 right-edge and left-edge age semantics",
+          "criteria": [
+            "describe.skip removed for M4-S7 and M4-S8",
+            "Pointer at x\u2248width with arrived sample at now returns ageMs < 500",
+            "Pointer at x\u22480 with arrived sample at now-60000 returns ageMs \u2248 60000 (within test epsilon)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "07",
+      "name": "Milestone 5 \u2014 session lifecycle and ambient window",
+      "steps": [
+        {
+          "id": "07-01",
+          "name": "Milestone 5 \u2014 adding and removing sessions reflected in next",
+          "criteria": [
+            "describe.skip removed for M5-S1 and M5-S2",
+            "addSession(newId); next buildFrame includes a trace and legend entry for newId",
+            "removeSession(middleId); next buildFrame excludes middleId from traces and legend"
+          ]
+        },
+        {
+          "id": "07-02",
+          "name": "Milestone 5 \u2014 legend reflects latest arrived value",
+          "criteria": [
+            "describe.skip removed for M5-S3",
+            "Legend for session-1 shows 7 and session-2 shows 22 when those are their most recent arrived events-per-second values"
+          ]
+        },
+        {
+          "id": "07-03",
+          "name": "Milestone 5 \u2014 ambient 60s window trim and pulse retention",
+          "criteria": [
+            "describe.skip removed for M5-S4 and M5-S5",
+            "Trace projected for samples at 30/45/70/90s-ago contains only the 30s and 45s samples",
+            "getPulses returns no 6-second-old pulse and includes any \u22645-second-old pulses"
+          ]
+        },
+        {
+          "id": "07-04",
+          "name": "Milestone 5 \u2014 removing a session clears its buffers and",
+          "criteria": [
+            "describe.skip removed for M5-S6",
+            "After removeSession('session-1'): getRateHistory('session-1', metric) returns empty for all metrics, getPulses('session-1') returns empty, session-1 absent from all subsequent frames"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "08",
+      "name": "Integration checkpoints (derivation + store contract + properties)",
+      "steps": [
+        {
+          "id": "08-01",
+          "name": "Integration checkpoint \u2014 events/s derivation (windowed counter)",
+          "criteria": [
+            "describe.skip removed for IC-S1",
+            "deriveEventsRate(15, 5000, tickBoundaryT) returns { t: tickBoundaryT, v: 3 }",
+            "Unit tests for count=0 \u2192 v=0, count non-multiple-of-5 (fractional rate), and boundary cases"
+          ]
+        },
+        {
+          "id": "08-02",
+          "name": "Integration checkpoint \u2014 tokens/s derivation (delta-over-duration)",
+          "criteria": [
+            "describe.skip removed for IC-S2",
+            "deriveTokensRate(500, 2000, tickBoundaryT) returns { t: tickBoundaryT, v: 250 }",
+            "Unit tests for zero-duration (defined behavior: returns 0 or throws \u2014 lock the fixture expectation), total=0, very-large totals"
+          ]
+        },
+        {
+          "id": "08-03",
+          "name": "Integration checkpoint \u2014 tool-calls/s derivation (windowed counter)",
+          "criteria": [
+            "describe.skip removed for IC-S3",
+            "deriveToolCallsRate(10, 5000, tickBoundaryT) returns { t: tickBoundaryT, v: 2 }"
+          ]
+        },
+        {
+          "id": "08-04",
+          "name": "Integration checkpoint \u2014 pulse emitter and kind strength",
+          "criteria": [
+            "describe.skip removed for IC-S4 and IC-S5",
+            "emitPulse('tool', t) returns { t, kind: 'tool', strength: 1.0 }",
+            "emitPulse('lifecycle', t).strength < emitPulse('tool', t).strength"
+          ]
+        },
+        {
+          "id": "08-05",
+          "name": "Integration checkpoint \u2014 store order preservation (rate samples + pulses)",
+          "criteria": [
+            "describe.skip removed for IC-S6 and IC-S7",
+            "getRateHistory returns samples in oldest-to-newest timestamp order",
+            "getPulses returns pulses in arrival order"
+          ]
+        },
+        {
+          "id": "08-06",
+          "name": "Integration checkpoint \u2014 ghost-session query returns empty",
+          "criteria": [
+            "describe.skip removed for IC-S8",
+            "getRateHistory('session-ghost', 'events') returns an empty readonly array",
+            "getPulses('session-ghost') returns an empty readonly array"
+          ]
+        },
+        {
+          "id": "08-07",
+          "name": "Integration checkpoint \u2014 subscriber notification contract (appends)",
+          "criteria": [
+            "describe.skip removed for IC-S9 and IC-S10",
+            "Each notification increments the counter exactly once",
+            "Both scenarios green"
+          ]
+        },
+        {
+          "id": "08-08",
+          "name": "Integration checkpoint \u2014 subscriber notification contract (session lifecycle)",
+          "criteria": [
+            "New scenario 'Subscribers are notified after addSession and removeSession' added to integration-checkpoints.feature and activated green \u2014 without a counter reset between setup and assertion \u2014 per the contract locked in",
+            "addSession and removeSession each notify synchronously after the mutation, exactly-once per call",
+            "Scenario green"
+          ]
+        },
+        {
+          "id": "08-09",
+          "name": "Integration checkpoint \u2014 honest-signal properties (no spike, no zero-fill)",
+          "criteria": [
+            "describe.skip removed for IC-S11 and IC-S12",
+            "Test body uses fc.assert(fc.property(...)) with generators for (sessionId, metric, arrived-samples, now)",
+            "Property bodies assert the bracketing and zero-fill invariants hold for every generated sample"
+          ]
+        },
+        {
+          "id": "08-10",
+          "name": "Integration checkpoint \u2014 store order and window-trim idempotence properties",
+          "criteria": [
+            "describe.skip removed for IC-S13 and IC-S14",
+            "Both properties use fc.assert(fc.property(...))",
+            "Order property: for any finite in-order append sequence, read returns same order",
+            "Idempotence property: two consecutive getRateHistory calls return arrays with identical contents"
+          ]
+        },
+        {
+          "id": "08-11",
+          "name": "Integration checkpoint \u2014 hit-test consistency and pulse-decay monotonicity properties",
+          "criteria": [
+            "describe.skip removed for IC-S15 and IC-S16",
+            "Hit-test consistency: for any frame and any pointer position inside the scope area, if scopeHitTest returns non-null then the selected trace's sampled value at selection.time equals selection.value within a small",
+            "Decay monotonicity: for any pulse in its lifetime, decayFactor at later time \u2264 decayFactor at earlier time; pulse at age > lifetime absent from frame.pulses"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "09",
+      "name": "Views and registration swap",
+      "steps": [
+        {
+          "id": "09-01",
+          "name": "Phosphor view components (shell, controls, legend, hover tooltip)",
+          "criteria": [
+            "Four new files under src/plugins/norbert-usage/views/phosphor/ exist and type-check",
+            "PhosphorScopeView subscribes to multiSessionStore and calls buildFrame on each notification",
+            "PhosphorControls binds to DEFAULT_METRIC at first render",
+            "PhosphorLegend consumes frame.legend read-only; no rendering side effects",
+            "PhosphorHoverTooltip is a prop-in functional component"
+          ]
+        },
+        {
+          "id": "09-02",
+          "name": "PhosphorCanvasHost + ensurePersistenceBuffer invariant + registration swap",
+          "criteria": [
+            "PhosphorCanvasHost.tsx exists",
+            "ensurePersistenceBuffer unit test asserts buffer identity changes when any of (w, h, metric, dpr) changes and remains stable otherwise",
+            "rAF loop pauses when document.visibilityState === 'hidden'",
+            "index.ts renders PhosphorScopeView for performance-monitor view id; floatMetric / primaryView / minWidth / minHeight unchanged"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "10",
+      "name": "V1 cleanup and enforcement",
+      "steps": [
+        {
+          "id": "10-01",
+          "name": "Delete v1 PM view components and v1 PM-only domain modules",
+          "criteria": [
+            "Grep precondition run and documented for each file below",
+            "Deleted: views/PerformanceMonitorView.tsx, views/PMSidebar.tsx, views/PMChart.tsx, views/PMDetailPane.tsx, views/PMStatsGrid.tsx, views/PMSessionTable.tsx, views/PMTooltip.tsx",
+            "Deleted: domain/categoryConfig.ts, domain/heartbeat.ts, domain/multiWindowSampler.ts (after grep shows no remaining importers)",
+            "domain/crossSessionAggregator.ts: deleted only if grep shows zero importers; else left in place with a 'non-PM usage only' JSDoc",
+            "Build still green; npm test still green"
+          ]
+        },
+        {
+          "id": "10-02",
+          "name": "Delete v1 acceptance test files + final mutation gate",
+          "criteria": [
+            "Five v1 test files deleted",
+            "Full acceptance suite green after deletions (56 scenarios pass; 1 new M2 scenario; 1 new IC scenario; total 58 if the two new ones both landed)",
+            "Stryker mutation report shows \u226420% surviving mutants on domain/phosphor/**/*.ts",
+            "Stryker mutation report shows \u226420% surviving mutants on the new hookProcessor helpers (deriveEvents/deriveTokens/deriveToolCalls/emitPulse)",
+            "Stryker mutation report shows \u226430% surviving mutants on the new multiSessionStore rate/pulse pathways"
+          ]
         }
       ]
     }
   ],
+  "roadmap": {
+    "project_id": "norbert-performance-monitor",
+    "created_at": "2026-04-17T00:00:00Z",
+    "total_steps": 46,
+    "phases": 10
+  },
   "implementation_scope": {
     "source_directories": [
-      "src/plugins/norbert-usage/domain/",
+      "src/plugins/norbert-usage/domain/phosphor/",
+      "src/plugins/norbert-usage/views/phosphor/",
       "src/plugins/norbert-usage/adapters/",
-      "src/plugins/norbert-usage/views/"
-    ],
-    "test_directories": [
-      "tests/acceptance/norbert-performance-monitor/"
-    ],
-    "excluded_patterns": [
-      "node_modules/**",
-      "dist/**"
+      "src/plugins/norbert-usage/hookProcessor.ts"
     ]
-  },
-  "validation": {
-    "status": "approved",
-    "reviewer": "software-crafter-reviewer",
-    "reviewed_at": "2026-03-18",
-    "approved_at": "2026-03-18",
-    "revision_notes": "D1 (blocker): fixed 03-01 deps to include 02-02. D2 (high): added tests for 04-02. D6: fixed PMAggregatGrid typo. D3/D4/D5: accepted as advisory."
   }
 }

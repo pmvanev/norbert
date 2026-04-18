@@ -1,0 +1,305 @@
+{
+  "roadmap": {
+    "project_id": "norbert-performance-monitor",
+    "created_at": "2026-03-18T21:29:59Z",
+    "total_steps": 9,
+    "phases": 4
+  },
+  "phases": [
+    {
+      "id": "01",
+      "name": "Foundation",
+      "steps": [
+        {
+          "id": "01-01",
+          "name": "Domain types and multi-session store",
+          "description": "Add new algebraic types (AggregateMetrics, SessionSummary, TimeWindowConfig, PMViewMode, CompactionEstimate, AgentMetrics, SessionDetailData) to types.ts. Create multiSessionStore adapter to track SessionMetrics for all active sessions. Create sessionDiscovery adapter to poll sessions table.",
+          "criteria": [
+            "Empty aggregate yields zero totals and empty session list",
+            "Single session aggregate equals that session's metrics",
+            "Multi-session store tracks add/remove of sessions independently"
+          ],
+          "time_estimate": "4h",
+          "dependencies": [],
+          "implementation_scope": {
+            "files_to_modify": [
+              "src/plugins/norbert-usage/domain/types.ts"
+            ],
+            "files_to_create": [
+              "src/plugins/norbert-usage/adapters/multiSessionStore.ts",
+              "src/plugins/norbert-usage/adapters/sessionDiscovery.ts"
+            ],
+            "tests": [
+              "tests/acceptance/norbert-performance-monitor/cross-session-aggregation.test.ts#Empty aggregate when no sessions are active",
+              "tests/acceptance/norbert-performance-monitor/cross-session-aggregation.test.ts#Single session aggregate equals that session's metrics"
+            ]
+          }
+        },
+        {
+          "id": "01-02",
+          "name": "View registration and backward compatibility",
+          "description": "Register Performance Monitor as a new mode view alongside Oscilloscope and Dashboard. Wire multi-session store initialization in plugin onLoad. Verify existing oscilloscope data pipeline unchanged.",
+          "criteria": [
+            "Performance Monitor registered as a mode view in Usage tab",
+            "Existing oscilloscope buffer operations produce unchanged results",
+            "Existing view registrations preserved, floating panels unbroken",
+            "Shared time-series buffer identical when read from PM or oscilloscope"
+          ],
+          "time_estimate": "3h",
+          "dependencies": ["01-01"],
+          "implementation_scope": {
+            "files_to_modify": [
+              "src/plugins/norbert-usage/index.ts",
+              "src/plugins/norbert-usage/hookProcessor.ts"
+            ],
+            "files_to_create": [
+              "src/plugins/norbert-usage/views/PerformanceMonitorView.tsx"
+            ],
+            "tests": [
+              "tests/acceptance/norbert-performance-monitor/backward-compatibility.test.ts#Existing time-series buffer operations produce unchanged results",
+              "tests/acceptance/norbert-performance-monitor/backward-compatibility.test.ts#Oscilloscope waveform data is identical when accessed from PM context",
+              "tests/acceptance/norbert-performance-monitor/backward-compatibility.test.ts#Token rate from shared buffer matches between oscilloscope and PM",
+              "tests/acceptance/norbert-performance-monitor/backward-compatibility.test.ts#Data pipeline remains valid across mode switches"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "02",
+      "name": "Aggregate Metrics",
+      "steps": [
+        {
+          "id": "02-01",
+          "name": "Cross-session aggregator pure functions",
+          "description": "Create crossSessionAggregator.ts: pure function mapping Array<SessionMetrics> to AggregateMetrics. Sum token rates, cost rates, agent counts. Sort sessions by rate descending. Create urgencyThresholds.ts with shared threshold constants.",
+          "criteria": [
+            "Aggregate token rate equals sum of per-session burn rates",
+            "Aggregate active agents equals sum of per-session agent counts",
+            "Per-session breakdown sorted by token rate descending",
+            "Aggregate updates correctly when sessions added or removed",
+            "Sum invariant holds for any combination of session metrics"
+          ],
+          "time_estimate": "4h",
+          "dependencies": ["01-01"],
+          "implementation_scope": {
+            "files_to_create": [
+              "src/plugins/norbert-usage/domain/crossSessionAggregator.ts",
+              "src/plugins/norbert-usage/domain/urgencyThresholds.ts"
+            ],
+            "files_to_modify": [
+              "src/plugins/norbert-usage/domain/gaugeCluster.ts"
+            ],
+            "tests": [
+              "tests/acceptance/norbert-performance-monitor/cross-session-aggregation.test.ts#User views aggregate resource consumption across all active sessions",
+              "tests/acceptance/norbert-performance-monitor/cross-session-aggregation.test.ts#Aggregate token rate is the sum of per-session burn rates",
+              "tests/acceptance/norbert-performance-monitor/cross-session-aggregation.test.ts#Aggregate active agents is the sum of per-session agent counts",
+              "tests/acceptance/norbert-performance-monitor/cross-session-aggregation.test.ts#Per-session breakdown is sorted by token rate descending",
+              "tests/acceptance/norbert-performance-monitor/cross-session-aggregation.test.ts#Aggregate updates when a new session is added",
+              "tests/acceptance/norbert-performance-monitor/cross-session-aggregation.test.ts#Aggregate updates when a session ends",
+              "tests/acceptance/norbert-performance-monitor/cross-session-aggregation.test.ts#@property: aggregate total always equals sum of per-session values"
+            ]
+          }
+        },
+        {
+          "id": "02-02",
+          "name": "Context pressure tracker pure functions",
+          "description": "Add classifyContextUrgency and computeCompactionEstimate to performanceMonitor.ts. Urgency zones: normal (<70%), amber (70-89%), red (>=90%). Compaction estimate from remaining headroom and burn rate with confidence indicator.",
+          "criteria": [
+            "Context below 70% classified as normal, at 70% as amber, at 90% as red",
+            "Boundary values 69%/70% and 89%/90% produce correct urgency transition",
+            "Compaction estimate computed from remaining tokens and burn rate",
+            "Low confidence when burn rate near zero",
+            "Threshold constants match Gauge Cluster values (shared config)"
+          ],
+          "time_estimate": "3h",
+          "dependencies": ["02-01"],
+          "implementation_scope": {
+            "files_to_create": [
+              "src/plugins/norbert-usage/domain/performanceMonitor.ts"
+            ],
+            "tests": [
+              "tests/acceptance/norbert-performance-monitor/context-pressure.test.ts#User sees context utilization with urgency zones and compaction estimate",
+              "tests/acceptance/norbert-performance-monitor/context-pressure.test.ts#Context below 70% shows normal urgency",
+              "tests/acceptance/norbert-performance-monitor/context-pressure.test.ts#Context at 70% triggers amber urgency zone",
+              "tests/acceptance/norbert-performance-monitor/context-pressure.test.ts#Context at 72% is within amber urgency zone",
+              "tests/acceptance/norbert-performance-monitor/context-pressure.test.ts#Context at 90% triggers red urgency zone",
+              "tests/acceptance/norbert-performance-monitor/context-pressure.test.ts#Context at 93% is deep in red urgency zone",
+              "tests/acceptance/norbert-performance-monitor/context-pressure.test.ts#Context at 69% is the last normal level before amber",
+              "tests/acceptance/norbert-performance-monitor/context-pressure.test.ts#Context at 89% is the last amber level before red",
+              "tests/acceptance/norbert-performance-monitor/context-pressure.test.ts#Context at 100% is in red urgency zone",
+              "tests/acceptance/norbert-performance-monitor/context-pressure.test.ts#Compaction estimate calculated from remaining headroom and burn rate",
+              "tests/acceptance/norbert-performance-monitor/context-pressure.test.ts#Compaction estimate shows low confidence when burn rate near zero",
+              "tests/acceptance/norbert-performance-monitor/context-pressure.test.ts#Context data unavailable produces safe default values",
+              "tests/acceptance/norbert-performance-monitor/context-pressure.test.ts#@property: context urgency thresholds match Gauge Cluster thresholds"
+            ]
+          }
+        },
+        {
+          "id": "02-03",
+          "name": "Cost rate computation and aggregate view component",
+          "description": "Add computeCostRatePerMinute to performanceMonitor.ts. Build PMAggregateGrid.tsx (2x2 chart grid + breakdown panel) and PMChart.tsx (reusable Canvas chart cell reusing oscilloscope rendering functions).",
+          "criteria": [
+            "Cost rate per minute computed from aggregate cost rate",
+            "Zero cost rate correctly displayed during idle periods",
+            "Aggregate grid renders tokens/s, cost/min, agents, and context charts",
+            "Per-session breakdown panel lists sessions with individual metrics"
+          ],
+          "time_estimate": "5h",
+          "dependencies": ["02-01", "02-02"],
+          "implementation_scope": {
+            "files_to_modify": [
+              "src/plugins/norbert-usage/domain/performanceMonitor.ts"
+            ],
+            "files_to_create": [
+              "src/plugins/norbert-usage/views/PMAggregateGrid.tsx",
+              "src/plugins/norbert-usage/views/PMChart.tsx"
+            ],
+            "tests": [
+              "tests/acceptance/norbert-performance-monitor/cross-session-aggregation.test.ts#User sees rolling cost rate across all active sessions",
+              "tests/acceptance/norbert-performance-monitor/cross-session-aggregation.test.ts#Zero cost rate when all sessions are idle"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "03",
+      "name": "Drill-Down Navigation",
+      "steps": [
+        {
+          "id": "03-01",
+          "name": "Navigation state machine",
+          "description": "Add discriminated union routing functions to performanceMonitor.ts: createAggregateViewMode, createSessionDetailViewMode, computeBreadcrumb, computeSessionDetailData. PMViewMode routes aggregate vs session-detail.",
+          "criteria": [
+            "Aggregate view mode is the default navigation state",
+            "Session detail mode captures selected session identifier",
+            "Breadcrumb reflects current path: 'Performance Monitor' or 'PM > session'",
+            "Session detail data computable from frozen metrics after session ends"
+          ],
+          "time_estimate": "4h",
+          "dependencies": ["02-01", "02-02"],
+          "implementation_scope": {
+            "files_to_modify": [
+              "src/plugins/norbert-usage/domain/performanceMonitor.ts"
+            ],
+            "tests": [
+              "tests/acceptance/norbert-performance-monitor/session-drill-down.test.ts#User drills into a session to investigate a token rate spike",
+              "tests/acceptance/norbert-performance-monitor/session-drill-down.test.ts#Aggregate view mode is the default",
+              "tests/acceptance/norbert-performance-monitor/session-drill-down.test.ts#Session detail view mode captures the selected session",
+              "tests/acceptance/norbert-performance-monitor/session-drill-down.test.ts#Breadcrumb reflects current navigation path",
+              "tests/acceptance/norbert-performance-monitor/session-drill-down.test.ts#Navigation back from detail to aggregate preserves time window",
+              "tests/acceptance/norbert-performance-monitor/session-drill-down.test.ts#Session end during detail view produces frozen state indicator",
+              "tests/acceptance/norbert-performance-monitor/session-drill-down.test.ts#Ended session removed from aggregate after back navigation"
+            ]
+          }
+        },
+        {
+          "id": "03-02",
+          "name": "Session detail view component",
+          "description": "Build PMSessionDetail.tsx: session-scoped charts, agent breakdown panel, operational metrics bar, back navigation. Handles graceful degradation when agent data absent and session-end indicator.",
+          "criteria": [
+            "Session detail shows session-scoped charts and agent breakdown",
+            "Agent breakdown degrades gracefully when agent data absent",
+            "Session end during detail view shows frozen state indicator",
+            "Back button returns to aggregate view"
+          ],
+          "time_estimate": "4h",
+          "dependencies": ["02-03", "03-01"],
+          "implementation_scope": {
+            "files_to_create": [
+              "src/plugins/norbert-usage/views/PMSessionDetail.tsx"
+            ],
+            "files_to_modify": [
+              "src/plugins/norbert-usage/views/PerformanceMonitorView.tsx"
+            ],
+            "tests": [
+              "tests/acceptance/norbert-performance-monitor/session-drill-down.test.ts#Session detail includes agent breakdown when agent data is available",
+              "tests/acceptance/norbert-performance-monitor/session-drill-down.test.ts#Session detail degrades gracefully when agent data is absent"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "04",
+      "name": "Time Windows",
+      "steps": [
+        {
+          "id": "04-01",
+          "name": "Multi-window sampler with downsampling",
+          "description": "Create multiWindowSampler.ts: TIME_WINDOW_PRESETS const array, createMultiWindowBuffer, appendMultiWindowSample, getActiveWindowSamples, computeMultiWindowStats, resolveSessionWindowConfig. Maintains ring buffers at 1m/5m/15m/session resolutions.",
+          "criteria": [
+            "1m preset: 600 samples at 100ms; 5m: 600 at 500ms; 15m: 900 at 1s",
+            "Session-length window computes dynamic resolution targeting 300-900 points",
+            "Buffer at capacity wraps correctly evicting oldest samples",
+            "Partially filled window produces valid stats from available data"
+          ],
+          "time_estimate": "5h",
+          "dependencies": ["01-01"],
+          "implementation_scope": {
+            "files_to_create": [
+              "src/plugins/norbert-usage/domain/multiWindowSampler.ts"
+            ],
+            "tests": [
+              "tests/acceptance/norbert-performance-monitor/time-window.test.ts#User switches from 1-minute to 15-minute window to see resource trend",
+              "tests/acceptance/norbert-performance-monitor/time-window.test.ts#Time window presets have correct resolution and capacity",
+              "tests/acceptance/norbert-performance-monitor/time-window.test.ts#Session-length window computes dynamic resolution for full history",
+              "tests/acceptance/norbert-performance-monitor/time-window.test.ts#Stats computed from 5-minute window differ from 1-minute window",
+              "tests/acceptance/norbert-performance-monitor/time-window.test.ts#Time window selection is independent of view mode",
+              "tests/acceptance/norbert-performance-monitor/time-window.test.ts#1-minute window buffer at capacity wraps correctly",
+              "tests/acceptance/norbert-performance-monitor/time-window.test.ts#Partially filled window still produces valid stats"
+            ]
+          }
+        },
+        {
+          "id": "04-02",
+          "name": "Time window selector UI and integration",
+          "description": "Build PMTimeWindowSelector.tsx: button group for 1m/5m/15m/Session. Wire multi-window sampler into multi-session store and PM view container. Time window state preserved across aggregate/detail navigation.",
+          "criteria": [
+            "Time window selector offers 1m, 5m, 15m, and Session options",
+            "All charts respond to time window changes",
+            "Time window persists across aggregate/detail navigation",
+            "1-minute window preserves approximately 10Hz update feel"
+          ],
+          "time_estimate": "4h",
+          "dependencies": ["04-01", "03-02"],
+          "implementation_scope": {
+            "files_to_create": [
+              "src/plugins/norbert-usage/views/PMTimeWindowSelector.tsx"
+            ],
+            "files_to_modify": [
+              "src/plugins/norbert-usage/views/PerformanceMonitorView.tsx",
+              "src/plugins/norbert-usage/adapters/multiSessionStore.ts"
+            ],
+            "tests": [
+              "tests/acceptance/norbert-performance-monitor/time-window.test.ts#Time window persists when switching from aggregate to session detail",
+              "tests/acceptance/norbert-performance-monitor/time-window.test.ts#Charts update when time window selection changes"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "implementation_scope": {
+    "source_directories": [
+      "src/plugins/norbert-usage/domain/",
+      "src/plugins/norbert-usage/adapters/",
+      "src/plugins/norbert-usage/views/"
+    ],
+    "test_directories": [
+      "tests/acceptance/norbert-performance-monitor/"
+    ],
+    "excluded_patterns": [
+      "node_modules/**",
+      "dist/**"
+    ]
+  },
+  "validation": {
+    "status": "approved",
+    "reviewer": "software-crafter-reviewer",
+    "reviewed_at": "2026-03-18",
+    "approved_at": "2026-03-18",
+    "revision_notes": "D1 (blocker): fixed 03-01 deps to include 02-02. D2 (high): added tests for 04-02. D6: fixed PMAggregatGrid typo. D3/D4/D5: accepted as advisory."
+  }
+}

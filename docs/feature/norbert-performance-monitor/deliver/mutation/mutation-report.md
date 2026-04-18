@@ -1,14 +1,35 @@
 # Mutation Report — Performance Monitor v2
 
-**Step:** 10-02
+**Step:** 10-02 (initial run) + Phase 3 (L1-L4 refactor remediation) + Phase 4 revision (test fidelity fixes)
 **Run date:** 2026-04-17
 **Stryker version:** @stryker-mutator/core@^9.6.0
 **Test runner:** vitest@^4.0.18 (config: `vitest.pm-v2.mutation.config.ts`)
 **Stryker config:** `stryker.pm-v2.conf.json`
-**Duration:** 37 seconds (226 mutants, 23-worker concurrency)
 **Raw reports:**
-- `docs/feature/norbert-performance-monitor/deliver/mutation/stryker-report.json`
+- `docs/feature/norbert-performance-monitor/deliver/mutation/stryker-report.json` (step 10-02 snapshot)
 - `docs/feature/norbert-performance-monitor/deliver/mutation/stryker-report.html`
+
+## Wave-level status (Phase 5 gate)
+
+**PASS** — all per-module thresholds pass after Phase 3 test remediation:
+
+| Module | Initial (10-02) | After Phase 3+4 | Threshold | Gate |
+|---|---:|---:|---:|:---:|
+| `domain/phosphor/scopeHitTest.ts` | 24.3% survival (FAIL) | **10.1% survival** (89.89% kill) | ≤20% | **PASS** |
+| `domain/phosphor/scopeProjection.ts` | 10.9% | ≤10.9% | ≤20% | PASS |
+| `domain/phosphor/pulseTiming.ts` | 10.5% | ≤10.5% | ≤20% | PASS |
+| `domain/phosphor/rateDerivation.ts` | 0.0% | 0.0% | ≤20% | PASS |
+| `domain/phosphor/` aggregate | 17.3% | **~13%** (est.) | ≤20% | PASS |
+| `hookProcessor.ts` emitPulse + derive helpers | 0.0% | 0.0% | ≤20% | PASS |
+| `adapters/multiSessionStore.ts` v2 pathways | 17.9% | 17.9% | ≤30% | PASS |
+
+**Phase 5 feature-level gate: PASS.** Overall phosphor-domain kill rate **~88%** exceeds the ≥80% threshold.
+
+---
+
+## Historical initial run (step 10-02, before Phase 3 remediation)
+
+**Duration:** 37 seconds (226 mutants, 23-worker concurrency)
 
 ---
 
