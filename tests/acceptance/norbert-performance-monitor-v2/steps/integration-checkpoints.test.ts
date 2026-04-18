@@ -29,16 +29,10 @@ import {
   NOW,
   PULSE_LIFETIME_MS,
   PULSE_STRENGTHS,
-  PULSE_RETENTION_MS,
   RATE_TICK_MS,
   WINDOW_MS,
-  type Frame,
-  type HoverSelection,
   type MetricId,
-  type MultiSessionStoreSurface,
-  type Pulse,
   type PulseKind,
-  synthesizeArrivedHistory,
 } from "./fixtures";
 
 // Driving ports (resolved as DELIVER wave lands modules).
@@ -50,14 +44,8 @@ import {
   emitPulse,
 } from "../../../../src/plugins/norbert-usage/hookProcessor";
 import { buildFrame } from "../../../../src/plugins/norbert-usage/domain/phosphor/scopeProjection";
-// import { scopeHitTest } from "../../../../src/plugins/norbert-usage/domain/phosphor/scopeHitTest";
-// import { decayFactor } from "../../../../src/plugins/norbert-usage/domain/phosphor/pulseTiming";
-
-declare const scopeHitTest: (
-  pointer: { x: number; y: number; width: number; height: number },
-  frame: Frame,
-) => HoverSelection | null;
-declare const decayFactor: (ageMs: number, lifetimeMs: number) => number;
+import { scopeHitTest } from "../../../../src/plugins/norbert-usage/domain/phosphor/scopeHitTest";
+import { decayFactor } from "../../../../src/plugins/norbert-usage/domain/phosphor/pulseTiming";
 
 /**
  * Derivation helpers — signatures target the hookProcessor shape. Each returns
@@ -680,67 +668,228 @@ describe("IC-S14 @property: Window trim is consistent across reads", () => {
 // ---------------------------------------------------------------------------
 // IC-S15: @property Hit-test consistency between trace value and returned value
 // Tag: @driving_port @property @US-PM-001
+//
+// Generators:
+//   - sessionId: non-empty string
+//   - metric: one of the three MetricIds
+//   - arrived-samples: a non-empty, ascending-timestamp sequence inside the
+//     60s window. Values are STRICTLY POSITIVE (min 0.01) so on-canvas
+//     samples always have a meaningful displayY (not clipped to the top edge
+//     where the off-canvas zero-distance rule in scopeHitTest would short-
+//     circuit the match we want to assert).
+//   - width/height: positive canvas dimensions (pointer space)
+//   - pointerX/pointerY: pointer inside the canvas rectangle
+//   - nowOffset: integer offset around a fixed logical NOW for variety
+//
+// Invariant (business language): whenever the hit-test returns a hover
+// selection, the selected trace's value AT the selection's reported time —
+// computed by the same honest-signal lookup used by scopeProjection (last
+// sample at-or-before `selection.time`; earliest sample when the cursor
+// precedes all arrivals) — equals `selection.value` within a small epsilon.
+// The scope never reports a hover value that disagrees with the underlying
+// trace signal at that time.
 // ---------------------------------------------------------------------------
 
-describe.skip("IC-S15 @property: Hit-test consistency between trace value and returned value", () => {
-  it("selection value matches the selected trace's sampled value at selection.time", () => {
-    // DELIVER wave will generalize to fast-check.
-    const store = createMultiSessionStore();
-    store.addSession("session-1");
-    const history = synthesizeArrivedHistory(12, (i) => 3 + i * 0.4);
-    for (const s of history) store.appendRateSample("session-1", "events", s.t, s.v);
-
-    const frame = buildFrame(store, "events", NOW);
-    const trace = frame.traces.find((t) => t.sessionId === "session-1");
-    expect(trace).toBeDefined();
-
-    const width = 1000;
-    const height = 400;
-    const targetSample = trace!.samples[Math.floor(trace!.samples.length / 2)];
-    const ageMs = NOW - targetSample.t;
-    const x = width * (1 - ageMs / WINDOW_MS);
-    const yMax = frame.yMax;
-    const y = height - (targetSample.v / yMax) * height;
-
-    const selection = scopeHitTest({ x, y, width, height }, frame);
-    expect(selection).not.toBeNull();
-
-    // Selection value matches trace sample at selection.time within small epsilon
-    const matchingSample = trace!.samples.reduce((best, s) =>
-      Math.abs(s.t - selection!.time) < Math.abs(best.t - selection!.time) ? s : best,
+describe("IC-S15 @property: Hit-test consistency between trace value and returned value", () => {
+  it("selection value equals the selected trace's sampled value at selection.time within epsilon", () => {
+    const metricArb: fc.Arbitrary<MetricId> = fc.constantFrom<MetricId>(
+      "events",
+      "tokens",
+      "toolcalls",
     );
-    expect(selection!.value).toBeCloseTo(matchingSample.v, 1);
+
+    // Non-empty, strictly-positive arrived samples at unique ages inside the
+    // 60s window. A higher max value (up to 3x yMax) deliberately exercises
+    // the off-canvas clipping path inside scopeHitTest, but the honest-signal
+    // invariant under test is value-equality, not on/off-canvas behavior.
+    const arrivedArb = fc
+      .uniqueArray(fc.integer({ min: 0, max: WINDOW_MS - 1 }), {
+        minLength: 1,
+        maxLength: 12,
+      })
+      .chain((ages) => {
+        const sortedAgesDesc = [...ages].sort((a, b) => b - a);
+        return fc
+          .array(
+            fc.double({
+              min: 0.01,
+              max: 300,
+              noNaN: true,
+              noDefaultInfinity: true,
+            }),
+            {
+              minLength: sortedAgesDesc.length,
+              maxLength: sortedAgesDesc.length,
+            },
+          )
+          .map((values) =>
+            sortedAgesDesc.map((ageMs, i) => ({ ageMs, v: values[i] })),
+          );
+      });
+
+    fc.assert(
+      fc.property(
+        fc.string({ minLength: 1, maxLength: 12 }),
+        metricArb,
+        arrivedArb,
+        fc.integer({ min: 100, max: 2000 }), // width px
+        fc.integer({ min: 100, max: 800 }), // height px
+        fc.double({ min: 0, max: 1, noNaN: true, noDefaultInfinity: true }), // fractional x
+        fc.double({ min: 0, max: 1, noNaN: true, noDefaultInfinity: true }), // fractional y
+        fc.integer({ min: -1000, max: 1000 }),
+        (
+          sessionId,
+          metric,
+          arrived,
+          width,
+          height,
+          xFrac,
+          yFrac,
+          nowOffset,
+        ) => {
+          const now = NOW + nowOffset;
+          const store = createMultiSessionStore();
+          store.addSession(sessionId);
+          for (const s of arrived) {
+            store.appendRateSample(sessionId, metric, now - s.ageMs, s.v);
+          }
+
+          const frame = buildFrame(store, metric, now);
+          const trace = frame.traces.find((t) => t.sessionId === sessionId);
+          expect(trace).toBeDefined();
+
+          const pointer = {
+            x: xFrac * width,
+            y: yFrac * height,
+            width,
+            height,
+          };
+          const selection = scopeHitTest(pointer, frame);
+
+          // The property is conditional: whenever a selection is returned,
+          // its value must match the trace's sampled value at selection.time.
+          if (selection === null) return;
+
+          expect(selection.sessionId).toBe(sessionId);
+
+          // Honest-signal lookup: last sample at-or-before selection.time;
+          // when the cursor precedes all arrivals, the earliest sample.
+          const samples = trace!.samples;
+          let sampledValue: number | null = null;
+          let latestTime = Number.NEGATIVE_INFINITY;
+          for (const s of samples) {
+            if (s.t <= selection.time && s.t >= latestTime) {
+              latestTime = s.t;
+              sampledValue = s.v;
+            }
+          }
+          if (sampledValue === null) {
+            let earliest = samples[0];
+            for (const s of samples) {
+              if (s.t < earliest.t) earliest = s;
+            }
+            sampledValue = earliest.v;
+          }
+
+          expect(selection.value).toBeCloseTo(sampledValue, 5);
+        },
+      ),
+    );
   });
 });
 
 // ---------------------------------------------------------------------------
 // IC-S16: @property Pulse decay factor monotonically decreases with age
 // Tag: @driving_port @property @US-PM-001
+//
+// Generators:
+//   - earlierAge / laterAge: integers inside [0, PULSE_LIFETIME_MS] with
+//     earlierAge <= laterAge (built via chain to guarantee the ordering)
+//   - beyondLifetimeAgeMs: integer strictly greater than PULSE_LIFETIME_MS
+//     but within the pulse-retention window so the store keeps it alive
+//   - kind: PulseKind (tool | subagent | lifecycle)
+//   - sessionId: non-empty string
+//   - metric: one of the three MetricIds
+//   - nowOffset: integer offset around a fixed logical NOW for variety
+//
+// Invariants (business language):
+//   1. decay-monotonicity: for any two ages inside the 2.5s lifetime,
+//      decay at the later age is less-than-or-equal-to decay at the earlier
+//      age (the flare only dims over time, never brightens).
+//   2. beyond-lifetime-absent: a pulse whose age exceeds PULSE_LIFETIME_MS
+//      is absent from the projected frame's `pulses` list, regardless of
+//      session kind or metric (the store may retain it for a longer
+//      retention window, but the frame only exposes visible pulses).
 // ---------------------------------------------------------------------------
 
-describe.skip("IC-S16 @property: Pulse decay factor monotonically decreases with age", () => {
-  it("decay at later age is less than or equal to decay at earlier age", () => {
-    // DELIVER wave will generalize to fast-check.
-    // A representative fixed case: two points inside the lifetime.
-    const earlierAge = 500;
-    const laterAge = 2000;
-    expect(decayFactor(laterAge, PULSE_LIFETIME_MS)).toBeLessThanOrEqual(
-      decayFactor(earlierAge, PULSE_LIFETIME_MS),
+describe("IC-S16 @property: Pulse decay factor monotonically decreases with age", () => {
+  it("decay at later age <= decay at earlier age, and pulses beyond lifetime are absent from the frame", () => {
+    const metricArb: fc.Arbitrary<MetricId> = fc.constantFrom<MetricId>(
+      "events",
+      "tokens",
+      "toolcalls",
+    );
+    const kindArb: fc.Arbitrary<PulseKind> = fc.constantFrom<PulseKind>(
+      "tool",
+      "subagent",
+      "lifecycle",
     );
 
-    // And a pulse beyond lifetime is absent from the frame.
-    const store = createMultiSessionStore();
-    store.addSession("session-1");
-    store.appendPulse("session-1", {
-      t: NOW - 3000,
-      kind: "tool",
-      strength: PULSE_STRENGTHS.tool,
-    });
-    const frame = buildFrame(store, "events", NOW);
-    const pulses = frame.pulses.filter((p) => p.sessionId === "session-1");
-    expect(pulses).toHaveLength(0);
+    // Two ages inside [0, PULSE_LIFETIME_MS], ordered earlier <= later.
+    const agePairArb = fc
+      .tuple(
+        fc.integer({ min: 0, max: PULSE_LIFETIME_MS }),
+        fc.integer({ min: 0, max: PULSE_LIFETIME_MS }),
+      )
+      .map(([a, b]) => ({
+        earlierAge: Math.min(a, b),
+        laterAge: Math.max(a, b),
+      }));
 
-    // Silence warnings for unused constants.
-    void PULSE_RETENTION_MS;
+    // A pulse age strictly past lifetime but within the store's retention
+    // window so the store keeps the pulse and the frame can prove absence.
+    const beyondLifetimeAgeArb = fc.integer({
+      min: PULSE_LIFETIME_MS + 1,
+      max: PULSE_LIFETIME_MS + 2_000,
+    });
+
+    fc.assert(
+      fc.property(
+        fc.string({ minLength: 1, maxLength: 12 }),
+        metricArb,
+        kindArb,
+        agePairArb,
+        beyondLifetimeAgeArb,
+        fc.integer({ min: -1000, max: 1000 }),
+        (sessionId, metric, kind, agePair, beyondLifetimeAgeMs, nowOffset) => {
+          const now = NOW + nowOffset;
+
+          // Invariant 1: decay monotonicity across arbitrary in-lifetime ages.
+          const decayEarlier = decayFactor(agePair.earlierAge, PULSE_LIFETIME_MS);
+          const decayLater = decayFactor(agePair.laterAge, PULSE_LIFETIME_MS);
+          expect(decayLater).toBeLessThanOrEqual(decayEarlier + 1e-12);
+          // And decay stays within [0, 1] regardless of age ordering.
+          expect(decayEarlier).toBeGreaterThanOrEqual(0);
+          expect(decayEarlier).toBeLessThanOrEqual(1);
+          expect(decayLater).toBeGreaterThanOrEqual(0);
+          expect(decayLater).toBeLessThanOrEqual(1);
+
+          // Invariant 2: a beyond-lifetime pulse is absent from the frame.
+          const store = createMultiSessionStore();
+          store.addSession(sessionId);
+          store.appendPulse(sessionId, {
+            t: now - beyondLifetimeAgeMs,
+            kind,
+            strength: PULSE_STRENGTHS[kind],
+          });
+
+          const frame = buildFrame(store, metric, now);
+          const sessionPulses = frame.pulses.filter(
+            (p) => p.sessionId === sessionId,
+          );
+          expect(sessionPulses).toHaveLength(0);
+        },
+      ),
+    );
   });
 });
