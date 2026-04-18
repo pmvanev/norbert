@@ -142,7 +142,7 @@ describe("M3-S3: Switching to Tool-calls per second re-projects with the tool-ca
 // contract through buildFrame alone, the driving port listed in D7 / §Q7.
 // ---------------------------------------------------------------------------
 
-describe.skip("M3-S4: Persistence buffer is reset at the metric-change boundary", () => {
+describe("M3-S4: Persistence buffer is reset at the metric-change boundary", () => {
   it("post-toggle frame uses the new metric's scale and carries no prior-metric sample values", () => {
     // Given session-1 has non-trivial Events per second arrived history and no
     // tokens history (so any value carried over would be unambiguously from the
@@ -197,7 +197,7 @@ describe.skip("M3-S4: Persistence buffer is reset at the metric-change boundary"
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("M3-S5: Toggling back to the original metric re-projects from its own history", () => {
+describe("M3-S5: Toggling back to the original metric re-projects from its own history", () => {
   it("events history is restored untouched after a round-trip through tokens", () => {
     // Given session-1 has arrived history for both events and tokens
     const store = createMultiSessionStore();
