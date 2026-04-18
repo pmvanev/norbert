@@ -104,7 +104,7 @@ describe("M5-S2: Removing a session makes it disappear from the scope in the nex
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("M5-S3: The legend reflects the latest arrived value for each session", () => {
+describe("M5-S3: The legend reflects the latest arrived value for each session", () => {
   it("legend entries carry the most recent arrived value per session", () => {
     // Given session-1 most recently arrived 7 evt/s and session-2 most recently arrived 22 evt/s
     const store = createMultiSessionStore();
