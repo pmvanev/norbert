@@ -17,13 +17,29 @@ import fc from "fast-check";
 import { ewmaStep } from "./ewma";
 
 describe("ewmaStep — idempotence at target", () => {
-  it("returns target unchanged when current already equals target", () => {
+  it("returns target within floating-point tolerance when current already equals target", () => {
+    // Mathematically, v*(1-α) + v*α === v for any α. In IEEE-754 double
+    // precision, the two multiplications and one addition can leak up to ~1
+    // ULP of rounding drift (most visibly on subnormal magnitudes). This
+    // property tolerates that sub-ULP drift via a relative+absolute bound
+    // sized to the magnitude of `value`, preserving the intent (the result
+    // is observably equal to `value` at the precision a consumer can use)
+    // without over-restricting the generator.
+    //
+    // Bound derivation: 4 * Number.EPSILON ≈ 8.88e-16. Multiplying by
+    // |value| yields a relative tolerance; adding a tiny absolute floor
+    // (Number.MIN_VALUE scaled) keeps the comparison well-defined for
+    // value === 0 and extremely subnormal magnitudes.
     fc.assert(
       fc.property(
         fc.double({ min: -1e6, max: 1e6, noNaN: true }),
         fc.double({ min: 0, max: 1, noNaN: true }),
         (value, alpha) => {
-          expect(ewmaStep(value, value, alpha)).toBe(value);
+          const result = ewmaStep(value, value, alpha);
+          const absoluteFloor = Number.MIN_VALUE * 16;
+          const relativeBound = Math.abs(value) * 4 * Number.EPSILON;
+          const tolerance = Math.max(absoluteFloor, relativeBound);
+          expect(Math.abs(result - value)).toBeLessThanOrEqual(tolerance);
         },
       ),
     );
