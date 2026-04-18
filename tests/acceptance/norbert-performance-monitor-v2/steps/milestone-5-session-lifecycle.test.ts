@@ -198,7 +198,7 @@ describe("M5-S5: Pulses older than their retention are absent from the store", (
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("M5-S6: Removing a session removes its associated rate buffers and pulses", () => {
+describe("M5-S6: Removing a session removes its associated rate buffers and pulses", () => {
   it("store holds no history or pulses for the removed session", () => {
     // Given session-1 has arrived rate history and pulses
     const store = createMultiSessionStore();
