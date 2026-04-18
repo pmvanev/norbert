@@ -72,7 +72,7 @@ describe("M3-S1: Default metric at first launch is Events per second", () => {
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("M3-S2: Switching to Tokens per second re-projects with the tokens scale", () => {
+describe("M3-S2: Switching to Tokens per second re-projects with the tokens scale", () => {
   it("next frame uses tokens history with yMax 100 and tokens unit", () => {
     // Given session-1 has arrived tokens-per-second history
     const store = createMultiSessionStore();
@@ -105,7 +105,7 @@ describe.skip("M3-S2: Switching to Tokens per second re-projects with the tokens
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("M3-S3: Switching to Tool-calls per second re-projects with the tool-calls scale", () => {
+describe("M3-S3: Switching to Tool-calls per second re-projects with the tool-calls scale", () => {
   it("next frame uses tool-calls history with yMax 3 and tool-calls unit", () => {
     // Given session-1 has arrived tool-calls-per-second history
     const store = createMultiSessionStore();
