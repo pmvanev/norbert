@@ -23,6 +23,7 @@
  */
 
 import { describe, it, expect } from "vitest";
+import fc from "fast-check";
 
 import {
   NOW,
@@ -48,16 +49,10 @@ import {
   deriveToolCallsRate,
   emitPulse,
 } from "../../../../src/plugins/norbert-usage/hookProcessor";
-// import { buildFrame } from "../../../../src/plugins/norbert-usage/domain/phosphor/scopeProjection";
+import { buildFrame } from "../../../../src/plugins/norbert-usage/domain/phosphor/scopeProjection";
 // import { scopeHitTest } from "../../../../src/plugins/norbert-usage/domain/phosphor/scopeHitTest";
 // import { decayFactor } from "../../../../src/plugins/norbert-usage/domain/phosphor/pulseTiming";
-// import fc from "fast-check";
 
-declare const buildFrame: (
-  store: MultiSessionStoreSurface,
-  metric: MetricId,
-  now: number,
-) => Frame;
 declare const scopeHitTest: (
   pointer: { x: number; y: number; width: number; height: number },
   frame: Frame,
@@ -316,42 +311,103 @@ describe("IC-S10b: Subscribers are notified after addSession and removeSession",
 // IC-S11: @property Frame values never invent sub-interval spikes beyond
 //         bracketing arrived values
 // Tag: @driving_port @property @US-PM-001
+//
+// Generators:
+//   - sessionId: non-empty string
+//   - metric: one of the three MetricIds
+//   - arrived-samples: a non-empty array of (ageMsFromNow, v) pairs strictly
+//     inside the 60s window, monotonically increasing in timestamp (i.e.
+//     decreasing ageMs). Values are positive finite doubles.
+//   - nowOffset: integer offset around a fixed logical NOW for variety
+//
+// Invariant: for every projected trace sample, locate its two bracketing
+// arrived samples (the arrived pair (left, right) with left.t <= sample.t
+// <= right.t; or a single arrived sample when the projected sample lies at
+// an endpoint). The projected sample.v must fall within
+// [min(left.v, right.v), max(left.v, right.v)] — i.e. no invented
+// sub-interval spike above the higher or below the lower bracketing value.
 // ---------------------------------------------------------------------------
 
-describe.skip("IC-S11 @property: Frame values never invent sub-interval spikes beyond bracketing arrived values", () => {
+describe("IC-S11 @property: Frame values never invent sub-interval spikes beyond bracketing arrived values", () => {
   it("every projected trace value is bounded by its two bracketing arrived samples", () => {
-    // NOTE: The DELIVER wave will implement this as a fast-check property.
-    // Here we express the shape with a representative, generator-friendly
-    // fixed case; the crafter replaces the body with `fc.assert(fc.property(...))`.
-    const store = createMultiSessionStore();
-    store.addSession("session-1");
-    const arrived = [
-      { t: NOW - 40_000, v: 2 },
-      { t: NOW - 30_000, v: 9 },
-      { t: NOW - 20_000, v: 4 },
-      { t: NOW - 10_000, v: 11 },
-      { t: NOW - 5_000, v: 7 },
-    ];
-    for (const s of arrived) store.appendRateSample("session-1", "events", s.t, s.v);
+    const metricArb: fc.Arbitrary<MetricId> = fc.constantFrom<MetricId>(
+      "events",
+      "tokens",
+      "toolcalls",
+    );
 
-    const frame = buildFrame(store, "events", NOW);
-    const trace = frame.traces.find((t) => t.sessionId === "session-1");
-    expect(trace).toBeDefined();
+    // A non-empty, timestamp-sorted sequence of arrived samples inside the
+    // 60s window. We generate unique `ageMs` in [0, WINDOW_MS - 1] then sort
+    // descending so the resulting `t = now - ageMs` sequence is ascending.
+    const arrivedArb = fc
+      .uniqueArray(fc.integer({ min: 0, max: WINDOW_MS - 1 }), {
+        minLength: 1,
+        maxLength: 12,
+      })
+      .chain((ages) => {
+        const sortedAgesDesc = [...ages].sort((a, b) => b - a);
+        return fc
+          .array(fc.double({ min: 0, max: 1000, noNaN: true, noDefaultInfinity: true }), {
+            minLength: sortedAgesDesc.length,
+            maxLength: sortedAgesDesc.length,
+          })
+          .map((values) =>
+            sortedAgesDesc.map((ageMs, i) => ({ ageMs, v: values[i] })),
+          );
+      });
 
-    const sortedArrived = [...arrived].sort((a, b) => a.t - b.t);
-    for (const sample of trace!.samples) {
-      let left = sortedArrived[0];
-      let right = sortedArrived[sortedArrived.length - 1];
-      for (let i = 0; i < sortedArrived.length - 1; i++) {
-        if (sortedArrived[i].t <= sample.t && sample.t <= sortedArrived[i + 1].t) {
-          left = sortedArrived[i];
-          right = sortedArrived[i + 1];
-          break;
-        }
-      }
-      expect(sample.v).toBeLessThanOrEqual(Math.max(left.v, right.v) + 1e-9);
-      expect(sample.v).toBeGreaterThanOrEqual(Math.min(left.v, right.v) - 1e-9);
-    }
+    fc.assert(
+      fc.property(
+        fc.string({ minLength: 1, maxLength: 12 }),
+        metricArb,
+        arrivedArb,
+        fc.integer({ min: -1000, max: 1000 }),
+        (sessionId, metric, arrived, nowOffset) => {
+          const now = NOW + nowOffset;
+          const store = createMultiSessionStore();
+          store.addSession(sessionId);
+          for (const s of arrived) {
+            store.appendRateSample(sessionId, metric, now - s.ageMs, s.v);
+          }
+
+          const frame = buildFrame(store, metric, now);
+          const trace = frame.traces.find((t) => t.sessionId === sessionId);
+          expect(trace).toBeDefined();
+
+          // Bracketing lookup over arrived samples (ascending timestamp).
+          const sortedArrived = arrived
+            .map((s) => ({ t: now - s.ageMs, v: s.v }))
+            .sort((a, b) => a.t - b.t);
+
+          for (const sample of trace!.samples) {
+            let left = sortedArrived[0];
+            let right = sortedArrived[sortedArrived.length - 1];
+            if (sample.t <= sortedArrived[0].t) {
+              left = sortedArrived[0];
+              right = sortedArrived[0];
+            } else if (sample.t >= sortedArrived[sortedArrived.length - 1].t) {
+              left = sortedArrived[sortedArrived.length - 1];
+              right = sortedArrived[sortedArrived.length - 1];
+            } else {
+              for (let i = 0; i < sortedArrived.length - 1; i++) {
+                if (
+                  sortedArrived[i].t <= sample.t &&
+                  sample.t <= sortedArrived[i + 1].t
+                ) {
+                  left = sortedArrived[i];
+                  right = sortedArrived[i + 1];
+                  break;
+                }
+              }
+            }
+            const hi = Math.max(left.v, right.v);
+            const lo = Math.min(left.v, right.v);
+            expect(sample.v).toBeLessThanOrEqual(hi + 1e-9);
+            expect(sample.v).toBeGreaterThanOrEqual(lo - 1e-9);
+          }
+        },
+      ),
+    );
   });
 });
 
@@ -359,28 +415,96 @@ describe.skip("IC-S11 @property: Frame values never invent sub-interval spikes b
 // IC-S12: @property Frame values never zero-fill between arrivals when the
 //         last arrived value is non-zero
 // Tag: @driving_port @property @US-PM-001
+//
+// Generators:
+//   - sessionId: non-empty string
+//   - metric: one of the three MetricIds
+//   - arrived-samples: a non-empty, ascending-timestamp sequence inside the
+//     60s window; every value is STRICTLY POSITIVE (min 0.01). The last
+//     arrived sample is the most recent, and no further samples arrive
+//     after it (silence up to `now`).
+//   - nowOffset: integer offset around a fixed logical NOW
+//
+// Invariants:
+//   1. edge-value: the projected trace's current-time-edge sample value
+//      equals the last arrived value (the scope does not zero-fill during
+//      silence).
+//   2. no-zero-fill: no projected sample value equals 0 purely because time
+//      has elapsed without arrivals.
 // ---------------------------------------------------------------------------
 
-describe.skip("IC-S12 @property: Frame values never zero-fill between arrivals", () => {
-  it("trace value at the current-time edge equals the last arrived value (non-zero)", () => {
-    // DELIVER wave will generalize this to fast-check.
-    const store = createMultiSessionStore();
-    store.addSession("session-1");
-    // Last arrived value: 8 at 15s ago, then silence.
-    store.appendRateSample("session-1", "events", NOW - 60_000, 3);
-    store.appendRateSample("session-1", "events", NOW - 30_000, 8);
-    store.appendRateSample("session-1", "events", NOW - 15_000, 8);
+describe("IC-S12 @property: Frame values never zero-fill between arrivals", () => {
+  it("edge value equals last arrived value and no sample zero-fills while the last arrival is non-zero", () => {
+    const metricArb: fc.Arbitrary<MetricId> = fc.constantFrom<MetricId>(
+      "events",
+      "tokens",
+      "toolcalls",
+    );
 
-    const frame = buildFrame(store, "events", NOW);
-    const trace = frame.traces.find((t) => t.sessionId === "session-1");
-    expect(trace).toBeDefined();
-    const edge = trace!.samples[trace!.samples.length - 1];
-    expect(edge.v).toBeCloseTo(8, 5);
+    const arrivedNonZeroArb = fc
+      .uniqueArray(fc.integer({ min: 0, max: WINDOW_MS - 1 }), {
+        minLength: 1,
+        maxLength: 12,
+      })
+      .chain((ages) => {
+        const sortedAgesDesc = [...ages].sort((a, b) => b - a);
+        return fc
+          .array(
+            fc.double({
+              min: 0.01,
+              max: 1000,
+              noNaN: true,
+              noDefaultInfinity: true,
+            }),
+            {
+              minLength: sortedAgesDesc.length,
+              maxLength: sortedAgesDesc.length,
+            },
+          )
+          .map((values) =>
+            sortedAgesDesc.map((ageMs, i) => ({ ageMs, v: values[i] })),
+          );
+      });
 
-    // No value is zero while the last arrived is non-zero.
-    for (const sample of trace!.samples) {
-      expect(sample.v).not.toBe(0);
-    }
+    fc.assert(
+      fc.property(
+        fc.string({ minLength: 1, maxLength: 12 }),
+        metricArb,
+        arrivedNonZeroArb,
+        fc.integer({ min: -1000, max: 1000 }),
+        (sessionId, metric, arrived, nowOffset) => {
+          const now = NOW + nowOffset;
+          const store = createMultiSessionStore();
+          store.addSession(sessionId);
+          for (const s of arrived) {
+            store.appendRateSample(sessionId, metric, now - s.ageMs, s.v);
+          }
+
+          const frame = buildFrame(store, metric, now);
+          const trace = frame.traces.find((t) => t.sessionId === sessionId);
+          expect(trace).toBeDefined();
+
+          // The last arrived sample (smallest ageMs -> largest t).
+          const sortedByT = arrived
+            .map((s) => ({ t: now - s.ageMs, v: s.v }))
+            .sort((a, b) => a.t - b.t);
+          const lastArrived = sortedByT[sortedByT.length - 1];
+
+          // Edge-value invariant: the projected edge sample equals the last
+          // arrived value. (When samples is empty something upstream
+          // silently zero-filled / dropped the last arrival — a violation.)
+          expect(trace!.samples.length).toBeGreaterThan(0);
+          const edge = trace!.samples[trace!.samples.length - 1];
+          expect(edge.v).toBeCloseTo(lastArrived.v, 5);
+
+          // No-zero-fill invariant: since every arrival is strictly
+          // positive, no projected sample may read as zero.
+          for (const sample of trace!.samples) {
+            expect(sample.v).not.toBe(0);
+          }
+        },
+      ),
+    );
   });
 });
 
