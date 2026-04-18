@@ -34,14 +34,8 @@ import {
 // Driving ports (target modules — resolved once DELIVER implements them).
 // Uncomment as each module lands.
 import { buildFrame } from "../../../../src/plugins/norbert-usage/domain/phosphor/scopeProjection";
-// import { scopeHitTest } from "../../../../src/plugins/norbert-usage/domain/phosphor/scopeHitTest";
+import { scopeHitTest } from "../../../../src/plugins/norbert-usage/domain/phosphor/scopeHitTest";
 import { createMultiSessionStore } from "../../../../src/plugins/norbert-usage/adapters/multiSessionStore";
-
-// Placeholder declarations so this file parses before DELIVER lands.
-declare const scopeHitTest: (
-  pointer: { x: number; y: number; width: number; height: number },
-  frame: Frame,
-) => HoverSelection | null;
 
 // ---------------------------------------------------------------------------
 // WALKING SKELETON WS-1: Two sessions alive and churning
@@ -164,7 +158,7 @@ describe("WS-3: User switches the metric and the scope re-projects with the new 
 // Tag: @walking_skeleton @driving_port
 // ---------------------------------------------------------------------------
 
-describe.skip("WS-4: User hovers over a trace and a tooltip identifies the session, value, and age", () => {
+describe("WS-4: User hovers over a trace and a tooltip identifies the session, value, and age", () => {
   it("hit-test returns session-2, value 47, age near 1.5 seconds", () => {
     // Given session-2 has an arrived value of 47 events per second at 1.5 seconds ago
     const store = createMultiSessionStore();
