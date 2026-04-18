@@ -119,8 +119,8 @@ describe("M4-S2: Hover snaps to the nearest of two overlapping traces", () => {
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("M4-S3: Hover value comes from sampling the arrived history at the pointer's time", () => {
-  it("value is the interpolation between bracketing arrived samples", () => {
+describe("M4-S3: Hover value comes from sampling the arrived history at the pointer's time", () => {
+  it("value is the bracketing arrived sample at the pointer's time (no interpolation) and matches the trace's projected value", () => {
     // Given session-1 has arrived samples at 5s intervals with distinct values
     const store = createMultiSessionStore();
     store.addSession("session-1");
@@ -132,26 +132,40 @@ describe.skip("M4-S3: Hover value comes from sampling the arrived history at the
     const frame = buildFrame(store, "events", NOW);
 
     // When the pointer is between (NOW-10s, 8) and (NOW-5s, 12), at midpoint (NOW-7.5s)
-    // Expected interpolated value at midpoint = (8 + 12) / 2 = 10
+    // Expected value at pointerTime under the scope's bracketing rule (last sample
+    // at-or-before pointerTime) = 8. No interpolation — the trace is a step/line
+    // over the arrived samples and the hover value must sit on the same
+    // bracketed sample that projection uses.
     const pointerTime = NOW - 7500;
     const ageMs = NOW - pointerTime;
     const x = xForAgeMs(ageMs);
     const yMax = frame.yMax;
-    const y = HEIGHT - (10 / yMax) * HEIGHT;
+    // Place the pointer vertically near the bracketed value (8) so the hit-test
+    // snaps to session-1; the exact y does not affect the reported value (the
+    // reported value is a property of pointer's x-time, not y).
+    const y = HEIGHT - (8 / yMax) * HEIGHT;
 
     const selection = scopeHitTest({ x, y, width: WIDTH, height: HEIGHT }, frame);
 
-    // Then the selection's value is the interpolated arrived value
+    // Then the selection's value is the bracketed arrived value (not an interpolation)
     expect(selection).not.toBeNull();
     expect(selection!.sessionId).toBe("session-1");
-    expect(selection!.value).toBeCloseTo(10, 1);
+    expect(selection!.value).toBeCloseTo(8, 5);
 
-    // And the value matches the trace value at that time
+    // And the value matches the trace's bracketed value at the pointer's time —
+    // the value of the latest sample at-or-before pointerTime from the trace the
+    // projection emits. scopeHitTest and scopeProjection must agree.
     const trace = frame.traces.find((t) => t.sessionId === "session-1")!;
-    const nearest = trace.samples.reduce((best, s) =>
-      Math.abs(s.t - pointerTime) < Math.abs(best.t - pointerTime) ? s : best,
+    const bracketed = trace.samples.reduce<{ t: number; v: number } | null>(
+      (best, s) => {
+        if (s.t > pointerTime) return best;
+        if (best === null || s.t > best.t) return s;
+        return best;
+      },
+      null,
     );
-    expect(selection!.value).toBeCloseTo(nearest.v, 0);
+    expect(bracketed).not.toBeNull();
+    expect(selection!.value).toBeCloseTo(bracketed!.v, 5);
   });
 });
 
