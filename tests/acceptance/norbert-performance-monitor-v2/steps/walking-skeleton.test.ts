@@ -129,7 +129,7 @@ describe("WS-2: User sees a fresh hook event flare as a pulse on its session's t
 // Tag: @walking_skeleton @driving_port
 // ---------------------------------------------------------------------------
 
-describe.skip("WS-3: User switches the metric and the scope re-projects with the new scale", () => {
+describe("WS-3: User switches the metric and the scope re-projects with the new scale", () => {
   it("the next frame uses tokens-per-second history and Y-axis maximum of 100", () => {
     // Given session-1 has tokens-per-second history peaking near 80
     const store = createMultiSessionStore();
