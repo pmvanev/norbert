@@ -1527,6 +1527,140 @@ code, pre, .mono,
   display: block;
 }
 
+/* ═══ PHOSPHOR SCOPE (Performance Monitor v2) ═══
+   Mirrors the bounded-canvas pattern used by .oscilloscope / .osc-main
+   so the internal <canvas> (which is imperatively sized from the host's
+   ResizeObserver) can never feedback-loop the parent into unbounded
+   growth. The canvas-wrap is flex:1 inside a height:100% column; the
+   canvas-host fills the wrap absolutely; the canvas itself is pinned
+   100% to its host. All colors come from design tokens. */
+
+.phosphor-scope {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 2px;
+}
+
+.phosphor-controls {
+  display: flex;
+  gap: 6px;
+  padding: 6px 10px;
+  flex-shrink: 0;
+}
+
+.phosphor-controls-btn {
+  font-family: var(--font-ui);
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: 999px;
+  color: var(--text-m);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+
+.phosphor-controls-btn:hover {
+  color: var(--text-p);
+  background: var(--bg-card-h);
+  border-color: var(--border-card-h);
+}
+
+.phosphor-controls-btn-active {
+  color: var(--brand);
+  background: var(--bg-card-h);
+  border-color: var(--brand);
+}
+
+.phosphor-scope-canvas-wrap {
+  flex: 1;
+  position: relative;
+  min-height: 120px;
+  overflow: hidden;
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--card-r);
+}
+
+.phosphor-canvas-host {
+  position: absolute;
+  inset: 0;
+}
+
+.phosphor-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.phosphor-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 10px;
+  flex-shrink: 0;
+}
+
+.phosphor-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--text-m);
+}
+
+.phosphor-legend-swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  /* background color applied inline via style={{ backgroundColor: entry.color }} */
+}
+
+.phosphor-legend-session {
+  color: var(--text-p);
+}
+
+.phosphor-legend-value {
+  font-family: var(--font-mono);
+  color: var(--text-m);
+}
+
+.phosphor-hover-tooltip {
+  position: absolute;
+  pointer-events: none;
+  padding: 4px 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: 4px;
+  font-size: 10px;
+  color: var(--text-p);
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  z-index: 2;
+}
+
+.phosphor-hover-session {
+  color: var(--text-p);
+}
+
+.phosphor-hover-sep {
+  color: var(--text-m);
+}
+
+.phosphor-hover-value,
+.phosphor-hover-age {
+  font-family: var(--font-mono);
+  color: var(--text-m);
+}
+
 /* ═══ USAGE DASHBOARD ═══ */
 
 .usage-dashboard {
