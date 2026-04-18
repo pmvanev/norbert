@@ -42,6 +42,14 @@ const perSessionSnapshots = new Map<string, MetricsSnapshot>();
 // reflect live upstream activity.
 let rateTickHandle: ReturnType<typeof setInterval> | null = null;
 
+// v2 phosphor DEV-only silence watchdog. Scheduled alongside rateTickHandle
+// in onLoad and cleared by onUnload. Fires once ~10s after plugin load and
+// warns on the console if no events have arrived, so Phil can distinguish
+// "hook wiring broken" from "implementation bug" when DevTools shows an
+// empty scope. Production builds skip this entirely.
+let silenceWatchdogHandle: ReturnType<typeof setTimeout> | null = null;
+let firstEventReceivedAt: number | null = null;
+
 // ---------------------------------------------------------------------------
 // View constants
 // ---------------------------------------------------------------------------
@@ -158,6 +166,9 @@ const onLoad = (api: NorbertAPI): void => {
       usageMetricsStore.update(nextMetrics, nextTimeSeries);
     },
     updateMultiSessionMetrics: (sessionId, label, reducer) => {
+      if (firstEventReceivedAt === null) {
+        firstEventReceivedAt = Date.now();
+      }
       usageMultiSessionStore.addSession(sessionId);
       const prev = usageMultiSessionStore.getSession(sessionId);
       if (prev) {
@@ -220,6 +231,27 @@ const onLoad = (api: NorbertAPI): void => {
   rateTickHandle = setInterval(() => {
     processor.sampleRates(Date.now());
   }, RATE_TICK_MS);
+
+  // DEV-only silence watchdog — see module-level docblock. If no events
+  // arrive within the 10s grace window, warn on the console so Phil can
+  // identify a hook-receiver wiring issue vs an implementation bug.
+  if (
+    typeof import.meta !== "undefined" &&
+    typeof import.meta.env !== "undefined" &&
+    Boolean(import.meta.env.DEV)
+  ) {
+    if (silenceWatchdogHandle !== null) {
+      clearTimeout(silenceWatchdogHandle);
+    }
+    silenceWatchdogHandle = setTimeout(() => {
+      if (firstEventReceivedAt === null) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          "[phosphor] no events received in 10s — check hook receiver wiring",
+        );
+      }
+    }, 10_000);
+  }
 };
 
 /// Cleanup function called when the plugin is unloaded.
@@ -231,6 +263,14 @@ const onUnload = (): void => {
     clearInterval(rateTickHandle);
     rateTickHandle = null;
   }
+  // Clear the DEV silence watchdog if it was armed.
+  if (silenceWatchdogHandle !== null) {
+    clearTimeout(silenceWatchdogHandle);
+    silenceWatchdogHandle = null;
+  }
+  // Reset the first-event sentinel so reload-cycles during development
+  // actually re-arm the watchdog.
+  firstEventReceivedAt = null;
 };
 
 /// The norbert-usage plugin instance.

@@ -370,6 +370,22 @@ export const createHookProcessor = (
     { events: number; toolcalls: number }
   >();
 
+  // ---------------------------------------------------------------------
+  // DEV-only diagnostics. Guarded behind `import.meta.env.DEV` so
+  // production builds emit nothing. Phil opens DevTools during a local
+  // run to confirm the v2 pipeline actually receives events and the 5s
+  // tick actually fires. Logs once per boundary (first event, first rate
+  // sample, first pulse) to avoid console spam.
+  // ---------------------------------------------------------------------
+  const isDev =
+    typeof import.meta !== "undefined" &&
+    typeof import.meta.env !== "undefined" &&
+    Boolean(import.meta.env.DEV);
+  let loggedFirstEvent = false;
+  let loggedFirstRateSample = false;
+  let loggedFirstPulse = false;
+  let loggedFirstTick = false;
+
   const ensureCounters = (
     sessionId: string,
   ): { events: number; toolcalls: number } => {
@@ -435,6 +451,14 @@ export const createHookProcessor = (
         counters.toolcalls += 1;
       }
 
+      if (isDev && !loggedFirstEvent) {
+        loggedFirstEvent = true;
+        // eslint-disable-next-line no-console
+        console.log(
+          `[phosphor] first event received — session=${sessionId} type=${eventType}`,
+        );
+      }
+
       // Emit a pulse for event types that warrant one. Tool events carry
       // the strongest strength; subagent lifecycle a medium strength;
       // session lifecycle the softest. Event types outside the three
@@ -445,6 +469,13 @@ export const createHookProcessor = (
         const kind = classifyPulseKind(eventType);
         if (kind) {
           appendPulse(sessionId, emitPulse(kind, now()));
+          if (isDev && !loggedFirstPulse) {
+            loggedFirstPulse = true;
+            // eslint-disable-next-line no-console
+            console.log(
+              `[phosphor] first pulse appended — session=${sessionId} kind=${kind}`,
+            );
+          }
         }
       }
 
@@ -465,6 +496,13 @@ export const createHookProcessor = (
             now(),
           );
           appendRateSample(sessionId, "tokens", sample.t, sample.v);
+          if (isDev && !loggedFirstRateSample) {
+            loggedFirstRateSample = true;
+            // eslint-disable-next-line no-console
+            console.log(
+              `[phosphor] first tokens/s rate sample — session=${sessionId} v=${sample.v.toFixed(2)}`,
+            );
+          }
         }
       }
     }
@@ -478,6 +516,13 @@ export const createHookProcessor = (
    */
   const sampleRates = (tickBoundaryT: number): void => {
     if (!appendRateSample) return;
+    if (isDev && !loggedFirstTick) {
+      loggedFirstTick = true;
+      // eslint-disable-next-line no-console
+      console.log(
+        `[phosphor] first rate tick fired — sessionCount=${sessionCounters.size} t=${tickBoundaryT}`,
+      );
+    }
     for (const [sessionId, counters] of sessionCounters.entries()) {
       const eventsSample = deriveEventsRate(
         counters.events,
