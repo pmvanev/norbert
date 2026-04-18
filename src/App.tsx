@@ -36,7 +36,9 @@ import { NotificationCenterStandalone } from "./plugins/norbert-notif/views/Noti
 import { ConfigViewerView } from "./plugins/norbert-config/views/ConfigViewerView";
 import { ConfigDetailPanel } from "./plugins/norbert-config/views/ConfigDetailPanel";
 import type { SelectedConfigItem } from "./plugins/norbert-config/domain/types";
-import { PerformanceMonitorView } from "./plugins/norbert-usage/views/PerformanceMonitorView";
+// v1 PerformanceMonitorView is unused post-09-02 (swap to PhosphorScopeView);
+// deletion is owned by Step 10-01 per v2-phosphor-architecture.md §5 Q5.
+import { PhosphorScopeView } from "./plugins/norbert-usage/views/phosphor/PhosphorScopeView";
 import { CostTicker } from "./plugins/norbert-usage/views/CostTicker";
 import { SessionStatusView, type SessionEvent as DashboardSessionEvent } from "./plugins/norbert-usage/views/SessionStatusView";
 import type { AccumulatedMetric as BackendAccumulatedMetric } from "./plugins/norbert-usage/domain/activeTimeFormatter";
@@ -543,8 +545,12 @@ function App() {
     };
     CostTickerWrapper.displayName = "CostTickerWrapper";
 
+    // v2 phosphor scope replaces v1 PerformanceMonitorView for the
+    // "performance-monitor" view id (per v2-phosphor-architecture.md §5 Q5).
+    // The v1 component file still exists at this step and becomes unused;
+    // it is deleted by Step 10-01.
     const PerformanceMonitorWrapper: FC = () => (
-      <PerformanceMonitorView store={usageMetricsStore} multiSessionStore={usageMultiSessionStore} />
+      <PhosphorScopeView store={usageMultiSessionStore} />
     );
     PerformanceMonitorWrapper.displayName = "PerformanceMonitorWrapper";
 
