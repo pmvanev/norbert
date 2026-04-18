@@ -1,7 +1,7 @@
 /// Multi-session store: mutable adapter tracking SessionMetrics for all
 /// active sessions. Lives at the adapter boundary (effects at edges).
 ///
-/// Port: MultiSessionStore
+/// Port: MultiSessionStore (v1 — category-based)
 ///   addSession(id) -- register a new session with zeroed metrics
 ///   removeSession(id) -- remove a tracked session
 ///   updateSession(id, metrics) -- replace metrics for a session
@@ -13,8 +13,18 @@
 ///   getAggregateWindowBuffer(categoryId, windowId) -- aggregate buffer for a specific time window
 ///   getSessionWindowBuffer(sessionId, categoryId, windowId) -- session buffer for a specific time window
 ///   subscribe(callback) -- register state-change listener
+///
+/// Port: MultiSessionStoreV2Surface (v2 — phosphor rate samples + pulse log)
+/// Additive to v1; see the "V2 (phosphor) additive surface" section below.
+/// Milestone 10 of the PM v2 rollout deletes the v1 category pathway; until
+/// then both surfaces coexist on the same factory return value.
 
-import type { SessionMetrics, TimeSeriesBuffer, RateSample, TimeWindowId } from "../domain/types";
+import type {
+  SessionMetrics,
+  TimeSeriesBuffer,
+  RateSample as CategoryRateSample,
+  TimeWindowId,
+} from "../domain/types";
 import type { MetricCategoryId } from "../domain/categoryConfig";
 import { createInitialMetrics } from "../domain/metricsAggregator";
 import { createBuffer, appendSample } from "../domain/timeSeriesSampler";
@@ -24,6 +34,12 @@ import {
   appendMultiWindowSample,
   type MultiWindowBuffer,
 } from "../domain/multiWindowSampler";
+import {
+  METRIC_IDS,
+  type MetricId,
+  type Pulse,
+  type RateSample as PhosphorRateSample,
+} from "../domain/phosphor/phosphorMetricConfig";
 
 // ---------------------------------------------------------------------------
 // Category sample input -- values for each of the 4 metric categories
@@ -54,6 +70,43 @@ export interface MultiSessionStore {
   readonly getAggregateWindowBuffer: (categoryId: MetricCategoryId, windowId: TimeWindowId) => TimeSeriesBuffer;
   readonly getSessionWindowBuffer: (sessionId: string, categoryId: MetricCategoryId, windowId: TimeWindowId) => TimeSeriesBuffer | undefined;
   readonly subscribe: (callback: () => void) => () => void;
+
+  // -------------------------------------------------------------------------
+  // V2 (phosphor) additive surface — see ADR-049 / v2-phosphor-architecture.md.
+  //
+  // These methods coexist with the v1 category pathway above until milestone
+  // 10 deletes v1. Phosphor domain modules consume only this subset via the
+  // structural `PhosphorStoreSurface` type in `domain/phosphor/scopeProjection`.
+  // -------------------------------------------------------------------------
+
+  /** Append a rate sample for (session, metric) at time `t` with value `v`. */
+  readonly appendRateSample: (
+    sessionId: string,
+    metric: MetricId,
+    t: number,
+    v: number,
+  ) => void;
+  /** Append a pulse event on the named session's pulse log. */
+  readonly appendPulse: (sessionId: string, pulse: Pulse) => void;
+  /**
+   * Return the session's rate-sample history for the requested metric in
+   * insertion order (oldest → newest). Empty array when the session has no
+   * samples or does not exist.
+   */
+  readonly getRateHistory: (
+    sessionId: string,
+    metric: MetricId,
+  ) => ReadonlyArray<PhosphorRateSample>;
+  /**
+   * Return the session's pulse log in insertion order. Empty array when
+   * the session has no pulses or does not exist.
+   */
+  readonly getPulses: (sessionId: string) => ReadonlyArray<Pulse>;
+  /**
+   * Return the ordered list of registered session IDs. Registration order
+   * is preserved so per-session color assignment is deterministic.
+   */
+  readonly getSessionIds: () => ReadonlyArray<string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -83,7 +136,7 @@ const extractCategoryValue = (
 /// a separate CategorySample type. Consumers should read `tokenRate` to get the
 /// category value regardless of which category the buffer represents.
 /// TODO: introduce a dedicated CategorySample type to eliminate semantic mismatch.
-const createCategorySample = (value: number, timestamp: number): RateSample => ({
+const createCategorySample = (value: number, timestamp: number): CategoryRateSample => ({
   timestamp,
   tokenRate: value,
   costRate: 0,
@@ -143,12 +196,28 @@ export const createMultiSessionStore = (): MultiSessionStore => {
   // Last-known value per session per category (for delta computation)
   const lastSessionValues = new Map<string, Map<MetricCategoryId, number>>();
 
+  // V2 phosphor storage — per-session per-metric rate samples + per-session pulse log.
+  // Arrays grow on append; read-time callers are responsible for windowing.
+  const sessionRateHistories = new Map<
+    string,
+    Map<MetricId, PhosphorRateSample[]>
+  >();
+  const sessionPulseLogs = new Map<string, Pulse[]>();
+
   // Initialize aggregate buffers and sums for all categories
   for (const id of CATEGORY_IDS) {
     aggregateBuffers.set(id, createBuffer(DEFAULT_BUFFER_CAPACITY));
     aggregateMultiWindowBuffers.set(id, createMultiWindowBuffer());
     aggregateSums.set(id, 0);
   }
+
+  /** Initialize empty v2 rate-history buckets for a newly-added session. */
+  const initPhosphorBuckets = (sessionId: string): void => {
+    const metricMap = new Map<MetricId, PhosphorRateSample[]>();
+    for (const metric of METRIC_IDS) metricMap.set(metric, []);
+    sessionRateHistories.set(sessionId, metricMap);
+    sessionPulseLogs.set(sessionId, []);
+  };
 
   let batchDepth = 0;
   let batchDirty = false;
@@ -186,6 +255,7 @@ export const createMultiSessionStore = (): MultiSessionStore => {
     const valueMap = new Map<MetricCategoryId, number>();
     for (const id of CATEGORY_IDS) valueMap.set(id, 0);
     lastSessionValues.set(sessionId, valueMap);
+    initPhosphorBuckets(sessionId);
   };
 
   const removeSession = (sessionId: string): void => {
@@ -203,6 +273,8 @@ export const createMultiSessionStore = (): MultiSessionStore => {
     sessionBuffers.delete(sessionId);
     sessionMultiWindowBuffers.delete(sessionId);
     lastSessionValues.delete(sessionId);
+    sessionRateHistories.delete(sessionId);
+    sessionPulseLogs.delete(sessionId);
   };
 
   const updateSession = (sessionId: string, metrics: SessionMetrics): void => {
@@ -306,6 +378,46 @@ export const createMultiSessionStore = (): MultiSessionStore => {
     };
   };
 
+  // ---------------------------------------------------------------------------
+  // V2 phosphor methods (additive)
+  // ---------------------------------------------------------------------------
+
+  const appendRateSample = (
+    sessionId: string,
+    metric: MetricId,
+    t: number,
+    v: number,
+  ): void => {
+    const metricMap = sessionRateHistories.get(sessionId);
+    if (!metricMap) return; // unknown session -- silently drop (v1 parity)
+    const history = metricMap.get(metric);
+    if (!history) return;
+    history.push({ t, v });
+    notifySubscribers();
+  };
+
+  const appendPulse = (sessionId: string, pulse: Pulse): void => {
+    const log = sessionPulseLogs.get(sessionId);
+    if (!log) return;
+    log.push(pulse);
+    notifySubscribers();
+  };
+
+  const getRateHistory = (
+    sessionId: string,
+    metric: MetricId,
+  ): ReadonlyArray<PhosphorRateSample> => {
+    const metricMap = sessionRateHistories.get(sessionId);
+    if (!metricMap) return [];
+    const history = metricMap.get(metric);
+    return history ?? [];
+  };
+
+  const getPulses = (sessionId: string): ReadonlyArray<Pulse> =>
+    sessionPulseLogs.get(sessionId) ?? [];
+
+  const getSessionIds = (): ReadonlyArray<string> => Array.from(sessions.keys());
+
   return {
     addSession,
     removeSession,
@@ -319,5 +431,11 @@ export const createMultiSessionStore = (): MultiSessionStore => {
     getAggregateWindowBuffer,
     getSessionWindowBuffer,
     subscribe,
+    // v2 phosphor additive surface
+    appendRateSample,
+    appendPulse,
+    getRateHistory,
+    getPulses,
+    getSessionIds,
   };
 };
