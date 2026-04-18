@@ -100,10 +100,12 @@ export interface MultiSessionStore {
     metric: MetricId,
   ) => ReadonlyArray<PhosphorRateSample>;
   /**
-   * Return the session's pulse log in insertion order. When `now` is
-   * supplied, pulses older than `PULSE_RETENTION_MS` (relative to `now`)
-   * are trimmed from the returned array. Without `now`, the raw log is
-   * returned. Empty array when the session has no pulses or does not exist.
+   * Return the session's pulse log in insertion order with retention
+   * trim applied: pulses older than `PULSE_RETENTION_MS` relative to
+   * the reference clock are absent. When `now` is supplied, it is the
+   * reference clock; otherwise `Date.now()` is used so callers always
+   * observe the "no pulses older than retention" invariant. Empty
+   * array when the session has no pulses or does not exist.
    */
   readonly getPulses: (
     sessionId: string,
@@ -426,8 +428,14 @@ export const createMultiSessionStore = (): MultiSessionStore => {
   ): ReadonlyArray<Pulse> => {
     const log = sessionPulseLogs.get(sessionId);
     if (!log) return [];
-    if (now === undefined) return log;
-    return prunePulses(log, now, PULSE_RETENTION_MS);
+    // Retention trim is idempotent and always applied. When `now` is
+    // supplied (e.g. by scopeProjection), use it so trimming aligns with
+    // the frame's logical clock. Otherwise fall back to wall-clock
+    // `Date.now()` so callers never observe pulses older than the
+    // retention cutoff (the "pulses older than 5s are absent from
+    // store.getPulses" invariant).
+    const reference = now ?? Date.now();
+    return prunePulses(log, reference, PULSE_RETENTION_MS);
   };
 
   const getSessionIds = (): ReadonlyArray<string> => Array.from(sessions.keys());

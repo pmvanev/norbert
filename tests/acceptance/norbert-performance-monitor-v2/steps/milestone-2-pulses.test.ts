@@ -260,7 +260,7 @@ describe("M2-S5: A pulse older than 2.5 seconds is absent from the frame", () =>
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("M2-S6: The store trims pulses older than the retention cutoff", () => {
+describe("M2-S6: The store trims pulses older than the retention cutoff", () => {
   it("pulses older than 5s are absent from the store; younger pulses remain", () => {
     // Given session-1 has pulses at various ages including some beyond retention
     const store = createMultiSessionStore();
