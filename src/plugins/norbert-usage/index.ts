@@ -16,6 +16,7 @@ import { DEFAULT_PRICING_TABLE } from "./domain/pricingModel";
 import { appendSample } from "./domain/timeSeriesSampler";
 import { computeInstantaneousRates, type MetricsSnapshot } from "./domain/instantaneousRate";
 import type { RateSample, SessionMetrics } from "./domain/types";
+import { RATE_TICK_MS } from "./domain/phosphor/phosphorMetricConfig";
 
 // ---------------------------------------------------------------------------
 // Shared metrics store -- module-level so App.tsx and the hook processor
@@ -33,6 +34,13 @@ let previousSnapshot: MetricsSnapshot = { totalTokens: 0, sessionCost: 0, timest
 // Keyed by sessionId so that one session's rate isn't affected by events
 // from another session interleaving through the global pipeline.
 const perSessionSnapshots = new Map<string, MetricsSnapshot>();
+
+// v2 phosphor rate ticker handle. Scheduled by onLoad, cleared by onUnload.
+// The ticker drains the hookProcessor's per-session events / toolcalls
+// counters every RATE_TICK_MS and appends the derived rate samples to the
+// v2 store so per-session traces on the Performance Monitor phosphor scope
+// reflect live upstream activity.
+let rateTickHandle: ReturnType<typeof setInterval> | null = null;
 
 // ---------------------------------------------------------------------------
 // View constants
@@ -187,15 +195,42 @@ const onLoad = (api: NorbertAPI): void => {
     appendSessionSample: (sessionId, samples) => {
       usageMultiSessionStore.appendSessionSample(sessionId, samples);
     },
+    // v2 phosphor wiring: feed per-session rate samples and pulses into
+    // the multi-session store. Both methods are part of the store's
+    // additive v2 surface; callers that don't need the v2 pathway simply
+    // omit these deps. See v2-phosphor-architecture.md §5 Q1.
+    appendRateSample: (sessionId, metric, t, v) => {
+      usageMultiSessionStore.appendRateSample(sessionId, metric, t, v);
+    },
+    appendPulse: (sessionId, pulse) => {
+      usageMultiSessionStore.appendPulse(sessionId, pulse);
+    },
     pricingTable: DEFAULT_PRICING_TABLE,
   });
   api.hooks.register("session-event", processor);
+
+  // v2 phosphor rate ticker: every RATE_TICK_MS the processor drains its
+  // per-session events / toolcalls counters as rate samples. Running the
+  // scheduler here (composition root) rather than inside the processor
+  // keeps the processor's effect boundary bounded to ingest — the ticker
+  // is a separate boundary concern owned by plugin lifecycle.
+  if (rateTickHandle !== null) {
+    clearInterval(rateTickHandle);
+  }
+  rateTickHandle = setInterval(() => {
+    processor.sampleRates(Date.now());
+  }, RATE_TICK_MS);
 };
 
 /// Cleanup function called when the plugin is unloaded.
 const onUnload = (): void => {
-  // No cleanup needed for the walking skeleton.
-  // Future: unsubscribe from event sources, clear caches.
+  // Stop the v2 phosphor rate ticker if one is running so unload is
+  // idempotent and doesn't leak a background interval into the next
+  // load cycle.
+  if (rateTickHandle !== null) {
+    clearInterval(rateTickHandle);
+    rateTickHandle = null;
+  }
 };
 
 /// The norbert-usage plugin instance.

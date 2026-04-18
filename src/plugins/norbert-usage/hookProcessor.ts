@@ -15,9 +15,16 @@ import { aggregateEvent } from "./domain/metricsAggregator";
 import { computeInstantaneousRates } from "./domain/instantaneousRate";
 import {
   PULSE_STRENGTHS,
+  RATE_TICK_MS,
+  type MetricId,
   type Pulse,
   type PulseKind,
 } from "./domain/phosphor/phosphorMetricConfig";
+import {
+  deriveEventsRate,
+  deriveTokensRate,
+  deriveToolCallsRate,
+} from "./domain/phosphor/rateDerivation";
 
 // Re-export phosphor rate-derivation helpers so acceptance tests and
 // upstream wiring can import the full derivation surface from a single
@@ -39,9 +46,56 @@ export interface HookProcessorDeps {
   readonly updateMetrics: (reducer: (prev: SessionMetrics) => SessionMetrics) => void;
   readonly updateMultiSessionMetrics?: (sessionId: string, label: string, reducer: (prev: SessionMetrics) => SessionMetrics) => void;
   readonly appendSessionSample?: (sessionId: string, samples: CategorySampleInput) => void;
+  /**
+   * v2 phosphor: append a rate sample (events/s, tokens/s, or toolcalls/s)
+   * onto the session's per-metric history. Called by:
+   *   - per-event tokens/s derivation on OTel `api_request` arrivals
+   *   - per-tick events/s and toolcalls/s derivation from `sampleRates`
+   */
+  readonly appendRateSample?: (
+    sessionId: string,
+    metric: MetricId,
+    t: number,
+    v: number,
+  ) => void;
+  /**
+   * v2 phosphor: append a pulse event onto the session's pulse log.
+   * Called per-event with the pulse kind (tool / subagent / lifecycle)
+   * derived from the event_type.
+   */
+  readonly appendPulse?: (sessionId: string, pulse: Pulse) => void;
+  /**
+   * Clock dependency. Defaults to `Date.now` when omitted so existing
+   * callers and tests are unaffected. Tests inject a deterministic clock
+   * (e.g. `vi.getMockedSystemTime`) to pin rate-sample timestamps.
+   */
+  readonly now?: () => number;
   readonly pricingTable: PricingTable;
   readonly getIsOtelActive?: (sessionId: string) => boolean;
 }
+
+/**
+ * The hookProcessor returned by `createHookProcessor`. Callable as
+ * `HookProcessor(payload)` — the existing plugin-loader contract — and
+ * augmented with a `sampleRates(now)` method that the composition root
+ * invokes on a 5-second tick to derive events/s and toolcalls/s rate
+ * samples from closure-scoped counters.
+ *
+ * The augmentation preserves backwards compatibility: existing unit
+ * tests that destructure the returned function and call it directly
+ * remain unchanged (a function-with-property is still a function).
+ */
+export type HookProcessorWithRateSampler = HookProcessor & {
+  /**
+   * Drain the closure-scoped per-session events / toolcalls counters as
+   * rate samples at time `now`, then reset the counters. Idempotent per
+   * session — invoking with no intervening events produces a zero sample.
+   *
+   * Noop when `appendRateSample` was not injected (production + tests
+   * that do not exercise the v2 rate pathway remain unaffected).
+   */
+  readonly sampleRates: (now: number) => void;
+};
 
 // ---------------------------------------------------------------------------
 // Payload field extraction — pure helpers
@@ -142,6 +196,90 @@ export const emitPulse = (kind: PulseKind, t: number): Pulse => ({
 });
 
 // ---------------------------------------------------------------------------
+// Pulse-kind classification — maps event_type to the phosphor pulse kind.
+//
+// Per v2-phosphor-architecture.md §5 Q1: tool events emit the strongest
+// flare, subagent lifecycle events a medium flare, session lifecycle
+// events the softest. Event-type names cover both Claude Code hook
+// provider names (PreToolUse / PostToolUse / SubagentStop) and OTel /
+// internal aliases (tool_call_start / tool_result / agent_complete /
+// session_start) so the classification works uniformly regardless of
+// which upstream stream delivered the event.
+// ---------------------------------------------------------------------------
+
+const TOOL_EVENT_TYPES: ReadonlySet<string> = new Set([
+  "PreToolUse",
+  "PostToolUse",
+  "tool_call_start",
+  "tool_call_end",
+  "tool_result",
+]);
+
+const SUBAGENT_EVENT_TYPES: ReadonlySet<string> = new Set([
+  "SubagentStop",
+  "agent_complete",
+]);
+
+const LIFECYCLE_EVENT_TYPES: ReadonlySet<string> = new Set([
+  "SessionStart",
+  "SessionEnd",
+  "session_start",
+  "session_end",
+]);
+
+/**
+ * Classify an `event_type` into its phosphor pulse kind.
+ *
+ * Returns `null` for event types that do not warrant a visual pulse
+ * (notifications, prompt_submit, api_request, unknown) — the scope
+ * intentionally reserves pulses for the three kinds Phil uses to judge
+ * ambient aliveness. Pure: lookup against three immutable sets.
+ */
+const classifyPulseKind = (eventType: string): PulseKind | null => {
+  if (TOOL_EVENT_TYPES.has(eventType)) return "tool";
+  if (SUBAGENT_EVENT_TYPES.has(eventType)) return "subagent";
+  if (LIFECYCLE_EVENT_TYPES.has(eventType)) return "lifecycle";
+  return null;
+};
+
+/** Is the event_type one that counts toward the toolcalls/s rate? */
+const isToolCallEvent = (eventType: string): boolean =>
+  TOOL_EVENT_TYPES.has(eventType);
+
+// ---------------------------------------------------------------------------
+// OTel api_request token rate extraction — pure helpers
+// ---------------------------------------------------------------------------
+
+/** Sum of all token fields on a Claude Code usage record. */
+const totalTokensOf = (usage: Record<string, unknown>): number => {
+  const input = typeof usage["input_tokens"] === "number" ? (usage["input_tokens"] as number) : 0;
+  const output = typeof usage["output_tokens"] === "number" ? (usage["output_tokens"] as number) : 0;
+  const cacheRead = typeof usage["cache_read_input_tokens"] === "number" ? (usage["cache_read_input_tokens"] as number) : 0;
+  const cacheCreate = typeof usage["cache_creation_input_tokens"] === "number" ? (usage["cache_creation_input_tokens"] as number) : 0;
+  return input + output + cacheRead + cacheCreate;
+};
+
+/**
+ * Extract the `(totalTokens, durationMs)` pair from an OTel api_request
+ * payload for the tokens/s derivation. Returns `null` when the payload
+ * is missing either field — the caller then skips the tokens/s sample
+ * (pure: no throwing on malformed payloads).
+ */
+const extractOtelTokenRateInputs = (
+  payload: unknown,
+): { readonly totalTokens: number; readonly durationMs: number } | null => {
+  const inner = extractInnerPayload(payload);
+  if (!isRecord(inner)) return null;
+  const usage = inner["usage"];
+  if (!isRecord(usage)) return null;
+  const durationRaw = inner["duration_ms"];
+  const durationMs = typeof durationRaw === "number" ? durationRaw : 0;
+  if (durationMs <= 0) return null;
+  const totalTokens = totalTokensOf(usage);
+  return { totalTokens, durationMs };
+};
+
+// ---------------------------------------------------------------------------
 // Category sample derivation — pure helper
 // ---------------------------------------------------------------------------
 
@@ -201,8 +339,19 @@ const deriveCategorySamples = (
  * 3. aggregateEvent(prev, event, pricingTable) -> next SessionMetrics
  * 4. updateMetrics(reducer) -> effect (store update)
  */
-export const createHookProcessor = (deps: HookProcessorDeps): HookProcessor => {
-  const { updateMetrics, updateMultiSessionMetrics, appendSessionSample, pricingTable, getIsOtelActive } = deps;
+export const createHookProcessor = (
+  deps: HookProcessorDeps,
+): HookProcessorWithRateSampler => {
+  const {
+    updateMetrics,
+    updateMultiSessionMetrics,
+    appendSessionSample,
+    appendRateSample,
+    appendPulse,
+    pricingTable,
+    getIsOtelActive,
+  } = deps;
+  const now = deps.now ?? Date.now;
 
   // Per-session OTel-active tracking. A session is flipped to OTel mode
   // on the first event tagged with provider="otel" and remains in that
@@ -212,7 +361,26 @@ export const createHookProcessor = (deps: HookProcessorDeps): HookProcessor => {
   // counting against OTel api_request events.
   const otelActiveSessions = new Set<string>();
 
-  return (payload: unknown): void => {
+  // v2 phosphor counters. Per-session accumulators drained and reset by
+  // `sampleRates(now)` on each 5-second tick. The mutable cell lives in
+  // this closure so the production effect boundary stays inside this
+  // module (the composition root only owns the ticker scheduler).
+  const sessionCounters = new Map<
+    string,
+    { events: number; toolcalls: number }
+  >();
+
+  const ensureCounters = (
+    sessionId: string,
+  ): { events: number; toolcalls: number } => {
+    const existing = sessionCounters.get(sessionId);
+    if (existing) return existing;
+    const fresh = { events: 0, toolcalls: 0 };
+    sessionCounters.set(sessionId, fresh);
+    return fresh;
+  };
+
+  const processor: HookProcessor = (payload: unknown): void => {
     const eventType = extractEventType(payload);
     const event = buildAggregatorEvent(eventType, payload);
     const sessionId = extractSessionId(payload);
@@ -247,13 +415,100 @@ export const createHookProcessor = (deps: HookProcessorDeps): HookProcessor => {
           return next;
         });
 
-        // Append per-category samples after metrics update
+        // v1: Append per-category samples after metrics update (legacy path,
+        // still feeds gauges / session-status / other adjacent v1 consumers).
         if (appendSessionSample && previousMetrics && updatedMetrics) {
           const samples = deriveCategorySamples(previousMetrics, updatedMetrics);
           appendSessionSample(sessionId, samples);
         }
       }
     }
+
+    // v2 phosphor: per-event pulse emission + rate counter increments +
+    // per-event tokens/s derivation. Guarded on sessionId so hook events
+    // that are not scoped to a session do not pollute per-session state.
+    if (sessionId) {
+      // Increment per-session counters (drained on the 5s tick).
+      const counters = ensureCounters(sessionId);
+      counters.events += 1;
+      if (isToolCallEvent(eventType)) {
+        counters.toolcalls += 1;
+      }
+
+      // Emit a pulse for event types that warrant one. Tool events carry
+      // the strongest strength; subagent lifecycle a medium strength;
+      // session lifecycle the softest. Event types outside the three
+      // classes (prompt_submit, api_request, notifications, unknown) do
+      // not emit pulses — this keeps the scope signal diagnostic rather
+      // than saturated.
+      if (appendPulse) {
+        const kind = classifyPulseKind(eventType);
+        if (kind) {
+          appendPulse(sessionId, emitPulse(kind, now()));
+        }
+      }
+
+      // Tokens/s is per-event (not per-tick) because OTel api_request
+      // events carry their own `duration_ms`. See v2-phosphor-architecture
+      // §5 Q1. Guarded on provider="otel" AND event_type="api_request" so
+      // only the tokens-bearing OTel stream drives this metric.
+      if (
+        appendRateSample &&
+        provider === "otel" &&
+        eventType === "api_request"
+      ) {
+        const inputs = extractOtelTokenRateInputs(payload);
+        if (inputs) {
+          const sample = deriveTokensRate(
+            inputs.totalTokens,
+            inputs.durationMs,
+            now(),
+          );
+          appendRateSample(sessionId, "tokens", sample.t, sample.v);
+        }
+      }
+    }
   };
+
+  /**
+   * Drain the events / toolcalls counters as rate samples. Invoked by
+   * the composition root on its 5-second tick. Resets counters on exit
+   * so the next window starts from zero. Noop when `appendRateSample`
+   * was not injected (the v2 pathway is disabled).
+   */
+  const sampleRates = (tickBoundaryT: number): void => {
+    if (!appendRateSample) return;
+    for (const [sessionId, counters] of sessionCounters.entries()) {
+      const eventsSample = deriveEventsRate(
+        counters.events,
+        RATE_TICK_MS,
+        tickBoundaryT,
+      );
+      appendRateSample(sessionId, "events", eventsSample.t, eventsSample.v);
+
+      const toolcallsSample = deriveToolCallsRate(
+        counters.toolcalls,
+        RATE_TICK_MS,
+        tickBoundaryT,
+      );
+      appendRateSample(
+        sessionId,
+        "toolcalls",
+        toolcallsSample.t,
+        toolcallsSample.v,
+      );
+
+      counters.events = 0;
+      counters.toolcalls = 0;
+    }
+  };
+
+  // Function-with-property: the callable stays a `HookProcessor`
+  // (preserving the plugin-loader contract and existing unit-test
+  // destructure-and-call pattern) while exposing `sampleRates` for the
+  // composition root's 5-second tick scheduler.
+  const augmented = processor as HookProcessorWithRateSampler;
+  (augmented as { sampleRates: (t: number) => void }).sampleRates = sampleRates;
+  return augmented;
 };
 
