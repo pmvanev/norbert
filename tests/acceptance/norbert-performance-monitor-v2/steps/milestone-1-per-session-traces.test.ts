@@ -173,7 +173,7 @@ describe("M1-S4: A session with no arrived history yet produces an empty trace",
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("M1-S5: Samples older than the 60-second window are excluded from the trace", () => {
+describe("M1-S5: Samples older than the 60-second window are excluded from the trace", () => {
   it("no trace point uses a sample timestamped more than 60 seconds ago", () => {
     // Given session-1 has samples spanning the last 120 seconds
     const store = createMultiSessionStore();
