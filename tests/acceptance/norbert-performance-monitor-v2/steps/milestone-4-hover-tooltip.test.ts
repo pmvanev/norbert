@@ -174,7 +174,7 @@ describe("M4-S3: Hover value comes from sampling the arrived history at the poin
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("M4-S4: Hover beyond the snap threshold produces no selection", () => {
+describe("M4-S4: Hover beyond the snap threshold produces no selection", () => {
   it("returns null when vertical distance exceeds the snap threshold", () => {
     // Given session-1's trace sits near the bottom (value 1 on yMax=15)
     const store = createMultiSessionStore();
@@ -205,7 +205,7 @@ describe.skip("M4-S4: Hover beyond the snap threshold produces no selection", ()
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("M4-S5: Hover outside the scope area produces no selection", () => {
+describe("M4-S5: Hover outside the scope area produces no selection", () => {
   it("returns null for pointer coordinates outside the scope rectangle", () => {
     // Given session-1 has history
     const store = createMultiSessionStore();
