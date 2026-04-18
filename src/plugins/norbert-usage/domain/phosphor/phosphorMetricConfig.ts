@@ -35,6 +35,18 @@ export type MetricId = "events" | "tokens" | "toolcalls";
 /** Ordered list for iteration where a canonical order is needed. */
 export const METRIC_IDS: ReadonlyArray<MetricId> = ["events", "tokens", "toolcalls"];
 
+/**
+ * The metric the Performance Monitor shows at first launch and on initial
+ * render of the phosphor scope view. Single source of truth for the
+ * first-launch metric — views initialize their `selectedMetric` state from
+ * this constant rather than hard-coding `"events"`.
+ *
+ * Events per second is the default because it blends hook activity with
+ * OTel log arrivals and is the most human-legible signal for Phil's
+ * typical "is anything happening" glance at the scope.
+ */
+export const DEFAULT_METRIC: MetricId = "events";
+
 export interface MetricConfig {
   readonly id: MetricId;
   readonly name: string;
