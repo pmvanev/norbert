@@ -40,8 +40,8 @@ import {
   synthesizeArrivedHistory,
 } from "./fixtures";
 
-// Driving ports (uncomment as DELIVER lands modules).
-// import { createMultiSessionStore } from "../../../../src/plugins/norbert-usage/adapters/multiSessionStore";
+// Driving ports (resolved as DELIVER wave lands modules).
+import { createMultiSessionStore } from "../../../../src/plugins/norbert-usage/adapters/multiSessionStore";
 import {
   deriveEventsRate,
   deriveTokensRate,
@@ -53,7 +53,6 @@ import {
 // import { decayFactor } from "../../../../src/plugins/norbert-usage/domain/phosphor/pulseTiming";
 // import fc from "fast-check";
 
-declare const createMultiSessionStore: () => MultiSessionStoreSurface;
 declare const buildFrame: (
   store: MultiSessionStoreSurface,
   metric: MetricId,
@@ -170,7 +169,7 @@ describe("IC-S5: A lifecycle hook event emits a pulse with a smaller strength th
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("IC-S6: Appending rate samples preserves temporal order on read", () => {
+describe("IC-S6: Appending rate samples preserves temporal order on read", () => {
   it("samples read back in oldest-to-newest order", () => {
     // Given rate samples at 10, 20, 30 seconds ago, appended in that order
     const store = createMultiSessionStore();
@@ -195,7 +194,7 @@ describe.skip("IC-S6: Appending rate samples preserves temporal order on read", 
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("IC-S7: Appending pulses preserves arrival order on read", () => {
+describe("IC-S7: Appending pulses preserves arrival order on read", () => {
   it("pulses read back in the arrival order they were appended", () => {
     // Given pulses at 4, 2, and 1 seconds ago appended in that order
     const store = createMultiSessionStore();
@@ -209,8 +208,8 @@ describe.skip("IC-S7: Appending pulses preserves arrival order on read", () => {
       });
     }
 
-    // When the store is queried
-    const pulses = store.getPulses("session-1");
+    // When the store is queried (logical clock so retention trim aligns with NOW)
+    const pulses = store.getPulses("session-1", NOW);
 
     // Then the pulses are returned in arrival order
     expect(pulses).toHaveLength(3);
