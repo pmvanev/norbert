@@ -265,9 +265,13 @@ export const createMultiSessionStore = (): MultiSessionStore => {
     for (const id of CATEGORY_IDS) valueMap.set(id, 0);
     lastSessionValues.set(sessionId, valueMap);
     initPhosphorBuckets(sessionId);
+    // ADR-049 Contract A: lifecycle mutations notify via the same pub/sub.
+    notifySubscribers();
   };
 
   const removeSession = (sessionId: string): void => {
+    // Idempotent: no notification unless the session actually existed.
+    if (!sessions.has(sessionId)) return;
     // Subtract this session's last values from running aggregates
     const valueMap = lastSessionValues.get(sessionId);
     if (valueMap) {
@@ -284,6 +288,8 @@ export const createMultiSessionStore = (): MultiSessionStore => {
     lastSessionValues.delete(sessionId);
     sessionRateHistories.delete(sessionId);
     sessionPulseLogs.delete(sessionId);
+    // ADR-049 Contract A: lifecycle mutations notify via the same pub/sub.
+    notifySubscribers();
   };
 
   const updateSession = (sessionId: string, metrics: SessionMetrics): void => {

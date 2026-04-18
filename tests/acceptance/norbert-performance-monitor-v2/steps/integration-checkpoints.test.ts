@@ -285,6 +285,34 @@ describe("IC-S10: Subscribers are notified after appendPulse", () => {
 });
 
 // ---------------------------------------------------------------------------
+// IC-S10b: Subscribers are notified after addSession and removeSession
+// Tag: @driving_port @US-PM-001
+// ADR-049 Contract A: lifecycle notifies via the same pub/sub.
+// NOTE: No counter reset between the two lifecycle calls — the exactly-once
+// invariant per call is what we are contracting. A reset would hide double
+// notifies on the second call.
+// ---------------------------------------------------------------------------
+
+describe("IC-S10b: Subscribers are notified after addSession and removeSession", () => {
+  it("addSession notifies once and removeSession notifies once — two total", () => {
+    const store = createMultiSessionStore();
+
+    let notifications = 0;
+    const unsubscribe = store.subscribe(() => {
+      notifications += 1;
+    });
+
+    store.addSession("session-1");
+    expect(notifications).toBe(1);
+
+    store.removeSession("session-1");
+    expect(notifications).toBe(2);
+
+    unsubscribe();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // IC-S11: @property Frame values never invent sub-interval spikes beyond
 //         bracketing arrived values
 // Tag: @driving_port @property @US-PM-001
