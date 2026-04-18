@@ -59,6 +59,15 @@ export interface PhosphorStoreSurface {
     sessionId: string,
     now?: number,
   ) => ReadonlyArray<Pulse>;
+  /**
+   * Retrieve the session's human-readable label (populated from cwd on
+   * first hook event). Optional so stores that predate the label field
+   * remain compatible; when absent OR the stored label is empty string,
+   * `buildFrame` falls back to a truncated session id. Matches the
+   * labeling convention used by the Sessions tab so both views identify
+   * sessions consistently.
+   */
+  readonly getSessionLabel?: (sessionId: string) => string | undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -67,6 +76,13 @@ export interface PhosphorStoreSurface {
 
 export interface FrameTrace {
   readonly sessionId: string;
+  /**
+   * Human-readable label for legend/tooltip display. Derived from the
+   * store's `getSessionLabel` (populated from cwd on first hook event);
+   * falls back to a truncated session id when no label is present. See
+   * `deriveDisplayLabel` for the exact fallback rule.
+   */
+  readonly displayLabel: string;
   readonly color: string;
   readonly samples: ReadonlyArray<RateSample>;
   readonly latestValue: number | null;
@@ -84,6 +100,8 @@ export interface FramePulse {
 
 export interface LegendEntry {
   readonly sessionId: string;
+  /** See `FrameTrace.displayLabel` — same derivation, same fallback. */
+  readonly displayLabel: string;
   readonly color: string;
   readonly latestValue: number | null;
 }
@@ -97,6 +115,36 @@ export interface Frame {
   readonly pulses: ReadonlyArray<FramePulse>;
   readonly legend: ReadonlyArray<LegendEntry>;
 }
+
+// ---------------------------------------------------------------------------
+// Display label derivation — session identity as the user sees it
+// ---------------------------------------------------------------------------
+
+/**
+ * Maximum visible prefix for a truncated session id. Matches the Sessions
+ * tab's `formatSessionLabel` convention (first 8 chars) so both views
+ * identify sessions consistently.
+ */
+const LABEL_TRUNCATE_PREFIX = 8;
+
+/**
+ * Resolve a session's display label.
+ *
+ *   - Store-supplied label (non-empty) -> label verbatim.
+ *   - No label, or empty string -> `sessionId.slice(0, 8)` with a trailing
+ *     ellipsis only when the id is longer than the prefix (ids that fit
+ *     entirely in the prefix render without an ellipsis).
+ *
+ * Pure; deterministic in (storeLabel, sessionId).
+ */
+export const deriveDisplayLabel = (
+  storeLabel: string | undefined,
+  sessionId: string,
+): string => {
+  if (storeLabel !== undefined && storeLabel !== "") return storeLabel;
+  if (sessionId.length <= LABEL_TRUNCATE_PREFIX) return sessionId;
+  return `${sessionId.slice(0, LABEL_TRUNCATE_PREFIX)}\u2026`;
+};
 
 // ---------------------------------------------------------------------------
 // Pure helpers
@@ -155,17 +203,23 @@ const projectTrace = (
   const color = colorForSessionIndex(index);
   const history = store.getRateHistory(sessionId, metric);
   const samples = trimToWindow(history, now);
+  const storeLabel = store.getSessionLabel
+    ? store.getSessionLabel(sessionId)
+    : undefined;
+  const displayLabel = deriveDisplayLabel(storeLabel, sessionId);
   return {
     sessionId,
+    displayLabel,
     color,
     samples,
     latestValue: latestValueOf(samples),
   };
 };
 
-/** Derive the legend row for a trace — same identity triple. */
+/** Derive the legend row for a trace — same identity triple + display label. */
 const legendEntryFor = (trace: FrameTrace): LegendEntry => ({
   sessionId: trace.sessionId,
+  displayLabel: trace.displayLabel,
   color: trace.color,
   latestValue: trace.latestValue,
 });

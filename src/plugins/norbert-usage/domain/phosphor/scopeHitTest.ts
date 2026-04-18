@@ -57,6 +57,12 @@ export interface PointerPosition {
 
 export interface HoverSelection {
   readonly sessionId: string;
+  /**
+   * Human-readable label copied verbatim from the matched trace. Mirrors
+   * the legend's label-with-fallback so the tooltip never shows a raw
+   * UUID when the legend shows a friendly name.
+   */
+  readonly displayLabel: string;
   readonly color: string;
   readonly value: number;
   readonly time: number;
@@ -194,6 +200,7 @@ const toHoverSelection = (
   now: number,
 ): HoverSelection => ({
   sessionId: candidate.trace.sessionId,
+  displayLabel: candidate.trace.displayLabel,
   color: candidate.trace.color,
   value: candidate.cursorValue,
   time: candidate.cursorTime,

@@ -43,7 +43,12 @@ const PhosphorLegendRow = ({
       data-testid={`phosphor-legend-swatch-${entry.sessionId}`}
       style={{ backgroundColor: entry.color }}
     />
-    <span className="phosphor-legend-session">{entry.sessionId}</span>
+    <span
+      className="phosphor-legend-session"
+      title={entry.sessionId}
+    >
+      {entry.displayLabel}
+    </span>
     <span className="phosphor-legend-value" data-mono="">
       {formatLatestValue(entry.latestValue, unit)}
     </span>

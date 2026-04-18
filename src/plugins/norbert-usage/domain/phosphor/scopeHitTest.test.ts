@@ -54,11 +54,13 @@ const buildTestFrame = (
     readonly sessionId: string;
     readonly color: string;
     readonly samples: ReadonlyArray<RateSample>;
+    readonly displayLabel?: string;
   }>,
 ): Frame => {
   const traces = traceSpecs.map((spec) => ({
     sessionId: spec.sessionId,
     color: spec.color,
+    displayLabel: spec.displayLabel ?? spec.sessionId,
     samples: spec.samples,
     latestValue:
       spec.samples.length === 0 ? null : spec.samples[spec.samples.length - 1].v,
@@ -73,6 +75,7 @@ const buildTestFrame = (
     legend: traces.map((t) => ({
       sessionId: t.sessionId,
       color: t.color,
+      displayLabel: t.displayLabel,
       latestValue: t.latestValue,
     })),
   };
@@ -109,6 +112,30 @@ describe("scopeHitTest — within snap distance", () => {
     expect(selection?.ageMs).toBeCloseTo(1500, 3);
     expect(selection?.displayX).toBeCloseTo(x, 3);
     expect(selection?.displayY).toBeCloseTo(y, 3);
+  });
+
+  it("copies displayLabel from the matched trace into the HoverSelection", () => {
+    // HoverSelection surfaces the same visible identifier the legend uses,
+    // so the tooltip never shows a raw UUID when a session label is known.
+    const width = 1000;
+    const height = 400;
+    const sampleTime = NOW - 1500;
+    const sampleValue = 10;
+    const frame = buildTestFrame([
+      {
+        sessionId: "9ea8ff2a-5207-4e3b-9bba-3fffffffffff",
+        displayLabel: "norbert",
+        color: SESSION_COLORS[0],
+        samples: [{ t: sampleTime, v: sampleValue }],
+      },
+    ]);
+
+    const x = timeToX(sampleTime, width, NOW);
+    const y = valueToY(sampleValue, height, METRICS.events.yMax);
+    const selection = scopeHitTest({ x, y, width, height }, frame);
+
+    expect(selection).not.toBeNull();
+    expect(selection?.displayLabel).toBe("norbert");
   });
 
   it("returns a HoverSelection when pointer is vertically within HOVER_SNAP_DISTANCE_PX", () => {

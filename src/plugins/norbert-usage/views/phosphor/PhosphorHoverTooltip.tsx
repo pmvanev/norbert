@@ -59,7 +59,9 @@ export const PhosphorHoverTooltip = ({
         borderLeft: `2px solid ${selection.color}`,
       }}
     >
-      <span className="phosphor-hover-session">{selection.sessionId}</span>
+      <span className="phosphor-hover-session" title={selection.sessionId}>
+        {selection.displayLabel}
+      </span>
       <span className="phosphor-hover-sep"> · </span>
       <span className="phosphor-hover-value" data-mono="">
         {formatValue(selection.value, unit)}

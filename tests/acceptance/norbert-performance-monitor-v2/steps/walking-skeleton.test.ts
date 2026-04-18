@@ -36,6 +36,7 @@ import {
 import { buildFrame } from "../../../../src/plugins/norbert-usage/domain/phosphor/scopeProjection";
 import { scopeHitTest } from "../../../../src/plugins/norbert-usage/domain/phosphor/scopeHitTest";
 import { createMultiSessionStore } from "../../../../src/plugins/norbert-usage/adapters/multiSessionStore";
+import { createInitialMetrics } from "../../../../src/plugins/norbert-usage/domain/metricsAggregator";
 
 // ---------------------------------------------------------------------------
 // WALKING SKELETON WS-1: Two sessions alive and churning
@@ -74,6 +75,37 @@ describe("WS-1: User glances at the scope and sees two sessions alive and churni
     const legend2 = frame.legend.find((e) => e.sessionId === "session-2");
     expect(legend1?.latestValue).toBeCloseTo(historyA[historyA.length - 1].v, 5);
     expect(legend2?.latestValue).toBeCloseTo(historyB[historyB.length - 1].v, 5);
+  });
+
+  it("projects a displayLabel that prefers sessionLabel and falls back to a truncated sessionId", () => {
+    // Given a session whose store metrics carry a sessionLabel (populated
+    // from cwd by the hook processor on first event), and a second session
+    // with no label yet (label = empty string, fresh registration).
+    const store = createMultiSessionStore();
+    const labeledId = "9ea8ff2a-5207-4e3b-9bba-3fffffffffff";
+    const unlabeledId = "c1f4d311-a0b0-4444-8888-1234567890ab";
+    store.addSession(labeledId);
+    store.addSession(unlabeledId);
+    store.updateSession(labeledId, {
+      ...createInitialMetrics(labeledId),
+      sessionLabel: "norbert",
+    });
+
+    const history = synthesizeArrivedHistory(3, () => 1);
+    for (const s of history) store.appendRateSample(labeledId, "events", s.t, s.v);
+    for (const s of history) store.appendRateSample(unlabeledId, "events", s.t, s.v);
+
+    // When the scope projects a frame
+    const frame = buildFrame(store, "events", NOW);
+
+    // Then the labeled session's display label matches the Sessions tab
+    const labeledLegend = frame.legend.find((e) => e.sessionId === labeledId);
+    expect(labeledLegend?.displayLabel).toBe("norbert");
+
+    // And the unlabeled session falls back to a truncated sessionId so
+    // the legend never shows a raw UUID mid-way through a long identifier.
+    const unlabeledLegend = frame.legend.find((e) => e.sessionId === unlabeledId);
+    expect(unlabeledLegend?.displayLabel).toBe("c1f4d311\u2026");
   });
 });
 

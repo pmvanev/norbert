@@ -41,6 +41,7 @@ import {
 interface FakeStoreSeed {
   readonly sessions: ReadonlyArray<{
     readonly id: string;
+    readonly label?: string;
     readonly rates?: Partial<Record<MetricId, ReadonlyArray<RateSample>>>;
     readonly pulses?: ReadonlyArray<Pulse>;
   }>;
@@ -50,6 +51,7 @@ const makeFakeStore = (seed: FakeStoreSeed): PhosphorStoreSurface => {
   const order = seed.sessions.map((s) => s.id);
   const rateMap = new Map<string, Map<MetricId, ReadonlyArray<RateSample>>>();
   const pulseMap = new Map<string, ReadonlyArray<Pulse>>();
+  const labelMap = new Map<string, string>();
   for (const s of seed.sessions) {
     const metricMap = new Map<MetricId, ReadonlyArray<RateSample>>();
     for (const metric of ["events", "tokens", "toolcalls"] as const) {
@@ -57,11 +59,13 @@ const makeFakeStore = (seed: FakeStoreSeed): PhosphorStoreSurface => {
     }
     rateMap.set(s.id, metricMap);
     pulseMap.set(s.id, s.pulses ?? []);
+    if (s.label !== undefined) labelMap.set(s.id, s.label);
   }
   return {
     getSessionIds: () => order,
     getRateHistory: (sessionId, metric) => rateMap.get(sessionId)?.get(metric) ?? [],
     getPulses: (sessionId) => pulseMap.get(sessionId) ?? [],
+    getSessionLabel: (sessionId) => labelMap.get(sessionId),
   };
 };
 
@@ -190,12 +194,15 @@ describe("buildFrame — legend", () => {
     });
     const frame = buildFrame(store, "events", NOW);
     expect(frame.legend).toHaveLength(2);
-    expect(frame.legend[0]).toEqual({
+    // Legend entries carry the same (sessionId, color, latestValue) triple
+    // as before plus the new `displayLabel`. Using `toMatchObject` keeps the
+    // core-triple assertion intact while allowing additive fields.
+    expect(frame.legend[0]).toMatchObject({
       sessionId: "alpha",
       color: SESSION_COLORS[0],
       latestValue: 4,
     });
-    expect(frame.legend[1]).toEqual({
+    expect(frame.legend[1]).toMatchObject({
       sessionId: "beta",
       color: SESSION_COLORS[1],
       latestValue: 12,
@@ -206,6 +213,58 @@ describe("buildFrame — legend", () => {
     const store = makeFakeStore({ sessions: [{ id: "silent" }] });
     const frame = buildFrame(store, "events", NOW);
     expect(frame.legend[0].latestValue).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Display label — legend, trace, and hover-selection derived labels
+//
+// Each session's visible identifier comes from the store's sessionLabel
+// (populated from cwd on first hook event, matching the Sessions tab). When
+// the label is empty or the store has no label for the session, buildFrame
+// falls back to a truncated session id (first 8 chars + ellipsis) so the
+// legend and hover tooltip never show a raw UUID.
+// ---------------------------------------------------------------------------
+
+describe("buildFrame — display label", () => {
+  const UUID = "9ea8ff2a-5207-4e3b-9bba-3fffffffffff";
+
+  it("uses the store-provided session label when non-empty", () => {
+    const store = makeFakeStore({
+      sessions: [{ id: UUID, label: "norbert" }],
+    });
+    const frame = buildFrame(store, "events", NOW);
+    expect(frame.traces[0].displayLabel).toBe("norbert");
+    expect(frame.legend[0].displayLabel).toBe("norbert");
+  });
+
+  it("falls back to the truncated session id when the label is empty string", () => {
+    const store = makeFakeStore({
+      sessions: [{ id: UUID, label: "" }],
+    });
+    const frame = buildFrame(store, "events", NOW);
+    // Truncate to first 8 chars + ellipsis.
+    expect(frame.traces[0].displayLabel).toBe("9ea8ff2a…");
+    expect(frame.legend[0].displayLabel).toBe("9ea8ff2a…");
+  });
+
+  it("falls back to the truncated session id when the store has no label for the session", () => {
+    const store = makeFakeStore({
+      sessions: [{ id: UUID }], // no label key at all
+    });
+    const frame = buildFrame(store, "events", NOW);
+    expect(frame.traces[0].displayLabel).toBe("9ea8ff2a…");
+    expect(frame.legend[0].displayLabel).toBe("9ea8ff2a…");
+  });
+
+  it("does not add an ellipsis when the session id is already 8 characters or fewer", () => {
+    const store = makeFakeStore({
+      sessions: [{ id: "short-id" }],
+    });
+    const frame = buildFrame(store, "events", NOW);
+    // "short-id" is exactly 8 chars — no truncation, no ellipsis.
+    expect(frame.traces[0].displayLabel).toBe("short-id");
+    expect(frame.legend[0].displayLabel).toBe("short-id");
   });
 });
 

@@ -19,10 +19,10 @@ import type { LegendEntry } from "../../domain/phosphor/scopeProjection";
 afterEach(cleanup);
 
 describe("PhosphorLegend", () => {
-  it("renders one row per legend entry showing session id and latest value", () => {
+  it("renders one row per legend entry showing session display label and latest value", () => {
     const legend: ReadonlyArray<LegendEntry> = [
-      { sessionId: "sess-a", color: "#f472b6", latestValue: 7.25 },
-      { sessionId: "sess-b", color: "#a78bfa", latestValue: 3 },
+      { sessionId: "sess-a", displayLabel: "sess-a", color: "#f472b6", latestValue: 7.25 },
+      { sessionId: "sess-b", displayLabel: "sess-b", color: "#a78bfa", latestValue: 3 },
     ];
 
     render(<PhosphorLegend legend={legend} unit="evt/s" />);
@@ -36,9 +36,31 @@ describe("PhosphorLegend", () => {
     expect(within(rowB).getByText(/\b3\b/)).toBeInTheDocument();
   });
 
+  it("renders the display label in preference to the raw sessionId", () => {
+    // The visible text is `displayLabel` — the legend shows the friendly
+    // name (project cwd) instead of the raw UUID. The raw id remains
+    // accessible via the `title` attribute for power-user diagnostics.
+    const legend: ReadonlyArray<LegendEntry> = [
+      {
+        sessionId: "9ea8ff2a-5207-4e3b-9bba-3fffffffffff",
+        displayLabel: "norbert",
+        color: "#f472b6",
+        latestValue: 1,
+      },
+    ];
+
+    render(<PhosphorLegend legend={legend} unit="evt/s" />);
+
+    const row = screen.getByTestId(
+      "phosphor-legend-row-9ea8ff2a-5207-4e3b-9bba-3fffffffffff",
+    );
+    expect(within(row).getByText("norbert")).toBeInTheDocument();
+    expect(within(row).queryByText(/9ea8ff2a-5207/)).toBeNull();
+  });
+
   it("applies the entry's color to its swatch", () => {
     const legend: ReadonlyArray<LegendEntry> = [
-      { sessionId: "sess-a", color: "#f472b6", latestValue: 1 },
+      { sessionId: "sess-a", displayLabel: "sess-a", color: "#f472b6", latestValue: 1 },
     ];
 
     render(<PhosphorLegend legend={legend} unit="evt/s" />);
@@ -51,7 +73,12 @@ describe("PhosphorLegend", () => {
 
   it("renders an em-dash for sessions with null latest value", () => {
     const legend: ReadonlyArray<LegendEntry> = [
-      { sessionId: "quiet-session", color: "#34d399", latestValue: null },
+      {
+        sessionId: "quiet-session",
+        displayLabel: "quiet-session",
+        color: "#34d399",
+        latestValue: null,
+      },
     ];
 
     render(<PhosphorLegend legend={legend} unit="tok/s" />);

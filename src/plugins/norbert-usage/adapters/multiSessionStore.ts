@@ -116,6 +116,15 @@ export interface MultiSessionStore {
    * is preserved so per-session color assignment is deterministic.
    */
   readonly getSessionIds: () => ReadonlyArray<string>;
+  /**
+   * Return the session's human-readable label (cwd project name populated
+   * by the hook processor on first event), or undefined when no session
+   * exists. Consumed by the phosphor projection to populate trace /
+   * legend / hover `displayLabel`. Matches the labeling convention used
+   * by the Sessions tab (`formatSessionLabel`) so both views identify
+   * sessions consistently.
+   */
+  readonly getSessionLabel: (sessionId: string) => string | undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -446,6 +455,10 @@ export const createMultiSessionStore = (): MultiSessionStore => {
 
   const getSessionIds = (): ReadonlyArray<string> => Array.from(sessions.keys());
 
+  /** Return the session's stored `sessionLabel`, or undefined when unknown. */
+  const getSessionLabel = (sessionId: string): string | undefined =>
+    sessions.get(sessionId)?.sessionLabel;
+
   return {
     addSession,
     removeSession,
@@ -465,5 +478,6 @@ export const createMultiSessionStore = (): MultiSessionStore => {
     getRateHistory,
     getPulses,
     getSessionIds,
+    getSessionLabel,
   };
 };
