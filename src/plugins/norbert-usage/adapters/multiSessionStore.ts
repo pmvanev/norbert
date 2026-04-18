@@ -36,10 +36,12 @@ import {
 } from "../domain/multiWindowSampler";
 import {
   METRIC_IDS,
+  PULSE_RETENTION_MS,
   type MetricId,
   type Pulse,
   type RateSample as PhosphorRateSample,
 } from "../domain/phosphor/phosphorMetricConfig";
+import { prunePulses } from "../domain/phosphor/pulseTiming";
 
 // ---------------------------------------------------------------------------
 // Category sample input -- values for each of the 4 metric categories
@@ -98,10 +100,15 @@ export interface MultiSessionStore {
     metric: MetricId,
   ) => ReadonlyArray<PhosphorRateSample>;
   /**
-   * Return the session's pulse log in insertion order. Empty array when
-   * the session has no pulses or does not exist.
+   * Return the session's pulse log in insertion order. When `now` is
+   * supplied, pulses older than `PULSE_RETENTION_MS` (relative to `now`)
+   * are trimmed from the returned array. Without `now`, the raw log is
+   * returned. Empty array when the session has no pulses or does not exist.
    */
-  readonly getPulses: (sessionId: string) => ReadonlyArray<Pulse>;
+  readonly getPulses: (
+    sessionId: string,
+    now?: number,
+  ) => ReadonlyArray<Pulse>;
   /**
    * Return the ordered list of registered session IDs. Registration order
    * is preserved so per-session color assignment is deterministic.
@@ -413,8 +420,15 @@ export const createMultiSessionStore = (): MultiSessionStore => {
     return history ?? [];
   };
 
-  const getPulses = (sessionId: string): ReadonlyArray<Pulse> =>
-    sessionPulseLogs.get(sessionId) ?? [];
+  const getPulses = (
+    sessionId: string,
+    now?: number,
+  ): ReadonlyArray<Pulse> => {
+    const log = sessionPulseLogs.get(sessionId);
+    if (!log) return [];
+    if (now === undefined) return log;
+    return prunePulses(log, now, PULSE_RETENTION_MS);
+  };
 
   const getSessionIds = (): ReadonlyArray<string> => Array.from(sessions.keys());
 

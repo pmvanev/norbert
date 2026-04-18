@@ -88,7 +88,7 @@ describe("WS-1: User glances at the scope and sees two sessions alive and churni
 // Tag: @walking_skeleton @driving_port
 // ---------------------------------------------------------------------------
 
-describe.skip("WS-2: User sees a fresh hook event flare as a pulse on its session's trace", () => {
+describe("WS-2: User sees a fresh hook event flare as a pulse on its session's trace", () => {
   it("projects a pulse entry with age-based decay factor at the event's arrival time", () => {
     // Given a session with a steady events-per-second envelope
     const store = createMultiSessionStore();

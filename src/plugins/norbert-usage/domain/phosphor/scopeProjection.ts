@@ -25,11 +25,13 @@
 import {
   colorForSessionIndex,
   METRICS,
+  PULSE_LIFETIME_MS,
   WINDOW_MS,
   type MetricId,
   type Pulse,
   type RateSample,
 } from "./phosphorMetricConfig";
+import { decayFactor } from "./pulseTiming";
 
 // ---------------------------------------------------------------------------
 // Store surface — structural type, satisfied by adapters/multiSessionStore
@@ -47,7 +49,15 @@ export interface PhosphorStoreSurface {
     sessionId: string,
     metric: MetricId,
   ) => ReadonlyArray<RateSample>;
-  readonly getPulses: (sessionId: string) => ReadonlyArray<Pulse>;
+  /**
+   * Retrieve a session's pulse log. When `now` is supplied, the store
+   * prunes pulses older than its retention window; without `now`, the
+   * raw log is returned. `buildFrame` always passes `now`.
+   */
+  readonly getPulses: (
+    sessionId: string,
+    now?: number,
+  ) => ReadonlyArray<Pulse>;
 }
 
 // ---------------------------------------------------------------------------
@@ -110,6 +120,29 @@ const trimToWindow = (
 const latestValueOf = (samples: ReadonlyArray<RateSample>): number | null =>
   samples.length === 0 ? null : samples[samples.length - 1].v;
 
+/**
+ * Honest-signal sample lookup for a pulse's vertical position: find the
+ * value at (or most recently before) time `t` in the session's rate
+ * history. Returns `0` when no sample at-or-before `t` exists (baseline
+ * position — see M2-S8: a session with no arrived history still projects
+ * pulses at baseline, without fabricating rate samples).
+ *
+ * No interpolation between samples. The vertical position is literally
+ * the last observed arrival value, which is what "honest signal" means
+ * in the phosphor scope design (see v2-phosphor-architecture.md §5 Q1).
+ */
+const sampleAt = (samples: ReadonlyArray<RateSample>, t: number): number => {
+  let latestValue = 0;
+  let latestTime = Number.NEGATIVE_INFINITY;
+  for (const sample of samples) {
+    if (sample.t <= t && sample.t >= latestTime) {
+      latestTime = sample.t;
+      latestValue = sample.v;
+    }
+  }
+  return latestValue;
+};
+
 /** Project a single session's trace for the requested metric. */
 const projectTrace = (
   sessionId: string,
@@ -136,6 +169,46 @@ const legendEntryFor = (trace: FrameTrace): LegendEntry => ({
   latestValue: trace.latestValue,
 });
 
+/**
+ * Project a single pulse into a `FramePulse`. The vertical position (`v`)
+ * is looked up from the session's trace samples at the pulse's time —
+ * this enforces the honest-signal invariant: a pulse sits on the trace
+ * line, not between interpolated points.
+ */
+const projectPulse = (
+  pulse: Pulse,
+  trace: FrameTrace,
+  now: number,
+): FramePulse => ({
+  sessionId: trace.sessionId,
+  t: pulse.t,
+  v: sampleAt(trace.samples, pulse.t),
+  decay: decayFactor(now - pulse.t, PULSE_LIFETIME_MS),
+  strength: pulse.strength,
+  kind: pulse.kind,
+  color: trace.color,
+});
+
+/**
+ * Project all visible pulses for a single session's trace. "Visible"
+ * means `decay > 0` — pulses at or past the lifetime boundary are absent
+ * from the frame even if the store still retains them (retention window
+ * > visual lifetime by design).
+ */
+const projectPulsesForTrace = (
+  trace: FrameTrace,
+  store: PhosphorStoreSurface,
+  now: number,
+): ReadonlyArray<FramePulse> => {
+  const pulses = store.getPulses(trace.sessionId, now);
+  const projected: FramePulse[] = [];
+  for (const pulse of pulses) {
+    const framePulse = projectPulse(pulse, trace, now);
+    if (framePulse.decay > 0) projected.push(framePulse);
+  }
+  return projected;
+};
+
 // ---------------------------------------------------------------------------
 // buildFrame — the driving port
 // ---------------------------------------------------------------------------
@@ -144,7 +217,7 @@ const legendEntryFor = (trace: FrameTrace): LegendEntry => ({
  * Pure projection. Deterministic in (store snapshot, metric, now). No side
  * effects, no hidden state.
  *
- * WS-1 contract:
+ * Contract:
  *   - One trace per session returned by `store.getSessionIds()`.
  *   - Trace samples are the session's arrived rate history, trimmed to
  *     the 60s window ending at `now`.
@@ -152,7 +225,10 @@ const legendEntryFor = (trace: FrameTrace): LegendEntry => ({
  *     `SESSION_COLORS` (palette-wrapping beyond its length).
  *   - `latestValue` is the most recent raw arrived value, or `null`.
  *   - `yMax` and `unit` come from `METRICS[metric]`.
- *   - `pulses` is empty for WS-1 (pulse projection lands in WS-2).
+ *   - `pulses` contains one `FramePulse` per still-visible pulse across
+ *     all sessions. A pulse is visible iff `decay(age, PULSE_LIFETIME_MS)`
+ *     is greater than 0; pulses at or past the lifetime are absent even
+ *     if the store retains them (retention > lifetime by design).
  *   - `legend` parallels `traces` 1:1.
  */
 export const buildFrame = (
@@ -164,6 +240,9 @@ export const buildFrame = (
   const traces = sessionIds.map((sessionId, index) =>
     projectTrace(sessionId, index, store, metric, now),
   );
+  const pulses = traces.flatMap((trace) =>
+    projectPulsesForTrace(trace, store, now),
+  );
   const legend = traces.map(legendEntryFor);
   const config = METRICS[metric];
   return {
@@ -172,7 +251,7 @@ export const buildFrame = (
     yMax: config.yMax,
     unit: config.unit,
     traces,
-    pulses: [],
+    pulses,
     legend,
   };
 };
