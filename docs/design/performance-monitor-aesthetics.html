@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Performance Monitor — Aesthetic Comparison</title>
+<style>
+  :root {
+    --bg-0: #07080c;
+    --bg-1: #11141c;
+    --panel: rgba(22, 28, 42, 0.55);
+    --panel-border: rgba(255, 255, 255, 0.08);
+    --panel-border-strong: rgba(255, 255, 255, 0.14);
+    --text: #eaf0fa;
+    --text-dim: #8692a8;
+    --text-mute: #5a6578;
+    --accent: #7dd3fc;
+    --accent-glow: rgba(125, 211, 252, 0.25);
+
+    --s1: #f472b6; /* rose */
+    --s2: #a78bfa; /* violet */
+    --s3: #34d399; /* emerald */
+    --s4: #fbbf24; /* amber */
+    --s5: #60a5fa; /* sky */
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Segoe UI', sans-serif;
+    font-feature-settings: 'ss01', 'cv11';
+    background:
+      radial-gradient(1200px 600px at 15% -10%, rgba(125, 211, 252, 0.08), transparent 60%),
+      radial-gradient(900px 500px at 85% 100%, rgba(167, 139, 250, 0.08), transparent 55%),
+      linear-gradient(180deg, var(--bg-1) 0%, var(--bg-0) 100%);
+    background-attachment: fixed;
+    padding: 40px 36px 60px;
+  }
+
+  header {
+    max-width: 1800px;
+    margin: 0 auto 28px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 32px;
+  }
+  h1 {
+    font-size: 26px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin: 0 0 6px;
+    background: linear-gradient(90deg, #eaf0fa 0%, #a78bfa 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .sub {
+    color: var(--text-dim);
+    font-size: 13.5px;
+    line-height: 1.55;
+    max-width: 780px;
+  }
+  .legend-note {
+    font-size: 11.5px;
+    color: var(--text-mute);
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .legend-note b { color: var(--accent); font-weight: 600; }
+
+  .controls {
+    max-width: 1800px;
+    margin: 0 auto 24px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px 28px;
+    align-items: center;
+    padding: 14px 20px;
+    background: var(--panel);
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    border: 1px solid var(--panel-border);
+    border-radius: 14px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+  }
+  .ctl-label {
+    font-size: 11px;
+    color: var(--text-mute);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-right: 4px;
+  }
+  .seg {
+    display: inline-flex;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    padding: 3px;
+    gap: 2px;
+  }
+  .seg button {
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--text-dim);
+    background: transparent;
+    border: 0;
+    padding: 6px 12px;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: color 160ms ease, background 160ms ease, transform 160ms ease;
+  }
+  .seg button:hover { color: var(--text); background: rgba(255, 255, 255, 0.04); }
+  .seg button.active {
+    color: var(--accent);
+    background: linear-gradient(180deg, rgba(125, 211, 252, 0.18), rgba(125, 211, 252, 0.08));
+    box-shadow: inset 0 0 0 1px rgba(125, 211, 252, 0.35), 0 0 12px var(--accent-glow);
+  }
+  .seg button:active { transform: translateY(1px); }
+  .ghost-btn {
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--panel-border);
+    padding: 7px 14px;
+    border-radius: 9px;
+    cursor: pointer;
+    transition: all 160ms ease;
+  }
+  .ghost-btn:hover { background: rgba(255, 255, 255, 0.09); border-color: var(--panel-border-strong); }
+
+  .grid {
+    max-width: 1800px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 22px;
+  }
+  @media (max-width: 1200px) { .grid { grid-template-columns: 1fr; } }
+
+  .panel {
+    position: relative;
+    background: var(--panel);
+    backdrop-filter: blur(22px) saturate(130%);
+    -webkit-backdrop-filter: blur(22px) saturate(130%);
+    border: 1px solid var(--panel-border);
+    border-radius: 18px;
+    padding: 22px 22px 18px;
+    box-shadow:
+      0 10px 40px rgba(0, 0, 0, 0.45),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    overflow: hidden;
+    transition: transform 240ms ease, border-color 240ms ease, box-shadow 240ms ease;
+  }
+  .panel:hover {
+    border-color: var(--panel-border-strong);
+    transform: translateY(-2px);
+    box-shadow:
+      0 16px 48px rgba(0, 0, 0, 0.55),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+  .panel::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 18px;
+    padding: 1px;
+    background: linear-gradient(140deg, rgba(255,255,255,0.10), transparent 40%);
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  .panel-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 4px;
+  }
+  .panel-kicker {
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .panel-name {
+    font-size: 19px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 4px 0 6px;
+  }
+  .panel-desc {
+    font-size: 12.5px;
+    color: var(--text-dim);
+    line-height: 1.5;
+    margin: 0 0 14px;
+    min-height: 54px;
+  }
+
+  .canvas-wrap {
+    position: relative;
+    width: 100%;
+    height: 320px;
+    border-radius: 12px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+  }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  .legend {
+    margin-top: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    font-size: 11.5px;
+    color: var(--text-dim);
+    letter-spacing: 0.01em;
+  }
+  .legend-item { display: inline-flex; align-items: center; gap: 6px; }
+  .legend-dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    box-shadow: 0 0 10px currentColor;
+  }
+
+  .axis-note {
+    position: absolute;
+    bottom: 10px;
+    right: 14px;
+    font-size: 10.5px;
+    color: var(--text-mute);
+    letter-spacing: 0.06em;
+    pointer-events: none;
+    text-transform: uppercase;
+  }
+  .axis-note-left {
+    left: 14px;
+    right: auto;
+  }
+
+  .characteristics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 12px;
+    font-size: 10.5px;
+  }
+  .chip {
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-dim);
+    border: 1px solid var(--panel-border);
+    letter-spacing: 0.02em;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Performance Monitor — Aesthetic Comparison</h1>
+    <div class="sub">
+      Same simulated multi-session data feeds all three panels. Hybrid compositing: a smoothed <b style="color:var(--accent)">rate envelope</b> updates every ~5s (OTel log cadence), and discrete <b style="color:var(--accent)">hook-event pulses</b> arrive randomly (instant). Canvas renders at 60fps; no sub-interval interpolation. Use the controls to change session count and activity to feel how each pattern scales.
+    </div>
+  </div>
+  <div class="legend-note">
+    Anchor job: <b>Ambient aliveness</b>
+  </div>
+</header>
+
+<div class="controls">
+  <span class="ctl-label">Sessions</span>
+  <div class="seg" id="seg-n">
+    <button data-n="2">2</button>
+    <button data-n="3">3</button>
+    <button data-n="4" class="active">4</button>
+    <button data-n="5">5</button>
+  </div>
+
+  <span class="ctl-label">Activity</span>
+  <div class="seg" id="seg-activity">
+    <button data-activity="quiet">Quiet</button>
+    <button data-activity="normal" class="active">Normal</button>
+    <button data-activity="bursty">Bursty</button>
+    <button data-activity="stalled">One stalled</button>
+  </div>
+
+  <button class="ghost-btn" id="pause-btn">Pause</button>
+  <button class="ghost-btn" id="reseed-btn">Reseed history</button>
+</div>
+
+<div class="grid">
+
+  <div class="panel">
+    <div class="panel-head">
+      <span class="panel-kicker">Option 01</span>
+    </div>
+    <div class="panel-name">Streamgraph</div>
+    <div class="panel-desc">Flowing-river aesthetic. Per-session colored layers on a centered baseline — total system activity is the silhouette. Warm, organic, immediately legible at N=2–5.</div>
+    <div class="canvas-wrap">
+      <canvas id="stream"></canvas>
+      <div class="axis-note axis-note-left">60s ago</div>
+      <div class="axis-note">now &rsaquo;</div>
+    </div>
+    <div class="characteristics">
+      <span class="chip">Familiar</span>
+      <span class="chip">Emotionally warm</span>
+      <span class="chip">Shows total + per-session</span>
+    </div>
+    <div class="legend" id="legend-stream"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <span class="panel-kicker">Option 02</span>
+    </div>
+    <div class="panel-name">Horizon Chart Rows</div>
+    <div class="panel-desc">One row per session. 3-band color encoding packs magnitude into minimal height. Data-viz-serious; scales cleanly to 10+ sessions; small learning curve for the encoding.</div>
+    <div class="canvas-wrap">
+      <canvas id="horizon"></canvas>
+      <div class="axis-note axis-note-left">60s ago</div>
+      <div class="axis-note">now &rsaquo;</div>
+    </div>
+    <div class="characteristics">
+      <span class="chip">Space-efficient</span>
+      <span class="chip">Per-session identity</span>
+      <span class="chip">Scales to N&gt;10</span>
+    </div>
+    <div class="legend" id="legend-horizon"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <span class="panel-kicker">Option 03</span>
+    </div>
+    <div class="panel-name">Phosphor Oscilloscope</div>
+    <div class="panel-desc">Overlaid waveforms with afterglow decay. Each new 5s sample extends the trace; old pixels fade. Hook pulses flare brightly. Retro engine-room aesthetic — closest to "cool signal display."</div>
+    <div class="canvas-wrap">
+      <canvas id="scope"></canvas>
+      <div class="axis-note axis-note-left">60s ago</div>
+      <div class="axis-note">now &rsaquo;</div>
+    </div>
+    <div class="characteristics">
+      <span class="chip">Most "alive"</span>
+      <span class="chip">Event flares pop</span>
+      <span class="chip">Overlap at N&gt;4</span>
+    </div>
+    <div class="legend" id="legend-scope"></div>
+  </div>
+
+</div>
+
+<script>
+// ---------- Shared model ----------
+
+const SESSION_DEFS = [
+  { id: 's1', name: 'session-1', color: '#f472b6', hue: 330 },
+  { id: 's2', name: 'session-2', color: '#a78bfa', hue: 262 },
+  { id: 's3', name: 'session-3', color: '#34d399', hue: 158 },
+  { id: 's4', name: 'session-4', color: '#fbbf24', hue:  42 },
+  { id: 's5', name: 'session-5', color: '#60a5fa', hue: 215 },
+];
+
+const WINDOW_MS  = 60_000;   // 60-second visible window
+const RATE_TICK  = 5_000;    // OTel log export cadence (simulated)
+const MAX_VAL    = 100;      // Y-axis ceiling for token-rate proxy
+
+const state = {
+  n: 4,
+  activity: 'normal',
+  paused: false,
+  lastRate: 0,
+};
+
+const sessions = SESSION_DEFS.map(s => ({
+  ...s,
+  current: 20 + Math.random() * 30,
+  target:  20 + Math.random() * 40,
+  history: [],
+  pulses:  [],
+  stalled: false,
+}));
+
+function activityParams() {
+  switch (state.activity) {
+    case 'quiet':   return { base: 10, variance: 14, pulseRate: 0.010, stallIdx: -1 };
+    case 'bursty':  return { base: 30, variance: 55, pulseRate: 0.055, stallIdx: -1 };
+    case 'stalled': return { base: 28, variance: 26, pulseRate: 0.030, stallIdx: 1 };
+    default:        return { base: 28, variance: 26, pulseRate: 0.030, stallIdx: -1 };
+  }
+}
+
+function stepRates(now) {
+  const { base, variance, stallIdx } = activityParams();
+  for (let i = 0; i < state.n; i++) {
+    const s = sessions[i];
+    if (i === stallIdx) {
+      // flatline
+      s.target = 0;
+      s.current = s.current * 0.7;
+    } else {
+      // Drift target with random walk; occasionally a burst for bursty profile
+      s.target += (Math.random() - 0.5) * variance * 0.6;
+      if (state.activity === 'bursty' && Math.random() < 0.2) {
+        s.target += variance * 0.6;
+      }
+      s.target = Math.max(2, Math.min(base + variance * 1.6, s.target));
+      // EWMA smoothing
+      s.current = s.current * 0.55 + s.target * 0.45;
+    }
+    s.history.push({ t: now, v: s.current });
+    const cutoff = now - WINDOW_MS - 5000;
+    while (s.history.length && s.history[0].t < cutoff) s.history.shift();
+  }
+}
+
+function maybeFirePulses(now) {
+  const { pulseRate, stallIdx } = activityParams();
+  for (let i = 0; i < state.n; i++) {
+    if (i === stallIdx) continue;
+    const s = sessions[i];
+    // Probability scaled by current activity level so quieter sessions fire fewer pulses
+    const p = pulseRate * (0.3 + 0.7 * (s.current / 50));
+    if (Math.random() < p) {
+      s.pulses.push({ t: now, strength: 0.6 + Math.random() * 0.4 });
+    }
+    const cutoff = now - 2500;
+    while (s.pulses.length && s.pulses[0].t < cutoff) s.pulses.shift();
+  }
+}
+
+function seedHistory() {
+  const now = performance.now();
+  for (const s of sessions) {
+    s.history.length = 0;
+    s.pulses.length = 0;
+    s.current = 20 + Math.random() * 30;
+    s.target  = 20 + Math.random() * 40;
+  }
+  // Simulate 60s of rate ticks in the past so panels start populated
+  for (let t = now - WINDOW_MS; t <= now; t += RATE_TICK) {
+    stepRates(t);
+    // scatter a few pulses over the past window too
+    if (Math.random() < 0.4) {
+      const i = Math.floor(Math.random() * state.n);
+      sessions[i].pulses.push({
+        t: t + Math.random() * RATE_TICK,
+        strength: 0.5 + Math.random() * 0.5,
+      });
+    }
+  }
+  state.lastRate = now;
+}
+seedHistory();
+
+// Linear interpolation of a session's rate envelope at time t
+function sampleAt(s, t) {
+  const h = s.history;
+  if (!h.length) return 0;
+  if (t <= h[0].t) return h[0].v;
+  if (t >= h[h.length - 1].t) return h[h.length - 1].v;
+  // binary search
+  let lo = 0, hi = h.length - 1;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (h[mid].t <= t) lo = mid; else hi = mid;
+  }
+  const a = h[lo], b = h[hi];
+  const span = b.t - a.t || 1;
+  const r = (t - a.t) / span;
+  return a.v * (1 - r) + b.v * r;
+}
+
+function timeToX(t, now, w) {
+  return w * (1 - (now - t) / WINDOW_MS);
+}
+
+// ---------- Streamgraph ----------
+
+function drawStreamgraph(ctx, w, h, now) {
+  ctx.clearRect(0, 0, w, h);
+  // soft horizontal gridlines
+  ctx.strokeStyle = 'rgba(255,255,255,0.035)';
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 6; i++) {
+    ctx.beginPath(); ctx.moveTo(0, (i / 6) * h); ctx.lineTo(w, (i / 6) * h); ctx.stroke();
+  }
+
+  const samples = Math.max(80, Math.floor(w / 3));
+  const padding = 18;
+  // Per-session value per sample
+  const rows = [];
+  let maxTotal = 1;
+  for (let i = 0; i < state.n; i++) {
+    const s = sessions[i];
+    const row = new Array(samples);
+    for (let x = 0; x < samples; x++) {
+      const t = now - (1 - x / (samples - 1)) * WINDOW_MS;
+      row[x] = sampleAt(s, t);
+    }
+    rows.push(row);
+  }
+  for (let x = 0; x < samples; x++) {
+    let tot = 0;
+    for (let i = 0; i < state.n; i++) tot += rows[i][x];
+    if (tot > maxTotal) maxTotal = tot;
+  }
+  // gentle smoothing for visual flow (3-tap box)
+  for (let i = 0; i < state.n; i++) {
+    const src = rows[i].slice();
+    for (let x = 1; x < samples - 1; x++) {
+      rows[i][x] = (src[x - 1] + src[x] * 2 + src[x + 1]) / 4;
+    }
+  }
+
+  const scale = (h - padding * 2) / maxTotal;
+
+  // Draw each layer, from bottom-of-stack up, centered streamgraph baseline
+  for (let i = 0; i < state.n; i++) {
+    const s = sessions[i];
+    ctx.beginPath();
+    // upper edge
+    for (let x = 0; x < samples; x++) {
+      let below = 0;
+      for (let j = 0; j < i; j++) below += rows[j][x];
+      let total = 0;
+      for (let j = 0; j < state.n; j++) total += rows[j][x];
+      const topBaseline = h / 2 - (total / 2) * scale;
+      const y = topBaseline + below * scale;
+      const px = (x / (samples - 1)) * w;
+      if (x === 0) ctx.moveTo(px, y); else ctx.lineTo(px, y);
+    }
+    // lower edge back
+    for (let x = samples - 1; x >= 0; x--) {
+      let below = 0;
+      for (let j = 0; j <= i; j++) below += rows[j][x];
+      let total = 0;
+      for (let j = 0; j < state.n; j++) total += rows[j][x];
+      const topBaseline = h / 2 - (total / 2) * scale;
+      const y = topBaseline + below * scale;
+      const px = (x / (samples - 1)) * w;
+      ctx.lineTo(px, y);
+    }
+    ctx.closePath();
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, s.color + 'ee');
+    g.addColorStop(1, s.color + '55');
+    ctx.fillStyle = g;
+    ctx.fill();
+    // highlight upper edge
+    ctx.strokeStyle = s.color + '55';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  // Event pulses as glowing dots within their session band
+  for (let i = 0; i < state.n; i++) {
+    const s = sessions[i];
+    for (const p of s.pulses) {
+      const age = (now - p.t) / 2500;
+      if (age < 0 || age > 1) continue;
+      const px = timeToX(p.t, now, w);
+      if (px < 0 || px > w) continue;
+      const xi = Math.round((px / w) * (samples - 1));
+      const xc = Math.max(0, Math.min(samples - 1, xi));
+      let below = 0;
+      for (let j = 0; j < i; j++) below += rows[j][xc];
+      let total = 0;
+      for (let j = 0; j < state.n; j++) total += rows[j][xc];
+      const topBaseline = h / 2 - (total / 2) * scale;
+      const py = topBaseline + below * scale + (rows[i][xc] * scale) / 2;
+      const a = (1 - age) * p.strength;
+      ctx.save();
+      ctx.globalAlpha = a;
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = s.color;
+      ctx.shadowBlur = 16 * (1 - age * 0.5);
+      ctx.beginPath();
+      ctx.arc(px, py, 2 + age * 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+}
+
+// ---------- Horizon Chart Rows ----------
+
+function drawHorizon(ctx, w, h, now) {
+  ctx.clearRect(0, 0, w, h);
+  const rowGap = 4;
+  const rowH = (h - rowGap * (state.n - 1)) / state.n;
+  const samples = Math.max(100, Math.floor(w / 3));
+  const bands = 3;
+  const bandSize = MAX_VAL / bands;
+
+  for (let i = 0; i < state.n; i++) {
+    const s = sessions[i];
+    const y0 = i * (rowH + rowGap);
+
+    // Row chrome
+    ctx.fillStyle = 'rgba(255,255,255,0.025)';
+    ctx.fillRect(0, y0, w, rowH);
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    ctx.strokeRect(0.5, y0 + 0.5, w - 1, rowH - 1);
+
+    // Build value array
+    const vals = new Array(samples);
+    for (let x = 0; x < samples; x++) {
+      const t = now - (1 - x / (samples - 1)) * WINDOW_MS;
+      vals[x] = sampleAt(s, t);
+    }
+
+    // Bands from lightest to darkest
+    for (let b = 0; b < bands; b++) {
+      ctx.beginPath();
+      for (let x = 0; x < samples; x++) {
+        const px = (x / (samples - 1)) * w;
+        const clipped = Math.max(0, Math.min(bandSize, vals[x] - b * bandSize));
+        const frac = clipped / bandSize;
+        const py = y0 + rowH - frac * rowH;
+        if (x === 0) ctx.moveTo(px, y0 + rowH);
+        ctx.lineTo(px, py);
+      }
+      ctx.lineTo(w, y0 + rowH);
+      ctx.closePath();
+      const light = 62 - b * 14;
+      const alpha = 0.45 + b * 0.18;
+      ctx.fillStyle = `hsla(${s.hue}, 72%, ${light}%, ${alpha})`;
+      ctx.fill();
+    }
+
+    // Session label
+    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    ctx.font = '600 11px -apple-system, sans-serif';
+    ctx.fillText(s.name, 10, y0 + 14);
+
+    // Current value readout
+    const latest = s.history.length ? s.history[s.history.length - 1].v : 0;
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.font = '500 10.5px -apple-system, sans-serif';
+    const txt = latest.toFixed(0) + ' tok/s';
+    ctx.textAlign = 'right';
+    ctx.fillText(txt, w - 10, y0 + 14);
+    ctx.textAlign = 'left';
+
+    // Event pulses: vertical streaks across the row
+    for (const p of s.pulses) {
+      const age = (now - p.t) / 2500;
+      if (age < 0 || age > 1) continue;
+      const px = timeToX(p.t, now, w);
+      if (px < 0 || px > w) continue;
+      ctx.save();
+      ctx.globalAlpha = (1 - age) * 0.7 * p.strength;
+      const grad = ctx.createLinearGradient(0, y0, 0, y0 + rowH);
+      grad.addColorStop(0, s.color + '00');
+      grad.addColorStop(0.5, s.color + 'ff');
+      grad.addColorStop(1, s.color + '00');
+      ctx.fillStyle = grad;
+      ctx.fillRect(px - 0.5, y0, 1.5, rowH);
+      ctx.restore();
+    }
+  }
+}
+
+// ---------- Phosphor Oscilloscope ----------
+
+let scopePersist;
+function drawOscilloscope(ctx, w, h, now) {
+  if (!scopePersist || scopePersist.width !== Math.floor(w) || scopePersist.height !== Math.floor(h)) {
+    scopePersist = document.createElement('canvas');
+    scopePersist.width = Math.max(1, Math.floor(w));
+    scopePersist.height = Math.max(1, Math.floor(h));
+  }
+  const pctx = scopePersist.getContext('2d');
+
+  // Phosphor decay — fade prior frame slightly
+  pctx.globalCompositeOperation = 'destination-out';
+  pctx.fillStyle = 'rgba(0,0,0,0.09)';
+  pctx.fillRect(0, 0, w, h);
+  pctx.globalCompositeOperation = 'source-over';
+
+  const padding = 18;
+  const samples = Math.max(200, Math.floor(w / 2));
+
+  for (let i = 0; i < state.n; i++) {
+    const s = sessions[i];
+    // Current sweep — draw onto persistence buffer
+    pctx.beginPath();
+    for (let x = 0; x < samples; x++) {
+      const t = now - (1 - x / (samples - 1)) * WINDOW_MS;
+      const v = sampleAt(s, t);
+      const px = (x / (samples - 1)) * w;
+      const py = h - padding - (v / MAX_VAL) * (h - padding * 2);
+      if (x === 0) pctx.moveTo(px, py); else pctx.lineTo(px, py);
+    }
+    pctx.strokeStyle = s.color;
+    pctx.lineWidth = 1.6;
+    pctx.shadowColor = s.color;
+    pctx.shadowBlur = 10;
+    pctx.stroke();
+    pctx.shadowBlur = 0;
+
+    // Event pulses: bright flares on waveform
+    for (const p of s.pulses) {
+      const age = (now - p.t) / 2500;
+      if (age < 0 || age > 1) continue;
+      const px = timeToX(p.t, now, w);
+      if (px < 0 || px > w) continue;
+      const v = sampleAt(s, p.t);
+      const py = h - padding - (v / MAX_VAL) * (h - padding * 2);
+      pctx.save();
+      pctx.globalAlpha = (1 - age) * p.strength;
+      pctx.fillStyle = '#ffffff';
+      pctx.shadowColor = s.color;
+      pctx.shadowBlur = 22 * (1 - age * 0.3);
+      pctx.beginPath();
+      pctx.arc(px, py, 2 + (1 - age) * 7, 0, Math.PI * 2);
+      pctx.fill();
+      pctx.restore();
+    }
+  }
+
+  // Compose frame: dark bg + grid + persistence buffer
+  ctx.clearRect(0, 0, w, h);
+  // deep background with subtle radial
+  const bg = ctx.createRadialGradient(w / 2, h / 2, h * 0.1, w / 2, h / 2, Math.max(w, h));
+  bg.addColorStop(0, '#07121a');
+  bg.addColorStop(1, '#020509');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, w, h);
+  // grid
+  ctx.strokeStyle = 'rgba(80, 220, 180, 0.08)';
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 6; i++) {
+    ctx.beginPath(); ctx.moveTo(0, (i / 6) * h); ctx.lineTo(w, (i / 6) * h); ctx.stroke();
+  }
+  for (let i = 1; i < 10; i++) {
+    ctx.beginPath(); ctx.moveTo((i / 10) * w, 0); ctx.lineTo((i / 10) * w, h); ctx.stroke();
+  }
+  ctx.drawImage(scopePersist, 0, 0, w, h);
+}
+
+// ---------- Animation loop ----------
+
+const canvases = [
+  { id: 'stream',  draw: drawStreamgraph },
+  { id: 'horizon', draw: drawHorizon },
+  { id: 'scope',   draw: drawOscilloscope },
+];
+
+function resizeCanvas(c) {
+  const rect = c.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const needW = Math.floor(rect.width * dpr);
+  const needH = Math.floor(rect.height * dpr);
+  if (c.width !== needW || c.height !== needH) {
+    c.width = needW;
+    c.height = needH;
+  }
+  return rect;
+}
+
+function tick() {
+  const now = performance.now();
+  if (!state.paused) {
+    if (now - state.lastRate >= RATE_TICK) {
+      stepRates(now);
+      state.lastRate = now;
+    }
+    maybeFirePulses(now);
+  }
+  for (const { id, draw } of canvases) {
+    const c = document.getElementById(id);
+    const rect = resizeCanvas(c);
+    const ctx = c.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    draw(ctx, rect.width, rect.height, now);
+  }
+  requestAnimationFrame(tick);
+}
+
+// ---------- Legend + controls ----------
+
+function renderLegends() {
+  const items = sessions.slice(0, state.n).map(s => (
+    `<span class="legend-item" style="color:${s.color}">` +
+      `<span class="legend-dot" style="background:${s.color}"></span>` +
+      `<span style="color:var(--text-dim)">${s.name}</span>` +
+    `</span>`
+  )).join('');
+  document.getElementById('legend-stream').innerHTML  = items;
+  document.getElementById('legend-horizon').innerHTML = items;
+  document.getElementById('legend-scope').innerHTML   = items;
+}
+renderLegends();
+
+function wireSeg(containerId, attr, onChange) {
+  const container = document.getElementById(containerId);
+  container.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      container.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      onChange(btn.dataset[attr]);
+    });
+  });
+}
+wireSeg('seg-n', 'n', v => { state.n = parseInt(v, 10); renderLegends(); });
+wireSeg('seg-activity', 'activity', v => { state.activity = v; });
+
+document.getElementById('pause-btn').addEventListener('click', (e) => {
+  state.paused = !state.paused;
+  e.target.textContent = state.paused ? 'Resume' : 'Pause';
+});
+document.getElementById('reseed-btn').addEventListener('click', () => {
+  seedHistory();
+});
+
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>

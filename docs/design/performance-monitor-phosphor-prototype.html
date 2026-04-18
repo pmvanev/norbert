@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Performance Monitor — Phosphor Prototype</title>
+<style>
+  :root {
+    --bg-0: #07080c;
+    --bg-1: #11141c;
+    --panel: rgba(22, 28, 42, 0.55);
+    --panel-border: rgba(255, 255, 255, 0.08);
+    --panel-border-strong: rgba(255, 255, 255, 0.14);
+    --text: #eaf0fa;
+    --text-dim: #8692a8;
+    --text-mute: #5a6578;
+    --accent: #7dd3fc;
+    --accent-glow: rgba(125, 211, 252, 0.25);
+
+    --s1: #f472b6; /* rose */
+    --s2: #a78bfa; /* violet */
+    --s3: #34d399; /* emerald */
+    --s4: #fbbf24; /* amber */
+    --s5: #60a5fa; /* sky */
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Segoe UI', sans-serif;
+    font-feature-settings: 'ss01', 'cv11';
+    background:
+      radial-gradient(1200px 600px at 15% -10%, rgba(125, 211, 252, 0.08), transparent 60%),
+      radial-gradient(900px 500px at 85% 100%, rgba(167, 139, 250, 0.08), transparent 55%),
+      linear-gradient(180deg, var(--bg-1) 0%, var(--bg-0) 100%);
+    background-attachment: fixed;
+    padding: 40px 36px 60px;
+  }
+
+  header {
+    max-width: 1400px;
+    margin: 0 auto 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 32px;
+  }
+  h1 {
+    font-size: 26px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin: 0 0 6px;
+    background: linear-gradient(90deg, #eaf0fa 0%, #a78bfa 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .sub {
+    color: var(--text-dim);
+    font-size: 13.5px;
+    line-height: 1.55;
+    max-width: 780px;
+  }
+  .sub b { color: var(--accent); font-weight: 600; }
+  .legend-note {
+    font-size: 11.5px;
+    color: var(--text-mute);
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .controls {
+    max-width: 1400px;
+    margin: 0 auto 22px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px 28px;
+    align-items: center;
+    padding: 14px 20px;
+    background: var(--panel);
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    border: 1px solid var(--panel-border);
+    border-radius: 14px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+  }
+  .ctl-label {
+    font-size: 11px;
+    color: var(--text-mute);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-right: 4px;
+  }
+  .seg {
+    display: inline-flex;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    padding: 3px;
+    gap: 2px;
+  }
+  .seg button {
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--text-dim);
+    background: transparent;
+    border: 0;
+    padding: 6px 12px;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: color 160ms ease, background 160ms ease, transform 160ms ease;
+  }
+  .seg button:hover { color: var(--text); background: rgba(255, 255, 255, 0.04); }
+  .seg button.active {
+    color: var(--accent);
+    background: linear-gradient(180deg, rgba(125, 211, 252, 0.18), rgba(125, 211, 252, 0.08));
+    box-shadow: inset 0 0 0 1px rgba(125, 211, 252, 0.35), 0 0 12px var(--accent-glow);
+  }
+  .seg button:active { transform: translateY(1px); }
+  .ghost-btn {
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--panel-border);
+    padding: 7px 14px;
+    border-radius: 9px;
+    cursor: pointer;
+    transition: all 160ms ease;
+  }
+  .ghost-btn:hover { background: rgba(255, 255, 255, 0.09); border-color: var(--panel-border-strong); }
+
+  .hero {
+    max-width: 1400px;
+    margin: 0 auto;
+    position: relative;
+    background: var(--panel);
+    backdrop-filter: blur(22px) saturate(130%);
+    -webkit-backdrop-filter: blur(22px) saturate(130%);
+    border: 1px solid var(--panel-border);
+    border-radius: 18px;
+    padding: 22px 24px 20px;
+    box-shadow:
+      0 18px 48px rgba(0, 0, 0, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 18px;
+    padding: 1px;
+    background: linear-gradient(140deg, rgba(255,255,255,0.10), transparent 40%);
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask-composite: exclude;
+    pointer-events: none;
+  }
+  .hero-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 12px;
+    gap: 20px;
+  }
+  .hero-title-row {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+  }
+  .hero-kicker {
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .hero-name {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0;
+  }
+  .metric-readout {
+    font-size: 12.5px;
+    color: var(--text-dim);
+  }
+  .metric-readout b {
+    color: var(--text);
+    font-weight: 600;
+  }
+  #metric-caption {
+    font-size: 12px;
+    color: var(--text-mute);
+    line-height: 1.5;
+    margin-bottom: 12px;
+    min-height: 34px;
+  }
+
+  .canvas-wrap {
+    position: relative;
+    width: 100%;
+    height: 520px;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #020509;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    cursor: crosshair;
+  }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  .axis-note {
+    position: absolute;
+    font-size: 10.5px;
+    color: var(--text-mute);
+    letter-spacing: 0.06em;
+    pointer-events: none;
+    text-transform: uppercase;
+    z-index: 2;
+  }
+  .axis-bottom-left  { bottom: 10px; left: 14px; }
+  .axis-bottom-right { bottom: 10px; right: 14px; }
+  .axis-top-left     { top: 10px;    left: 14px; }
+  .y-max {
+    color: var(--accent);
+  }
+
+  .tooltip {
+    position: absolute;
+    display: none;
+    padding: 7px 11px;
+    border-radius: 9px;
+    background: rgba(12, 16, 24, 0.85);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    font-size: 12px;
+    color: var(--text);
+    pointer-events: none;
+    white-space: nowrap;
+    transform: translate(14px, -50%);
+    z-index: 5;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  }
+  .tooltip .t-dot {
+    display: inline-block;
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    margin-right: 7px;
+    vertical-align: -1px;
+    box-shadow: 0 0 8px currentColor;
+  }
+  .tooltip .t-name {
+    font-weight: 600;
+    margin-right: 9px;
+  }
+  .tooltip .t-value {
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+  .tooltip .t-unit {
+    color: var(--text-dim);
+    margin-left: 3px;
+  }
+  .tooltip .t-sep {
+    color: var(--text-mute);
+    margin: 0 8px;
+  }
+  .tooltip .t-time {
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .legend {
+    margin-top: 14px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 18px;
+    font-size: 12px;
+    color: var(--text-dim);
+    letter-spacing: 0.01em;
+  }
+  .legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 10px 3px 4px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+  .legend-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    box-shadow: 0 0 10px currentColor;
+  }
+  .legend-name { color: var(--text); font-weight: 500; }
+  .legend-val {
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+    font-size: 11.5px;
+  }
+
+  footer {
+    max-width: 1400px;
+    margin: 28px auto 0;
+    font-size: 11.5px;
+    color: var(--text-mute);
+    letter-spacing: 0.02em;
+    line-height: 1.7;
+  }
+  footer b { color: var(--text-dim); }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Performance Monitor — Phosphor Prototype</h1>
+    <div class="sub">
+      Chosen direction: overlaid phosphor oscilloscope with per-session color traces, afterglow decay, and hybrid <b>rate envelope + event-pulse</b> compositing. Toggle the Y-axis metric to feel which reads most instantly as "alive." Hover any trace for its value at that instant.
+    </div>
+  </div>
+  <div class="legend-note">Anchor job: <b style="color:var(--accent)">Ambient aliveness</b></div>
+</header>
+
+<div class="controls">
+  <span class="ctl-label">Metric</span>
+  <div class="seg" id="seg-metric">
+    <button data-metric="events" class="active">Events/s</button>
+    <button data-metric="tokens">Tokens/s</button>
+    <button data-metric="toolcalls">Tool-calls/s</button>
+  </div>
+
+  <span class="ctl-label">Sessions</span>
+  <div class="seg" id="seg-n">
+    <button data-n="2">2</button>
+    <button data-n="3">3</button>
+    <button data-n="4" class="active">4</button>
+    <button data-n="5">5</button>
+  </div>
+
+  <span class="ctl-label">Activity</span>
+  <div class="seg" id="seg-activity">
+    <button data-activity="quiet">Quiet</button>
+    <button data-activity="normal" class="active">Normal</button>
+    <button data-activity="bursty">Bursty</button>
+    <button data-activity="stalled">One stalled</button>
+  </div>
+
+  <button class="ghost-btn" id="pause-btn">Pause</button>
+  <button class="ghost-btn" id="reseed-btn">Reseed history</button>
+</div>
+
+<div class="hero">
+  <div class="hero-head">
+    <div class="hero-title-row">
+      <span class="hero-kicker">Live Signal</span>
+      <h2 class="hero-name" id="metric-name">Events per second</h2>
+    </div>
+    <div class="metric-readout">
+      Y-axis max: <b id="y-max">15</b> <span id="unit-readout">evt/s</span>
+      &middot; 60s window &middot; 60fps render &middot; data 5s cadence
+    </div>
+  </div>
+  <div id="metric-caption">
+    Events/s blends hook events (instant: tool calls, sub-agent spawns, lifecycle) with OTel log arrivals. Most direct "alive" signal — stays non-zero even when tokens pause between requests.
+  </div>
+  <div class="canvas-wrap" id="scope-wrap">
+    <canvas id="scope"></canvas>
+    <div class="axis-note axis-top-left y-max" id="ymax-label">&uarr; 15 evt/s</div>
+    <div class="axis-note axis-bottom-left">60s ago</div>
+    <div class="axis-note axis-bottom-right">now &rsaquo;</div>
+    <div class="tooltip" id="tip"></div>
+  </div>
+  <div class="legend" id="legend"></div>
+</div>
+
+<footer>
+  <b>Simulation:</b> each session has independent EWMA envelopes for tokens, events, and tool-calls, updated on a 5s tick (OTel cadence). Event pulses are instant and flare brightly. &middot;
+  <b>Anti-patterns avoided:</b> no sub-interval interpolation invents spikes; no zero-fill between arrivals. Motion comes from 60fps render scroll, not fabricated data.
+</footer>
+
+<script>
+// ---------- Shared model ----------
+
+const SESSION_DEFS = [
+  { id: 's1', name: 'session-1', color: '#f472b6' },
+  { id: 's2', name: 'session-2', color: '#a78bfa' },
+  { id: 's3', name: 'session-3', color: '#34d399' },
+  { id: 's4', name: 'session-4', color: '#fbbf24' },
+  { id: 's5', name: 'session-5', color: '#60a5fa' },
+];
+
+const WINDOW_MS = 60_000;
+const RATE_TICK = 5_000;
+
+const METRICS = {
+  events:    { name: 'Events per second',    unit: 'evt/s',   max: 15,
+               caption: 'Events/s blends hook events (instant: tool calls, sub-agent spawns, lifecycle) with OTel log arrivals. Most direct "alive" signal — stays non-zero even when tokens pause between requests.' },
+  tokens:    { name: 'Tokens per second',    unit: 'tok/s',   max: 100,
+               caption: 'Tokens/s is throughput-proper: input + output + cache tokens per second, from OTel logs. Drops to zero between requests; best for sensing raw generation volume.' },
+  toolcalls: { name: 'Tool-calls per second',unit: 'calls/s', max: 3,
+               caption: 'Tool-calls/s is sparsest — each bash/edit/read call is one event. Most diagnostic: a session hammering tools looks busy even when tokens are modest.' },
+};
+
+const state = {
+  n: 4,
+  activity: 'normal',
+  metric: 'events',
+  paused: false,
+  lastRate: 0,
+  hover: null, // { sessionIdx, value, time, x, y, canvasW, canvasH }
+};
+
+const sessions = SESSION_DEFS.map(s => ({
+  ...s,
+  metrics: {
+    events:    { current: 3, target: 3, history: [] },
+    tokens:    { current: 25, target: 25, history: [] },
+    toolcalls: { current: 0.5, target: 0.5, history: [] },
+  },
+  pulses: [],
+  stalled: false,
+}));
+
+function activityParams() {
+  switch (state.activity) {
+    case 'quiet':
+      return { factor: 0.30, variance: 0.5, pulseRate: 0.008, stallIdx: -1 };
+    case 'bursty':
+      return { factor: 1.30, variance: 1.8, pulseRate: 0.055, stallIdx: -1 };
+    case 'stalled':
+      return { factor: 0.80, variance: 1.0, pulseRate: 0.028, stallIdx: 1 };
+    default:
+      return { factor: 0.80, variance: 1.0, pulseRate: 0.028, stallIdx: -1 };
+  }
+}
+
+function baseForMetric(m) {
+  return { events: 4.5, tokens: 30, toolcalls: 0.7 }[m];
+}
+function varianceScale(m) {
+  return { events: 3.5, tokens: 32, toolcalls: 0.9 }[m];
+}
+
+function stepRates(now) {
+  const { factor, variance, stallIdx } = activityParams();
+  for (let i = 0; i < state.n; i++) {
+    const s = sessions[i];
+    for (const m of ['events', 'tokens', 'toolcalls']) {
+      const mm = s.metrics[m];
+      if (i === stallIdx) {
+        mm.target = 0;
+        mm.current = mm.current * 0.55;
+      } else {
+        const base = baseForMetric(m) * factor;
+        const vs   = varianceScale(m) * variance;
+        mm.target += (Math.random() - 0.5) * vs * 0.8;
+        if (state.activity === 'bursty' && Math.random() < 0.18) {
+          mm.target += vs * 0.7;
+        }
+        mm.target = Math.max(0, Math.min(base * 3, mm.target));
+        // EWMA
+        mm.current = mm.current * 0.55 + mm.target * 0.45;
+      }
+      mm.history.push({ t: now, v: mm.current });
+      const cutoff = now - WINDOW_MS - 5000;
+      while (mm.history.length && mm.history[0].t < cutoff) mm.history.shift();
+    }
+  }
+}
+
+function maybeFirePulses(now) {
+  const { pulseRate, stallIdx } = activityParams();
+  for (let i = 0; i < state.n; i++) {
+    if (i === stallIdx) continue;
+    const s = sessions[i];
+    const level = s.metrics.events.current;
+    const p = pulseRate * (0.3 + 0.7 * Math.min(1, level / 8));
+    if (Math.random() < p) {
+      s.pulses.push({ t: now, strength: 0.6 + Math.random() * 0.4 });
+    }
+    const cutoff = now - 2500;
+    while (s.pulses.length && s.pulses[0].t < cutoff) s.pulses.shift();
+  }
+}
+
+function seedHistory() {
+  const now = performance.now();
+  for (const s of sessions) {
+    for (const m of ['events', 'tokens', 'toolcalls']) {
+      s.metrics[m].history.length = 0;
+      s.metrics[m].current = baseForMetric(m) * (0.5 + Math.random());
+      s.metrics[m].target  = s.metrics[m].current;
+    }
+    s.pulses.length = 0;
+  }
+  for (let t = now - WINDOW_MS; t <= now; t += RATE_TICK) {
+    stepRates(t);
+    if (Math.random() < 0.5) {
+      const i = Math.floor(Math.random() * state.n);
+      sessions[i].pulses.push({
+        t: t + Math.random() * RATE_TICK,
+        strength: 0.5 + Math.random() * 0.5,
+      });
+    }
+  }
+  state.lastRate = now;
+}
+seedHistory();
+
+function currentHistory(s) {
+  return s.metrics[state.metric].history;
+}
+
+function sampleAt(history, t) {
+  if (!history.length) return 0;
+  if (t <= history[0].t) return history[0].v;
+  if (t >= history[history.length - 1].t) return history[history.length - 1].v;
+  let lo = 0, hi = history.length - 1;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (history[mid].t <= t) lo = mid; else hi = mid;
+  }
+  const a = history[lo], b = history[hi];
+  const span = b.t - a.t || 1;
+  const r = (t - a.t) / span;
+  return a.v * (1 - r) + b.v * r;
+}
+
+function timeToX(t, now, w) {
+  return w * (1 - (now - t) / WINDOW_MS);
+}
+
+// ---------- Phosphor rendering ----------
+
+let scopePersist;
+let lastMaxVal = null;
+
+function drawOscilloscope(ctx, w, h, now) {
+  const maxVal = METRICS[state.metric].max;
+  if (!scopePersist
+      || scopePersist.width !== Math.floor(w)
+      || scopePersist.height !== Math.floor(h)
+      || lastMaxVal !== maxVal) {
+    scopePersist = document.createElement('canvas');
+    scopePersist.width = Math.max(1, Math.floor(w));
+    scopePersist.height = Math.max(1, Math.floor(h));
+    lastMaxVal = maxVal;
+  }
+  const pctx = scopePersist.getContext('2d');
+
+  // Phosphor decay
+  pctx.globalCompositeOperation = 'destination-out';
+  pctx.fillStyle = 'rgba(0,0,0,0.095)';
+  pctx.fillRect(0, 0, w, h);
+  pctx.globalCompositeOperation = 'source-over';
+
+  const padding = 22;
+  const samples = Math.max(220, Math.floor(w / 2));
+
+  for (let i = 0; i < state.n; i++) {
+    const s = sessions[i];
+    const history = currentHistory(s);
+    pctx.beginPath();
+    for (let x = 0; x < samples; x++) {
+      const t = now - (1 - x / (samples - 1)) * WINDOW_MS;
+      const v = sampleAt(history, t);
+      const px = (x / (samples - 1)) * w;
+      const py = h - padding - (v / maxVal) * (h - padding * 2);
+      if (x === 0) pctx.moveTo(px, py); else pctx.lineTo(px, py);
+    }
+    pctx.strokeStyle = s.color;
+    pctx.lineWidth = 1.7;
+    pctx.shadowColor = s.color;
+    pctx.shadowBlur = 11;
+    pctx.stroke();
+    pctx.shadowBlur = 0;
+
+    for (const p of s.pulses) {
+      const age = (now - p.t) / 2500;
+      if (age < 0 || age > 1) continue;
+      const px = timeToX(p.t, now, w);
+      if (px < 0 || px > w) continue;
+      const v = sampleAt(history, p.t);
+      const py = h - padding - (v / maxVal) * (h - padding * 2);
+      pctx.save();
+      pctx.globalAlpha = (1 - age) * p.strength;
+      pctx.fillStyle = '#ffffff';
+      pctx.shadowColor = s.color;
+      pctx.shadowBlur = 24 * (1 - age * 0.3);
+      pctx.beginPath();
+      pctx.arc(px, py, 2 + (1 - age) * 7, 0, Math.PI * 2);
+      pctx.fill();
+      pctx.restore();
+    }
+  }
+
+  // Composite frame
+  ctx.clearRect(0, 0, w, h);
+  const bg = ctx.createRadialGradient(w / 2, h / 2, h * 0.1, w / 2, h / 2, Math.max(w, h));
+  bg.addColorStop(0, '#07121a');
+  bg.addColorStop(1, '#020509');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = 'rgba(80, 220, 180, 0.07)';
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 6; i++) {
+    ctx.beginPath(); ctx.moveTo(0, (i / 6) * h); ctx.lineTo(w, (i / 6) * h); ctx.stroke();
+  }
+  for (let i = 1; i < 10; i++) {
+    ctx.beginPath(); ctx.moveTo((i / 10) * w, 0); ctx.lineTo((i / 10) * w, h); ctx.stroke();
+  }
+  ctx.drawImage(scopePersist, 0, 0, w, h);
+
+  // Hover highlight
+  if (state.hover) {
+    const { sessionIdx, value, time } = state.hover;
+    const s = sessions[sessionIdx];
+    if (s && sessionIdx < state.n) {
+      const px = timeToX(time, now, w);
+      const py = h - padding - (value / maxVal) * (h - padding * 2);
+      ctx.save();
+      // outer ring
+      ctx.strokeStyle = s.color;
+      ctx.shadowColor = s.color;
+      ctx.shadowBlur = 20;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(px, py, 7, 0, Math.PI * 2);
+      ctx.stroke();
+      // inner dot
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(px, py, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      // vertical guide
+      ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 4]);
+      ctx.beginPath();
+      ctx.moveTo(px, 0);
+      ctx.lineTo(px, h);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+  }
+}
+
+// ---------- Animation loop ----------
+
+const scopeCanvas = document.getElementById('scope');
+let currentRect = { width: 0, height: 0 };
+
+function resizeCanvas() {
+  const rect = scopeCanvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const needW = Math.floor(rect.width * dpr);
+  const needH = Math.floor(rect.height * dpr);
+  if (scopeCanvas.width !== needW || scopeCanvas.height !== needH) {
+    scopeCanvas.width = needW;
+    scopeCanvas.height = needH;
+  }
+  currentRect = rect;
+  return rect;
+}
+
+function tick() {
+  const now = performance.now();
+  if (!state.paused) {
+    if (now - state.lastRate >= RATE_TICK) {
+      stepRates(now);
+      state.lastRate = now;
+    }
+    maybeFirePulses(now);
+  }
+  const rect = resizeCanvas();
+  const ctx = scopeCanvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  drawOscilloscope(ctx, rect.width, rect.height, now);
+  updateLegendValues();
+  requestAnimationFrame(tick);
+}
+
+// ---------- Legend + readouts ----------
+
+const legendEl = document.getElementById('legend');
+
+function renderLegend() {
+  legendEl.innerHTML = sessions.slice(0, state.n).map(s => (
+    `<span class="legend-item" data-id="${s.id}" style="color:${s.color}">` +
+      `<span class="legend-dot" style="background:${s.color}"></span>` +
+      `<span class="legend-name">${s.name}</span>` +
+      `<span class="legend-val" id="val-${s.id}">—</span>` +
+    `</span>`
+  )).join('');
+}
+renderLegend();
+
+function updateLegendValues() {
+  const unit = METRICS[state.metric].unit;
+  for (let i = 0; i < state.n; i++) {
+    const s = sessions[i];
+    const history = currentHistory(s);
+    const latest = history.length ? history[history.length - 1].v : 0;
+    const el = document.getElementById('val-' + s.id);
+    if (el) {
+      el.textContent = formatVal(latest) + ' ' + unit;
+    }
+  }
+}
+
+function formatVal(v) {
+  if (v >= 10) return v.toFixed(0);
+  if (v >= 1) return v.toFixed(1);
+  return v.toFixed(2);
+}
+
+function formatAge(ms) {
+  if (ms < 500) return 'now';
+  if (ms < 10000) return (ms / 1000).toFixed(1) + ' s ago';
+  return (ms / 1000).toFixed(0) + ' s ago';
+}
+
+function applyMetricUi() {
+  const m = METRICS[state.metric];
+  document.getElementById('metric-name').textContent = m.name;
+  document.getElementById('y-max').textContent = m.max;
+  document.getElementById('unit-readout').textContent = m.unit;
+  document.getElementById('ymax-label').textContent = '\u2191 ' + m.max + ' ' + m.unit;
+  document.getElementById('metric-caption').textContent = m.caption;
+  // reset afterglow so the old Y-scale traces don't persist incorrectly
+  scopePersist = null;
+}
+applyMetricUi();
+
+// ---------- Hover interaction ----------
+
+const tip = document.getElementById('tip');
+const scopeWrap = document.getElementById('scope-wrap');
+
+scopeWrap.addEventListener('mousemove', (e) => {
+  const rect = scopeCanvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const w = rect.width, h = rect.height;
+  if (mx < 0 || my < 0 || mx > w || my > h) {
+    clearHover();
+    return;
+  }
+  const now = performance.now();
+  const maxVal = METRICS[state.metric].max;
+  const padding = 22;
+  // Time at cursor x
+  const fraction = Math.max(0, Math.min(1, mx / w));
+  const timeAtCursor = now - (1 - fraction) * WINDOW_MS;
+
+  // Find nearest trace
+  let best = null;
+  for (let i = 0; i < state.n; i++) {
+    const s = sessions[i];
+    const history = currentHistory(s);
+    const v = sampleAt(history, timeAtCursor);
+    const py = h - padding - (v / maxVal) * (h - padding * 2);
+    const dist = Math.abs(py - my);
+    if (best === null || dist < best.dist) {
+      best = { dist, i, v, py };
+    }
+  }
+  const MAX_SNAP = 28;
+  if (!best || best.dist > MAX_SNAP) {
+    clearHover();
+    return;
+  }
+  const s = sessions[best.i];
+  state.hover = {
+    sessionIdx: best.i,
+    value: best.v,
+    time: timeAtCursor,
+    canvasW: w,
+    canvasH: h,
+  };
+
+  // Position tooltip
+  const tipX = mx + rect.left - scopeWrap.getBoundingClientRect().left;
+  const tipY = best.py + rect.top - scopeWrap.getBoundingClientRect().top;
+  tip.style.left = tipX + 'px';
+  tip.style.top  = tipY + 'px';
+  tip.style.display = 'block';
+  const ageMs = Math.max(0, now - timeAtCursor);
+  tip.innerHTML =
+    `<span class="t-dot" style="background:${s.color};color:${s.color}"></span>` +
+    `<span class="t-name" style="color:${s.color}">${s.name}</span>` +
+    `<span class="t-value">${formatVal(best.v)}</span>` +
+    `<span class="t-unit">${METRICS[state.metric].unit}</span>` +
+    `<span class="t-sep">&middot;</span>` +
+    `<span class="t-time">${formatAge(ageMs)}</span>`;
+});
+
+scopeWrap.addEventListener('mouseleave', clearHover);
+
+function clearHover() {
+  state.hover = null;
+  tip.style.display = 'none';
+}
+
+// ---------- Controls ----------
+
+function wireSeg(containerId, attr, onChange) {
+  const container = document.getElementById(containerId);
+  container.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      container.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      onChange(btn.dataset[attr]);
+    });
+  });
+}
+wireSeg('seg-metric', 'metric', v => {
+  state.metric = v;
+  applyMetricUi();
+  clearHover();
+});
+wireSeg('seg-n', 'n', v => {
+  state.n = parseInt(v, 10);
+  renderLegend();
+  clearHover();
+});
+wireSeg('seg-activity', 'activity', v => {
+  state.activity = v;
+});
+
+document.getElementById('pause-btn').addEventListener('click', (e) => {
+  state.paused = !state.paused;
+  e.target.textContent = state.paused ? 'Resume' : 'Pause';
+});
+document.getElementById('reseed-btn').addEventListener('click', () => {
+  seedHistory();
+  scopePersist = null;
+});
+
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>
