@@ -79,7 +79,7 @@ describe("M1-S1: Each active session gets its own color identity on the scope", 
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("M1-S2: A trace samples its session's arrived rate history across the window", () => {
+describe("M1-S2: A trace samples its session's arrived rate history across the window", () => {
   it("trace values stay bracketed by neighboring arrived samples (no sub-interval spikes)", () => {
     // Given session-1 has arrived samples at 5s intervals across the 60s window
     const store = createMultiSessionStore();
@@ -118,7 +118,7 @@ describe.skip("M1-S2: A trace samples its session's arrived rate history across 
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("M1-S3: A stalled session shows a flatline from the last arrived value, not a drop to zero", () => {
+describe("M1-S3: A stalled session shows a flatline from the last arrived value, not a drop to zero", () => {
   it("flatlines at the last arrived value of 8 up to the current-time edge", () => {
     // Given session-1 had an arrived rate of 8 evt/s 20s ago and nothing since
     const store = createMultiSessionStore();
