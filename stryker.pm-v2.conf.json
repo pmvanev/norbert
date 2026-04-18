@@ -1,0 +1,25 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stryker-mutator/stryker/master/packages/core/schema/stryker-schema.json",
+  "mutate": [
+    "src/plugins/norbert-usage/domain/phosphor/pulseTiming.ts",
+    "src/plugins/norbert-usage/domain/phosphor/rateDerivation.ts",
+    "src/plugins/norbert-usage/domain/phosphor/scopeHitTest.ts",
+    "src/plugins/norbert-usage/domain/phosphor/scopeProjection.ts",
+    "src/plugins/norbert-usage/hookProcessor.ts:138-142",
+    "src/plugins/norbert-usage/adapters/multiSessionStore.ts:220-230",
+    "src/plugins/norbert-usage/adapters/multiSessionStore.ts:285-295",
+    "src/plugins/norbert-usage/adapters/multiSessionStore.ts:396-445"
+  ],
+  "testRunner": "vitest",
+  "reporters": ["clear-text", "json", "html"],
+  "jsonReporter": {
+    "fileName": "docs/feature/norbert-performance-monitor/deliver/mutation/stryker-report.json"
+  },
+  "htmlReporter": {
+    "fileName": "docs/feature/norbert-performance-monitor/deliver/mutation/stryker-report.html"
+  },
+  "vitest": {
+    "configFile": "vitest.pm-v2.mutation.config.ts"
+  },
+  "tempDirName": ".stryker-tmp"
+}

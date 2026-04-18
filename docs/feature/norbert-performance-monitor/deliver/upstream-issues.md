@@ -150,3 +150,60 @@ Build green: `tsc --noEmit` exits 0, `npm run lint:boundaries` exits 0 (183
 modules post-deletion, down from 190), full vitest suite: 1805 passed, 103
 skipped, 1 pre-existing flaky property test (`ewma.test.ts`) unrelated to
 these deletions.
+
+---
+
+## Step 10-02 — mutation-gate follow-ups
+
+Step 10-02 executed the v2-shaped acceptance deletions (5 files, 102 tests)
+and ran Stryker mutation testing against the v2 phosphor seam. Full details
+are in `docs/feature/norbert-performance-monitor/deliver/mutation/mutation-report.md`.
+Two gaps are logged here for the wave-level Phase 5 mutation pass.
+
+### `scopeHitTest.ts` survival above ≤20% threshold (AC #3)
+
+Kill rate: **78 / 103 = 75.7%** → **survival 24.3%** → 4.3 percentage points
+above the ≤20% target from DISTILL handoff §5.
+
+Root cause: 25 surviving mutants cluster around three kinds of boundary
+predicate that lack exact-edge test coverage. See mutation-report.md §3.1
+and §4 for per-line breakdown and the four-scenario remediation plan
+(pointer-at-canvas-boundary, sample-on-edge, sample-at-exact-cursor-time,
+snap-distance-boundary). Expected outcome after follow-up: ≤11% survival
+on `scopeHitTest.ts`, well under threshold.
+
+Scope: test-only additions. No production change needed.
+
+**Note on folder aggregate:** reading AC #3 on a folder-wide basis,
+`domain/phosphor/**/*.ts` runs at 158 / 191 = 82.7% kill = 17.3% survival,
+which IS under ≤20%. The step still commits with the gap documented because
+reading AC #3 strictly per-file is the more defensive interpretation.
+
+### `ewma.test.ts` idempotence property — pre-existing flakiness
+
+Step 10-01 flagged this test as flaky. Step 10-02 confirmed it and has to
+exclude both the test file and `ewma.ts` from the Stryker run because the
+initial-test-run gate aborts the mutation executor when the property fails
+on a given fast-check seed.
+
+Root cause: the property asserts `ewmaStep(v, v, α) === v` using `toBe`
+(Object.is equality), but the production formula `v*(1-α) + v*α` produces a
+1-ULP drift for many `v` values (e.g. `6.75e-261` evaluates to
+`6.75e-261 + 1 ULP`). Mathematically the identity holds; in IEEE-754
+floating-point it does not.
+
+Remediation options (both test-only):
+
+- Option A — tolerance: change `expect(...).toBe(v)` to
+  `expect(...).toBeCloseTo(v, 12)` (or an equivalent ULP-tolerance helper).
+- Option B — alternative formula: rewrite the production as
+  `current + alpha * (target - current)`. When `current === target` this
+  algebraically returns `current` exactly (no floating-point drift),
+  allowing the strict-equality test to stand.
+
+`ewma.ts` currently has no production importer (verified via grep); it is
+reachable only through `ewma.test.ts`. The mutation-gate gap for `ewma.ts`
+is therefore informational until an importer lands.
+
+**Follow-up:** fix `ewma.test.ts` per Option A (smaller change) and reinstate
+`ewma.ts` to the mutation target list in the wave-level Phase 5 run.
