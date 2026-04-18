@@ -239,7 +239,7 @@ describe("IC-S8: Querying a non-existent session returns empty history and pulse
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("IC-S9: Subscribers are notified after appendRateSample", () => {
+describe("IC-S9: Subscribers are notified after appendRateSample", () => {
   it("subscriber callback is invoked exactly once", () => {
     const store = createMultiSessionStore();
     store.addSession("session-1");
@@ -262,7 +262,7 @@ describe.skip("IC-S9: Subscribers are notified after appendRateSample", () => {
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("IC-S10: Subscribers are notified after appendPulse", () => {
+describe("IC-S10: Subscribers are notified after appendPulse", () => {
   it("subscriber callback is invoked exactly once", () => {
     const store = createMultiSessionStore();
     store.addSession("session-1");
