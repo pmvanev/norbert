@@ -239,64 +239,72 @@ describe("scopeHitTest — beyond snap distance", () => {
 // ---------------------------------------------------------------------------
 
 describe("scopeHitTest — pointer outside canvas bounds", () => {
-  it("returns null when pointer x is negative", () => {
-    const frame = buildTestFrame([
-      {
-        sessionId: "s1",
-        color: SESSION_COLORS[0],
-        samples: [{ t: NOW - 1000, v: 5 }],
-      },
-    ]);
+  // Fixture-helper: construct a frame whose sample would produce a valid
+  // selection if the pointer were inside the canvas. This makes the
+  // "returns null" assertion contingent specifically on the out-of-bounds
+  // guard, so mutating any of the four conjuncts in isPointerInsideCanvas
+  // yields a detectable difference (null vs. valid selection).
+  const width = 1000;
+  const height = 400;
+  const yMax = METRICS.events.yMax;
+  const sampleTime = NOW - 10_000;
+  // Pick a sample value so that the trace's displayY lies near the pointer's
+  // y when the pointer is clamped into the canvas — this guarantees the
+  // "inside" case would return a selection, not null.
+  const sampleValue = yMax / 2;
+  const frameWithSelectableTrace = buildTestFrame([
+    {
+      sessionId: "selectable",
+      color: SESSION_COLORS[0],
+      samples: [{ t: sampleTime, v: sampleValue }],
+    },
+  ]);
+  const sampleX = timeToX(sampleTime, width, NOW);
+  const sampleY = valueToY(sampleValue, height, yMax);
+
+  it("returns null when pointer x is negative (and the inside-case would select)", () => {
     const selection = scopeHitTest(
-      { x: -5, y: 100, width: 1000, height: 400 },
-      frame,
+      { x: -5, y: sampleY, width, height },
+      frameWithSelectableTrace,
     );
     expect(selection).toBeNull();
   });
 
-  it("returns null when pointer x exceeds width", () => {
-    const frame = buildTestFrame([
-      {
-        sessionId: "s1",
-        color: SESSION_COLORS[0],
-        samples: [{ t: NOW - 1000, v: 5 }],
-      },
-    ]);
+  it("returns null when pointer x exceeds width (and the inside-case would select)", () => {
     const selection = scopeHitTest(
-      { x: 1001, y: 100, width: 1000, height: 400 },
-      frame,
+      { x: width + 1, y: sampleY, width, height },
+      frameWithSelectableTrace,
     );
     expect(selection).toBeNull();
   });
 
-  it("returns null when pointer y is negative", () => {
-    const frame = buildTestFrame([
-      {
-        sessionId: "s1",
-        color: SESSION_COLORS[0],
-        samples: [{ t: NOW - 1000, v: 5 }],
-      },
-    ]);
+  it("returns null when pointer y is negative (and the inside-case would select)", () => {
     const selection = scopeHitTest(
-      { x: 500, y: -1, width: 1000, height: 400 },
-      frame,
+      { x: sampleX, y: -1, width, height },
+      frameWithSelectableTrace,
     );
     expect(selection).toBeNull();
   });
 
-  it("returns null when pointer y exceeds height", () => {
-    const frame = buildTestFrame([
-      {
-        sessionId: "s1",
-        color: SESSION_COLORS[0],
-        samples: [{ t: NOW - 1000, v: 5 }],
-      },
-    ]);
+  it("returns null when pointer y exceeds height (and the inside-case would select)", () => {
     const selection = scopeHitTest(
-      { x: 500, y: 401, width: 1000, height: 400 },
-      frame,
+      { x: sampleX, y: height + 1, width, height },
+      frameWithSelectableTrace,
     );
     expect(selection).toBeNull();
+  });
+
+  it("control: pointer at (sampleX, sampleY) inside canvas returns the selectable trace", () => {
+    // Sanity check that the above fixture really would select when inside —
+    // this is the symmetric counterexample that converts the isPointerInsideCanvas
+    // conjunct mutants from "survive" to "kill" by disagreeing with the
+    // out-of-bounds null-return on the same fixture.
+    const selection = scopeHitTest(
+      { x: sampleX, y: sampleY, width, height },
+      frameWithSelectableTrace,
+    );
+    expect(selection).not.toBeNull();
+    expect(selection?.sessionId).toBe("selectable");
   });
 });
 
@@ -390,6 +398,391 @@ describe("scopeHitTest — nearest of two candidates", () => {
 
     expect(selection).not.toBeNull();
     expect(selection?.sessionId).toBe("close");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Case 6: canvas-edge boundary — pointer exactly at (0,y), (width,y),
+// (x,0), (x,height) is INSIDE the canvas per the inclusive-edge contract.
+// This exercises the four `>=` / `<=` conjuncts in isPointerInsideCanvas.
+// ---------------------------------------------------------------------------
+
+describe("scopeHitTest — pointer exactly on canvas edges (inclusive)", () => {
+  const width = 1000;
+  const height = 400;
+  const yMax = METRICS.events.yMax;
+  // Centered sample so any edge-pointer we place is close enough vertically.
+  const sampleValue = yMax / 2;
+  const sampleTime = NOW - 30_000; // middle of the window
+  const frame = buildTestFrame([
+    {
+      sessionId: "edge-session",
+      color: SESSION_COLORS[0],
+      samples: [{ t: sampleTime, v: sampleValue }],
+    },
+  ]);
+  const sampleY = valueToY(sampleValue, height, yMax);
+
+  it("returns a selection when pointer.x === 0 (left edge inclusive)", () => {
+    const selection = scopeHitTest({ x: 0, y: sampleY, width, height }, frame);
+    expect(selection).not.toBeNull();
+    expect(selection?.sessionId).toBe("edge-session");
+  });
+
+  it("returns a selection when pointer.x === width (right edge inclusive)", () => {
+    const selection = scopeHitTest({ x: width, y: sampleY, width, height }, frame);
+    expect(selection).not.toBeNull();
+    expect(selection?.sessionId).toBe("edge-session");
+  });
+
+  it("returns a selection when pointer.y === 0 (top edge inclusive) and a trace is near top", () => {
+    // Place the sample near the top so y=0 is within snap distance vertically.
+    const topSampleValue = yMax - 0.1; // nearly at top
+    const topFrame = buildTestFrame([
+      {
+        sessionId: "top-session",
+        color: SESSION_COLORS[0],
+        samples: [{ t: sampleTime, v: topSampleValue }],
+      },
+    ]);
+    const x = timeToX(sampleTime, width, NOW);
+    const selection = scopeHitTest({ x, y: 0, width, height }, topFrame);
+    expect(selection).not.toBeNull();
+    expect(selection?.sessionId).toBe("top-session");
+  });
+
+  it("returns a selection when pointer.y === height (bottom edge inclusive) and a trace is near bottom", () => {
+    // Place the sample near the bottom so y=height is within snap distance.
+    const bottomSampleValue = 0.1; // nearly at bottom
+    const bottomFrame = buildTestFrame([
+      {
+        sessionId: "bottom-session",
+        color: SESSION_COLORS[0],
+        samples: [{ t: sampleTime, v: bottomSampleValue }],
+      },
+    ]);
+    const x = timeToX(sampleTime, width, NOW);
+    const selection = scopeHitTest({ x, y: height, width, height }, bottomFrame);
+    expect(selection).not.toBeNull();
+    expect(selection?.sessionId).toBe("bottom-session");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Case 7: sample-on-edge — sample at y=0 (top) or y=height (bottom) is
+// considered ON the canvas per the STRICT `< 0` / `> height` off-canvas
+// test. A pointer somewhere else at that x must compute vertical distance
+// from the sample position (not treat the sample as clipped).
+// ---------------------------------------------------------------------------
+
+describe("scopeHitTest — sample exactly on canvas edge is not off-canvas", () => {
+  const width = 1000;
+  const height = 400;
+  const yMax = METRICS.events.yMax;
+
+  it("sample at v=yMax (displayY === 0) is on-canvas: pointer at y=200 is beyond snap", () => {
+    // displayY for v=yMax is exactly 0 (top edge). The off-canvas test is
+    // STRICT (`sampleY < 0`), so the sample is on-canvas and vertical
+    // distance is |0 - 200| = 200 — far beyond the 28px snap radius.
+    const sampleTime = NOW - 5000;
+    const frame = buildTestFrame([
+      {
+        sessionId: "on-top-edge",
+        color: SESSION_COLORS[0],
+        samples: [{ t: sampleTime, v: yMax }],
+      },
+    ]);
+    const x = timeToX(sampleTime, width, NOW);
+    const selection = scopeHitTest({ x, y: 200, width, height }, frame);
+    expect(selection).toBeNull();
+  });
+
+  it("sample at v=0 (displayY === height) is on-canvas: pointer at y=0 is beyond snap", () => {
+    // displayY for v=0 is exactly `height` (bottom edge). The off-canvas
+    // test is STRICT (`sampleY > height`), so the sample is on-canvas and
+    // vertical distance is `height` — far beyond the 28px snap radius.
+    const sampleTime = NOW - 5000;
+    const frame = buildTestFrame([
+      {
+        sessionId: "on-bottom-edge",
+        color: SESSION_COLORS[0],
+        samples: [{ t: sampleTime, v: 0 }],
+      },
+    ]);
+    const x = timeToX(sampleTime, width, NOW);
+    const selection = scopeHitTest({ x, y: 0, width, height }, frame);
+    expect(selection).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Case 8: sample-at-exact-cursor-time — valueAtCursorTime uses the
+// inclusive `sample.t <= cursorTime` predicate. A sample whose time is
+// exactly equal to the cursor time must be selected (not skipped).
+// ---------------------------------------------------------------------------
+
+describe("scopeHitTest — sample time equals cursor time", () => {
+  it("selects the sample whose time exactly equals the cursor time (inclusive <=)", () => {
+    const width = 1000;
+    const height = 400;
+    const yMax = METRICS.events.yMax;
+    // Pick a sample time, put the pointer at exactly the same x-column so
+    // the derived cursor time equals the sample's time.
+    const exactTime = NOW - 15_000;
+    const sampleValue = yMax / 3;
+    const frame = buildTestFrame([
+      {
+        sessionId: "exact",
+        color: SESSION_COLORS[0],
+        samples: [{ t: exactTime, v: sampleValue }],
+      },
+    ]);
+    const x = timeToX(exactTime, width, NOW);
+    const y = valueToY(sampleValue, height, yMax);
+
+    const selection = scopeHitTest({ x, y, width, height }, frame);
+    expect(selection).not.toBeNull();
+    expect(selection?.value).toBe(sampleValue);
+    expect(selection?.time).toBe(exactTime);
+  });
+
+  it("selects the earliest sample when cursor time is strictly before every sample", () => {
+    // Fallback path: every sample.t > cursorTime. valueAtCursorTime returns
+    // the earliest sample's value. The resulting selection is on-canvas and
+    // should be reported.
+    const width = 1000;
+    const height = 400;
+    const yMax = METRICS.events.yMax;
+    const earliestTime = NOW - 10_000;
+    const earliestValue = yMax / 4;
+    const frame = buildTestFrame([
+      {
+        sessionId: "falling-back",
+        color: SESSION_COLORS[0],
+        samples: [
+          { t: earliestTime, v: earliestValue },
+          { t: NOW - 5000, v: yMax / 2 },
+        ],
+      },
+    ]);
+    // Pointer at the left edge — cursorTime corresponds to NOW - WINDOW_MS,
+    // which is strictly before earliestTime (earliestTime = NOW - 10_000,
+    // cursorTime = NOW - 60_000). The selection.time is the cursor time
+    // (step-function semantics), but the reported value is the earliest
+    // sample's value — that's the fallback-earliest contract under test.
+    const yOfEarliest = valueToY(earliestValue, height, yMax);
+    const selection = scopeHitTest({ x: 0, y: yOfEarliest, width, height }, frame);
+    expect(selection).not.toBeNull();
+    expect(selection?.value).toBe(earliestValue);
+    expect(selection?.sessionId).toBe("falling-back");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Case 9: snap-distance boundary — `verticalDistance > HOVER_SNAP_DISTANCE_PX`
+// returns null; `verticalDistance === HOVER_SNAP_DISTANCE_PX` returns a
+// selection (boundary is inclusive of the snap radius).
+// ---------------------------------------------------------------------------
+
+describe("scopeHitTest — snap distance boundary", () => {
+  const width = 1000;
+  const height = 400;
+  const yMax = METRICS.events.yMax;
+  const sampleTime = NOW - 10_000;
+  const sampleValue = yMax / 2;
+  const frame = buildTestFrame([
+    {
+      sessionId: "snap-boundary",
+      color: SESSION_COLORS[0],
+      samples: [{ t: sampleTime, v: sampleValue }],
+    },
+  ]);
+  const x = timeToX(sampleTime, width, NOW);
+  const sampleY = valueToY(sampleValue, height, yMax);
+
+  it("returns a selection when vertical distance equals HOVER_SNAP_DISTANCE_PX (inclusive boundary)", () => {
+    const selection = scopeHitTest(
+      { x, y: sampleY + HOVER_SNAP_DISTANCE_PX, width, height },
+      frame,
+    );
+    expect(selection).not.toBeNull();
+    expect(selection?.sessionId).toBe("snap-boundary");
+  });
+
+  it("returns null when vertical distance is just beyond HOVER_SNAP_DISTANCE_PX", () => {
+    const selection = scopeHitTest(
+      { x, y: sampleY + HOVER_SNAP_DISTANCE_PX + 1, width, height },
+      frame,
+    );
+    expect(selection).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Case 9b: sample-time strictly greater than cursor — a sample whose time
+// is AFTER the cursor must be ignored in the main loop (it's looking for
+// sample.t <= cursorTime). The fallback then chooses the earliest. This
+// kills the `sample.t < cursorTime` / `sample.t <= cursorTime` equality
+// flip on line 133.
+// ---------------------------------------------------------------------------
+
+describe("scopeHitTest — sample time strictly after cursor vs. equal-to cursor", () => {
+  it("returns value of earliest sample when ALL samples are strictly after cursor time", () => {
+    const width = 1000;
+    const height = 400;
+    const yMax = METRICS.events.yMax;
+    // Two samples, both AFTER cursor (pointer at x=0 → cursorTime = NOW-60_000).
+    const valueA = yMax / 5;
+    const valueB = yMax / 2;
+    const frame = buildTestFrame([
+      {
+        sessionId: "after-only",
+        color: SESSION_COLORS[0],
+        samples: [
+          { t: NOW - 1000, v: valueA },
+          { t: NOW - 500, v: valueB }, // strictly later than earliest
+        ],
+      },
+    ]);
+    // Fallback-earliest: sample.t < earliest.t chooses valueA (t=NOW-1000).
+    // If the mutator flips to `<=`, the iteration order still yields valueA
+    // first (NOW-1000) and then valueB (NOW-500 is not <= NOW-1000), so
+    // earliest stays valueA. We need a scenario where `<` vs. `<=` matters.
+    // Place pointer at the earliest sample's y so we can confirm value.
+    const yOfValueA = valueToY(valueA, height, yMax);
+    const selection = scopeHitTest({ x: 0, y: yOfValueA, width, height }, frame);
+    expect(selection).not.toBeNull();
+    expect(selection?.value).toBe(valueA);
+    expect(selection?.sessionId).toBe("after-only");
+  });
+
+  it("fallback-earliest chooses the sample with the strictly smallest time when duplicates exist", () => {
+    // To exercise `sample.t < earliest.t` vs. `<=`: make two samples share
+    // the minimum time. Whichever is seen first is kept by `<`; `<=` would
+    // overwrite to the second. Because samples share t, their values must
+    // also match to keep the test behavior-observable. We therefore use a
+    // single-time sample array with a distinct LATER sample — the earliest
+    // is unique, and the loop body picks it on the first iteration. The
+    // `<` → `<=` flip is still detectable because in the alt case the
+    // loop would replace earliest with the later sample incorrectly (the
+    // later sample's .t > earliest.t, so neither `<` nor `<=` is true).
+    // Concretely: construct samples [earliest, later]. With `<`, earliest
+    // stays. With `<=`, earliest stays. So this test won't distinguish.
+    //
+    // Key insight: the mutator `< → <=` only affects behavior when
+    // sample.t === earliest.t. That requires duplicate timestamps with
+    // DIFFERENT values — which the scope tolerates via an "append in order"
+    // contract. We emulate that here.
+    const width = 1000;
+    const height = 400;
+    const yMax = METRICS.events.yMax;
+    const sharedTime = NOW - 1000;
+    const firstValue = yMax / 4;
+    const duplicateTimeValue = yMax / 3; // different value, same timestamp
+    const frame = buildTestFrame([
+      {
+        sessionId: "duplicate-time",
+        color: SESSION_COLORS[0],
+        samples: [
+          { t: sharedTime, v: firstValue },
+          { t: sharedTime, v: duplicateTimeValue },
+        ],
+      },
+    ]);
+    // Pointer at x=0 → cursor time ≪ sharedTime. Fallback-earliest picks
+    // the first-seen minimum. With `<`, the first sample (firstValue) wins.
+    // With `<=`, the second overwrites (duplicateTimeValue wins).
+    const yOfFirst = valueToY(firstValue, height, yMax);
+    const selection = scopeHitTest({ x: 0, y: yOfFirst, width, height }, frame);
+    expect(selection).not.toBeNull();
+    expect(selection?.value).toBe(firstValue);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Case 9c: mixed traces (empty + populated) — the empty trace must be
+// skipped (candidateForTrace returns null → outer loop continues). Kills
+// the line-180 `if (cursorValue === null) return null;` guard and the
+// line-241 `if (candidate === null) continue;` guard by exposing the
+// populated trace's selection as the winner.
+// ---------------------------------------------------------------------------
+
+describe("scopeHitTest — mixed empty and populated traces", () => {
+  it("skips the empty trace and selects the populated one", () => {
+    const width = 1000;
+    const height = 400;
+    const yMax = METRICS.events.yMax;
+    const sampleTime = NOW - 10_000;
+    const sampleValue = yMax / 2;
+    const frame = buildTestFrame([
+      // First trace is empty — candidateForTrace should return null and
+      // the outer loop should `continue` past it.
+      { sessionId: "empty", color: SESSION_COLORS[0], samples: [] },
+      // Second trace has a sample — should be selected.
+      {
+        sessionId: "populated",
+        color: SESSION_COLORS[1],
+        samples: [{ t: sampleTime, v: sampleValue }],
+      },
+    ]);
+    const x = timeToX(sampleTime, width, NOW);
+    const y = valueToY(sampleValue, height, yMax);
+    const selection = scopeHitTest({ x, y, width, height }, frame);
+    expect(selection).not.toBeNull();
+    expect(selection?.sessionId).toBe("populated");
+  });
+
+  it("returns null when the only populated trace is beyond snap distance", () => {
+    // Negative control: empty + populated-but-far trace. The empty trace
+    // must still be skipped (not crash), and the far trace must produce
+    // null because of snap, not because of the empty-guard.
+    const width = 1000;
+    const height = 400;
+    const yMax = METRICS.events.yMax;
+    const sampleTime = NOW - 10_000;
+    const farSampleValue = yMax / 2;
+    const frame = buildTestFrame([
+      { sessionId: "empty", color: SESSION_COLORS[0], samples: [] },
+      {
+        sessionId: "far",
+        color: SESSION_COLORS[1],
+        samples: [{ t: sampleTime, v: farSampleValue }],
+      },
+    ]);
+    const x = timeToX(sampleTime, width, NOW);
+    const y = valueToY(farSampleValue, height, yMax);
+    // Pointer 200px above the far sample — well beyond snap.
+    const selection = scopeHitTest({ x, y: y - 200, width, height }, frame);
+    expect(selection).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Case 10: off-canvas sample below baseline — `sampleY > height`. Mirrors
+// the existing "above top" case and exercises the second disjunct of
+// isSampleOffCanvas.
+// ---------------------------------------------------------------------------
+
+describe("scopeHitTest — off-canvas samples below baseline", () => {
+  it("selects a trace whose sample is below baseline (clipped to bottom edge)", () => {
+    const width = 1000;
+    const height = 400;
+    const sampleTime = NOW - 1500;
+    const negativeValue = -3; // < 0 → displayY > height → off-canvas
+    const frame = buildTestFrame([
+      {
+        sessionId: "below-baseline",
+        color: SESSION_COLORS[1],
+        samples: [{ t: sampleTime, v: negativeValue }],
+      },
+    ]);
+    // Pointer anywhere inside the canvas at the sample's x-time should
+    // select this trace: off-canvas samples clip to the edge and verticalDistance = 0.
+    const x = timeToX(sampleTime, width, NOW);
+    const selection = scopeHitTest({ x, y: height - 10, width, height }, frame);
+    expect(selection).not.toBeNull();
+    expect(selection?.sessionId).toBe("below-baseline");
+    expect(selection?.value).toBe(negativeValue);
   });
 });
 
