@@ -46,10 +46,8 @@ import {
   deriveEventsRate,
   deriveTokensRate,
   deriveToolCallsRate,
+  emitPulse,
 } from "../../../../src/plugins/norbert-usage/hookProcessor";
-// import {
-//   emitPulse,
-// } from "../../../../src/plugins/norbert-usage/hookProcessor";
 // import { buildFrame } from "../../../../src/plugins/norbert-usage/domain/phosphor/scopeProjection";
 // import { scopeHitTest } from "../../../../src/plugins/norbert-usage/domain/phosphor/scopeHitTest";
 // import { decayFactor } from "../../../../src/plugins/norbert-usage/domain/phosphor/pulseTiming";
@@ -70,15 +68,11 @@ declare const decayFactor: (ageMs: number, lifetimeMs: number) => number;
 /**
  * Derivation helpers — signatures target the hookProcessor shape. Each returns
  * the derived RateSample (or pulse) for a single tick/event, without mutating
- * store state. The caller appends. `deriveEventsRate`, `deriveTokensRate`, and
- * `deriveToolCallsRate` are imported from the real module (delivered in steps
- * 08-01 / 08-02 / 08-03); the remaining helpers stay `declare`d until their
- * respective IC scenarios are un-skipped.
+ * store state. The caller appends. `deriveEventsRate`, `deriveTokensRate`,
+ * `deriveToolCallsRate`, and `emitPulse` are imported from the real module
+ * (delivered in steps 08-01 / 08-02 / 08-03 / 08-04); the remaining helpers
+ * stay `declare`d until their respective IC scenarios are un-skipped.
  */
-declare const emitPulse: (
-  kind: PulseKind,
-  t: number,
-) => Pulse;
 
 // ---------------------------------------------------------------------------
 // IC-S1: A 5-second tick of hook arrivals derives an events-per-second sample
@@ -144,7 +138,7 @@ describe("IC-S3: Tool-call events within a 5-second tick derive a tool-calls-per
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("IC-S4: A tool-use hook event emits a pulse at the event's timestamp", () => {
+describe("IC-S4: A tool-use hook event emits a pulse at the event's timestamp", () => {
   it("pulse kind is tool and t matches the event time", () => {
     const eventTime = NOW - 500;
     const pulse = emitPulse("tool", eventTime);
@@ -160,7 +154,7 @@ describe.skip("IC-S4: A tool-use hook event emits a pulse at the event's timesta
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe.skip("IC-S5: A lifecycle hook event emits a pulse with a smaller strength than a tool-use pulse", () => {
+describe("IC-S5: A lifecycle hook event emits a pulse with a smaller strength than a tool-use pulse", () => {
   it("tool-use pulse strength exceeds lifecycle pulse strength", () => {
     const toolPulse = emitPulse("tool", NOW);
     const lifecyclePulse = emitPulse("lifecycle", NOW);
