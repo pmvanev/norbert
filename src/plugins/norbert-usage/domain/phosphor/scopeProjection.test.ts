@@ -717,3 +717,110 @@ describe("buildFrame — hidden-session filtering", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Theme-aware session-color palette (opts.sessionColors)
+//
+// `buildFrame` accepts an optional `sessionColors: ReadonlyArray<string>`.
+// When provided, session → color assignment reads from THAT palette by
+// registration index (modulo length) instead of the default SESSION_COLORS.
+// The legend and trace colors match by index. When omitted, the default
+// `SESSION_COLORS` palette is used so existing callers need no changes.
+// Empty arrays are treated as "omitted" so a misconfigured theme cannot
+// erase trace color entirely.
+// ---------------------------------------------------------------------------
+
+describe("buildFrame — theme-aware session-color palette", () => {
+  it("uses default SESSION_COLORS when opts.sessionColors is omitted", () => {
+    const store = makeFakeStore({
+      sessions: [
+        { id: "s1", rates: { events: history(3, () => 1) } },
+        { id: "s2", rates: { events: history(3, () => 1) } },
+      ],
+    });
+    const frame = buildFrame(store, "events", NOW);
+    expect(frame.traces[0].color).toBe(SESSION_COLORS[0]);
+    expect(frame.traces[1].color).toBe(SESSION_COLORS[1]);
+    expect(frame.legend[0].color).toBe(SESSION_COLORS[0]);
+    expect(frame.legend[1].color).toBe(SESSION_COLORS[1]);
+  });
+
+  it("uses the caller-supplied palette for trace AND legend colors by index", () => {
+    const customPalette: ReadonlyArray<string> = [
+      "#ff0000",
+      "#00ff00",
+      "#0000ff",
+      "#ffff00",
+      "#ff00ff",
+    ];
+    const store = makeFakeStore({
+      sessions: [
+        { id: "s1", rates: { events: history(3, () => 1) } },
+        { id: "s2", rates: { events: history(3, () => 1) } },
+        { id: "s3", rates: { events: history(3, () => 1) } },
+      ],
+    });
+    const frame = buildFrame(store, "events", NOW, {
+      sessionColors: customPalette,
+    });
+    expect(frame.traces[0].color).toBe("#ff0000");
+    expect(frame.traces[1].color).toBe("#00ff00");
+    expect(frame.traces[2].color).toBe("#0000ff");
+    expect(frame.legend[0].color).toBe("#ff0000");
+    expect(frame.legend[1].color).toBe("#00ff00");
+    expect(frame.legend[2].color).toBe("#0000ff");
+  });
+
+  it("wraps modulo the caller-supplied palette length when sessions exceed it", () => {
+    // Custom palette of 3 colors, 5 sessions — sessions 3 and 4 wrap.
+    const threeColorPalette: ReadonlyArray<string> = ["#a11", "#2b2", "#33c"];
+    const store = makeFakeStore({
+      sessions: [
+        { id: "s0", rates: { events: history(2, () => 1) } },
+        { id: "s1", rates: { events: history(2, () => 1) } },
+        { id: "s2", rates: { events: history(2, () => 1) } },
+        { id: "s3", rates: { events: history(2, () => 1) } },
+        { id: "s4", rates: { events: history(2, () => 1) } },
+      ],
+    });
+    const frame = buildFrame(store, "events", NOW, {
+      sessionColors: threeColorPalette,
+    });
+    expect(frame.traces[0].color).toBe("#a11");
+    expect(frame.traces[3].color).toBe("#a11"); // wraps back to index 0
+    expect(frame.traces[4].color).toBe("#2b2"); // wraps to index 1
+  });
+
+  it("propagates custom palette colors through pulses via the owning trace", () => {
+    // A pulse's `color` mirrors its trace's color; changing the palette
+    // must change the pulse color in lockstep.
+    const customPalette: ReadonlyArray<string> = ["#cafe00"];
+    const store = makeFakeStore({
+      sessions: [
+        {
+          id: "s1",
+          rates: { events: history(3, () => 5) },
+          pulses: [
+            { t: NOW - 100, kind: "tool", strength: PULSE_STRENGTHS.tool },
+          ],
+        },
+      ],
+    });
+    const frame = buildFrame(store, "events", NOW, {
+      sessionColors: customPalette,
+    });
+    expect(frame.pulses[0].color).toBe("#cafe00");
+    expect(frame.traces[0].color).toBe("#cafe00");
+  });
+
+  it("falls back to default SESSION_COLORS when caller passes an empty palette", () => {
+    // A misconfigured theme (no --phosphor-session-* variables resolved)
+    // could pass an empty array. Treat it the same as omitted so traces
+    // still render in a visible color.
+    const store = makeFakeStore({
+      sessions: [{ id: "s1", rates: { events: history(3, () => 1) } }],
+    });
+    const frame = buildFrame(store, "events", NOW, { sessionColors: [] });
+    expect(frame.traces[0].color).toBe(SESSION_COLORS[0]);
+  });
+});

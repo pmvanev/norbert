@@ -24,9 +24,9 @@
  */
 
 import {
-  colorForSessionIndex,
   METRICS,
   PULSE_LIFETIME_MS,
+  SESSION_COLORS,
   WINDOW_MS,
   YMAX_FLOOR,
   type MetricId,
@@ -202,6 +202,18 @@ const sampleAt = (samples: ReadonlyArray<RateSample>, t: number): number => {
   return latestValue;
 };
 
+/**
+ * Select a session's color from a palette by registration index, wrapping
+ * modulo the palette length. Factored out so `projectTrace` can consult
+ * either the default `SESSION_COLORS` or a caller-supplied theme palette
+ * with identical wrap semantics.
+ */
+const colorFromPalette = (
+  palette: ReadonlyArray<string>,
+  index: number,
+): string =>
+  palette[((index % palette.length) + palette.length) % palette.length];
+
 /** Project a single session's trace for the requested metric. */
 const projectTrace = (
   sessionId: string,
@@ -209,8 +221,9 @@ const projectTrace = (
   store: PhosphorStoreSurface,
   metric: MetricId,
   now: number,
+  palette: ReadonlyArray<string>,
 ): FrameTrace => {
-  const color = colorForSessionIndex(index);
+  const color = colorFromPalette(palette, index);
   const history = store.getRateHistory(sessionId, metric);
   const samples = trimToWindow(history, now);
   const storeLabel = store.getSessionLabel
@@ -333,6 +346,17 @@ export interface BuildFrameOptions {
    * — every session contributes a trace.
    */
   readonly hiddenSessions?: ReadonlySet<string>;
+  /**
+   * Theme-resolved color palette for per-session traces. When provided,
+   * session colors are assigned by registration index into THIS palette
+   * (modulo its length) instead of the default `SESSION_COLORS`. This is
+   * the hook the view layer uses to thread theme-specific phosphor
+   * palettes (resolved from `--phosphor-session-0..4` CSS variables at
+   * render time) through the pure projection without leaking the DOM into
+   * the domain. When omitted OR empty, `SESSION_COLORS` is used so existing
+   * callers and degenerate theme configurations remain visually sane.
+   */
+  readonly sessionColors?: ReadonlyArray<string>;
 }
 
 /** Peak across all traces' samples in the current window, or 0 when empty. */
@@ -402,13 +426,20 @@ export const buildFrame = (
   opts?: BuildFrameOptions,
 ): Frame => {
   const hiddenSessions = opts?.hiddenSessions ?? EMPTY_HIDDEN_SESSIONS;
+  // Resolve the session-color palette once per frame. An empty caller-
+  // supplied palette is treated as "omitted" so a misconfigured theme
+  // (no --phosphor-session-* variables) cannot erase trace color entirely.
+  const palette =
+    opts?.sessionColors && opts.sessionColors.length > 0
+      ? opts.sessionColors
+      : SESSION_COLORS;
   const sessionIds = store.getSessionIds();
   // Project every session's trace. Projection is needed for all sessions so
   // the legend can show hidden entries with their latest value and color;
   // the hidden/visible split happens only when we assemble the canvas-
   // facing `traces` and `pulses` arrays.
   const allTraces = sessionIds.map((sessionId, index) =>
-    projectTrace(sessionId, index, store, metric, now),
+    projectTrace(sessionId, index, store, metric, now, palette),
   );
   const visibleTraces = allTraces.filter(
     (trace) => !hiddenSessions.has(trace.sessionId),
