@@ -160,9 +160,11 @@ describe("scopeHitTest — within snap distance", () => {
 
     const sampleX = timeToX(sampleTime, width, NOW);
     const sampleY = valueToY(sampleValue, height, METRICS.events.yMax);
-    // Pointer vertically 12px below the sample — within the 18px snap radius.
+    // Pointer vertically 12px above the sample — within the 18px snap radius.
+    // (Offset upward rather than downward because the sample sits near the
+    // canvas bottom when yMax is large relative to the sample value.)
     const selection = scopeHitTest(
-      { x: sampleX, y: sampleY + 12, width, height },
+      { x: sampleX, y: sampleY - 12, width, height },
       frame,
     );
 
@@ -178,7 +180,7 @@ describe("scopeHitTest — within snap distance", () => {
     const width = 1000;
     const height = 400;
     const sampleTime = NOW - 1500;
-    const offScaleValue = 47; // > events yMax of 15
+    const offScaleValue = 1000; // > events yMax of 500
     const frame = buildTestFrame([
       {
         sessionId: "focused",

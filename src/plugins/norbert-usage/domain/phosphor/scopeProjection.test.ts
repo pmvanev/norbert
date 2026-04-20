@@ -517,11 +517,12 @@ describe("buildFrame — yMax resolution (dynamic mode)", () => {
   });
 
   it("clamps to the METRICS.yMax cap when peak would produce a higher nice number", () => {
-    // peak = 14 evt/s; peak * 1.2 = 16.8; niceCeil(16.8) = 20; clamp to
-    // events cap (15). A user watching a spike near the cap gets the cap,
-    // not 20.
+    // peak = 1000 evt/s (far above the events cap); niceCeil(1200) would
+    // exceed METRICS.events.yMax so the resolver clamps. The cap exists
+    // as a safety rail against pathological input, not as a normal-
+    // operation clamp on realistic traffic.
     const store = makeFakeStore({
-      sessions: [{ id: "s1", rates: { events: history(3, () => 14) } }],
+      sessions: [{ id: "s1", rates: { events: history(3, () => 1000) } }],
     });
     const frame = buildFrame(store, "events", NOW, { yMaxMode: "dynamic" });
     expect(frame.yMax).toBe(METRICS.events.yMax);
@@ -545,7 +546,7 @@ describe("buildFrame — yMax resolution (dynamic mode)", () => {
     // One stale sample at v=999 (older than 60s) and a fresh sample at v=2.
     // Stale sample is outside the window and must not drive the scale.
     // peak = 2; peak * 1.2 = 2.4; niceCeil(2.4) = 3; events floor = 1 and
-    // cap = 15 so no clamp; resolved = 3.
+    // cap = 500 so no clamp; resolved = 3.
     const store = makeFakeStore({
       sessions: [
         {
@@ -585,7 +586,7 @@ describe("buildFrame — yMax resolution (dynamic mode)", () => {
   });
 
   it("clamps up to floor for toolcalls when peak is tiny", () => {
-    // peak = 0.1 calls/s; niceCeil(0.12) = 1; toolcalls floor = 1; cap = 3.
+    // peak = 0.1 calls/s; niceCeil(0.12) = 1; toolcalls floor = 1; cap = 100.
     const store = makeFakeStore({
       sessions: [{ id: "s1", rates: { toolcalls: history(3, () => 0.1) } }],
     });
@@ -674,9 +675,9 @@ describe("buildFrame — hidden-session filtering", () => {
 
   it("computes dynamic yMax from VISIBLE sessions only — hiding a spike lets the quiet trace fill the canvas", () => {
     // Big hidden trace peaks at 14 evt/s; small visible trace peaks at 2.
-    // If the hidden peak leaked into yMax we would get yMax clamped to the
-    // events cap of 15. With hidden filtered out, yMax scales to the visible
-    // peak: peak = 2, peak * 1.2 = 2.4, niceCeil = 3.
+    // If the hidden peak leaked into yMax we would see niceCeil(16.8) = 20.
+    // With hidden filtered out, yMax scales to the visible peak: peak = 2,
+    // peak * 1.2 = 2.4, niceCeil = 3.
     const store = makeFakeStore({
       sessions: [
         { id: "spiky", rates: { events: history(3, () => 14) } },

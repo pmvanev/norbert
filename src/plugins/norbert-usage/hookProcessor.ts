@@ -484,71 +484,71 @@ export const createHookProcessor = (
       }
     }
 
-    // v2 phosphor: per-event pulse emission + rate counter increments +
-    // per-event tokens/s derivation. Guarded on sessionId so hook events
-    // that are not scoped to a session do not pollute per-session state.
+    // v2 phosphor: per-event pulse emission + rate counter increments.
+    // Guarded on sessionId so hook events that are not scoped to a session
+    // do not pollute per-session state.
+    //
+    // Backlog guard: when Norbert opens against a pre-existing session, the
+    // first `get_new_events_batch` call delivers every historical event in
+    // a burst. Those ancient events carry a `received_at` from when they
+    // were first POSTed to the hook-receiver (hours or days old). If they
+    // contributed to the phosphor live signals (rates + pulses), the scope
+    // would show misleading spikes that don't correspond to current
+    // activity. Rejecting anything older than 2× RATE_TICK_MS keeps all
+    // three live signals honest while leaving the cumulative session-state
+    // updates above intact (those legitimately want every event).
+    //
+    // Freshness threshold is 2× RATE_TICK_MS to tolerate the gap between
+    // an event firing and the next poll tick delivering it.
     if (sessionId) {
-      // Increment per-session counters (drained on the 5s tick).
-      const counters = ensureCounters(sessionId);
-      counters.events += 1;
-      if (isToolCallEvent(eventType)) {
-        counters.toolcalls += 1;
-      }
+      const receivedAtMs = extractReceivedAtMs(payload);
+      const freshEnough =
+        receivedAtMs === null ||
+        now() - receivedAtMs <= 2 * RATE_TICK_MS;
 
-      if (isDev && !loggedFirstEvent) {
-        loggedFirstEvent = true;
-        // eslint-disable-next-line no-console
-        console.log(
-          `[phosphor] first event received — session=${sessionId} type=${eventType}`,
-        );
-      }
+      if (freshEnough) {
+        const counters = ensureCounters(sessionId);
+        counters.events += 1;
+        if (isToolCallEvent(eventType)) {
+          counters.toolcalls += 1;
+        }
 
-      // Emit a pulse for event types that warrant one. Tool events carry
-      // the strongest strength; subagent lifecycle a medium strength;
-      // session lifecycle the softest. Event types outside the three
-      // classes (prompt_submit, api_request, notifications, unknown) do
-      // not emit pulses — this keeps the scope signal diagnostic rather
-      // than saturated.
-      if (appendPulse) {
-        const kind = classifyPulseKind(eventType);
-        if (kind) {
-          appendPulse(sessionId, emitPulse(kind, now()));
-          if (isDev && !loggedFirstPulse) {
-            loggedFirstPulse = true;
-            // eslint-disable-next-line no-console
-            console.log(
-              `[phosphor] first pulse appended — session=${sessionId} kind=${kind}`,
-            );
+        if (isDev && !loggedFirstEvent) {
+          loggedFirstEvent = true;
+          // eslint-disable-next-line no-console
+          console.log(
+            `[phosphor] first event received — session=${sessionId} type=${eventType}`,
+          );
+        }
+
+        // Emit a pulse for event types that warrant one. Tool events carry
+        // the strongest strength; subagent lifecycle a medium strength;
+        // session lifecycle the softest. Event types outside the three
+        // classes (prompt_submit, api_request, notifications, unknown) do
+        // not emit pulses — this keeps the scope signal diagnostic rather
+        // than saturated.
+        if (appendPulse) {
+          const kind = classifyPulseKind(eventType);
+          if (kind) {
+            appendPulse(sessionId, emitPulse(kind, now()));
+            if (isDev && !loggedFirstPulse) {
+              loggedFirstPulse = true;
+              // eslint-disable-next-line no-console
+              console.log(
+                `[phosphor] first pulse appended — session=${sessionId} kind=${kind}`,
+              );
+            }
           }
         }
-      }
 
-      // Tokens/min is accumulated per-session and drained on the 5-second
-      // rate tick (see `sampleRates`). Production OTel payloads do not
-      // carry a `duration_ms` field, so per-event derivation is not
-      // possible — the counter pattern mirrors events/s and toolcalls/s.
-      //
-      // Only `api_request` events carry token usage, and they are emitted
-      // exclusively by the OTel adapter (Claude Code hooks never emit
-      // `api_request` — see adapters/providers/claude_code.rs::HOOK_EVENT_NAMES).
-      // `extractOtelTokenTotal` returns null for payloads missing the
-      // `usage` block, so malformed events don't inflate the counter.
-      //
-      // Backlog guard: when Norbert opens against a pre-existing session,
-      // the first `get_new_events_batch` call delivers every historical
-      // `api_request` in a burst. Those ancient events all carry a
-      // `received_at` from when they were first POSTed to the hook-receiver
-      // (hours or days old), so rejecting anything older than the current
-      // rate window keeps stale tokens out of the live-rate counter
-      // without affecting fresh events (which arrive within a few seconds
-      // of firing). The threshold is 2× RATE_TICK_MS to tolerate the gap
-      // between the event fire and the next poll tick.
-      if (appendRateSample && eventType === "api_request") {
-        const receivedAtMs = extractReceivedAtMs(payload);
-        const freshEnough =
-          receivedAtMs === null ||
-          now() - receivedAtMs <= 2 * RATE_TICK_MS;
-        if (freshEnough) {
+        // Tokens/min is accumulated per-session and drained on the 5-second
+        // rate tick (see `sampleRates`). Only `api_request` events carry
+        // token usage, and they are emitted exclusively by the OTel
+        // adapter (Claude Code hooks never emit `api_request` — see
+        // adapters/providers/claude_code.rs::HOOK_EVENT_NAMES).
+        // `extractOtelTokenTotal` returns null for payloads missing the
+        // `usage` block, so malformed events don't inflate the counter.
+        if (appendRateSample && eventType === "api_request") {
           const total = extractOtelTokenTotal(payload);
           if (total !== null && total > 0) {
             counters.tokens += total;

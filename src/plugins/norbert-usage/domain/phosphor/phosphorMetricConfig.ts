@@ -58,20 +58,21 @@ export interface MetricConfig {
 /**
  * Per-metric display configuration.
  *
- * yMax values are chosen so that typical envelopes sit in the middle third
- * of the scope: events up to ~10 evt/s, tool-calls up to ~2 calls/s.
- * Tokens is expressed per-minute (not per-second) so the axis maps directly
- * to Anthropic's published ITPM limit — a Tier-3 Sonnet 4 user has an 80K
- * tok/min ceiling, so a yMax around 10K keeps normal agentic traffic in the
- * middle third while leaving headroom for auto-scaling on cache-creation
- * bursts.
+ * yMax values act as a safety cap above which the dynamic Y-axis will not
+ * scale. They are set high enough that any realistic burst fits — a busy
+ * agent session can briefly hit dozens of events/s and many calls/s, and
+ * token traffic can saturate enterprise-tier ITPM ceilings. niceCeil does
+ * the real auto-scaling downward when traffic is quiet; YMAX_FLOOR keeps
+ * the axis legible when `niceCeil(peak * 1.2)` would otherwise collapse
+ * to a sub-unit value. The cap's job is to prevent a NaN / bug from
+ * pegging the axis — not to clip legitimate activity.
  */
 export const METRICS: Readonly<Record<MetricId, MetricConfig>> = {
   events: {
     id: "events",
     name: "Events per second",
     unit: "evt/s",
-    yMax: 15,
+    yMax: 500,
     caption: "Events/s blends hook events with OTel log arrivals.",
   },
   tokens: {
@@ -85,7 +86,7 @@ export const METRICS: Readonly<Record<MetricId, MetricConfig>> = {
     id: "toolcalls",
     name: "Tool-calls per second",
     unit: "calls/s",
-    yMax: 3,
+    yMax: 100,
     caption: "Tool-calls/s is sparsest and most diagnostic.",
   },
 };
