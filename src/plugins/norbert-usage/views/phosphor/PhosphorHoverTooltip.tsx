@@ -5,7 +5,7 @@
  *   - nothing (selection is null), or
  *   - a positioned div showing "session · value unit · age".
  *
- * Positioning contract (mirrors v1 PM's cf7af6c pattern):
+ * Positioning contract (mirrors v1 PM's cf7af6c + 6d5d2f1^ patterns):
  *   - Rendered via `ReactDOM.createPortal(document.body)` so the tooltip
  *     escapes the canvas-wrap's `overflow: hidden` clipping context and
  *     `position: fixed` resolves against the viewport (unaffected by any
@@ -15,18 +15,36 @@
  *     tooltip never sits under the pointer tip. Falls back to the trace
  *     sample's canvas-local `displayX/displayY` when client coords are
  *     absent (older callers, tests that do not simulate a mouse event).
- *   - Edge-flips at viewport bounds (mirrors v1 dbd6592): when the tooltip
- *     would overflow the right edge it shifts to the left of the cursor;
- *     when it would overflow the bottom it shifts above. Uses conservative
- *     hardcoded bounds — measuring via useLayoutEffect would force a second
- *     render per hover.
+ *   - Edge-flips at viewport bounds via the pure `clampTooltipLeft` /
+ *     `clampTooltipTop` helpers: below-right when it fits, flipped to the
+ *     opposite side when below-right would overflow, hard-clamped to the
+ *     viewport as a last-resort safety net.
+ *   - Tooltip width/height are MEASURED via `useLayoutEffect + ref` on the
+ *     first render, then fed into the pure clamp helpers. This mirrors v1's
+ *     PMTooltip pattern (chartViewHelpers.ts @ 6d5d2f1^): a fixed
+ *     conservative estimate (the previous 220×30) failed for long session
+ *     labels like "norbert-performance-monitor" that push real tooltip
+ *     widths well past 300px — the right-edge flip never triggered and the
+ *     tooltip clipped off-screen. Accept the one-frame measurement delay.
  *
- * Pure rendering function — no effects, no state. The portal is the only
- * DOM-aware call and is guarded for SSR.
+ * The measure-then-clamp pipeline means the first frame after a selection
+ * change uses the previous measurement (or the fallback estimate on the
+ * very first render); the useLayoutEffect then synchronously updates the
+ * measured width and triggers a re-render before the browser paints. The
+ * brief one-frame lag is far less visible than a clipped tooltip.
  */
 
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import type { HoverSelection } from "../../domain/phosphor/scopeHitTest";
+import {
+  clampTooltipLeft,
+  clampTooltipTop,
+} from "../../domain/phosphor/tooltipPositioning";
 
 interface PhosphorHoverTooltipProps {
   readonly selection: HoverSelection | null;
@@ -35,12 +53,12 @@ interface PhosphorHoverTooltipProps {
 
 // Offset from the cursor so the tooltip never sits beneath the pointer tip.
 const TOOLTIP_OFFSET_PX = 12;
-// Conservative bounds used for viewport edge-flip decisions. The tooltip's
-// actual size is small (one line of text, ~200x30). Measuring would force
-// a second render per hover; these are generous enough to avoid clipping
-// and tight enough that the tooltip rarely overlaps the cursor after a flip.
-const TOOLTIP_EST_WIDTH_PX = 220;
-const TOOLTIP_EST_HEIGHT_PX = 30;
+// Fallback estimates used on the very first render before useLayoutEffect
+// measures the tooltip's actual rendered size. Kept wider than the old
+// hardcoded 220×30 so even the pre-measurement placement is unlikely to
+// overflow; the real measurement replaces these within one frame.
+const TOOLTIP_EST_WIDTH_PX = 320;
+const TOOLTIP_EST_HEIGHT_PX = 36;
 
 /** Format a raw value for tooltip display with the metric's unit. */
 const formatValue = (value: number, unit: string): string => {
@@ -72,28 +90,30 @@ const viewportSize = (): { width: number; height: number } | null => {
 };
 
 /**
- * Compute the tooltip's viewport left/top given an anchor point (the
- * cursor), flipping to the opposite side when the preferred below-right
- * placement would overflow the viewport.
+ * Compute the tooltip's viewport left/top given the cursor anchor, the
+ * tooltip's measured (or fallback-estimated) dimensions, and the viewport.
+ * Delegates flipping + clamping to the pure `clampTooltipLeft` /
+ * `clampTooltipTop` helpers in `domain/phosphor/tooltipPositioning`.
  */
 const computePosition = (
   anchorX: number,
   anchorY: number,
+  tooltipWidth: number,
+  tooltipHeight: number,
 ): { left: number; top: number } => {
   const viewport = viewportSize();
-  // Preferred placement: below-right of the anchor by TOOLTIP_OFFSET_PX.
-  let left = anchorX + TOOLTIP_OFFSET_PX;
-  let top = anchorY + TOOLTIP_OFFSET_PX;
-  if (viewport === null) return { left, top };
-  // Right-edge flip: place to the left of the cursor instead.
-  if (left + TOOLTIP_EST_WIDTH_PX > viewport.width) {
-    left = anchorX - TOOLTIP_OFFSET_PX - TOOLTIP_EST_WIDTH_PX;
+  // Without a viewport (SSR / jsdom edge case), fall back to raw offset —
+  // any overflow is accepted silently since we cannot measure bounds.
+  if (viewport === null) {
+    return {
+      left: anchorX + TOOLTIP_OFFSET_PX,
+      top: anchorY + TOOLTIP_OFFSET_PX,
+    };
   }
-  // Bottom-edge flip: place above the cursor instead.
-  if (top + TOOLTIP_EST_HEIGHT_PX > viewport.height) {
-    top = anchorY - TOOLTIP_OFFSET_PX - TOOLTIP_EST_HEIGHT_PX;
-  }
-  return { left, top };
+  return {
+    left: clampTooltipLeft(anchorX, tooltipWidth, viewport.width, TOOLTIP_OFFSET_PX),
+    top: clampTooltipTop(anchorY, tooltipHeight, viewport.height, TOOLTIP_OFFSET_PX),
+  };
 };
 
 /**
@@ -123,15 +143,60 @@ export const PhosphorHoverTooltip = ({
   selection,
   unit,
 }: PhosphorHoverTooltipProps) => {
+  // Measured dimensions — populated by useLayoutEffect after each render.
+  // null before the first measurement lands, in which case the clamp uses
+  // the conservative fallback estimates.
+  const tooltipRef = useRef<HTMLDivElement | null>(null);
+  const [measured, setMeasured] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
+
+  useLayoutEffect(() => {
+    if (tooltipRef.current === null) {
+      // Tooltip was just unmounted (selection === null) — forget the
+      // previous measurement so the NEXT selection re-measures rather than
+      // reusing a stale width from a different trace's label.
+      if (measured !== null) setMeasured(null);
+      return;
+    }
+    const width = tooltipRef.current.offsetWidth;
+    const height = tooltipRef.current.offsetHeight;
+    // Zero-dimension measurements (jsdom without CSS, layout race, etc.) are
+    // treated as "not yet measured" so the fallback estimate continues to
+    // drive edge-flip decisions rather than producing a degenerate 0×0 box
+    // that never triggers flipping.
+    if (width === 0 || height === 0) return;
+    if (
+      measured === null ||
+      measured.width !== width ||
+      measured.height !== height
+    ) {
+      setMeasured({ width, height });
+    }
+    // Re-measure whenever the rendered content changes. Including `measured`
+    // in deps would cause an infinite loop — the hook compares measurements
+    // to the previous value and only calls setMeasured on change, which
+    // breaks the loop. eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    selection?.displayLabel,
+    selection?.value,
+    selection?.ageMs,
+    selection === null,
+  ]);
+
   if (selection === null) return null;
 
   const anchor = resolveAnchor(selection);
+  const tooltipWidth = measured?.width ?? TOOLTIP_EST_WIDTH_PX;
+  const tooltipHeight = measured?.height ?? TOOLTIP_EST_HEIGHT_PX;
   const { left, top } = anchor.fixed
-    ? computePosition(anchor.x, anchor.y)
+    ? computePosition(anchor.x, anchor.y, tooltipWidth, tooltipHeight)
     : { left: anchor.x, top: anchor.y };
 
   const tooltip = (
     <div
+      ref={tooltipRef}
       className="phosphor-hover-tooltip"
       data-testid="phosphor-hover-tooltip"
       style={{

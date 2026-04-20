@@ -23,7 +23,11 @@
 import { describe, it, expect } from "vitest";
 import fc from "fast-check";
 
-import { normalizeClientPointer } from "./tooltipPositioning";
+import {
+  clampTooltipLeft,
+  clampTooltipTop,
+  normalizeClientPointer,
+} from "./tooltipPositioning";
 
 describe("normalizeClientPointer — properties", () => {
   it("is identity when rect matches logical dimensions (zoom = 1)", () => {
@@ -171,5 +175,124 @@ describe("normalizeClientPointer — example anchors", () => {
     );
     expect(result.normalizedClientX).toBe(123);
     expect(result.normalizedClientY).toBe(456);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// clampTooltipLeft / clampTooltipTop — edge-flip + viewport clamp
+// ---------------------------------------------------------------------------
+
+describe("clampTooltipLeft — example anchors", () => {
+  it("prefers below-right placement (pointer + offset) when the tooltip fits", () => {
+    // Pointer well inside a 1000-wide viewport; tooltip width 200 plus
+    // offset 12 leaves ~200px of room on the right -> no flip, no clamp.
+    expect(clampTooltipLeft(300, 200, 1000, 12)).toBe(312);
+  });
+
+  it("flips to the left of the pointer when below-right would overflow", () => {
+    // Viewport 1024 (jsdom default). Pointer near right edge with a tooltip
+    // wider than the conservative 220 estimate -> must flip left.
+    const width = 300;
+    const left = clampTooltipLeft(1000, width, 1024, 12);
+    // Flipped placement is pointer - offset - width = 1000 - 12 - 300 = 688.
+    expect(left).toBe(688);
+  });
+
+  it("clamps to `viewportWidth - tooltipWidth` as a safety net if flipped placement would still overflow", () => {
+    // Degenerate pointer beyond the right edge. Flipped placement is
+    // still past the edge; clamp must bring it back.
+    const viewportWidth = 800;
+    const tooltipWidth = 300;
+    const left = clampTooltipLeft(900, tooltipWidth, viewportWidth, 12);
+    // Upper bound = viewportWidth - tooltipWidth = 500; result must be <= 500.
+    expect(left).toBeLessThanOrEqual(viewportWidth - tooltipWidth);
+    expect(left).toBeGreaterThanOrEqual(0);
+  });
+
+  it("never returns negative when tooltipWidth exceeds viewportWidth (degenerate)", () => {
+    // Tooltip wider than the viewport — impossible to fit without overflow;
+    // contract: never go negative (clamp to 0).
+    const left = clampTooltipLeft(100, 500, 300, 12);
+    expect(left).toBe(0);
+  });
+});
+
+describe("clampTooltipLeft — properties", () => {
+  it("output is always in [0, viewportWidth - tooltipWidth] when tooltip fits", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: -500, max: 5000 }), // pointer — any viewport-space x (can be outside)
+        fc.integer({ min: 50, max: 400 }), // tooltip width
+        fc.integer({ min: 500, max: 4000 }), // viewport width (always > max tooltip width)
+        fc.integer({ min: 0, max: 40 }), // preferred offset
+        (pointerX, tooltipWidth, viewportWidth, offset) => {
+          fc.pre(viewportWidth > tooltipWidth);
+          const left = clampTooltipLeft(pointerX, tooltipWidth, viewportWidth, offset);
+          expect(left).toBeGreaterThanOrEqual(0);
+          expect(left).toBeLessThanOrEqual(viewportWidth - tooltipWidth);
+        },
+      ),
+      { numRuns: 300 },
+    );
+  });
+
+  it("never returns negative, even under degenerate inputs", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: -10_000, max: 10_000 }),
+        fc.integer({ min: 1, max: 10_000 }),
+        fc.integer({ min: 1, max: 10_000 }),
+        fc.integer({ min: 0, max: 100 }),
+        (pointerX, tooltipWidth, viewportWidth, offset) => {
+          const left = clampTooltipLeft(pointerX, tooltipWidth, viewportWidth, offset);
+          expect(left).toBeGreaterThanOrEqual(0);
+        },
+      ),
+      { numRuns: 300 },
+    );
+  });
+});
+
+describe("clampTooltipTop — example anchors", () => {
+  it("prefers below-right placement when the tooltip fits", () => {
+    expect(clampTooltipTop(200, 30, 768, 12)).toBe(212);
+  });
+
+  it("flips above the pointer when below-preferred would overflow the bottom", () => {
+    // Near bottom of 768 viewport with a 40px tooltip -> flip above.
+    const height = 40;
+    const top = clampTooltipTop(760, height, 768, 12);
+    // Flipped = 760 - 12 - 40 = 708.
+    expect(top).toBe(708);
+  });
+
+  it("clamps result into [0, viewportHeight - tooltipHeight]", () => {
+    const top = clampTooltipTop(1500, 30, 768, 12);
+    expect(top).toBeGreaterThanOrEqual(0);
+    expect(top).toBeLessThanOrEqual(768 - 30);
+  });
+
+  it("never returns negative when tooltipHeight exceeds viewportHeight", () => {
+    expect(clampTooltipTop(100, 900, 500, 12)).toBe(0);
+  });
+});
+
+describe("clampTooltipTop — properties", () => {
+  it("output is always in [0, viewportHeight - tooltipHeight] when tooltip fits", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: -500, max: 5000 }),
+        fc.integer({ min: 20, max: 200 }),
+        fc.integer({ min: 400, max: 3000 }),
+        fc.integer({ min: 0, max: 40 }),
+        (pointerY, tooltipHeight, viewportHeight, offset) => {
+          fc.pre(viewportHeight > tooltipHeight);
+          const top = clampTooltipTop(pointerY, tooltipHeight, viewportHeight, offset);
+          expect(top).toBeGreaterThanOrEqual(0);
+          expect(top).toBeLessThanOrEqual(viewportHeight - tooltipHeight);
+        },
+      ),
+      { numRuns: 300 },
+    );
   });
 });

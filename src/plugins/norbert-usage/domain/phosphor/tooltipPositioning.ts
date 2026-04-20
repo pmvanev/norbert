@@ -1,10 +1,13 @@
 /**
  * Tooltip positioning math — pure helpers shared by the phosphor view's
- * pointer handlers. Currently hosts `normalizeClientPointer`, the CSS-zoom
- * compensation used when forwarding `event.clientX/Y` to a portal tooltip
- * positioned via `position: fixed`.
+ * pointer handlers. Hosts:
+ *   - `normalizeClientPointer`: CSS-zoom compensation for portal tooltips.
+ *   - `clampTooltipLeft` / `clampTooltipTop`: edge-flip + viewport-clamp
+ *     math used by `PhosphorHoverTooltip` so the tooltip never extends
+ *     past the viewport (mirrors v1 PM's `computeTooltipLeftClamped`
+ *     pattern from chartViewHelpers.ts at 6d5d2f1^).
  *
- * Why this exists:
+ * Why normalizeClientPointer exists:
  *   `document.documentElement.style.zoom` (set by Ctrl-+/- in main.tsx)
  *   inflates `getBoundingClientRect()` by the zoom factor relative to the
  *   canvas's unzoomed logical size (what `ResizeObserver.contentRect`
@@ -13,10 +16,17 @@
  *   The ratio of zoomed rect dimensions to unzoomed logical dimensions
  *   IS the CSS zoom factor; dividing client coords by that ratio returns
  *   them to the coordinate space the portal tooltip expects.
+ *   Mirrors the v1 PM fix landed in commit cf7af6c.
  *
- * Mirrors the v1 PM fix landed in commit cf7af6c (see PMChart.tsx in the
- * pre-deletion history). Extracted here rather than inlined so the math
- * is property-testable in isolation.
+ * Why clampTooltipLeft/clampTooltipTop exist:
+ *   The previous edge-flip in `PhosphorHoverTooltip` used a hardcoded
+ *   220×30 estimate. Real tooltips — with long session labels like
+ *   "norbert-performance-monitor" plus value + age — easily exceed 220px,
+ *   so the right-edge flip never triggered and the tooltip clipped. The
+ *   fix mirrors v1's chartViewHelpers.computeTooltipLeftClamped: the view
+ *   measures its actual rendered width via useLayoutEffect + ref, then
+ *   feeds the measured width into a pure clamp that both flips AND clamps
+ *   to viewport bounds as a last-resort safety net.
  *
  * Pure: no imports from `react`, `adapters`, `views`, `window`, `document`,
  * or any other phosphor domain module.
@@ -64,4 +74,65 @@ export const normalizeClientPointer = (
     normalizedClientX: cssZoomX === 1 ? clientX : clientX / cssZoomX,
     normalizedClientY: cssZoomY === 1 ? clientY : clientY / cssZoomY,
   };
+};
+
+// ---------------------------------------------------------------------------
+// clampTooltipLeft / clampTooltipTop — edge-flip + viewport clamp
+// ---------------------------------------------------------------------------
+
+/**
+ * Compute the tooltip's viewport `left` given the pointer's client x, the
+ * tooltip's measured width, the viewport width, and the preferred offset
+ * from the pointer (e.g. +12 for "below-right" placement).
+ *
+ * Algorithm:
+ *   1. Preferred placement: `pointerClientX + preferredOffset`.
+ *   2. If that would overflow the right edge (preferred + width > viewport),
+ *      flip to the left of the pointer: `pointerClientX - preferredOffset - width`.
+ *   3. Clamp to `[preferredOffset, viewportWidth - width]` as a safety net so
+ *      the tooltip can never extend past the viewport even if the pointer
+ *      itself is outside or the tooltip is wider than the viewport allows.
+ *
+ * Mirrors v1 PM's `computeTooltipLeftClamped` (chartViewHelpers.ts @ 6d5d2f1^)
+ * but takes `viewportWidth` directly rather than `containerWidth / docZoom`;
+ * CSS-zoom normalization is already handled upstream by `normalizeClientPointer`.
+ *
+ * Pure: deterministic in its arguments.
+ */
+export const clampTooltipLeft = (
+  pointerClientX: number,
+  tooltipWidth: number,
+  viewportWidth: number,
+  preferredOffset: number,
+): number => {
+  const preferredLeft =
+    pointerClientX + preferredOffset + tooltipWidth > viewportWidth
+      ? pointerClientX - preferredOffset - tooltipWidth
+      : pointerClientX + preferredOffset;
+  // Safety clamp: never extend past the viewport's right edge, never go
+  // negative. When viewportWidth < tooltipWidth (degenerate), the upper
+  // bound is negative; Math.min then Math.max yields 0 (never negative).
+  const upperBound = Math.max(0, viewportWidth - tooltipWidth);
+  return Math.max(0, Math.min(preferredLeft, upperBound));
+};
+
+/**
+ * Compute the tooltip's viewport `top` given the pointer's client y, the
+ * tooltip's measured height, the viewport height, and the preferred offset.
+ *
+ * Symmetric to clampTooltipLeft: below-preferred, flips above when it would
+ * overflow the bottom, clamps to viewport bounds as a last resort.
+ */
+export const clampTooltipTop = (
+  pointerClientY: number,
+  tooltipHeight: number,
+  viewportHeight: number,
+  preferredOffset: number,
+): number => {
+  const preferredTop =
+    pointerClientY + preferredOffset + tooltipHeight > viewportHeight
+      ? pointerClientY - preferredOffset - tooltipHeight
+      : pointerClientY + preferredOffset;
+  const upperBound = Math.max(0, viewportHeight - tooltipHeight);
+  return Math.max(0, Math.min(preferredTop, upperBound));
 };

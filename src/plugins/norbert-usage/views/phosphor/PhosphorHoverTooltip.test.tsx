@@ -187,6 +187,43 @@ describe("PhosphorHoverTooltip", () => {
     expect(left).toBeLessThanOrEqual(1024);
   });
 
+  it("edge-flips left even for wide tooltips (long session labels) without relying on a 220px estimate", () => {
+    // Regression guard for the post-deliver bug: long session labels like
+    // "norbert-performance-monitor" push real tooltip widths past ~300px,
+    // but the previous 220px hardcoded estimate never triggered the flip
+    // and the tooltip clipped off-screen. The fallback estimate + measured
+    // width must ensure a flip is chosen whenever the tooltip WOULD clip.
+    //
+    // Scenario: cursor at x=800 in jsdom's 1024 viewport with the fallback
+    // estimate of 320px. preferred = 800+12+320 = 1132 > 1024 -> flip to
+    // 800-12-320 = 468. With the old 220px estimate the check was
+    // 800+12+220 = 1032 > 1024 (barely flips), but AT x=750 we get
+    // 750+12+220 = 982 < 1024 (no flip under 220 but the REAL 320 tooltip
+    // would still clip). We exercise x=750 to catch the regression.
+    const selection: HoverSelection = {
+      sessionId: "long-label",
+      displayLabel: "norbert-performance-monitor",
+      color: "#fbbf24",
+      value: 3,
+      time: 1_000_000,
+      ageMs: 0,
+      displayX: 0,
+      displayY: 0,
+      pointerClientX: 750,
+      pointerClientY: 200,
+    };
+
+    render(<PhosphorHoverTooltip selection={selection} unit="evt/s" />);
+
+    const tooltip = screen.getByTestId("phosphor-hover-tooltip");
+    const left = parseFloat(tooltip.style.left);
+    // Flipped placement is to the left of the cursor: 750 - 12 - 320 = 418.
+    expect(left).toBeLessThan(750);
+    // And the tooltip does not overflow the right edge for a 320-wide
+    // tooltip in a 1024-wide viewport.
+    expect(left + 320).toBeLessThanOrEqual(1024);
+  });
+
   it("edge-flips up when below-right placement would overflow the viewport's bottom edge", () => {
     // jsdom defaults window.innerHeight to 768. Place the cursor near the
     // bottom so the preferred placement (clientY + 12) + tooltip height
