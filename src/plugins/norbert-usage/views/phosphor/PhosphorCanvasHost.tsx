@@ -75,10 +75,16 @@ const PERSISTENCE_DECAY_ALPHA = 0.08;
 // the eye an anchor for relative magnitude without stealing attention from
 // the trace. Vertical tickmarks at 15-second intervals mark the 60-second
 // window's four quarters (the newest edge sits at x = width).
-const GRID_Y_FRACTIONS: ReadonlyArray<number> = [0.25, 0.5, 0.75];
+//
+// Y-axis: labeled ticks at 25%, 50%, 75%, and 100% of yMax so the user can
+// read values off the trace. The top tick carries the metric unit; interior
+// ticks are bare numbers to stay uncluttered.
+// X-axis: labeled ticks at 15s-age intervals from the right edge — "-15s",
+// "-30s", "-45s", "-60s" — so the user can read a sample's age directly.
+const GRID_Y_FRACTIONS: ReadonlyArray<number> = [0.25, 0.5, 0.75, 1.0];
 const GRID_TIME_INTERVAL_MS = 15_000;
 const GRID_WINDOW_MS = 60_000;
-const GRID_TICK_HEIGHT_PX = 4;
+const GRID_TICK_LENGTH_PX = 5;
 const GRID_DASH_PATTERN: ReadonlyArray<number> = [2, 6];
 const AXIS_LABEL_FONT = "10px monospace";
 const AXIS_LABEL_PAD_PX = 4;
@@ -124,23 +130,37 @@ interface PhosphorCanvasHostProps {
 // ---------------------------------------------------------------------------
 
 /**
- * Format the scope's yMax as a short axis label, e.g. `15 evt/s`. Integer
- * yMax values render unadorned; fractional values get a single decimal so
- * the label stays compact.
+ * Format a Y-axis tick value for display. Integer-friendly values render
+ * without a decimal ("15", "10"); fractional values render with up to one
+ * decimal ("3.75", "7.5") and strip a trailing `.0` so "10.0" becomes "10".
+ * Keeps the label compact regardless of yMax magnitude (dynamic or fixed).
  */
-const formatYMaxLabel = (yMax: number, unit: string): string => {
-  const rendered = Number.isInteger(yMax) ? `${yMax}` : yMax.toFixed(1);
-  return `${rendered} ${unit}`;
+const formatTickValue = (value: number): string => {
+  if (Number.isInteger(value)) return `${value}`;
+  return value.toFixed(2).replace(/\.?0+$/, "");
 };
 
 /**
- * Draw the reference grid — dashed horizontal lines at quarter-scale
- * intervals, short vertical tickmarks at 15-second intervals, and yMax /
- * 0 axis labels in the top-left / bottom-left corners. Painted into the
- * persistence buffer BEFORE traces/pulses so the signal always reads on
- * top of the grid; the afterglow decay picks up the grid too, but
- * because the grid is very faint (alpha ~0.06) this is visually
- * indistinguishable from a re-painted grid each frame.
+ * Draw the reference grid and labeled tick marks.
+ *
+ * Y-axis (left edge, inside the canvas):
+ *   - Short horizontal tick marks at 25%, 50%, 75%, and 100% of yMax.
+ *   - Numeric value labels just to the right of each tick (top tick shows
+ *     unit after the value so the scale's unit is discoverable without a
+ *     separate legend).
+ *   - Faint dashed horizontal gridlines extend each tick across the canvas
+ *     so the eye can trace a trace's magnitude to its Y-axis value.
+ *
+ * X-axis (bottom edge, inside the canvas):
+ *   - Short vertical tick marks at -15s, -30s, -45s, -60s ages from the
+ *     right edge.
+ *   - Time-ago labels ("-15s" etc.) just above each tick.
+ *   - Faint dashed vertical gridlines rising from each tick so a hovered
+ *     sample's age is easy to read.
+ *
+ * Painted into the persistence buffer BEFORE traces/pulses so the signal
+ * always reads on top. Because the grid is very faint (~0.06 alpha) the
+ * afterglow decay's effect on the grid is imperceptible.
  */
 const drawGrid = (
   bufferCtx: CanvasRenderingContext2D,
@@ -151,11 +171,13 @@ const drawGrid = (
   axisLabelColor: string,
 ): void => {
   bufferCtx.save();
+
+  // ---- Gridlines (dashed, faint) ----
   bufferCtx.strokeStyle = gridColor;
   bufferCtx.lineWidth = 1;
   bufferCtx.setLineDash([...GRID_DASH_PATTERN]);
 
-  // Horizontal reference lines at 25%, 50%, 75% of the y-scale.
+  // Horizontal gridlines at each Y-tick fraction (including 1.0 at the top).
   for (const fraction of GRID_Y_FRACTIONS) {
     const y = height - height * fraction;
     bufferCtx.beginPath();
@@ -164,9 +186,9 @@ const drawGrid = (
     bufferCtx.stroke();
   }
 
-  // Vertical tickmarks at 15s intervals. Short marks from the bottom edge
-  // keep the scope uncluttered versus full-height grid lines.
-  bufferCtx.setLineDash([]);
+  // Vertical gridlines at each 15s X-tick (skip 60s mark — it would paint
+  // a line exactly at x=0 which adds visual noise without adding
+  // information beyond the canvas edge itself).
   for (
     let ageMs = GRID_TIME_INTERVAL_MS;
     ageMs < GRID_WINDOW_MS;
@@ -174,22 +196,88 @@ const drawGrid = (
   ) {
     const x = width * (1 - ageMs / GRID_WINDOW_MS);
     bufferCtx.beginPath();
-    bufferCtx.moveTo(x, height);
-    bufferCtx.lineTo(x, height - GRID_TICK_HEIGHT_PX);
+    bufferCtx.moveTo(x, 0);
+    bufferCtx.lineTo(x, height);
     bufferCtx.stroke();
   }
 
-  // yMax label top-left and 0 baseline bottom-left.
+  // ---- Tick marks (solid, from the axis inward) ----
+  bufferCtx.setLineDash([]);
+
+  // Y-axis tick marks along the left edge.
+  for (const fraction of GRID_Y_FRACTIONS) {
+    const y = height - height * fraction;
+    bufferCtx.beginPath();
+    bufferCtx.moveTo(0, y);
+    bufferCtx.lineTo(GRID_TICK_LENGTH_PX, y);
+    bufferCtx.stroke();
+  }
+
+  // X-axis tick marks along the bottom edge.
+  for (
+    let ageMs = GRID_TIME_INTERVAL_MS;
+    ageMs <= GRID_WINDOW_MS;
+    ageMs += GRID_TIME_INTERVAL_MS
+  ) {
+    const x = width * (1 - ageMs / GRID_WINDOW_MS);
+    bufferCtx.beginPath();
+    bufferCtx.moveTo(x, height);
+    bufferCtx.lineTo(x, height - GRID_TICK_LENGTH_PX);
+    bufferCtx.stroke();
+  }
+
+  // ---- Axis labels ----
   bufferCtx.fillStyle = axisLabelColor;
   bufferCtx.font = AXIS_LABEL_FONT;
-  bufferCtx.textBaseline = "top";
-  bufferCtx.fillText(
-    formatYMaxLabel(frame.yMax, frame.unit),
-    AXIS_LABEL_PAD_PX,
-    AXIS_LABEL_PAD_PX,
-  );
+
+  // Y-axis value labels, positioned just inside each tick.
+  bufferCtx.textAlign = "left";
+  for (const fraction of GRID_Y_FRACTIONS) {
+    const value = frame.yMax * fraction;
+    const y = height - height * fraction;
+    const label =
+      fraction === 1.0
+        ? `${formatTickValue(value)} ${frame.unit}`
+        : formatTickValue(value);
+    // Top tick label sits below its line; other labels are vertically
+    // centered on their tick.
+    bufferCtx.textBaseline = fraction === 1.0 ? "top" : "middle";
+    bufferCtx.fillText(
+      label,
+      GRID_TICK_LENGTH_PX + AXIS_LABEL_PAD_PX,
+      y + (fraction === 1.0 ? AXIS_LABEL_PAD_PX : 0),
+    );
+  }
+
+  // X-axis time-ago labels, positioned just above each tick.
   bufferCtx.textBaseline = "bottom";
-  bufferCtx.fillText("0", AXIS_LABEL_PAD_PX, height - AXIS_LABEL_PAD_PX);
+  bufferCtx.textAlign = "center";
+  for (
+    let ageMs = GRID_TIME_INTERVAL_MS;
+    ageMs <= GRID_WINDOW_MS;
+    ageMs += GRID_TIME_INTERVAL_MS
+  ) {
+    const x = width * (1 - ageMs / GRID_WINDOW_MS);
+    const ageSeconds = ageMs / 1000;
+    const label = `-${ageSeconds}s`;
+    // The -60s label would clip off the left edge when centered on x=0;
+    // left-align it in that case so it stays fully visible.
+    if (ageMs === GRID_WINDOW_MS) {
+      bufferCtx.textAlign = "left";
+      bufferCtx.fillText(
+        label,
+        x + AXIS_LABEL_PAD_PX,
+        height - GRID_TICK_LENGTH_PX - AXIS_LABEL_PAD_PX,
+      );
+      bufferCtx.textAlign = "center";
+    } else {
+      bufferCtx.fillText(
+        label,
+        x,
+        height - GRID_TICK_LENGTH_PX - AXIS_LABEL_PAD_PX,
+      );
+    }
+  }
 
   bufferCtx.restore();
 };
@@ -311,7 +399,15 @@ export const PhosphorCanvasHost = ({
   // any rAF tick has landed) has a valid frame to query. Cheap — `buildFrame`
   // is pure and O(sessions × samples); the parent subscribes to the store
   // so this recomputes exactly when the store notifies.
-  const renderFrame = buildFrame(store, selectedMetric, nowFn());
+  //
+  // `yMaxMode: "dynamic"` lets quiet signals fill more of the canvas while
+  // still clamping to the per-metric cap. When no samples are present the
+  // resolved yMax falls back to `METRICS[metric].yMax`, preserving the
+  // pre-existing `data-y-max === METRICS.*.yMax` observable exercised by
+  // the scope-view suite.
+  const renderFrame = buildFrame(store, selectedMetric, nowFn(), {
+    yMaxMode: "dynamic",
+  });
   const frameRef = useRef<Frame>(renderFrame);
   frameRef.current = renderFrame;
   // Theme colors cached per resize — resolved via getComputedStyle once per
@@ -382,11 +478,13 @@ export const PhosphorCanvasHost = ({
 
     // Compute a FRESH frame for this tick. This is the key change from the
     // previous architecture: `now` advances every rAF tick so traces scroll
-    // smoothly even between store notifications.
+    // smoothly even between store notifications. Dynamic yMax keeps the
+    // scope filling vertical space when real peaks are well below the cap.
     const activeFrame = buildFrame(
       storeRef.current,
       selectedMetricRef.current,
       nowFnRef.current(),
+      { yMaxMode: "dynamic" },
     );
     // Refresh the ref so a pointer event arriving mid-tick hits against the
     // same frame that was just rendered.
