@@ -14,6 +14,14 @@
  *     the window is hidden).
  *   - Handles pointer events: `mousemove` calls the pure `scopeHitTest` and
  *     fires `onHoverChange` with the result; `mouseleave` fires `onHoverChange(null)`.
+ *   - Live-tracks the hovered sample across rAF ticks: the last pointer
+ *     position is stored in a ref; each tick re-runs `scopeHitTest`
+ *     against the fresh frame so the selection tracks the scrolling
+ *     trace. A pulsing "heartbeat" dot is drawn on top of the composited
+ *     persistence buffer at that sample's canvas coordinates (radius and
+ *     alpha via the pure `hoverBeat` helpers). `onHoverChange` is
+ *     de-churned by content fingerprint so the parent only re-renders on
+ *     meaningful transitions (sample change or age-bucket tick).
  *
  * Why rAF-driven frame computation?
  *   Trace projection depends on `now` (the 60-second window slides against
@@ -53,6 +61,10 @@ import type { MetricId } from "../../domain/phosphor/phosphorMetricConfig";
 import { buildFrame, type Frame, type FramePulse, type FrameTrace } from "../../domain/phosphor/scopeProjection";
 import { scopeHitTest, type HoverSelection } from "../../domain/phosphor/scopeHitTest";
 import { timeToX, valueToY } from "../../domain/phosphor/canvasGeometry";
+import {
+  computeHoverBeatAlpha,
+  computeHoverBeatRadius,
+} from "../../domain/phosphor/hoverBeat";
 import { normalizeClientPointer } from "../../domain/phosphor/tooltipPositioning";
 import {
   ensurePersistenceBuffer,
@@ -67,6 +79,25 @@ const DEFAULT_WIDTH = 600;
 const DEFAULT_HEIGHT = 200;
 const TRACE_LINE_WIDTH = 2;
 const PULSE_BASE_RADIUS = 10;
+// Hover-beat (breathing dot at the hovered sample).
+//
+// Frequency note: Phil's sketch mentioned "60 Hz". At our 60fps render
+// cadence a 60 Hz sinusoid aliases to a static dot — each frame samples the
+// same phase. 2 Hz (120 bpm) sits well below Nyquist, gives a clearly
+// visible pulse, and feels like a heartbeat. Swap this constant if a
+// different tempo is wanted.
+const HOVER_BEAT_FREQ_HZ = 2;
+const HOVER_BEAT_BASE_RADIUS_PX = 4;
+const HOVER_BEAT_AMPLITUDE_PX = 3;
+// Alpha modulation: 0.7 ± 0.3 → [0.4, 1.0]. Keeps the dot always visible
+// while giving a subtle brightness pulse synchronized with the radius.
+const HOVER_BEAT_ALPHA_BASE = 0.7;
+const HOVER_BEAT_ALPHA_AMPLITUDE = 0.3;
+// Age-display bucket (ms) used to de-churn `onHoverChange` while the cursor
+// is stationary. `formatAge` in the tooltip ticks at tenth-of-a-second
+// granularity, so emitting at 100ms boundaries suffices for a live age
+// readout without flooding React with per-frame selection objects.
+const HOVER_EMIT_AGE_BUCKET_MS = 100;
 // Alpha applied to the persistence buffer each frame to produce afterglow
 // decay. 0.92 matches the prototype's phosphor falloff: recent traces linger
 // ~0.5s, older traces fade into background.
@@ -322,6 +353,49 @@ const drawPulse = (
   ctx.globalAlpha = 1;
 };
 
+/**
+ * Draw the beating-heart hover dot at the trace's sample under the cursor.
+ *
+ * Draws onto the PRIMARY canvas (not the persistence buffer) so no afterglow
+ * smear trails the dot as it tracks the scrolling trace — the dot must
+ * appear pinned to the sample, not a ghost of where the sample was.
+ *
+ * Position is recomputed from the frame's `now` and the selection's
+ * `time` (sample timestamp) rather than reusing `selection.displayX/Y`
+ * captured at last mousemove — those coords would go stale within a frame
+ * as the trace scrolls left.
+ */
+const drawHoverBeat = (
+  ctx: CanvasRenderingContext2D,
+  selection: HoverSelection,
+  frame: Frame,
+  width: number,
+  height: number,
+  nowMs: number,
+): void => {
+  const x = timeToX(selection.time, width, frame.now);
+  const y = valueToY(selection.value, height, frame.yMax);
+  const radius = computeHoverBeatRadius(
+    nowMs,
+    HOVER_BEAT_FREQ_HZ,
+    HOVER_BEAT_BASE_RADIUS_PX,
+    HOVER_BEAT_AMPLITUDE_PX,
+  );
+  const alpha = computeHoverBeatAlpha(
+    nowMs,
+    HOVER_BEAT_FREQ_HZ,
+    HOVER_BEAT_ALPHA_BASE,
+    HOVER_BEAT_ALPHA_AMPLITUDE,
+  );
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = selection.color;
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+};
+
 const drawFrame = (
   ctx: CanvasRenderingContext2D,
   bufferCtx: CanvasRenderingContext2D,
@@ -391,9 +465,32 @@ export const PhosphorCanvasHost = ({
   const storeRef = useRef<MultiSessionStore>(store);
   const selectedMetricRef = useRef<MetricId>(selectedMetric);
   const nowFnRef = useRef<() => number>(nowFn);
+  const onHoverChangeRef = useRef<(s: HoverSelection | null) => void>(onHoverChange);
   storeRef.current = store;
   selectedMetricRef.current = selectedMetric;
   nowFnRef.current = nowFn;
+  onHoverChangeRef.current = onHoverChange;
+
+  // Live-tracking hover state owned by the canvas host:
+  //
+  //   - `lastPointerRef` holds the pointer coords in CSS pixels (canvas-local)
+  //     plus the cursor's viewport coords for tooltip positioning. Set by
+  //     `mousemove`, cleared by `mouseleave`.
+  //   - `lastEmittedHoverKeyRef` stores a content fingerprint of the most
+  //     recently-emitted `onHoverChange` payload so the rAF tick only
+  //     notifies the parent when a meaningful transition happens
+  //     (sample changed OR displayed age bucket advanced). Reference-only
+  //     equality would not suffice because the hit-test produces a fresh
+  //     selection object every tick.
+  const lastPointerRef = useRef<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    clientX: number;
+    clientY: number;
+  } | null>(null);
+  const lastEmittedHoverKeyRef = useRef<string | null>(null);
 
   // Render-time frame: powers the DOM data attributes (test observability)
   // AND seeds `frameRef.current` so the very first hover hit-test (before
@@ -533,6 +630,58 @@ export const PhosphorCanvasHost = ({
       gridColorRef.current,
       axisLabelColorRef.current,
     );
+
+    // --- Live hover: re-run hit-test against the freshly-built frame so the
+    // selection tracks the scrolling trace. The pointer position is held in
+    // `lastPointerRef` (written by mousemove, cleared by mouseleave). When
+    // the pointer is absent we both skip drawing the beating dot and ensure
+    // the parent's hover state is null (cleared by mouseleave already —
+    // this branch is a no-op guard).
+    const pointer = lastPointerRef.current;
+    if (pointer !== null) {
+      const livePointer = {
+        x: pointer.x,
+        y: pointer.y,
+        width: pointer.width,
+        height: pointer.height,
+      };
+      const liveSelection = scopeHitTest(livePointer, activeFrame);
+      if (liveSelection !== null) {
+        // Draw the beating dot AFTER drawFrame composites the persistence
+        // buffer onto the primary canvas, so the dot sits on top of
+        // everything and leaves no afterglow trail as the trace scrolls.
+        drawHoverBeat(
+          ctx,
+          liveSelection,
+          activeFrame,
+          cssW,
+          cssH,
+          nowFnRef.current(),
+        );
+
+        // De-churned emit: only notify the parent when the meaningful
+        // content has changed. Sample identity (sessionId + time + value)
+        // changes when a new sample appears under the cursor; the bucketed
+        // age advances every HOVER_EMIT_AGE_BUCKET_MS so the tooltip's
+        // "Ns ago" readout updates at tooltip-display granularity without
+        // flooding React with per-frame selections.
+        const ageBucket = Math.floor(liveSelection.ageMs / HOVER_EMIT_AGE_BUCKET_MS);
+        const key = `${liveSelection.sessionId}|${liveSelection.time}|${liveSelection.value}|${ageBucket}`;
+        if (key !== lastEmittedHoverKeyRef.current) {
+          lastEmittedHoverKeyRef.current = key;
+          onHoverChangeRef.current({
+            ...liveSelection,
+            pointerClientX: pointer.clientX,
+            pointerClientY: pointer.clientY,
+          });
+        }
+      } else if (lastEmittedHoverKeyRef.current !== null) {
+        // Pointer still inside canvas but hit-test returned null (no traces
+        // with samples). Clear any stale selection so the tooltip hides.
+        lastEmittedHoverKeyRef.current = null;
+        onHoverChangeRef.current(null);
+      }
+    }
   }, [dimensions]);
 
   useEffect(() => {
@@ -595,17 +744,6 @@ export const PhosphorCanvasHost = ({
         width: rect.width,
         height: rect.height,
       };
-      const selection = scopeHitTest(pointer, frameRef.current);
-      if (selection === null) {
-        onHoverChange(null);
-        return;
-      }
-      // Enrich the pure hit-test result with the cursor's viewport
-      // coordinates so the tooltip can follow the cursor via
-      // `position: fixed` (mirrors v1 PM's cf7af6c portal pattern).
-      // The pure hit-test stays oblivious to view-layer concerns; the
-      // view is the only layer that knows about client coordinates.
-      //
       // Compensate for CSS zoom: `getBoundingClientRect()` returns ZOOMED
       // dimensions, `ResizeObserver.contentRect` (our `dimensions` state)
       // returns UNZOOMED logical dimensions. Their ratio IS the CSS zoom
@@ -619,6 +757,29 @@ export const PhosphorCanvasHost = ({
         { width: rect.width, height: rect.height },
         { width: dimensions.width, height: dimensions.height },
       );
+      // Persist the pointer for the rAF tick's live hit-test so the beating
+      // dot + tooltip keep tracking the scrolling trace even when the
+      // cursor is perfectly still.
+      lastPointerRef.current = {
+        x: pointer.x,
+        y: pointer.y,
+        width: pointer.width,
+        height: pointer.height,
+        clientX: normalizedClientX,
+        clientY: normalizedClientY,
+      };
+      // Eagerly fire once on the pointer event so the tooltip shows up on
+      // the same frame as the mousemove rather than waiting for the next
+      // rAF tick. The rAF-tick de-churn continues from here using the
+      // emitted key.
+      const selection = scopeHitTest(pointer, frameRef.current);
+      if (selection === null) {
+        lastEmittedHoverKeyRef.current = null;
+        onHoverChange(null);
+        return;
+      }
+      const ageBucket = Math.floor(selection.ageMs / HOVER_EMIT_AGE_BUCKET_MS);
+      lastEmittedHoverKeyRef.current = `${selection.sessionId}|${selection.time}|${selection.value}|${ageBucket}`;
       onHoverChange({
         ...selection,
         pointerClientX: normalizedClientX,
@@ -629,6 +790,8 @@ export const PhosphorCanvasHost = ({
   );
 
   const handleMouseLeave = useCallback(() => {
+    lastPointerRef.current = null;
+    lastEmittedHoverKeyRef.current = null;
     onHoverChange(null);
   }, [onHoverChange]);
 
