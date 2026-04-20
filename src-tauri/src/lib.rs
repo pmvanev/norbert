@@ -910,6 +910,31 @@ fn close_focused_window<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
+/// Toggle the native WebView DevTools on the currently focused window.
+///
+/// Falls back to the default window if nothing is focused (e.g. accelerator
+/// fired from a tray click). Requires the `devtools` feature on the `tauri`
+/// crate to be available in release builds.
+fn toggle_devtools_on_focused_window<R: Runtime>(app: &AppHandle<R>) {
+    let window = {
+        let windows = app.webview_windows();
+        windows
+            .values()
+            .find(|w| w.is_focused().unwrap_or(false))
+            .cloned()
+    }
+    .or_else(|| app.get_webview_window(DEFAULT_WINDOW_LABEL))
+    .or_else(|| app.webview_windows().values().next().cloned());
+
+    if let Some(window) = window {
+        if window.is_devtools_open() {
+            window.close_devtools();
+        } else {
+            window.open_devtools();
+        }
+    }
+}
+
 /// Theme identifiers matching the frontend CSS class suffixes.
 const THEME_IDS: [&str; 5] = ["theme_nb", "theme_cd", "theme_vd", "theme_cl", "theme_vl"];
 
@@ -998,10 +1023,16 @@ fn rebuild_menu(app: &AppHandle) {
         }
         let opacity_menu = opacity_submenu.build()?;
 
+        let toggle_devtools = MenuItemBuilder::with_id("toggle_devtools", "Developer Tools")
+            .accelerator("F12")
+            .build(app)?;
+
         let view_menu = SubmenuBuilder::new(app, "View")
             .item(&theme_menu)
             .separator()
             .item(&opacity_menu)
+            .separator()
+            .item(&toggle_devtools)
             .build()?;
 
         let menu = MenuBuilder::new(app)
@@ -1140,6 +1171,9 @@ pub fn run() {
                     }
                     "close_window" => {
                         close_focused_window(app_handle);
+                    }
+                    "toggle_devtools" => {
+                        toggle_devtools_on_focused_window(app_handle);
                     }
                     "quit" => {
                         app_handle.exit(0);
