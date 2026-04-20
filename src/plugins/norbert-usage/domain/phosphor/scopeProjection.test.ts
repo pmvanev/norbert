@@ -495,9 +495,11 @@ describe("buildFrame — yMax resolution (dynamic mode)", () => {
     expect(frame.yMax).toBe(METRICS.events.yMax);
   });
 
-  it("snaps low peaks up to the floor (events floor is 3)", () => {
-    // peak = 0.2 evt/s; niceCeil(0.24) = 1, which is below the events floor
-    // of 3. The resolved yMax must be 3 (the floor), not 1.
+  it("snaps low peaks up to the floor (events floor is 1)", () => {
+    // peak = 0.2 evt/s; niceCeil(0.24) = 1; floor (events) = 1; cap = 15.
+    // Resolved yMax clamps up to the floor when niceCeil lands below it —
+    // here niceCeil already equals the floor, so no adjustment is needed
+    // but the contract still holds: floor <= resolved <= cap.
     const store = makeFakeStore({
       sessions: [{ id: "s1", rates: { events: history(3, () => 0.2) } }],
     });
@@ -506,12 +508,12 @@ describe("buildFrame — yMax resolution (dynamic mode)", () => {
   });
 
   it("picks the next nice number above peak * 1.2 for mid-range peaks", () => {
-    // peak = 5 evt/s; peak * 1.2 = 6; niceCeil(6) = 10; within [3, 15].
+    // peak = 5 evt/s; peak * 1.2 = 6; niceCeil(6) = 7; within [1, 15].
     const store = makeFakeStore({
       sessions: [{ id: "s1", rates: { events: history(3, () => 5) } }],
     });
     const frame = buildFrame(store, "events", NOW, { yMaxMode: "dynamic" });
-    expect(frame.yMax).toBe(10);
+    expect(frame.yMax).toBe(7);
   });
 
   it("clamps to the METRICS.yMax cap when peak would produce a higher nice number", () => {
@@ -542,8 +544,8 @@ describe("buildFrame — yMax resolution (dynamic mode)", () => {
   it("ignores samples outside the 60s window when computing peak", () => {
     // One stale sample at v=999 (older than 60s) and a fresh sample at v=2.
     // Stale sample is outside the window and must not drive the scale.
-    // peak = 2; peak * 1.2 = 2.4; niceCeil = 5; clamp below events floor=3
-    // does not apply (5 > 3); cap = 15; resolved = 5.
+    // peak = 2; peak * 1.2 = 2.4; niceCeil(2.4) = 3; events floor = 1 and
+    // cap = 15 so no clamp; resolved = 3.
     const store = makeFakeStore({
       sessions: [
         {
@@ -558,7 +560,7 @@ describe("buildFrame — yMax resolution (dynamic mode)", () => {
       ],
     });
     const frame = buildFrame(store, "events", NOW, { yMaxMode: "dynamic" });
-    expect(frame.yMax).toBe(5);
+    expect(frame.yMax).toBe(3);
   });
 
   it("reads from the requested metric's history only", () => {

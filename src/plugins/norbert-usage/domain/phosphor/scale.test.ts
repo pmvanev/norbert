@@ -3,7 +3,8 @@
  *
  * Behaviors under test:
  *   1. Output is always >= input (ceiling semantics).
- *   2. Output is always a "nice" number: `m * 10^k` where `m in {1, 2, 5, 10}`.
+ *   2. Output is always a "nice" number: `m * 10^k` where
+ *      `m in {1, 1.5, 2, 3, 5, 7, 10}`.
  *   3. Monotonic: `a <= b` implies `niceCeil(a) <= niceCeil(b)`.
  *   4. Idempotent on nice inputs: `niceCeil(niceCeil(x)) === niceCeil(x)`.
  *   5. Example-based anchor: hand-picked values map to expected nice numbers.
@@ -15,10 +16,11 @@ import fc from "fast-check";
 
 import { niceCeil } from "./scale";
 
-// Check that `candidate` is of the form `m * 10^k` where m ∈ {1, 2, 5, 10}.
-// We recover k and m and assert m is in the allowed set (within a small
-// tolerance for floating-point representation of values like 0.1).
-const NICE_MANTISSA_SET = new Set([1, 2, 5, 10]);
+// Check that `candidate` is of the form `m * 10^k` where
+// m ∈ {1, 1.5, 2, 3, 5, 7, 10}. We recover k and m and assert m is in the
+// allowed set (within a small tolerance for floating-point representation
+// of values like 0.1).
+const NICE_MANTISSA_SET = new Set([1, 1.5, 2, 3, 5, 7, 10]);
 
 const isNiceNumber = (candidate: number): boolean => {
   if (!Number.isFinite(candidate) || candidate <= 0) return false;
@@ -77,26 +79,43 @@ describe("niceCeil — example anchors", () => {
   it.each<[number, number]>([
     [0.3, 1],
     [1, 1],
-    [1.1, 2],
+    [1.1, 1.5],
+    [1.5, 1.5],
+    [1.6, 2],
     [2, 2],
-    [2.5, 5],
-    [3, 5],
+    [2.1, 3],
+    [2.5, 3],
+    [3, 3],
+    [3.1, 5],
     [5, 5],
-    [6, 10],
+    [6, 7],
+    [7, 7],
+    [7.5, 10],
     [10, 10],
-    [11, 20],
-    [15, 20],
+    [11, 15],
+    [15, 15],
+    [16, 20],
     [20, 20],
-    [21, 50],
+    [21, 30],
+    [30, 30],
+    [31, 50],
     [47, 50],
     [50, 50],
-    [51, 100],
+    [51, 70],
+    [70, 70],
+    [71, 100],
     [100, 100],
-    [101, 200],
-    [123, 200],
+    [101, 150],
+    [123, 150],
+    [150, 150],
+    [151, 200],
     [200, 200],
-    [201, 500],
-    [501, 1000],
+    [201, 300],
+    [300, 300],
+    [301, 500],
+    [501, 700],
+    [700, 700],
+    [701, 1000],
     [1000, 1000],
   ])("niceCeil(%p) === %p", (input, expected) => {
     expect(niceCeil(input)).toBe(expected);

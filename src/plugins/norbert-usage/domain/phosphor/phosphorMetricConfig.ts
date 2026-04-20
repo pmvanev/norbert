@@ -87,20 +87,23 @@ export const METRICS: Readonly<Record<MetricId, MetricConfig>> = {
 };
 
 /**
- * Per-metric floors for dynamic Y-axis auto-scaling. When the actual peak
- * is very small, dynamic auto-scale could stretch a 0.2 evt/s trace to fill
- * the canvas — visually misleading. These floors keep the scope readable by
- * clamping the resolved yMax to a minimum value that makes the metric
- * recognizable in its typical operating range.
+ * Per-metric floors for dynamic Y-axis auto-scaling. The floor is the
+ * smallest reasonable axis ceiling — not a display preference. It exists to
+ * prevent degenerate cases where `niceCeil` would resolve to 0 or a sub-
+ * unit value; it should NOT hold the axis artificially high when real
+ * traffic is quieter than the floor. A low-activity session peaking at
+ * ~0.8 evt/s resolves to `niceCeil(0.96) = 1` and the floor must not
+ * push that up to some higher number — otherwise the trace hugs the
+ * bottom of the canvas and Phil's "most of my data is at the bottom of
+ * the plot" complaint returns.
  *
- * Values are calibrated against the prototype: a quiet-session `events` trace
- * sits comfortably within a 3 evt/s window; a quiet-session `tokens` trace
- * within 10 tok/s; `toolcalls` is already sparse enough that 1 is the
- * smallest useful ceiling.
+ * Calibration: 1 evt/s and 5 tok/s are the smallest nice values at which
+ * the axis labels remain legible; `toolcalls` is already sparse so 1 is
+ * the natural smallest useful ceiling.
  */
 export const YMAX_FLOOR: Readonly<Record<MetricId, number>> = {
-  events: 3,
-  tokens: 10,
+  events: 1,
+  tokens: 5,
   toolcalls: 1,
 };
 
