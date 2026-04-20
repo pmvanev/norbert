@@ -53,6 +53,7 @@ import type { MetricId } from "../../domain/phosphor/phosphorMetricConfig";
 import { buildFrame, type Frame, type FramePulse, type FrameTrace } from "../../domain/phosphor/scopeProjection";
 import { scopeHitTest, type HoverSelection } from "../../domain/phosphor/scopeHitTest";
 import { timeToX, valueToY } from "../../domain/phosphor/canvasGeometry";
+import { normalizeClientPointer } from "../../domain/phosphor/tooltipPositioning";
 import {
   ensurePersistenceBuffer,
   type PersistenceBufferCell,
@@ -604,13 +605,27 @@ export const PhosphorCanvasHost = ({
       // `position: fixed` (mirrors v1 PM's cf7af6c portal pattern).
       // The pure hit-test stays oblivious to view-layer concerns; the
       // view is the only layer that knows about client coordinates.
+      //
+      // Compensate for CSS zoom: `getBoundingClientRect()` returns ZOOMED
+      // dimensions, `ResizeObserver.contentRect` (our `dimensions` state)
+      // returns UNZOOMED logical dimensions. Their ratio IS the CSS zoom
+      // factor set by Ctrl-+/- on `documentElement.style.zoom`. `clientX/Y`
+      // arrive in zoomed space; the portal tooltip's `position: fixed`
+      // expects unzoomed CSS layout pixels. Divide to normalize. Mirrors
+      // the v1 PM fix (cf7af6c).
+      const { normalizedClientX, normalizedClientY } = normalizeClientPointer(
+        event.clientX,
+        event.clientY,
+        { width: rect.width, height: rect.height },
+        { width: dimensions.width, height: dimensions.height },
+      );
       onHoverChange({
         ...selection,
-        pointerClientX: event.clientX,
-        pointerClientY: event.clientY,
+        pointerClientX: normalizedClientX,
+        pointerClientY: normalizedClientY,
       });
     },
-    [onHoverChange],
+    [onHoverChange, dimensions],
   );
 
   const handleMouseLeave = useCallback(() => {
