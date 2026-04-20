@@ -2,8 +2,8 @@
  * Scope hit-test — pure snap-to-nearest-trace over a projected Frame.
  *
  * Given a pointer position in canvas coordinates and a Frame, return the
- * HoverSelection identifying the nearest trace within HOVER_SNAP_DISTANCE_PX
- * vertically at the pointer's x-time, or `null` when no trace is close enough.
+ * HoverSelection identifying the nearest trace at the pointer's x-time, or
+ * `null` when the pointer is outside the canvas (or no traces exist).
  *
  * Geometry contract (matches the canvas coordinate system used by the scope):
  *   - timeToX(t, width, now) = width * (1 - (now - t) / WINDOW_MS)
@@ -22,12 +22,16 @@
  *      is measured to the clipped edge, so off-scale traces remain hoverable
  *      anywhere at that x-time (a design choice mirroring the scope's visual
  *      clipping behavior).
- *   5. Pick the trace whose vertical distance is minimum; return null if that
- *      distance exceeds HOVER_SNAP_DISTANCE_PX.
+ *   5. Pick the trace whose vertical distance to the pointer is minimum.
+ *      The selection is always the nearest trace — there is no vertical
+ *      snap threshold. The only "no hit" outcomes are an out-of-canvas
+ *      pointer or a frame with no populated traces. Rationale: with moving
+ *      traces the user would otherwise have to chase the signal to catch
+ *      it inside a small vertical radius; always-snap makes hovering
+ *      dependable and matches how users expect a scope cursor to behave.
  *
  * Pure: no imports from `react`, `adapters`, `views`, `window`, `document`,
- * or `domain/oscilloscope`. Inspects only the Frame structure and the
- * HOVER_SNAP_DISTANCE_PX constant.
+ * or `domain/oscilloscope`. Inspects only the Frame structure.
  */
 
 import { timeToX, valueToY, xToTime } from "./canvasGeometry";
@@ -38,13 +42,12 @@ import type { Frame, FrameTrace } from "./scopeProjection";
 // ---------------------------------------------------------------------------
 
 /**
- * Maximum pixel distance for snap-to-trace hover.
- *
- * Tightened from the prototype's 28px to 18px after real-world use showed
- * the larger radius caused tooltips to appear when the cursor clearly was
- * not on a trace. With the dynamic yMax filling the canvas the trace is
- * visually thicker (2px stroke) and closer to most cursor distances; 18px
- * feels precise without being sticky.
+ * @deprecated Retained only for backward compatibility with callers that
+ * still import the constant. `scopeHitTest` no longer uses it as a filter:
+ * as long as the pointer is inside the canvas the hit-test returns the
+ * nearest trace at cursor-x regardless of vertical distance. The constant
+ * is kept so pre-existing imports keep compiling; remove once the M4-S4
+ * acceptance step and any other lingering references migrate off it.
  */
 export const HOVER_SNAP_DISTANCE_PX = 18;
 
@@ -234,18 +237,18 @@ const toHoverSelection = (
 /**
  * Pure hit-test. Deterministic in (pointer, frame).
  *
- * Returns the HoverSelection for the trace whose sample nearest the pointer's
- * cursor-time has the minimum vertical distance to the pointer, provided
- * that distance is ≤ HOVER_SNAP_DISTANCE_PX. Off-canvas samples (values
- * above yMax or negative) are considered clipped to the canvas edge — a
- * pointer inside the canvas at that x-time is effectively on the clipped
- * trace, so off-scale signals remain hoverable.
+ * Returns the HoverSelection for the trace whose sample nearest the
+ * pointer's cursor-time has the minimum vertical distance to the pointer.
+ * There is no vertical snap threshold — as long as the pointer is inside
+ * the canvas and at least one trace carries a sample, the nearest trace
+ * at the cursor column wins. Off-canvas samples (values above yMax or
+ * negative) are considered clipped to the canvas edge, so off-scale
+ * signals remain hoverable alongside on-scale ones.
  *
  * Returns `null` when:
  *   - the pointer is outside `[0, width] x [0, height]`
  *   - the frame has no traces
  *   - no trace has any samples
- *   - the nearest on-canvas trace is beyond the snap radius
  */
 export const scopeHitTest = (
   pointer: PointerPosition,
@@ -262,6 +265,8 @@ export const scopeHitTest = (
     }
   }
   if (winner === null) return null;
-  if (winner.verticalDistance > HOVER_SNAP_DISTANCE_PX) return null;
+  // No snap-distance gate: the nearest trace ALWAYS wins so long as one
+  // exists. This makes hovering moving traces dependable — users no longer
+  // have to chase the signal into a narrow vertical radius.
   return toHoverSelection(winner, frame.now);
 };

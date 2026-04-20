@@ -2,15 +2,20 @@
  * Unit tests: scopeHitTest — pure hit-test over a projected Frame.
  *
  * Behaviors (drives later M4-S2/4/5/6):
- *   1. within-snap:   pointer within HOVER_SNAP_DISTANCE_PX vertical of the
- *                     trace sample at the cursor-time returns a HoverSelection
- *                     identifying that trace.
- *   2. beyond-snap:   pointer outside HOVER_SNAP_DISTANCE_PX vertically
- *                     from every on-canvas trace sample returns null.
+ *   1. in-canvas hit: pointer inside the canvas with at least one populated
+ *                     trace returns a HoverSelection identifying the
+ *                     vertically-nearest trace at the cursor column.
+ *   2. far-but-still-hits: pointer far above or below every trace still
+ *                          returns the nearest trace — there is no
+ *                          vertical snap threshold. (Post-deliver change:
+ *                          the previous behavior was to return null beyond
+ *                          HOVER_SNAP_DISTANCE_PX. Always-snap makes
+ *                          hovering moving traces dependable.)
  *   3. outside-bounds: pointer x/y outside [0,width]/[0,height] returns null.
- *   4. empty-frame:   frame with no traces returns null regardless of pointer.
- *   5. nearest-of-two: when two traces' samples are within snap, selection
- *                      picks the vertically-closer one.
+ *   4. empty-frame:   frame with no traces (or no samples) returns null
+ *                     regardless of pointer.
+ *   5. nearest-of-two: when two traces carry samples at the cursor column,
+ *                     selection picks the vertically-closer one.
  *
  * Geometry contract (match the canvas coordinate system used by the scope):
  *   - timeToX(t, width, now) = width * (1 - (now - t) / WINDOW_MS)
@@ -18,11 +23,12 @@
  *   - valueToY(v, height, yMax) = height * (1 - v / yMax)
  *     (low-value-bottom, high-value-top; canvas origin is top-left)
  *
- * Snap semantics: vertical distance only. The cursor-time is derived from
- * pointer.x and each trace's sample-at-cursor-time determines the trace's
- * y at the pointer's column. Off-canvas sample y positions clip to the
- * nearest canvas edge for distance measurement (off-scale signals remain
- * hoverable — a design choice mirroring the scope's visual clipping).
+ * Semantics: "nearest trace at cursor-x by vertical distance". The
+ * cursor-time is derived from pointer.x and each trace's sample-at-cursor-
+ * time determines the trace's y at the pointer's column. Off-canvas sample
+ * y positions clip to the nearest canvas edge for distance measurement
+ * (off-scale signals remain hoverable — a design choice mirroring the
+ * scope's visual clipping).
  *
  * Pure: no imports from `react`, `adapters`, `views`, `window`, `document`,
  * or `domain/oscilloscope`. The function only inspects the Frame structure.
@@ -191,11 +197,15 @@ describe("scopeHitTest — within snap distance", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Case 2: beyond-snap — pointer too far from every trace returns null
+// Case 2: far-but-still-hits — pointer far from every trace still returns
+// the nearest trace (no snap threshold). Post-deliver change: previously
+// this case returned null beyond HOVER_SNAP_DISTANCE_PX. Dropping the
+// threshold makes hovering moving traces dependable — users no longer
+// have to chase the signal into a narrow vertical radius.
 // ---------------------------------------------------------------------------
 
-describe("scopeHitTest — beyond snap distance", () => {
-  it("returns null when the pointer is vertically farther than HOVER_SNAP_DISTANCE_PX from the trace", () => {
+describe("scopeHitTest — pointer far from any trace still identifies the nearest", () => {
+  it("returns the trace even when the pointer is vertically far from the sample (100px offset)", () => {
     const width = 1000;
     const height = 400;
     const sampleTime = NOW - 1000;
@@ -210,46 +220,43 @@ describe("scopeHitTest — beyond snap distance", () => {
 
     const sampleY = valueToY(sampleValue, height, METRICS.events.yMax);
     const sampleX = timeToX(sampleTime, width, NOW);
-    // 100px vertical offset — well outside the 18px snap radius.
+    // 100px vertical offset — under the old 18px snap this returned null.
+    // Under always-snap, we still identify session-1 as the nearest trace.
     const selection = scopeHitTest(
       { x: sampleX, y: sampleY - 100, width, height },
       frame,
     );
 
-    expect(selection).toBeNull();
+    expect(selection).not.toBeNull();
+    expect(selection?.sessionId).toBe("session-1");
+    expect(selection?.value).toBe(sampleValue);
   });
 
-  it("property: pointer vertically farther than HOVER_SNAP_DISTANCE_PX from an on-scale trace returns null", () => {
+  it("property: a pointer anywhere inside the canvas with a single on-scale trace always identifies that trace", () => {
     fc.assert(
       fc.property(
         fc.integer({ min: 200, max: 2000 }), // width
         fc.integer({ min: 200, max: 800 }), // height
-        fc.integer({ min: 40, max: 500 }), // vertical offset beyond snap
-        (width, height, offsetPx) => {
+        fc.integer({ min: 0, max: 800 }), // pointer y, later clamped to canvas
+        (width, height, rawY) => {
           // On-scale sample: value well within [0, yMax].
           const yMax = METRICS.events.yMax;
           const midValue = yMax / 2;
           const frame = buildTestFrame([
             {
-              sessionId: "s1",
+              sessionId: "only-trace",
               color: SESSION_COLORS[0],
               samples: [{ t: NOW - 5000, v: midValue }],
             },
           ]);
           const sampleX = timeToX(NOW - 5000, width, NOW);
-          const sampleY = valueToY(midValue, height, yMax);
-          // Place pointer vertically offset — choose direction that keeps it
-          // inside the canvas.
-          const directions = [sampleY - offsetPx, sampleY + offsetPx].filter(
-            (py) => py >= 0 && py <= height,
+          const pointerY = Math.min(rawY, height); // keep inside canvas
+          const selection = scopeHitTest(
+            { x: sampleX, y: pointerY, width, height },
+            frame,
           );
-          for (const py of directions) {
-            const selection = scopeHitTest(
-              { x: sampleX, y: py, width, height },
-              frame,
-            );
-            expect(selection).toBeNull();
-          }
+          expect(selection).not.toBeNull();
+          expect(selection?.sessionId).toBe("only-trace");
         },
       ),
       { numRuns: 100 },
@@ -395,13 +402,14 @@ describe("scopeHitTest — nearest of two candidates", () => {
     expect(selection?.value).toBe(valueB);
   });
 
-  it("does not select a trace whose sample is beyond snap when a closer trace is within snap", () => {
+  it("selects the closer trace when the other is far (200px) below the pointer", () => {
     const width = 1000;
     const height = 400;
     const yMax = METRICS.events.yMax;
     const sampleTime = NOW - 10000;
 
-    // Trace A sits at pointer y; trace B sits 200px below — beyond snap.
+    // Trace A sits at pointer y; trace B sits 200px below. Both are valid
+    // candidates under always-snap, but A's zero distance wins.
     const pointerY = valueToY(5, height, yMax);
     const frame = buildTestFrame([
       {
@@ -495,7 +503,10 @@ describe("scopeHitTest — pointer exactly on canvas edges (inclusive)", () => {
 // Case 7: sample-on-edge — sample at y=0 (top) or y=height (bottom) is
 // considered ON the canvas per the STRICT `< 0` / `> height` off-canvas
 // test. A pointer somewhere else at that x must compute vertical distance
-// from the sample position (not treat the sample as clipped).
+// from the sample position (not treat the sample as clipped, which would
+// yield a zero distance via the off-canvas branch). Under always-snap the
+// hit-test still returns that trace; the distinction we exercise here is
+// that the winning distance reflects the sample's actual position.
 // ---------------------------------------------------------------------------
 
 describe("scopeHitTest — sample exactly on canvas edge is not off-canvas", () => {
@@ -503,38 +514,58 @@ describe("scopeHitTest — sample exactly on canvas edge is not off-canvas", () 
   const height = 400;
   const yMax = METRICS.events.yMax;
 
-  it("sample at v=yMax (displayY === 0) is on-canvas: pointer at y=200 is beyond snap", () => {
+  it("sample at v=yMax (displayY === 0) is on-canvas and closer traces win over it", () => {
     // displayY for v=yMax is exactly 0 (top edge). The off-canvas test is
-    // STRICT (`sampleY < 0`), so the sample is on-canvas and vertical
-    // distance is |0 - 200| = 200 — far beyond the 18px snap radius.
+    // STRICT (`sampleY < 0`), so the sample is treated as on-canvas: its
+    // effective vertical distance from a pointer at y=200 is 200 (not 0,
+    // which would be the off-canvas clipped behavior). Place a second
+    // trace right at the pointer's y so the nearer trace wins — if the
+    // on-top-edge sample were incorrectly clipped (distance=0), it would
+    // win instead. The test's selection identity distinguishes the two
+    // behaviors precisely.
     const sampleTime = NOW - 5000;
+    const closerValue = yMax / 2; // displayY = height/2 = 200
     const frame = buildTestFrame([
       {
         sessionId: "on-top-edge",
         color: SESSION_COLORS[0],
         samples: [{ t: sampleTime, v: yMax }],
       },
+      {
+        sessionId: "middle",
+        color: SESSION_COLORS[1],
+        samples: [{ t: sampleTime, v: closerValue }],
+      },
     ]);
     const x = timeToX(sampleTime, width, NOW);
     const selection = scopeHitTest({ x, y: 200, width, height }, frame);
-    expect(selection).toBeNull();
+    expect(selection).not.toBeNull();
+    expect(selection?.sessionId).toBe("middle");
   });
 
-  it("sample at v=0 (displayY === height) is on-canvas: pointer at y=0 is beyond snap", () => {
+  it("sample at v=0 (displayY === height) is on-canvas and closer traces win over it", () => {
     // displayY for v=0 is exactly `height` (bottom edge). The off-canvas
-    // test is STRICT (`sampleY > height`), so the sample is on-canvas and
-    // vertical distance is `height` — far beyond the 18px snap radius.
+    // test is STRICT (`sampleY > height`), so the sample is on-canvas:
+    // distance from a pointer at y=0 is `height`, not 0. A second trace
+    // at the pointer's y must win.
     const sampleTime = NOW - 5000;
+    const closerValue = yMax; // displayY = 0 (top edge, same as pointer)
     const frame = buildTestFrame([
       {
         sessionId: "on-bottom-edge",
         color: SESSION_COLORS[0],
         samples: [{ t: sampleTime, v: 0 }],
       },
+      {
+        sessionId: "at-top",
+        color: SESSION_COLORS[1],
+        samples: [{ t: sampleTime, v: closerValue }],
+      },
     ]);
     const x = timeToX(sampleTime, width, NOW);
     const selection = scopeHitTest({ x, y: 0, width, height }, frame);
-    expect(selection).toBeNull();
+    expect(selection).not.toBeNull();
+    expect(selection?.sessionId).toBe("at-top");
   });
 });
 
@@ -602,12 +633,14 @@ describe("scopeHitTest — sample time equals cursor time", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Case 9: snap-distance boundary — `verticalDistance > HOVER_SNAP_DISTANCE_PX`
-// returns null; `verticalDistance === HOVER_SNAP_DISTANCE_PX` returns a
-// selection (boundary is inclusive of the snap radius).
+// Case 9: always-snap — no vertical distance threshold gates the result.
+// A pointer at the sample (distance = 0) and a pointer well beyond the
+// legacy HOVER_SNAP_DISTANCE_PX (e.g. +200px, boundary of the canvas)
+// both return the same trace. The only gating condition is the pointer's
+// position relative to the canvas.
 // ---------------------------------------------------------------------------
 
-describe("scopeHitTest — snap distance boundary", () => {
+describe("scopeHitTest — always snaps to nearest regardless of vertical distance", () => {
   const width = 1000;
   const height = 400;
   const yMax = METRICS.events.yMax;
@@ -615,7 +648,7 @@ describe("scopeHitTest — snap distance boundary", () => {
   const sampleValue = yMax / 2;
   const frame = buildTestFrame([
     {
-      sessionId: "snap-boundary",
+      sessionId: "always-snap",
       color: SESSION_COLORS[0],
       samples: [{ t: sampleTime, v: sampleValue }],
     },
@@ -623,21 +656,42 @@ describe("scopeHitTest — snap distance boundary", () => {
   const x = timeToX(sampleTime, width, NOW);
   const sampleY = valueToY(sampleValue, height, yMax);
 
-  it("returns a selection when vertical distance equals HOVER_SNAP_DISTANCE_PX (inclusive boundary)", () => {
+  it("returns a selection when the pointer is exactly on the sample (distance = 0)", () => {
     const selection = scopeHitTest(
-      { x, y: sampleY + HOVER_SNAP_DISTANCE_PX, width, height },
+      { x, y: sampleY, width, height },
       frame,
     );
     expect(selection).not.toBeNull();
-    expect(selection?.sessionId).toBe("snap-boundary");
+    expect(selection?.sessionId).toBe("always-snap");
   });
 
-  it("returns null when vertical distance is just beyond HOVER_SNAP_DISTANCE_PX", () => {
+  it("returns a selection when the pointer is well beyond the legacy snap radius", () => {
+    // +50px is 2.7x the legacy 18px snap radius. Under the old gated
+    // behavior this returned null; under always-snap it returns the trace.
     const selection = scopeHitTest(
-      { x, y: sampleY + HOVER_SNAP_DISTANCE_PX + 1, width, height },
+      { x, y: sampleY + 50, width, height },
       frame,
     );
-    expect(selection).toBeNull();
+    expect(selection).not.toBeNull();
+    expect(selection?.sessionId).toBe("always-snap");
+  });
+
+  it("returns a selection for a pointer near the canvas bottom when the trace sits at the top", () => {
+    // Maximum-possible on-canvas vertical distance: trace at displayY=0
+    // (v=yMax), pointer at y=height-1. Legacy behavior: null. New: trace.
+    const extremeFrame = buildTestFrame([
+      {
+        sessionId: "top-extreme",
+        color: SESSION_COLORS[0],
+        samples: [{ t: sampleTime, v: yMax }],
+      },
+    ]);
+    const selection = scopeHitTest(
+      { x, y: height - 1, width, height },
+      extremeFrame,
+    );
+    expect(selection).not.toBeNull();
+    expect(selection?.sessionId).toBe("top-extreme");
   });
 });
 
@@ -765,10 +819,11 @@ describe("scopeHitTest — mixed empty and populated traces", () => {
     expect(selection?.sessionId).toBe("populated");
   });
 
-  it("returns null when the only populated trace is beyond snap distance", () => {
-    // Negative control: empty + populated-but-far trace. The empty trace
-    // must still be skipped (not crash), and the far trace must produce
-    // null because of snap, not because of the empty-guard.
+  it("skips the empty trace and selects the populated one even when the pointer is far vertically", () => {
+    // Negative-control pair for the empty-trace skip: the empty trace must
+    // still be skipped when the only populated trace's sample is 200px from
+    // the pointer. Under always-snap the populated trace wins (the old
+    // "returns null beyond snap" assertion no longer reflects the design).
     const width = 1000;
     const height = 400;
     const yMax = METRICS.events.yMax;
@@ -777,16 +832,17 @@ describe("scopeHitTest — mixed empty and populated traces", () => {
     const frame = buildTestFrame([
       { sessionId: "empty", color: SESSION_COLORS[0], samples: [] },
       {
-        sessionId: "far",
+        sessionId: "populated-far",
         color: SESSION_COLORS[1],
         samples: [{ t: sampleTime, v: farSampleValue }],
       },
     ]);
     const x = timeToX(sampleTime, width, NOW);
     const y = valueToY(farSampleValue, height, yMax);
-    // Pointer 200px above the far sample — well beyond snap.
+    // Pointer 200px above the far sample — well beyond the legacy snap radius.
     const selection = scopeHitTest({ x, y: y - 200, width, height }, frame);
-    expect(selection).toBeNull();
+    expect(selection).not.toBeNull();
+    expect(selection?.sessionId).toBe("populated-far");
   });
 });
 

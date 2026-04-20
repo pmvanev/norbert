@@ -1,8 +1,10 @@
 Feature: Milestone 4 — Hover Tooltip
-  Hovering over the scope snaps to the nearest trace within a vertical
-  distance threshold and produces a selection identifying the session, its
-  arrived value at the pointer's time, and the age of that value.
-  Minimal content, no drill-down.
+  Hovering over the scope snaps to the vertically-nearest trace at the
+  pointer's x-time and produces a selection identifying the session, its
+  arrived value at the pointer's time, and the age of that value. There is
+  no vertical snap threshold — any pointer inside the canvas identifies the
+  closest trace, so users never chase a moving signal. Minimal content, no
+  drill-down.
 
   Background:
     Given the Performance Monitor view is open
@@ -39,11 +41,13 @@ Feature: Milestone 4 — Hover Tooltip
   # --- Error / boundary scenarios ---
 
   @driving_port @US-PM-001
-  Scenario: Hover beyond the snap threshold produces no selection
+  Scenario: Hover far above or below any trace still identifies the nearest trace
     Given "session-1" has a trace well below the pointer's vertical position
-    And the vertical distance from the pointer to "session-1"'s trace exceeds the snap threshold
+    And the vertical distance from the pointer to "session-1"'s trace is large
+      (100 pixels — well beyond any legacy snap radius)
     When the hover selection is computed for the pointer position
-    Then the hover selection is absent
+    Then the hover selection identifies "session-1"
+    And the hover selection reports "session-1"'s value at the pointer's x-time
 
   @driving_port @US-PM-001
   Scenario: Hover outside the scope area produces no selection

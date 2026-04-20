@@ -170,12 +170,19 @@ describe("M4-S3: Hover value comes from sampling the arrived history at the poin
 });
 
 // ---------------------------------------------------------------------------
-// M4-S4: Hover beyond the snap threshold produces no selection
+// M4-S4: Hover far above or below any trace still identifies the nearest trace
 // Tag: @driving_port @US-PM-001
+//
+// Reframed (post-deliver): previously "Hover beyond the snap threshold
+// produces no selection" asserted that the hit-test returned null beyond
+// HOVER_SNAP_DISTANCE_PX. The UX review replaced that gating behavior with
+// always-snap — users should not have to chase moving traces into a narrow
+// vertical radius. The scenario now asserts the POSITIVE form of the new
+// behavior so scenario count is preserved and the design is documented.
 // ---------------------------------------------------------------------------
 
-describe("M4-S4: Hover beyond the snap threshold produces no selection", () => {
-  it("returns null when vertical distance exceeds the snap threshold", () => {
+describe("M4-S4: Hover far above or below any trace still identifies the nearest trace", () => {
+  it("returns session-1 even when the pointer is 100px above a low-value trace", () => {
     // Given session-1's trace sits near the bottom (value 1 on yMax=15)
     const store = createMultiSessionStore();
     store.addSession("session-1");
@@ -184,19 +191,24 @@ describe("M4-S4: Hover beyond the snap threshold produces no selection", () => {
 
     const frame = buildFrame(store, "events", NOW);
 
-    // When the pointer is near the top of the scope (far above the trace)
+    // When the pointer is near the top of the scope (far above the trace —
+    // well beyond the legacy 18px snap radius).
     const x = xForAgeMs(0);
-    const y = 5; // well above the trace; distance > HOVER_SNAP_DISTANCE_PX
+    const y = 5;
 
-    // Sanity: the trace y is much lower on screen
+    // Sanity: the trace y is much lower on screen — distance > legacy snap.
     const yMax = frame.yMax;
     const traceY = HEIGHT - (1 / yMax) * HEIGHT;
     expect(Math.abs(y - traceY)).toBeGreaterThan(HOVER_SNAP_DISTANCE_PX);
 
     const selection = scopeHitTest({ x, y, width: WIDTH, height: HEIGHT }, frame);
 
-    // Then the hover is absent
-    expect(selection).toBeNull();
+    // Then the hover still identifies session-1 and reports its value at the
+    // pointer's x-time. Always-snap: the nearest trace wins regardless of
+    // vertical distance.
+    expect(selection).not.toBeNull();
+    expect(selection!.sessionId).toBe("session-1");
+    expect(selection!.value).toBeCloseTo(1, 5);
   });
 });
 
