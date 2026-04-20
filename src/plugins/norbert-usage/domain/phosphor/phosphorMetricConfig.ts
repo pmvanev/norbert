@@ -58,9 +58,13 @@ export interface MetricConfig {
 /**
  * Per-metric display configuration.
  *
- * yMax values are chosen so that the prototype's typical envelopes sit in
- * the middle third of the scope: events up to ~10 evt/s, tokens up to
- * ~80 tok/s, tool-calls up to ~2 calls/s. See prototype HTML.
+ * yMax values are chosen so that typical envelopes sit in the middle third
+ * of the scope: events up to ~10 evt/s, tool-calls up to ~2 calls/s.
+ * Tokens is expressed per-minute (not per-second) so the axis maps directly
+ * to Anthropic's published ITPM limit — a Tier-3 Sonnet 4 user has an 80K
+ * tok/min ceiling, so a yMax around 10K keeps normal agentic traffic in the
+ * middle third while leaving headroom for auto-scaling on cache-creation
+ * bursts.
  */
 export const METRICS: Readonly<Record<MetricId, MetricConfig>> = {
   events: {
@@ -72,10 +76,10 @@ export const METRICS: Readonly<Record<MetricId, MetricConfig>> = {
   },
   tokens: {
     id: "tokens",
-    name: "Tokens per second",
-    unit: "tok/s",
-    yMax: 100,
-    caption: "Tokens/s is throughput-proper.",
+    name: "Tokens per minute",
+    unit: "tok/min",
+    yMax: 500_000,
+    caption: "Input + cache-creation tok/min — the ITPM signal Anthropic rate-limits on.",
   },
   toolcalls: {
     id: "toolcalls",
@@ -97,13 +101,15 @@ export const METRICS: Readonly<Record<MetricId, MetricConfig>> = {
  * bottom of the canvas and Phil's "most of my data is at the bottom of
  * the plot" complaint returns.
  *
- * Calibration: 1 evt/s and 5 tok/s are the smallest nice values at which
- * the axis labels remain legible; `toolcalls` is already sparse so 1 is
- * the natural smallest useful ceiling.
+ * Calibration: 1 evt/s and 500 tok/min are the smallest nice values at
+ * which the axis labels remain legible; `toolcalls` is already sparse so
+ * 1 is the natural smallest useful ceiling. The tokens floor is much
+ * higher than the others because tok/min is two orders of magnitude above
+ * tok/s — a 5 tok/min floor would resolve too tight for realistic traffic.
  */
 export const YMAX_FLOOR: Readonly<Record<MetricId, number>> = {
   events: 1,
-  tokens: 5,
+  tokens: 500,
   toolcalls: 1,
 };
 

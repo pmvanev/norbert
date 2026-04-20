@@ -15,6 +15,7 @@ import { aggregateEvent } from "./domain/metricsAggregator";
 import { computeInstantaneousRates } from "./domain/instantaneousRate";
 import {
   PULSE_STRENGTHS,
+  RATE_TICK_MS,
   type MetricId,
   type Pulse,
   type PulseKind,
@@ -123,6 +124,19 @@ const extractProvider = (payload: unknown): string | null => {
   if (!isRecord(payload)) return null;
   const provider = payload["provider"];
   return typeof provider === "string" ? provider : null;
+};
+
+/** Extract `received_at` as epoch milliseconds, or null if absent/malformed.
+ *  Used to distinguish fresh events from backlog replay (e.g. the first
+ *  `get_new_events_batch` call against a pre-existing session returns every
+ *  historical event). Events older than the current rate window are stale
+ *  and must not contribute to live per-minute rates. */
+const extractReceivedAtMs = (payload: unknown): number | null => {
+  if (!isRecord(payload)) return null;
+  const raw = payload["received_at"];
+  if (typeof raw !== "string") return null;
+  const t = Date.parse(raw);
+  return Number.isFinite(t) ? t : null;
 };
 
 /** Extract a human-readable project name from the event payload.
@@ -249,13 +263,19 @@ const isToolCallEvent = (eventType: string): boolean =>
 // OTel api_request token extraction — pure helpers
 // ---------------------------------------------------------------------------
 
-/** Sum of all token fields on a Claude Code usage record. */
+/** ITPM-consuming tokens from a Claude Code usage record.
+ *
+ * On modern Claude models (4.x family) Anthropic's input-tokens-per-minute
+ * limit is charged only on `input_tokens + cache_creation_input_tokens`.
+ * `cache_read_input_tokens` is free for rate-limiting (billed at 10% of
+ * input price, but 0% of ITPM quota), and `output_tokens` lives in a
+ * separate OTPM bucket. We sum only the ITPM-consuming fields so the
+ * tokens/s trace answers "am I about to hit the rate limit I'm most
+ * likely to hit" — for long-context agentic work, that's ITPM. */
 const totalTokensOf = (usage: Record<string, unknown>): number => {
   const input = typeof usage["input_tokens"] === "number" ? (usage["input_tokens"] as number) : 0;
-  const output = typeof usage["output_tokens"] === "number" ? (usage["output_tokens"] as number) : 0;
-  const cacheRead = typeof usage["cache_read_input_tokens"] === "number" ? (usage["cache_read_input_tokens"] as number) : 0;
   const cacheCreate = typeof usage["cache_creation_input_tokens"] === "number" ? (usage["cache_creation_input_tokens"] as number) : 0;
-  return input + output + cacheRead + cacheCreate;
+  return input + cacheCreate;
 };
 
 /**
@@ -503,20 +523,36 @@ export const createHookProcessor = (
         }
       }
 
-      // Tokens/s is accumulated per-session and drained on the 5-second
+      // Tokens/min is accumulated per-session and drained on the 5-second
       // rate tick (see `sampleRates`). Production OTel payloads do not
       // carry a `duration_ms` field, so per-event derivation is not
       // possible — the counter pattern mirrors events/s and toolcalls/s.
-      // Guarded on provider="otel" AND event_type="api_request" so only
-      // the tokens-bearing OTel stream feeds the counter.
-      if (
-        appendRateSample &&
-        provider === "otel" &&
-        eventType === "api_request"
-      ) {
-        const total = extractOtelTokenTotal(payload);
-        if (total !== null && total > 0) {
-          counters.tokens += total;
+      //
+      // Only `api_request` events carry token usage, and they are emitted
+      // exclusively by the OTel adapter (Claude Code hooks never emit
+      // `api_request` — see adapters/providers/claude_code.rs::HOOK_EVENT_NAMES).
+      // `extractOtelTokenTotal` returns null for payloads missing the
+      // `usage` block, so malformed events don't inflate the counter.
+      //
+      // Backlog guard: when Norbert opens against a pre-existing session,
+      // the first `get_new_events_batch` call delivers every historical
+      // `api_request` in a burst. Those ancient events all carry a
+      // `received_at` from when they were first POSTed to the hook-receiver
+      // (hours or days old), so rejecting anything older than the current
+      // rate window keeps stale tokens out of the live-rate counter
+      // without affecting fresh events (which arrive within a few seconds
+      // of firing). The threshold is 2× RATE_TICK_MS to tolerate the gap
+      // between the event fire and the next poll tick.
+      if (appendRateSample && eventType === "api_request") {
+        const receivedAtMs = extractReceivedAtMs(payload);
+        const freshEnough =
+          receivedAtMs === null ||
+          now() - receivedAtMs <= 2 * RATE_TICK_MS;
+        if (freshEnough) {
+          const total = extractOtelTokenTotal(payload);
+          if (total !== null && total > 0) {
+            counters.tokens += total;
+          }
         }
       }
     }
@@ -595,9 +631,9 @@ export const createHookProcessor = (
         toolcallsSample.v,
       );
 
-      // Tokens/s — total tokens accumulated this window divided by the
-      // real elapsed window in seconds. `deriveTokensRate` is named for
-      // tokens but its math is identical to a count-over-window rate.
+      // Tokens/min — ITPM-consuming tokens accumulated this window,
+      // scaled to per-minute so the axis matches Anthropic's published
+      // ITPM limit directly (see deriveTokensRate).
       const tokensSample = deriveTokensRate(
         counters.tokens,
         windowMs,

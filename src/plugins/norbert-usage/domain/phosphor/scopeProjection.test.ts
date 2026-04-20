@@ -564,22 +564,24 @@ describe("buildFrame — yMax resolution (dynamic mode)", () => {
   });
 
   it("reads from the requested metric's history only", () => {
-    // Tokens history has a spike at 80, events history is quiet at 1. When
-    // the caller requests 'tokens', the tokens spike drives the scale.
+    // Tokens history has a spike at 5000, events history is quiet at 1.
+    // When the caller requests 'tokens', the tokens spike drives the scale.
+    // (Tokens/min scales up two orders of magnitude from evt/s, so the
+    // spike value must be large enough to dominate.)
     const store = makeFakeStore({
       sessions: [
         {
           id: "s1",
           rates: {
             events: history(3, () => 1),
-            tokens: history(3, () => 80),
+            tokens: history(3, () => 5000),
           },
         },
       ],
     });
     const frame = buildFrame(store, "tokens", NOW, { yMaxMode: "dynamic" });
-    // peak = 80; peak * 1.2 = 96; niceCeil = 100; clamp to tokens cap = 100.
-    expect(frame.yMax).toBe(100);
+    // peak = 5000; peak * 1.2 = 6000; niceCeil(6000) = 7000; under cap.
+    expect(frame.yMax).toBe(7000);
   });
 
   it("clamps up to floor for toolcalls when peak is tiny", () => {
@@ -592,9 +594,10 @@ describe("buildFrame — yMax resolution (dynamic mode)", () => {
   });
 
   it("never exceeds the fixed cap regardless of sample spikes", () => {
-    // peak = 500 tok/s; niceCeil(600) = 1000; clamp to tokens cap = 100.
+    // peak = 1_000_000 tok/min (far above the tokens cap); niceCeil of
+    // 1_200_000 would exceed METRICS.tokens.yMax so the resolver clamps.
     const store = makeFakeStore({
-      sessions: [{ id: "s1", rates: { tokens: history(3, () => 500) } }],
+      sessions: [{ id: "s1", rates: { tokens: history(3, () => 1_000_000) } }],
     });
     const frame = buildFrame(store, "tokens", NOW, { yMaxMode: "dynamic" });
     expect(frame.yMax).toBe(METRICS.tokens.yMax);

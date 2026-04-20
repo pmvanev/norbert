@@ -62,30 +62,33 @@ export const deriveEventsRate = (
 });
 
 /**
- * Derive a tokens-per-second `RateSample` from an OTel api-request event.
+ * Derive a tokens-per-minute `RateSample` from a windowed token total.
  *
- * `totalTokens` is the total token count reported by the api-request event
- * (input + output + cache tokens as aggregated upstream). `durationMs` is the
- * wall-clock duration the request took. `tickBoundaryT` is the timestamp the
- * store will append on the returned sample.
+ * `totalTokens` is the ITPM-consuming token count (input + cache_creation)
+ * accumulated across the preceding `windowMs` interval. `tickBoundaryT` is
+ * the timestamp the store will append on the returned sample.
  *
- * Semantics (v2-phosphor-architecture §5 Q1):
- *   deriveTokensRate(totalTokens, durationMs, t)
- *     = { t, v: totalTokens / (durationMs / 1000) }
+ * Semantics:
+ *   deriveTokensRate(totalTokens, windowMs, t)
+ *     = { t, v: totalTokens / (windowMs / 60000) }
  *
- * Zero-duration defensive lock: a `durationMs <= 0` yields `v = 0` rather
- * than producing `Infinity` or `NaN`. OTel api-request events occasionally
- * arrive with a zero or negative duration (clock skew, partial records); the
- * scope pipeline should emit a silent zero sample rather than crash. Pure:
- * total over all finite inputs.
+ * Per-minute units were chosen over per-second because Anthropic publishes
+ * rate limits as ITPM (e.g. 80K tok/min at Sonnet 4 Tier 3), so the axis
+ * maps directly to the constraint a user actually cares about. The other
+ * scope traces (events/s, toolcalls/s) remain per-second because no
+ * external limit is denominated in those units.
+ *
+ * Zero-window defensive lock: a `windowMs <= 0` yields `v = 0` rather than
+ * producing `Infinity` or `NaN`. Pipelines should emit a silent zero sample
+ * rather than crash. Pure: total over all finite inputs.
  */
 export const deriveTokensRate = (
   totalTokens: number,
-  durationMs: number,
+  windowMs: number,
   tickBoundaryT: number,
 ): RateSample => ({
   t: tickBoundaryT,
-  v: durationMs > 0 ? perSecond(totalTokens, durationMs) : 0,
+  v: windowMs > 0 ? (totalTokens * 60000) / windowMs : 0,
 });
 
 /**

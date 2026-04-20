@@ -4,11 +4,12 @@
  * Semantics (v2-phosphor-architecture §5 Q1):
  *   deriveEventsRate(count, windowMs, tickBoundaryT)
  *     = { t: tickBoundaryT, v: count / (windowMs / 1000) }
- *   deriveTokensRate(totalTokens, durationMs, tickBoundaryT)
- *     = { t: tickBoundaryT, v: totalTokens / (durationMs / 1000) }
+ *   deriveTokensRate(totalTokens, windowMs, tickBoundaryT)
+ *     = { t: tickBoundaryT, v: totalTokens / (windowMs / 60000) }
+ *     (per-minute units — Anthropic publishes rate limits as ITPM)
  *   deriveToolCallsRate(toolCallCount, windowMs, tickBoundaryT)
  *     = { t: tickBoundaryT, v: toolCallCount / (windowMs / 1000) }
- *   Zero-duration lock: deriveTokensRate(_, 0, t) = { t, v: 0 }
+ *   Zero-window lock: deriveTokensRate(_, 0, t) = { t, v: 0 }
  *     (defensive — prefer a safe sample over throwing, so pipelines do not
  *      crash on malformed OTel api-request events).
  *
@@ -22,10 +23,10 @@
  *     6. Property: rate scales linearly with count for a fixed window.
  *
  *   deriveTokensRate:
- *     1. Reference example — 500 tokens over 2s yields 250 tok/s at t.
- *     2. Zero-duration defensive lock — durationMs=0 yields v=0 (no throw).
- *     3. Zero tokens — totalTokens=0 yields v=0 regardless of duration.
- *     4. Very-large totals — 10M tokens over 1s yields 10M tok/s (no overflow).
+ *     1. Reference example — 1000 tokens over a 60s window yields 1000 tok/min at t.
+ *     2. Zero-window defensive lock — windowMs=0 yields v=0 (no throw).
+ *     3. Zero tokens — totalTokens=0 yields v=0 regardless of window.
+ *     4. Very-large totals — 10M tokens over 60s yields 10M tok/min (no overflow).
  *     5. Property: timestamp round-trip — returned t always equals input tickBoundaryT.
  *
  *   deriveToolCallsRate (mirrors deriveEventsRate — same windowed-counter shape):
@@ -119,20 +120,33 @@ describe("deriveEventsRate — linear scaling with count (property)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// deriveTokensRate — delta-over-duration semantics (IC-S2)
+// deriveTokensRate — windowed-counter semantics, per-minute units
+//
+// ITPM-relevant tokens (input + cache_creation) accumulated across the tick
+// window, reported per minute so the axis maps directly to Anthropic's
+// published ITPM limit.
 // ---------------------------------------------------------------------------
 
-describe("deriveTokensRate — reference example from IC-S2", () => {
-  it("500 tokens over a 2-second duration yields 250 tok/s at the tick boundary", () => {
-    const sample = deriveTokensRate(500, 2000, 1_000_000_000);
+describe("deriveTokensRate — reference example: one-minute window", () => {
+  it("1000 tokens over a 60-second window yields 1000 tok/min at the tick boundary", () => {
+    const sample = deriveTokensRate(1000, 60_000, 1_000_000_000);
 
-    expect(sample.v).toBeCloseTo(250, 5);
+    expect(sample.v).toBeCloseTo(1000, 5);
     expect(sample.t).toBe(1_000_000_000);
   });
 });
 
-describe("deriveTokensRate — zero-duration defensive lock", () => {
-  it("a durationMs of zero yields a rate of zero (no throw)", () => {
+describe("deriveTokensRate — 5-second window scales up to per-minute", () => {
+  it("1000 tokens over a 5-second window yields 12000 tok/min", () => {
+    const sample = deriveTokensRate(1000, 5000, 0);
+
+    expect(sample.v).toBeCloseTo(12_000, 5);
+    expect(sample.t).toBe(0);
+  });
+});
+
+describe("deriveTokensRate — zero-window defensive lock", () => {
+  it("a windowMs of zero yields a rate of zero (no throw)", () => {
     const sample = deriveTokensRate(500, 0, 42);
 
     expect(sample.v).toBe(0);
@@ -141,8 +155,8 @@ describe("deriveTokensRate — zero-duration defensive lock", () => {
 });
 
 describe("deriveTokensRate — zero tokens", () => {
-  it("a totalTokens of zero yields a rate of zero regardless of duration", () => {
-    const sample = deriveTokensRate(0, 2000, 99);
+  it("a totalTokens of zero yields a rate of zero regardless of window", () => {
+    const sample = deriveTokensRate(0, 5000, 99);
 
     expect(sample.v).toBe(0);
     expect(sample.t).toBe(99);
@@ -150,8 +164,8 @@ describe("deriveTokensRate — zero tokens", () => {
 });
 
 describe("deriveTokensRate — very-large totals", () => {
-  it("10 million tokens over a 1-second duration yields 10 million tok/s without overflow", () => {
-    const sample = deriveTokensRate(10_000_000, 1000, 7);
+  it("10 million tokens over a 60-second window yields 10 million tok/min without overflow", () => {
+    const sample = deriveTokensRate(10_000_000, 60_000, 7);
 
     expect(sample.v).toBeCloseTo(10_000_000, 0);
     expect(Number.isFinite(sample.v)).toBe(true);
@@ -166,8 +180,8 @@ describe("deriveTokensRate — timestamp preservation (property)", () => {
         fc.integer({ min: 0, max: 100_000_000 }),
         fc.integer({ min: 0, max: 60_000 }),
         fc.integer({ min: 0, max: 2_000_000_000 }),
-        (totalTokens, durationMs, tickBoundary) => {
-          const sample = deriveTokensRate(totalTokens, durationMs, tickBoundary);
+        (totalTokens, windowMs, tickBoundary) => {
+          const sample = deriveTokensRate(totalTokens, windowMs, tickBoundary);
           expect(sample.t).toBe(tickBoundary);
           expect(Number.isFinite(sample.v)).toBe(true);
           expect(sample.v).toBeGreaterThanOrEqual(0);
