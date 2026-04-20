@@ -224,6 +224,79 @@ describe("PhosphorHoverTooltip", () => {
     expect(left + 320).toBeLessThanOrEqual(1024);
   });
 
+  it("flips to the left when pointer is near the right edge at non-1.0 page zoom", () => {
+    // Regression guard for the post-deliver bug: at non-1.0
+    // `document.documentElement.style.zoom`, the upstream
+    // `normalizeClientPointer` already divided the pointer into the zoomed-
+    // out logical space, but the tooltip's viewport check used the raw
+    // `window.innerWidth`. The two coord spaces disagreed, so the flip never
+    // triggered at non-1.0 zoom. Verify the tooltip now flips correctly.
+    //
+    // At docZoom = 1.5, jsdom's window.innerWidth = 1024 maps to an
+    // effective (normalized) viewport width of ~682.67. Pointer at
+    // normalized clientX = 500 with the 320px fallback estimate gives
+    // preferred = 500 + 12 + 320 = 832 > 682.67 → must flip.
+    const original = document.documentElement.style.zoom;
+    document.documentElement.style.zoom = "1.5";
+    try {
+      const selection: HoverSelection = {
+        sessionId: "edge-zoom",
+        displayLabel: "edge-zoom",
+        color: "#fbbf24",
+        value: 3,
+        time: 1_000_000,
+        ageMs: 0,
+        displayX: 0,
+        displayY: 0,
+        pointerClientX: 500,
+        pointerClientY: 200,
+      };
+
+      render(<PhosphorHoverTooltip selection={selection} unit="evt/s" />);
+
+      const tooltip = screen.getByTestId("phosphor-hover-tooltip");
+      const left = parseFloat(tooltip.style.left);
+      // Flipped placement: to the left of the cursor → left < clientX.
+      expect(left).toBeLessThan(500);
+    } finally {
+      document.documentElement.style.zoom = original;
+    }
+  });
+
+  it("does NOT flip at zoom=1.0 with the same pointer position — proves the zoom reading matters", () => {
+    // Companion to the zoom-flip regression test above. With zoom=1.0 and
+    // the same pointer at x=500 in jsdom's 1024 viewport, below-right
+    // placement fits (500 + 12 + 320 = 832 < 1024), so the tooltip must
+    // NOT flip — it stays to the right of the cursor. This proves the
+    // zoom reading genuinely changes the flip decision (rather than the
+    // flip triggering for some unrelated reason).
+    const original = document.documentElement.style.zoom;
+    document.documentElement.style.zoom = "1";
+    try {
+      const selection: HoverSelection = {
+        sessionId: "no-flip-zoom1",
+        displayLabel: "no-flip-zoom1",
+        color: "#fbbf24",
+        value: 3,
+        time: 1_000_000,
+        ageMs: 0,
+        displayX: 0,
+        displayY: 0,
+        pointerClientX: 500,
+        pointerClientY: 200,
+      };
+
+      render(<PhosphorHoverTooltip selection={selection} unit="evt/s" />);
+
+      const tooltip = screen.getByTestId("phosphor-hover-tooltip");
+      const left = parseFloat(tooltip.style.left);
+      // Below-right placement: to the right of the cursor → left > clientX.
+      expect(left).toBe(512);
+    } finally {
+      document.documentElement.style.zoom = original;
+    }
+  });
+
   it("edge-flips up when below-right placement would overflow the viewport's bottom edge", () => {
     // jsdom defaults window.innerHeight to 768. Place the cursor near the
     // bottom so the preferred placement (clientY + 12) + tooltip height

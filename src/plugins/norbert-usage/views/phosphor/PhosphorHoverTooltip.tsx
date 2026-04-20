@@ -79,14 +79,43 @@ const formatAge = (ageMs: number): string => {
 };
 
 /**
- * Viewport dimensions (defensive: fall back to reasonable values during
- * SSR / jsdom envs that do not populate window). When window is absent we
- * skip edge-flipping entirely — the tooltip uses the offset-from-cursor
- * position and any overflow is accepted silently.
+ * Read `document.documentElement.style.zoom` as a strictly positive number,
+ * falling back to 1 when absent, unparseable, or non-positive. Mirrors v1
+ * PMTooltip's docZoom reader: Ctrl-+/- in main.tsx sets the inline zoom
+ * style, which inflates `window.innerWidth` / `window.innerHeight` relative
+ * to the normalized coordinate space that `normalizeClientPointer` produces
+ * for the pointer.
+ */
+const readDocZoom = (): number => {
+  if (typeof document === "undefined") return 1;
+  const raw = parseFloat(document.documentElement.style.zoom || "1");
+  return Number.isFinite(raw) && raw > 0 ? raw : 1;
+};
+
+/**
+ * Viewport dimensions in the SAME coordinate space as the normalized
+ * `pointerClientX/Y` arriving from upstream `normalizeClientPointer`.
+ *
+ * `window.innerWidth/Height` stay in physical-viewport CSS pixels and are
+ * unaffected by `document.documentElement.style.zoom`, whereas the pointer
+ * coords were already divided by the CSS-zoom factor upstream. To feed both
+ * into the pure clamp helpers (which assume a single consistent coord
+ * space), divide the viewport dims by the same docZoom. Mirrors v1 PM's
+ * `effectiveContainerWidth = containerWidth / docZoom` in
+ * chartViewHelpers.ts @ 6d5d2f1^.
+ *
+ * Defensive: falls back to null during SSR / jsdom envs that do not
+ * populate `window`. When window is absent we skip edge-flipping entirely
+ * — the tooltip uses the offset-from-cursor position and any overflow is
+ * accepted silently.
  */
 const viewportSize = (): { width: number; height: number } | null => {
   if (typeof window === "undefined") return null;
-  return { width: window.innerWidth, height: window.innerHeight };
+  const docZoom = readDocZoom();
+  return {
+    width: window.innerWidth / docZoom,
+    height: window.innerHeight / docZoom,
+  };
 };
 
 /**

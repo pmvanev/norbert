@@ -93,9 +93,19 @@ export const normalizeClientPointer = (
  *      the tooltip can never extend past the viewport even if the pointer
  *      itself is outside or the tooltip is wider than the viewport allows.
  *
- * Mirrors v1 PM's `computeTooltipLeftClamped` (chartViewHelpers.ts @ 6d5d2f1^)
- * but takes `viewportWidth` directly rather than `containerWidth / docZoom`;
- * CSS-zoom normalization is already handled upstream by `normalizeClientPointer`.
+ * Mirrors v1 PM's `computeTooltipLeftClamped` (chartViewHelpers.ts @ 6d5d2f1^).
+ *
+ * Coordinate-space contract (important):
+ *   All four inputs MUST be in the SAME coordinate space. `normalizeClientPointer`
+ *   takes care of the POINTER side — dividing `event.clientX/Y` by the CSS-zoom
+ *   factor — but the VIEWPORT side needs the same treatment at the caller.
+ *   `window.innerWidth/Height` stay in physical CSS pixels regardless of
+ *   `document.documentElement.style.zoom`, so the caller must divide them by
+ *   the same docZoom before passing `viewportWidth` in. See
+ *   `PhosphorHoverTooltip.viewportSize()` and v1's `effectiveContainerWidth =
+ *   containerWidth / docZoom`. Skipping the viewport normalization makes the
+ *   flip decision fire on the wrong comparison and the tooltip clips at
+ *   non-1.0 page zoom.
  *
  * Pure: deterministic in its arguments.
  */
