@@ -61,6 +61,7 @@ import type { MetricId } from "../../domain/phosphor/phosphorMetricConfig";
 import { buildFrame, type Frame, type FramePulse, type FrameTrace } from "../../domain/phosphor/scopeProjection";
 import { scopeHitTest, type HoverSelection } from "../../domain/phosphor/scopeHitTest";
 import { timeToX, valueToY } from "../../domain/phosphor/canvasGeometry";
+import { stepPolyline } from "../../domain/phosphor/stepPolyline";
 import {
   computeHoverBeatAlpha,
   computeHoverBeatRadius,
@@ -314,6 +315,21 @@ const drawGrid = (
   bufferCtx.restore();
 };
 
+/**
+ * Draw a trace as a square-wave (sample-and-hold) step function.
+ *
+ * Each sample holds its value from its own timestamp until the next sample's
+ * timestamp, then the trace steps vertically to the new value. After the
+ * last sample, the trace holds its last value out to the right edge of the
+ * canvas so the current value is visible at the scope's leading edge —
+ * matching `scopeHitTest`'s at-or-before sample-lookup semantics and
+ * conventional oscilloscope rendering.
+ *
+ * Geometry / shape construction is delegated to the pure `stepPolyline`
+ * helper. This function is effect-only: walk the point array with a
+ * `moveTo` for the first point and `lineTo` for each subsequent point,
+ * then stroke.
+ */
 const drawTrace = (
   ctx: CanvasRenderingContext2D,
   trace: FrameTrace,
@@ -321,16 +337,21 @@ const drawTrace = (
   width: number,
   height: number,
 ): void => {
-  if (trace.samples.length < 2) return;
+  const points = stepPolyline(
+    trace.samples,
+    width,
+    frame.now,
+    frame.yMax,
+    height,
+  );
+  if (points.length === 0) return;
   ctx.strokeStyle = trace.color;
   ctx.lineWidth = TRACE_LINE_WIDTH;
   ctx.lineJoin = "round";
   ctx.beginPath();
-  const first = trace.samples[0];
-  ctx.moveTo(timeToX(first.t, width, frame.now), valueToY(first.v, height, frame.yMax));
-  for (let i = 1; i < trace.samples.length; i++) {
-    const sample = trace.samples[i];
-    ctx.lineTo(timeToX(sample.t, width, frame.now), valueToY(sample.v, height, frame.yMax));
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i++) {
+    ctx.lineTo(points[i].x, points[i].y);
   }
   ctx.stroke();
 };
