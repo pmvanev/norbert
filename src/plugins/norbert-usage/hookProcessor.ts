@@ -95,6 +95,23 @@ export type HookProcessorWithRateSampler = HookProcessor & {
    * that do not exercise the v2 rate pathway remain unaffected).
    */
   readonly sampleRates: (now: number) => void;
+
+  /**
+   * Prime the live-rate boundary to the backfill's query timestamp.
+   *
+   * After a successful phosphor-history backfill, the caller invokes this
+   * with the Rust-side query time that bounded the backfill. The processor
+   * then treats any event with `received_at >= queryTimeMs` as live and
+   * anything older as already-covered-by-backfill (dropped). The first
+   * live rate tick emits a sample for the window starting at queryTimeMs,
+   * so backfill and live stitch together without a visible gap or
+   * double-counted events on the seam.
+   *
+   * Safe to call multiple times (last call wins). Safe to never call —
+   * the processor falls back to the historical first-tick-prime when
+   * `lastTickAt` remains unset.
+   */
+  readonly primeFromBackfill: (queryTimeMs: number) => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -502,9 +519,21 @@ export const createHookProcessor = (
     // an event firing and the next poll tick delivering it.
     if (sessionId) {
       const receivedAtMs = extractReceivedAtMs(payload);
+      // Live-stream partitioning:
+      //   - Before the first prime (lastTickAt === null): fall back to the
+      //     age-based guard so events that beat the first tick still land
+      //     in the counter when backfill is unavailable or still in flight.
+      //   - After prime: accept only events whose received_at is inside
+      //     the current tick window (>= lastTickAt). Events before the
+      //     boundary were already painted by the backfill or a prior tick;
+      //     accepting them again would double-count on the seam.
+      //   - Events with no received_at fall through to accepted (defensive —
+      //     payloads normalized by the Claude Code provider always carry it).
       const freshEnough =
         receivedAtMs === null ||
-        now() - receivedAtMs <= 2 * RATE_TICK_MS;
+        (lastTickAt === null
+          ? now() - receivedAtMs <= 2 * RATE_TICK_MS
+          : receivedAtMs >= lastTickAt);
 
       if (freshEnough) {
         const counters = ensureCounters(sessionId);
@@ -666,12 +695,36 @@ export const createHookProcessor = (
     lastTickAt = tickBoundaryT;
   };
 
+  /**
+   * Prime `lastTickAt` to the Rust-side backfill query time and discard
+   * any counter state accumulated in the race window between processor
+   * construction and backfill completion.
+   *
+   * After this call:
+   *   - `sampleRates` emits samples using windowMs = tickBoundaryT -
+   *     queryTimeMs on its first real tick, which stitches seamlessly to
+   *     the last backfill bucket.
+   *   - The processor's live-event guard rejects events with received_at
+   *     < queryTimeMs. Those events were covered by the backfill; accepting
+   *     them again would double-count on the seam.
+   */
+  const primeFromBackfill = (queryTimeMs: number): void => {
+    for (const counters of sessionCounters.values()) {
+      counters.events = 0;
+      counters.toolcalls = 0;
+      counters.tokens = 0;
+    }
+    lastTickAt = queryTimeMs;
+  };
+
   // Function-with-property: the callable stays a `HookProcessor`
   // (preserving the plugin-loader contract and existing unit-test
   // destructure-and-call pattern) while exposing `sampleRates` for the
   // composition root's 5-second tick scheduler.
   const augmented = processor as HookProcessorWithRateSampler;
   (augmented as { sampleRates: (t: number) => void }).sampleRates = sampleRates;
+  (augmented as { primeFromBackfill: (t: number) => void }).primeFromBackfill =
+    primeFromBackfill;
   return augmented;
 };
 

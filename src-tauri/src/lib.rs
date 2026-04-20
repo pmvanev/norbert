@@ -106,6 +106,61 @@ fn get_new_events_batch(
     result
 }
 
+/// Return pre-aggregated phosphor-scope history for the last `window_ms`
+/// milliseconds, bucketed in `RATE_TICK_MS` intervals. Used by the
+/// Performance Monitor plugin on startup to paint the scope with real
+/// historical data immediately instead of waiting ~60 seconds for the live
+/// rolling window to fill from tick-by-tick samples alone.
+///
+/// Aggregation logic lives in `domain::phosphor_history` (pure, unit-tested).
+/// This command is the thin effect boundary: reads events from SQLite via
+/// the EventStore port, delegates the aggregation, and returns the result.
+#[tauri::command]
+fn get_phosphor_history(
+    state: tauri::State<AppState>,
+    window_ms: i64,
+) -> domain::phosphor_history::PhosphorHistoryResponse {
+    // Bucket size matches the frontend's RATE_TICK_MS constant (5 seconds).
+    // Kept in sync manually: if RATE_TICK_MS changes on the frontend, update
+    // this constant too. A shared source would require a build-time codegen
+    // step; for two call sites, comment-level coordination is enough.
+    const BUCKET_SIZE_MS: i64 = 5_000;
+
+    // Capture the backend clock once so (a) the filter cutoff and the upper
+    // bound share a single reference and (b) the caller can prime its live
+    // boundary at the same instant. Events received at or after this tick
+    // are exclusive to the live stream (see PhosphorHistoryResponse docs).
+    let query_time_ms = chrono::Utc::now().timestamp_millis();
+    let cutoff_ms = query_time_ms - window_ms.max(0);
+
+    let cutoff_iso = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(cutoff_ms)
+        .map(|dt| dt.to_rfc3339())
+        .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_string());
+
+    let store = state.event_store.lock().unwrap();
+    let all_events = store.get_events_since(&cutoff_iso).unwrap_or_default();
+
+    // Enforce the exclusive upper bound in-memory: events with
+    // received_at >= query_time_ms belong to the live stream, not the
+    // backfill. Filtering here keeps the aggregation function pure and
+    // bound-agnostic.
+    let events: Vec<domain::Event> = all_events
+        .into_iter()
+        .filter(|e| {
+            domain::phosphor_history::parse_iso_ms(&e.received_at)
+                .map(|t| t < query_time_ms)
+                .unwrap_or(false)
+        })
+        .collect();
+
+    let buckets =
+        domain::phosphor_history::aggregate_phosphor_history(&events, BUCKET_SIZE_MS, cutoff_ms);
+    domain::phosphor_history::PhosphorHistoryResponse {
+        buckets,
+        query_time_ms,
+    }
+}
+
 /// Return accumulated metrics for a given session.
 ///
 /// Returns an empty array when the session does not exist or has no metrics.
@@ -1223,7 +1278,7 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet, get_status, get_latest_session, get_sessions, get_status_and_sessions, get_session_events, get_new_events_batch, get_metrics_for_session, get_session_metadata, get_all_session_metadata, get_all_session_summaries, get_transcript_usage, read_claude_config, sync_theme_menu, sync_opacity_menu])
+        .invoke_handler(tauri::generate_handler![greet, get_status, get_latest_session, get_sessions, get_status_and_sessions, get_session_events, get_new_events_batch, get_phosphor_history, get_metrics_for_session, get_session_metadata, get_all_session_metadata, get_all_session_summaries, get_transcript_usage, read_claude_config, sync_theme_menu, sync_opacity_menu])
         .run(tauri::generate_context!())
         .expect("error while running Norbert");
 }

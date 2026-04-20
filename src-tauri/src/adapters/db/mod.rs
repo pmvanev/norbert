@@ -299,6 +299,50 @@ impl EventStore for SqliteEventStore {
         Ok(events)
     }
 
+    fn get_events_since(&self, cutoff_iso: &str) -> Result<Vec<Event>, String> {
+        let mut stmt = self
+            .connection
+            .prepare(
+                "SELECT session_id, event_type, payload, received_at, provider FROM events WHERE received_at >= ?1 ORDER BY session_id, received_at ASC",
+            )
+            .map_err(|e| format!("Failed to prepare events-since query: {}", e))?;
+
+        let events = stmt
+            .query_map(rusqlite::params![cutoff_iso], |row| {
+                let session_id: String = row.get(0)?;
+                let event_type_str: String = row.get(1)?;
+                let payload_str: String = row.get(2)?;
+                let received_at: String = row.get(3)?;
+                let provider: String = row.get(4)?;
+
+                let event_type: EventType =
+                    serde_json::from_str(&format!("\"{}\"", event_type_str))
+                        .map_err(|e| {
+                            rusqlite::Error::FromSqlConversionFailure(
+                                1,
+                                rusqlite::types::Type::Text,
+                                Box::new(e),
+                            )
+                        })?;
+
+                let payload: serde_json::Value =
+                    serde_json::from_str(&payload_str).unwrap_or(serde_json::json!({}));
+
+                Ok(Event {
+                    session_id,
+                    event_type,
+                    payload,
+                    received_at,
+                    provider,
+                })
+            })
+            .map_err(|e| format!("Failed to query events-since: {}", e))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("Failed to read event row: {}", e))?;
+
+        Ok(events)
+    }
+
     fn get_latest_session(&self) -> Result<Option<Session>, String> {
         let mut stmt = self
             .connection

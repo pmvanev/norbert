@@ -2,6 +2,8 @@
 ///
 /// This module contains no IO or framework imports.
 /// All functions are pure and testable in isolation.
+pub mod phosphor_history;
+
 use chrono::DateTime;
 use serde::{Deserialize, Serialize};
 use std::fmt;

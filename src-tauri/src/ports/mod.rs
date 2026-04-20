@@ -30,6 +30,14 @@ pub trait EventStore {
     ///
     /// Returns an empty Vec when the session does not exist or has no events.
     fn get_events_for_session(&self, session_id: &str) -> Result<Vec<Event>, String>;
+
+    /// Retrieve events across all sessions whose `received_at` is at or after
+    /// `cutoff_iso`, ordered by (session_id, received_at).
+    ///
+    /// Used for Performance Monitor startup backfill — bounds the query to
+    /// the rolling-window duration so long-lived sessions don't have every
+    /// historical event materialized in memory.
+    fn get_events_since(&self, cutoff_iso: &str) -> Result<Vec<Event>, String>;
 }
 
 /// Storage abstraction for accumulated metric data points and session metadata.
@@ -154,6 +162,15 @@ mod tests {
                 .events
                 .iter()
                 .filter(|e| e.session_id == session_id)
+                .cloned()
+                .collect())
+        }
+
+        fn get_events_since(&self, cutoff_iso: &str) -> Result<Vec<Event>, String> {
+            Ok(self
+                .events
+                .iter()
+                .filter(|e| e.received_at.as_str() >= cutoff_iso)
                 .cloned()
                 .collect())
         }

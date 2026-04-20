@@ -7,6 +7,8 @@
 /// This is a first-party plugin that loads via the standard plugin loader
 /// identically to any third-party plugin.
 
+import { invoke } from "@tauri-apps/api/core";
+
 import type { NorbertPlugin, NorbertAPI } from "../types";
 import { NORBERT_USAGE_MANIFEST } from "./manifest";
 import { createHookProcessor } from "./hookProcessor";
@@ -16,7 +18,12 @@ import { DEFAULT_PRICING_TABLE } from "./domain/pricingModel";
 import { appendSample } from "./domain/timeSeriesSampler";
 import { computeInstantaneousRates, type MetricsSnapshot } from "./domain/instantaneousRate";
 import type { RateSample, SessionMetrics } from "./domain/types";
-import { RATE_TICK_MS } from "./domain/phosphor/phosphorMetricConfig";
+import { RATE_TICK_MS, WINDOW_MS } from "./domain/phosphor/phosphorMetricConfig";
+import {
+  deriveEventsRate,
+  deriveToolCallsRate,
+  deriveTokensRate,
+} from "./domain/phosphor/rateDerivation";
 
 // ---------------------------------------------------------------------------
 // Shared metrics store -- module-level so App.tsx and the hook processor
@@ -231,6 +238,61 @@ const onLoad = (api: NorbertAPI): void => {
   rateTickHandle = setInterval(() => {
     processor.sampleRates(Date.now());
   }, RATE_TICK_MS);
+
+  // Phosphor history backfill. The scope shows a 60-second rolling window
+  // of per-session activity; under the live-only ingest path it starts
+  // empty and needs a full minute to fill. Since the DB already contains
+  // the last minute of events, a single IPC call to `get_phosphor_history`
+  // returns pre-bucketed counts that we paint directly into the
+  // multi-session store — the scope lights up immediately on PM open.
+  //
+  // The response also carries `queryTimeMs` — the backend clock reading
+  // that bounds the backfill. We prime the processor's live boundary to
+  // that timestamp so live events pick up exactly where backfill ends
+  // (no gap, no double count).
+  //
+  // Best-effort: a failure here just leaves the user with the pre-fix
+  // behavior (empty scope, first-tick-prime fallback kicks in). No throw.
+  void (async () => {
+    try {
+      const response = await invoke<{
+        buckets: ReadonlyArray<{
+          sessionId: string;
+          bucketEndMs: number;
+          events: number;
+          toolcalls: number;
+          tokens: number;
+        }>;
+        queryTimeMs: number;
+      }>("get_phosphor_history", { windowMs: WINDOW_MS });
+
+      // Register each session encountered in the backfill. addSession is
+      // idempotent, so coexisting with App.tsx's polling-driven session
+      // discovery is safe.
+      const registered = new Set<string>();
+      for (const b of response.buckets) {
+        if (!registered.has(b.sessionId)) {
+          usageMultiSessionStore.addSession(b.sessionId);
+          registered.add(b.sessionId);
+        }
+        const ev = deriveEventsRate(b.events, RATE_TICK_MS, b.bucketEndMs);
+        usageMultiSessionStore.appendRateSample(b.sessionId, "events", ev.t, ev.v);
+        const tc = deriveToolCallsRate(b.toolcalls, RATE_TICK_MS, b.bucketEndMs);
+        usageMultiSessionStore.appendRateSample(b.sessionId, "toolcalls", tc.t, tc.v);
+        const tk = deriveTokensRate(b.tokens, RATE_TICK_MS, b.bucketEndMs);
+        usageMultiSessionStore.appendRateSample(b.sessionId, "tokens", tk.t, tk.v);
+      }
+
+      // Prime the live-rate boundary to the backend's query time. The
+      // processor's counter is zeroed and its freshness guard switches to
+      // `received_at >= queryTimeMs`, making the backfill→live transition
+      // seamless.
+      processor.primeFromBackfill(response.queryTimeMs);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.warn("norbert-usage: phosphor history backfill failed", error);
+    }
+  })();
 
   // DEV-only silence watchdog — see module-level docblock. If no events
   // arrive within the 10s grace window, warn on the console so Phil can
