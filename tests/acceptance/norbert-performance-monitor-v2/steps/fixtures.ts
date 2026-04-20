@@ -69,7 +69,7 @@ export const WINDOW_MS = 60_000;
 export const RATE_TICK_MS = 5_000;
 export const PULSE_LIFETIME_MS = 2_500;
 export const PULSE_RETENTION_MS = 5_000;
-export const HOVER_SNAP_DISTANCE_PX = 28;
+export const HOVER_SNAP_DISTANCE_PX = 18;
 
 // ---------------------------------------------------------------------------
 // Rate samples and pulses

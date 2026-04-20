@@ -1641,7 +1641,14 @@ code, pre, .mono,
 }
 
 .phosphor-hover-tooltip {
-  position: absolute;
+  /* Positioning is set inline by the React component:
+       - `position: fixed` (default) for cursor-tracked placement via
+         document.body portal, so the tooltip escapes the canvas-wrap's
+         `overflow: hidden` and lands precisely at the cursor.
+       - `position: absolute` as a fallback when no pointer-event supplied
+         client coords (legacy integration paths / unit tests).
+     The inline `left` / `top` values carry the exact placement, including
+     edge-flips at viewport bounds; no CSS nudge is needed here. */
   pointer-events: none;
   padding: 4px 8px;
   background: var(--bg-card);
@@ -1651,16 +1658,10 @@ code, pre, .mono,
   color: var(--text-p);
   white-space: nowrap;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
-  /* Nudge tooltip down-and-right of the cursor. Below-right positioning
-     avoids clipping by `.phosphor-scope-canvas-wrap`'s `overflow: hidden`
-     when the hover snap lands near the top of the canvas (the prior
-     `translate(..., -120%)` pushed the tooltip above y=0 and the wrap
-     clipped it out of sight). The `left`/`top` values come from
-     displayX/displayY (canvas-local); the transform keeps it clear of
-     the cursor. */
-  transform: translate(10px, 10px);
-  /* Sit above the canvas host (z-auto) and above any rAF-painted pixels. */
-  z-index: 10;
+  /* Sit above the canvas host and any rAF-painted pixels. Higher than the
+     prior 10 because the tooltip now portals to document.body and must
+     win over any page-level overlays that sit above the scope. */
+  z-index: 1000;
 }
 
 .phosphor-hover-session {

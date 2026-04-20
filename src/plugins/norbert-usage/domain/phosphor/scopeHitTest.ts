@@ -38,11 +38,15 @@ import type { Frame, FrameTrace } from "./scopeProjection";
 // ---------------------------------------------------------------------------
 
 /**
- * Maximum pixel distance for snap-to-trace hover. Sourced from the prototype
- * spec (28px ≈ thumb-width on a high-DPI laptop display, comfortable for
- * pointer targeting without feeling sticky).
+ * Maximum pixel distance for snap-to-trace hover.
+ *
+ * Tightened from the prototype's 28px to 18px after real-world use showed
+ * the larger radius caused tooltips to appear when the cursor clearly was
+ * not on a trace. With the dynamic yMax filling the canvas the trace is
+ * visually thicker (2px stroke) and closer to most cursor distances; 18px
+ * feels precise without being sticky.
  */
-export const HOVER_SNAP_DISTANCE_PX = 28;
+export const HOVER_SNAP_DISTANCE_PX = 18;
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -67,8 +71,22 @@ export interface HoverSelection {
   readonly value: number;
   readonly time: number;
   readonly ageMs: number;
+  /**
+   * Canvas-local coordinates of the trace sample at the cursor column.
+   * Used by crosshair/marker rendering that must land on the trace, not
+   * on the cursor. For tooltip positioning, prefer pointerClientX/Y.
+   */
   readonly displayX: number;
   readonly displayY: number;
+  /**
+   * Optional viewport coordinates of the cursor itself (event.clientX/Y).
+   * Set by the view layer after a successful hit-test so the tooltip can
+   * track the cursor via `position: fixed`. The pure hit-test does not
+   * compute these — they are a view concern — and they are undefined when
+   * the hit-test is called outside a pointer-event context (e.g. tests).
+   */
+  readonly pointerClientX?: number;
+  readonly pointerClientY?: number;
 }
 
 // ---------------------------------------------------------------------------

@@ -153,9 +153,9 @@ describe("scopeHitTest — within snap distance", () => {
 
     const sampleX = timeToX(sampleTime, width, NOW);
     const sampleY = valueToY(sampleValue, height, METRICS.events.yMax);
-    // Pointer vertically 20px below the sample — within the 28px snap radius.
+    // Pointer vertically 12px below the sample — within the 18px snap radius.
     const selection = scopeHitTest(
-      { x: sampleX, y: sampleY + 20, width, height },
+      { x: sampleX, y: sampleY + 12, width, height },
       frame,
     );
 
@@ -210,7 +210,7 @@ describe("scopeHitTest — beyond snap distance", () => {
 
     const sampleY = valueToY(sampleValue, height, METRICS.events.yMax);
     const sampleX = timeToX(sampleTime, width, NOW);
-    // 100px vertical offset — well outside the 28px snap radius.
+    // 100px vertical offset — well outside the 18px snap radius.
     const selection = scopeHitTest(
       { x: sampleX, y: sampleY - 100, width, height },
       frame,
@@ -506,7 +506,7 @@ describe("scopeHitTest — sample exactly on canvas edge is not off-canvas", () 
   it("sample at v=yMax (displayY === 0) is on-canvas: pointer at y=200 is beyond snap", () => {
     // displayY for v=yMax is exactly 0 (top edge). The off-canvas test is
     // STRICT (`sampleY < 0`), so the sample is on-canvas and vertical
-    // distance is |0 - 200| = 200 — far beyond the 28px snap radius.
+    // distance is |0 - 200| = 200 — far beyond the 18px snap radius.
     const sampleTime = NOW - 5000;
     const frame = buildTestFrame([
       {
@@ -523,7 +523,7 @@ describe("scopeHitTest — sample exactly on canvas edge is not off-canvas", () 
   it("sample at v=0 (displayY === height) is on-canvas: pointer at y=0 is beyond snap", () => {
     // displayY for v=0 is exactly `height` (bottom edge). The off-canvas
     // test is STRICT (`sampleY > height`), so the sample is on-canvas and
-    // vertical distance is `height` — far beyond the 28px snap radius.
+    // vertical distance is `height` — far beyond the 18px snap radius.
     const sampleTime = NOW - 5000;
     const frame = buildTestFrame([
       {
@@ -720,7 +720,7 @@ describe("scopeHitTest — sample time strictly after cursor vs. equal-to cursor
     //   - Under `<` (production): earliest.v stays `firstValue`,
     //     displayY = yOfFirst, distance = 0 → selection.value === firstValue.
     //   - Under `<=` (mutant): earliest.v becomes `secondValue`,
-    //     displayY = yOfSecond, distance ≈ 10 px (still < 28 snap) →
+    //     displayY = yOfSecond, distance ≈ 10 px (still < 18 snap) →
     //     selection.value === secondValue (FAILS the assertion below).
     const yOfFirst = valueToY(firstValue, height, yMax);
     const selection = scopeHitTest({ x: 0, y: yOfFirst, width, height }, frame);
@@ -824,7 +824,7 @@ describe("scopeHitTest — off-canvas samples below baseline", () => {
 // ---------------------------------------------------------------------------
 
 describe("scopeHitTest — exported constants", () => {
-  it("exports HOVER_SNAP_DISTANCE_PX = 28", () => {
-    expect(HOVER_SNAP_DISTANCE_PX).toBe(28);
+  it("exports HOVER_SNAP_DISTANCE_PX = 18", () => {
+    expect(HOVER_SNAP_DISTANCE_PX).toBe(18);
   });
 });

@@ -594,7 +594,21 @@ export const PhosphorCanvasHost = ({
         width: rect.width,
         height: rect.height,
       };
-      onHoverChange(scopeHitTest(pointer, frameRef.current));
+      const selection = scopeHitTest(pointer, frameRef.current);
+      if (selection === null) {
+        onHoverChange(null);
+        return;
+      }
+      // Enrich the pure hit-test result with the cursor's viewport
+      // coordinates so the tooltip can follow the cursor via
+      // `position: fixed` (mirrors v1 PM's cf7af6c portal pattern).
+      // The pure hit-test stays oblivious to view-layer concerns; the
+      // view is the only layer that knows about client coordinates.
+      onHoverChange({
+        ...selection,
+        pointerClientX: event.clientX,
+        pointerClientY: event.clientY,
+      });
     },
     [onHoverChange],
   );
