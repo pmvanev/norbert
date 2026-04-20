@@ -68,3 +68,12 @@ Feature: Milestone 1 — Per-Session Rate Envelope Traces
     Then the frame contains no traces
     And the legend is empty
     And the Y-axis maximum still reflects the current metric's scale
+
+  @driving_port @US-PM-001
+  Scenario: Hiding a session via the legend omits its trace and pulses from the frame
+    Given two sessions are active: "session-1", "session-2"
+    And each session has arrived rate history
+    When the scope projects the current frame with "session-1" hidden
+    Then only "session-2"'s trace appears in the frame
+    And "session-1" still appears in the legend marked as hidden
+    And "session-2" still appears in the legend marked as visible

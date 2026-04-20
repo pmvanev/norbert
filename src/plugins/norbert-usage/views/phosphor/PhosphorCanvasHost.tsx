@@ -80,6 +80,12 @@ const DEFAULT_WIDTH = 600;
 const DEFAULT_HEIGHT = 200;
 const TRACE_LINE_WIDTH = 2;
 const PULSE_BASE_RADIUS = 10;
+/**
+ * Shared empty set used when no `hiddenSessions` prop is supplied. A module-
+ * level constant avoids allocating a throwaway Set on every render / every
+ * rAF tick (the tick runs ~60 times per second).
+ */
+const EMPTY_HIDDEN_SESSIONS: ReadonlySet<string> = new Set<string>();
 // Hover-beat (breathing dot at the hovered sample).
 //
 // Frequency note: Phil's sketch mentioned "60 Hz". At our 60fps render
@@ -153,6 +159,14 @@ interface PhosphorCanvasHostProps {
    * clock. Tests may inject a deterministic stub.
    */
   readonly nowFn?: () => number;
+  /**
+   * Sessions the user has hidden via the legend. Passed through to
+   * `buildFrame` on every rAF tick so hidden traces and their pulses never
+   * reach the canvas. Undefined is treated as an empty set (nothing hidden)
+   * — this preserves the historical behavior of callers that predate the
+   * feature. Kept as a ReadonlySet so the canvas host cannot mutate it.
+   */
+  readonly hiddenSessions?: ReadonlySet<string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -472,6 +486,7 @@ export const PhosphorCanvasHost = ({
   selectedMetric,
   onHoverChange,
   nowFn = Date.now,
+  hiddenSessions,
 }: PhosphorCanvasHostProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -487,10 +502,16 @@ export const PhosphorCanvasHost = ({
   const selectedMetricRef = useRef<MetricId>(selectedMetric);
   const nowFnRef = useRef<() => number>(nowFn);
   const onHoverChangeRef = useRef<(s: HoverSelection | null) => void>(onHoverChange);
+  // Mirror `hiddenSessions` into a ref so the rAF loop can read the current
+  // value without being torn down and restarted on every toggle. Undefined
+  // is normalized to an empty set here so the render path never needs the
+  // `?? EMPTY` dance.
+  const hiddenSessionsRef = useRef<ReadonlySet<string>>(hiddenSessions ?? EMPTY_HIDDEN_SESSIONS);
   storeRef.current = store;
   selectedMetricRef.current = selectedMetric;
   nowFnRef.current = nowFn;
   onHoverChangeRef.current = onHoverChange;
+  hiddenSessionsRef.current = hiddenSessions ?? EMPTY_HIDDEN_SESSIONS;
 
   // Live-tracking hover state owned by the canvas host:
   //
@@ -526,6 +547,7 @@ export const PhosphorCanvasHost = ({
   // the scope-view suite.
   const renderFrame = buildFrame(store, selectedMetric, nowFn(), {
     yMaxMode: "dynamic",
+    hiddenSessions: hiddenSessions ?? EMPTY_HIDDEN_SESSIONS,
   });
   const frameRef = useRef<Frame>(renderFrame);
   frameRef.current = renderFrame;
@@ -603,7 +625,10 @@ export const PhosphorCanvasHost = ({
       storeRef.current,
       selectedMetricRef.current,
       nowFnRef.current(),
-      { yMaxMode: "dynamic" },
+      {
+        yMaxMode: "dynamic",
+        hiddenSessions: hiddenSessionsRef.current,
+      },
     );
     // Refresh the ref so a pointer event arriving mid-tick hits against the
     // same frame that was just rendered.

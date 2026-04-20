@@ -245,3 +245,47 @@ describe("M1-S7: No active sessions yields an empty scope with a clear legend", 
     expect(frame.metric).toBe("events");
   });
 });
+
+// ---------------------------------------------------------------------------
+// M1-S8: Hiding a session via the legend omits its trace and pulses from the
+// frame
+// Tag: @driving_port @US-PM-001
+//
+// Feature: click-to-toggle trace visibility. `buildFrame` accepts an optional
+// `hiddenSessions: ReadonlySet<string>`; sessions named there drop out of the
+// frame's traces and pulses but remain in the legend with `hidden: true`.
+// Default (no option, or empty set) preserves the existing feature-file
+// behavior exercised by M1-S1..S7.
+// ---------------------------------------------------------------------------
+
+describe("M1-S8: Hiding a session via the legend omits its trace and pulses from the frame", () => {
+  it("excludes hidden sessions from traces while keeping them in the legend marked hidden", () => {
+    // Given two sessions are active with arrived rate history
+    const store = createMultiSessionStore();
+    store.addSession("session-1");
+    store.addSession("session-2");
+    const historyA = synthesizeArrivedHistory(6, (i) => 3 + i);
+    const historyB = synthesizeArrivedHistory(6, (i) => 5 + i * 0.5);
+    for (const s of historyA) store.appendRateSample("session-1", "events", s.t, s.v);
+    for (const s of historyB) store.appendRateSample("session-2", "events", s.t, s.v);
+
+    // When the scope projects the current frame with session-1 hidden
+    const frame = buildFrame(store, "events", NOW, {
+      hiddenSessions: new Set(["session-1"]),
+    });
+
+    // Then only session-2's trace appears in the frame
+    expect(frame.traces.map((t) => t.sessionId)).toEqual(["session-2"]);
+
+    // And session-1 still appears in the legend marked as hidden
+    const legendById = new Map(frame.legend.map((e) => [e.sessionId, e]));
+    const hiddenEntry = legendById.get("session-1");
+    expect(hiddenEntry).toBeDefined();
+    expect(hiddenEntry!.hidden).toBe(true);
+
+    // And session-2 still appears in the legend marked as visible
+    const visibleEntry = legendById.get("session-2");
+    expect(visibleEntry).toBeDefined();
+    expect(visibleEntry!.hidden).toBe(false);
+  });
+});

@@ -1614,12 +1614,49 @@ code, pre, .mono,
   flex-shrink: 0;
 }
 
+/* Legend rows are <button>s so clicking toggles trace visibility. The
+ * declarations below reset native button styling (border, background,
+ * font) so the row visually matches its pre-interactive layout. Hover
+ * and focus-visible states make the click target discoverable without
+ * adding visual weight when idle. */
 .phosphor-legend-row {
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: 10px;
   color: var(--text-m);
+  /* Button reset — inherit context, add pointer affordance. */
+  border: none;
+  background: none;
+  padding: 2px 4px;
+  margin: 0;
+  font-family: inherit;
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background-color 120ms ease, opacity 120ms ease;
+}
+
+.phosphor-legend-row:hover {
+  background: var(--bg-card-h, rgba(255, 255, 255, 0.04));
+}
+
+.phosphor-legend-row:focus-visible {
+  outline: 2px solid var(--focus-ring, #60a5fa);
+  outline-offset: 1px;
+}
+
+/* Hidden state — user has clicked to hide this session's trace. The row
+ * stays present (so they can click again to un-hide) but is deemphasized:
+ * lower opacity, label struck through, swatch becomes a hollow outline
+ * instead of a filled dot. */
+.phosphor-legend-row-hidden {
+  opacity: 0.4;
+}
+
+.phosphor-legend-row-hidden .phosphor-legend-session {
+  text-decoration: line-through;
 }
 
 .phosphor-legend-swatch {
@@ -1629,6 +1666,16 @@ code, pre, .mono,
   border-radius: 2px;
   flex-shrink: 0;
   /* background color applied inline via style={{ backgroundColor: entry.color }} */
+}
+
+/* Hidden swatch — hollow outline in the session color. The inline style
+ * switches from `backgroundColor` to `borderColor`; these rules provide
+ * the transparent fill and the 2px border geometry. */
+.phosphor-legend-swatch-hidden {
+  background: transparent;
+  border-style: solid;
+  border-width: 2px;
+  /* border-color supplied inline via style={{ borderColor: entry.color }} */
 }
 
 .phosphor-legend-session {

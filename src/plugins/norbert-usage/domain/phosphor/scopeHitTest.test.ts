@@ -83,6 +83,7 @@ const buildTestFrame = (
       color: t.color,
       displayLabel: t.displayLabel,
       latestValue: t.latestValue,
+      hidden: false,
     })),
   };
 };

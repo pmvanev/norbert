@@ -54,6 +54,9 @@ interface PhosphorScopeViewProps {
 export const PhosphorScopeView = ({ store }: PhosphorScopeViewProps) => {
   const [selectedMetric, setSelectedMetric] = useState<MetricId>(DEFAULT_METRIC);
   const [hoverSelection, setHoverSelection] = useState<HoverSelection | null>(null);
+  const [hiddenSessions, setHiddenSessions] = useState<ReadonlySet<string>>(
+    () => new Set<string>(),
+  );
   const [, setTick] = useState<number>(0);
 
   // Subscribe to store notifications — each notification bumps the tick so
@@ -74,12 +77,38 @@ export const PhosphorScopeView = ({ store }: PhosphorScopeViewProps) => {
     setHoverSelection(null);
   }, []);
 
+  // Toggle a session's visibility. Clicking an entry flips its membership
+  // in `hiddenSessions`. Kept as an immutable-update callback so the state
+  // update is atomic and the reference changes whenever the contents do
+  // (which is what drives `buildFrame` to recompute on the next render).
+  //
+  // Stale ids (sessions removed from the store while hidden) are simply
+  // carried forward; they're cheap, and session UUIDs are not reused so
+  // the worst case is a handful of bytes retained until window close.
+  const handleToggleSession = useCallback((sessionId: string): void => {
+    setHiddenSessions((previous) => {
+      const next = new Set(previous);
+      if (next.has(sessionId)) {
+        next.delete(sessionId);
+      } else {
+        next.add(sessionId);
+      }
+      return next;
+    });
+  }, []);
+
   // Recompute a lightweight frame on every parent render to power the legend
   // and the tooltip's unit. `buildFrame` is pure and cheap, and this path
   // only fires on subscribe-driven re-renders (legend is a DOM element that
   // only changes when data arrives). The canvas host owns its own rAF-driven
   // frame computation for smooth animation.
-  const legendFrame = buildFrame(store, selectedMetric, Date.now());
+  //
+  // `hiddenSessions` is threaded in so the legend carries the correct
+  // `hidden` flag per entry; the canvas-facing `traces`/`pulses` of THIS
+  // frame are unused (the canvas host builds its own frame).
+  const legendFrame = buildFrame(store, selectedMetric, Date.now(), {
+    hiddenSessions,
+  });
 
   return (
     <div className="phosphor-scope" data-testid="phosphor-scope">
@@ -96,10 +125,15 @@ export const PhosphorScopeView = ({ store }: PhosphorScopeViewProps) => {
           store={store}
           selectedMetric={selectedMetric}
           onHoverChange={setHoverSelection}
+          hiddenSessions={hiddenSessions}
         />
         <PhosphorHoverTooltip selection={hoverSelection} unit={legendFrame.unit} />
       </div>
-      <PhosphorLegend legend={legendFrame.legend} unit={legendFrame.unit} />
+      <PhosphorLegend
+        legend={legendFrame.legend}
+        unit={legendFrame.unit}
+        onToggle={handleToggleSession}
+      />
     </div>
   );
 };

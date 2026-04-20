@@ -600,3 +600,120 @@ describe("buildFrame — yMax resolution (dynamic mode)", () => {
     expect(frame.yMax).toBe(METRICS.tokens.yMax);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Hidden-session filtering — drives the legend-click "hide trace" feature
+//
+// `buildFrame` accepts an optional `hiddenSessions: ReadonlySet<string>`.
+// Sessions named there are:
+//   - EXCLUDED from `frame.traces` (so the canvas host does not draw them
+//     and `scopeHitTest` naturally skips them).
+//   - EXCLUDED from `frame.pulses` (a hidden session's pulses must not
+//     flash on an otherwise-empty column).
+//   - STILL PRESENT in `frame.legend` with `hidden: true` so the user can
+//     un-hide them. Visible sessions carry `hidden: false`.
+// Dynamic yMax computes its peak from VISIBLE sessions only — hiding a
+// spiky session lets the remaining traces fill the canvas.
+// Default (omitted option, or empty set) preserves existing behavior.
+// ---------------------------------------------------------------------------
+
+describe("buildFrame — hidden-session filtering", () => {
+  it("excludes hidden sessions from frame.traces", () => {
+    const store = makeFakeStore({
+      sessions: [
+        { id: "visible", rates: { events: history(3, () => 5) } },
+        { id: "hidden", rates: { events: history(3, () => 7) } },
+      ],
+    });
+    const frame = buildFrame(store, "events", NOW, {
+      hiddenSessions: new Set(["hidden"]),
+    });
+    expect(frame.traces.map((t) => t.sessionId)).toEqual(["visible"]);
+  });
+
+  it("excludes hidden sessions' pulses from frame.pulses", () => {
+    const store = makeFakeStore({
+      sessions: [
+        {
+          id: "visible",
+          rates: { events: history(3, () => 5) },
+          pulses: [{ t: NOW - 100, kind: "tool", strength: PULSE_STRENGTHS.tool }],
+        },
+        {
+          id: "hidden",
+          rates: { events: history(3, () => 7) },
+          pulses: [{ t: NOW - 100, kind: "tool", strength: PULSE_STRENGTHS.tool }],
+        },
+      ],
+    });
+    const frame = buildFrame(store, "events", NOW, {
+      hiddenSessions: new Set(["hidden"]),
+    });
+    expect(frame.pulses.map((p) => p.sessionId)).toEqual(["visible"]);
+  });
+
+  it("keeps hidden sessions in frame.legend with hidden:true and visible ones with hidden:false", () => {
+    const store = makeFakeStore({
+      sessions: [
+        { id: "visible", rates: { events: history(3, () => 5) } },
+        { id: "hidden", rates: { events: history(3, () => 7) } },
+      ],
+    });
+    const frame = buildFrame(store, "events", NOW, {
+      hiddenSessions: new Set(["hidden"]),
+    });
+    const byId = new Map(frame.legend.map((e) => [e.sessionId, e]));
+    expect(byId.get("visible")?.hidden).toBe(false);
+    expect(byId.get("hidden")?.hidden).toBe(true);
+    // Legend still parallels the store's session order.
+    expect(frame.legend.map((e) => e.sessionId)).toEqual(["visible", "hidden"]);
+  });
+
+  it("computes dynamic yMax from VISIBLE sessions only — hiding a spike lets the quiet trace fill the canvas", () => {
+    // Big hidden trace peaks at 14 evt/s; small visible trace peaks at 2.
+    // If the hidden peak leaked into yMax we would get yMax clamped to the
+    // events cap of 15. With hidden filtered out, yMax scales to the visible
+    // peak: peak = 2, peak * 1.2 = 2.4, niceCeil = 3.
+    const store = makeFakeStore({
+      sessions: [
+        { id: "spiky", rates: { events: history(3, () => 14) } },
+        { id: "quiet", rates: { events: history(3, () => 2) } },
+      ],
+    });
+    const frame = buildFrame(store, "events", NOW, {
+      yMaxMode: "dynamic",
+      hiddenSessions: new Set(["spiky"]),
+    });
+    expect(frame.yMax).toBe(3);
+  });
+
+  it("default (no hiddenSessions option) marks every legend entry as hidden:false and includes every trace", () => {
+    const store = makeFakeStore({
+      sessions: [
+        { id: "s1", rates: { events: history(3, () => 5) } },
+        { id: "s2", rates: { events: history(3, () => 7) } },
+      ],
+    });
+    const frame = buildFrame(store, "events", NOW);
+    expect(frame.traces).toHaveLength(2);
+    for (const entry of frame.legend) {
+      expect(entry.hidden).toBe(false);
+    }
+  });
+
+  it("treats an empty hiddenSessions set the same as omitting the option", () => {
+    const store = makeFakeStore({
+      sessions: [
+        { id: "s1", rates: { events: history(3, () => 5) } },
+        { id: "s2", rates: { events: history(3, () => 7) } },
+      ],
+    });
+    const frame = buildFrame(store, "events", NOW, {
+      hiddenSessions: new Set<string>(),
+    });
+    expect(frame.traces).toHaveLength(2);
+    for (const entry of frame.legend) {
+      expect(entry.hidden).toBe(false);
+    }
+  });
+});

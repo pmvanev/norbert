@@ -106,6 +106,14 @@ export interface LegendEntry {
   readonly displayLabel: string;
   readonly color: string;
   readonly latestValue: number | null;
+  /**
+   * Whether the user has hidden this session's trace from the canvas via the
+   * legend. Hidden entries remain present in the legend so the user can
+   * un-hide them; the canvas-side `traces`/`pulses` arrays omit hidden
+   * sessions entirely, so downstream consumers (render, hit-test, dynamic
+   * yMax) naturally skip them without needing to re-check visibility.
+   */
+  readonly hidden: boolean;
 }
 
 export interface Frame {
@@ -218,12 +226,17 @@ const projectTrace = (
   };
 };
 
-/** Derive the legend row for a trace — same identity triple + display label. */
-const legendEntryFor = (trace: FrameTrace): LegendEntry => ({
+/**
+ * Derive the legend row for a trace — same identity triple + display label,
+ * plus the caller-supplied `hidden` flag (whether the user has clicked the
+ * legend entry to hide this session's trace from the canvas).
+ */
+const legendEntryFor = (trace: FrameTrace, hidden: boolean): LegendEntry => ({
   sessionId: trace.sessionId,
   displayLabel: trace.displayLabel,
   color: trace.color,
   latestValue: trace.latestValue,
+  hidden,
 });
 
 /**
@@ -311,6 +324,15 @@ export type YMaxMode = "fixed" | "dynamic";
 
 export interface BuildFrameOptions {
   readonly yMaxMode?: YMaxMode;
+  /**
+   * Session ids whose traces and pulses should be omitted from the frame.
+   * Hidden sessions still appear in `frame.legend` with `hidden: true` so
+   * the user can un-hide them. Dynamic yMax is computed from the visible
+   * traces only, so hiding a spiky session lets the remaining traces fill
+   * the canvas. Default (omitted, or empty set) preserves existing behavior
+   * — every session contributes a trace.
+   */
+  readonly hiddenSessions?: ReadonlySet<string>;
 }
 
 /** Peak across all traces' samples in the current window, or 0 when empty. */
@@ -379,24 +401,43 @@ export const buildFrame = (
   now: number,
   opts?: BuildFrameOptions,
 ): Frame => {
+  const hiddenSessions = opts?.hiddenSessions ?? EMPTY_HIDDEN_SESSIONS;
   const sessionIds = store.getSessionIds();
-  const traces = sessionIds.map((sessionId, index) =>
+  // Project every session's trace. Projection is needed for all sessions so
+  // the legend can show hidden entries with their latest value and color;
+  // the hidden/visible split happens only when we assemble the canvas-
+  // facing `traces` and `pulses` arrays.
+  const allTraces = sessionIds.map((sessionId, index) =>
     projectTrace(sessionId, index, store, metric, now),
   );
-  const pulses = sortPulsesByStrengthDescending(
-    traces.flatMap((trace) => projectPulsesForTrace(trace, store, now)),
+  const visibleTraces = allTraces.filter(
+    (trace) => !hiddenSessions.has(trace.sessionId),
   );
-  const legend = traces.map(legendEntryFor);
+  const pulses = sortPulsesByStrengthDescending(
+    visibleTraces.flatMap((trace) => projectPulsesForTrace(trace, store, now)),
+  );
+  const legend = allTraces.map((trace) =>
+    legendEntryFor(trace, hiddenSessions.has(trace.sessionId)),
+  );
   const config = METRICS[metric];
   const yMaxMode: YMaxMode = opts?.yMaxMode ?? "fixed";
-  const yMax = resolveYMax(metric, traces, yMaxMode);
+  // Dynamic yMax reads from the VISIBLE set so hiding a spiky session lets
+  // the remaining traces fill the canvas.
+  const yMax = resolveYMax(metric, visibleTraces, yMaxMode);
   return {
     now,
     metric,
     yMax,
     unit: config.unit,
-    traces,
+    traces: visibleTraces,
     pulses,
     legend,
   };
 };
+
+/**
+ * Shared empty set used when callers omit `hiddenSessions`. Keeping a
+ * module-level constant avoids allocating a throwaway `Set` on every frame
+ * (the rAF loop calls `buildFrame` ~60 times per second).
+ */
+const EMPTY_HIDDEN_SESSIONS: ReadonlySet<string> = new Set<string>();
