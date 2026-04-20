@@ -7,23 +7,37 @@
  *   - Tracks its container's size via `ResizeObserver` and the device pixel
  *     ratio via `window.devicePixelRatio`, mirroring the pattern proven in
  *     `OscilloscopeView.tsx`.
- *   - Runs a `requestAnimationFrame` loop that renders the current Frame
- *     every tick. The loop pauses when `document.visibilityState === 'hidden'`
- *     (the scope is a peripheral-glance view; no need to waste GPU when the
- *     window is hidden).
+ *   - Runs a `requestAnimationFrame` loop that computes a FRESH Frame on
+ *     every tick via `buildFrame(store, selectedMetric, now())` and renders
+ *     it. The loop pauses when `document.visibilityState === 'hidden'`
+ *     (the scope is a peripheral-glance view; no need to waste GPU when
+ *     the window is hidden).
  *   - Handles pointer events: `mousemove` calls the pure `scopeHitTest` and
  *     fires `onHoverChange` with the result; `mouseleave` fires `onHoverChange(null)`.
  *
- * Canvas drawing follows the pure/effect split: `buildFrame` (upstream, pure)
- * produces the Frame; all drawing routines here are effect-only and read the
- * Frame. The drawing itself is intentionally minimal (trace polyline + pulse
- * flares + afterglow overlay) — visual polish can be layered on later without
+ * Why rAF-driven frame computation?
+ *   Trace projection depends on `now` (the 60-second window slides against
+ *   real time). If the frame is computed on React render only, the canvas
+ *   redraws the SAME frozen-`now` frame between store notifications, so
+ *   traces stop scrolling — then jump when notifications fire. Running
+ *   `buildFrame` per rAF tick ties the window's right edge to real time,
+ *   producing smooth 60fps scroll regardless of notification cadence.
+ *   Data ingest (pulses, rate samples) remains event-driven in the store;
+ *   the renderer picks up fresh store state on every frame.
+ *
+ * Canvas drawing follows the pure/effect split: `buildFrame` (pure) produces
+ * the Frame; all drawing routines here are effect-only and read the Frame.
+ * The drawing itself is intentionally minimal (trace polyline + pulse flares
+ * + afterglow overlay) — visual polish can be layered on later without
  * changing the prop contract.
  *
  * Test observability: the container div exposes `data-metric`, `data-y-max`,
  * `data-unit`, `data-trace-count`, and `data-pulse-count` attributes so the
  * component is assertable from React Testing Library without reading the
- * canvas's pixel buffer.
+ * canvas's pixel buffer. Those attributes are computed on each React render
+ * via `buildFrame(store, selectedMetric, now())` so they refresh whenever
+ * the parent (which subscribes to the store) re-renders — preserving the
+ * existing observability contract.
  *
  * Pure-core boundary: this file is the ONE place inside the phosphor view
  * subtree that touches `requestAnimationFrame`, `document`, `ResizeObserver`,
@@ -34,7 +48,9 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
-import type { Frame, FramePulse, FrameTrace } from "../../domain/phosphor/scopeProjection";
+import type { MultiSessionStore } from "../../adapters/multiSessionStore";
+import type { MetricId } from "../../domain/phosphor/phosphorMetricConfig";
+import { buildFrame, type Frame, type FramePulse, type FrameTrace } from "../../domain/phosphor/scopeProjection";
 import { scopeHitTest, type HoverSelection } from "../../domain/phosphor/scopeHitTest";
 import { timeToX, valueToY } from "../../domain/phosphor/canvasGeometry";
 import {
@@ -89,8 +105,15 @@ const resolveThemeColor = (
 // ---------------------------------------------------------------------------
 
 interface PhosphorCanvasHostProps {
-  readonly frame: Frame;
+  readonly store: MultiSessionStore;
+  readonly selectedMetric: MetricId;
   readonly onHoverChange: (selection: HoverSelection | null) => void;
+  /**
+   * Time source for `buildFrame`. Defaults to `Date.now` so sample timestamps
+   * (written by hookProcessor via `Date.now`) and the frame's `now` share a
+   * clock. Tests may inject a deterministic stub.
+   */
+  readonly nowFn?: () => number;
 }
 
 // ---------------------------------------------------------------------------
@@ -261,8 +284,10 @@ const drawFrame = (
 // ---------------------------------------------------------------------------
 
 export const PhosphorCanvasHost = ({
-  frame,
+  store,
+  selectedMetric,
   onHoverChange,
+  nowFn = Date.now,
 }: PhosphorCanvasHostProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -271,16 +296,29 @@ export const PhosphorCanvasHost = ({
     buffer: null,
   });
   const rafIdRef = useRef<number | null>(null);
-  const frameRef = useRef<Frame>(frame);
+  // Stable refs so the rAF loop reads fresh dependencies without being
+  // re-created on every render. Without these, the `useEffect` that owns
+  // the loop would tear down and restart on every parent re-render.
+  const storeRef = useRef<MultiSessionStore>(store);
+  const selectedMetricRef = useRef<MetricId>(selectedMetric);
+  const nowFnRef = useRef<() => number>(nowFn);
+  storeRef.current = store;
+  selectedMetricRef.current = selectedMetric;
+  nowFnRef.current = nowFn;
+
+  // Render-time frame: powers the DOM data attributes (test observability)
+  // AND seeds `frameRef.current` so the very first hover hit-test (before
+  // any rAF tick has landed) has a valid frame to query. Cheap — `buildFrame`
+  // is pure and O(sessions × samples); the parent subscribes to the store
+  // so this recomputes exactly when the store notifies.
+  const renderFrame = buildFrame(store, selectedMetric, nowFn());
+  const frameRef = useRef<Frame>(renderFrame);
+  frameRef.current = renderFrame;
   // Theme colors cached per resize — resolved via getComputedStyle once per
   // dimension change rather than every rAF tick. The resize-coupled cadence
   // matches the OscilloscopeView pattern and keeps the render loop allocation-free.
   const gridColorRef = useRef<string>(GRID_COLOR_FALLBACK);
   const axisLabelColorRef = useRef<string>(AXIS_LABEL_COLOR_FALLBACK);
-
-  // Always push the latest frame into the ref so the rAF loop reads fresh
-  // state without re-subscribing.
-  frameRef.current = frame;
 
   const [dimensions, setDimensions] = useState<{ width: number; height: number }>({
     width: DEFAULT_WIDTH,
@@ -330,8 +368,11 @@ export const PhosphorCanvasHost = ({
   }, []);
 
   // -----------------------------------------------------------------------
-  // rAF render loop. Reads the latest frame via frameRef and renders through
-  // the persistence buffer. Pauses when document.visibilityState is hidden.
+  // rAF render loop. Computes a FRESH frame each tick via `buildFrame` so
+  // the 60-second window's right edge tracks real time regardless of store-
+  // notification cadence. Also refreshes `frameRef.current` so the hover
+  // hit-test always queries the most recently rendered frame.
+  // Pauses when document.visibilityState is hidden.
   // -----------------------------------------------------------------------
   const renderTick = useCallback(() => {
     const canvas = canvasRef.current;
@@ -339,7 +380,18 @@ export const PhosphorCanvasHost = ({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const activeFrame = frameRef.current;
+    // Compute a FRESH frame for this tick. This is the key change from the
+    // previous architecture: `now` advances every rAF tick so traces scroll
+    // smoothly even between store notifications.
+    const activeFrame = buildFrame(
+      storeRef.current,
+      selectedMetricRef.current,
+      nowFnRef.current(),
+    );
+    // Refresh the ref so a pointer event arriving mid-tick hits against the
+    // same frame that was just rendered.
+    frameRef.current = activeFrame;
+
     const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
     const cssW = dimensions.width;
     const cssH = dimensions.height;
@@ -458,11 +510,11 @@ export const PhosphorCanvasHost = ({
       ref={containerRef}
       className="phosphor-canvas-host"
       data-testid="phosphor-canvas-host"
-      data-metric={frame.metric}
-      data-y-max={frame.yMax}
-      data-unit={frame.unit}
-      data-trace-count={frame.traces.length}
-      data-pulse-count={frame.pulses.length}
+      data-metric={renderFrame.metric}
+      data-y-max={renderFrame.yMax}
+      data-unit={renderFrame.unit}
+      data-trace-count={renderFrame.traces.length}
+      data-pulse-count={renderFrame.pulses.length}
     >
       <canvas
         ref={canvasRef}

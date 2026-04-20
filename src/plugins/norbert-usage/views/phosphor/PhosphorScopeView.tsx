@@ -2,9 +2,9 @@
  * PhosphorScopeView — React shell for the Performance Monitor v2 scope.
  *
  * Composes the phosphor view tree: PhosphorControls (metric toggle) +
- * PhosphorCanvasHost (stubbed in Step 09-01, real canvas in 09-02) +
- * PhosphorHoverTooltip (positioned overlay) + PhosphorLegend (per-session
- * color / name / latest value).
+ * PhosphorCanvasHost (owns the rAF render loop) + PhosphorHoverTooltip
+ * (positioned overlay) + PhosphorLegend (per-session color / name /
+ * latest value).
  *
  * State owned here:
  *   - `selectedMetric` — initialized from `DEFAULT_METRIC`. Updated by the
@@ -14,10 +14,21 @@
  *   - `hoverSelection` — the pure hit-test result surfaced by the canvas
  *     host's pointer handler, rendered by the tooltip.
  *   - `tick` — a render-bumping counter the store's `subscribe` callback
- *     increments; each bump causes `buildFrame` to re-run with fresh
- *     store state. The frame itself is recomputed on every render (pure,
- *     cheap) so this component stays effect-free apart from the
- *     subscription effect.
+ *     increments. Bumps the legend / tooltip unit text when data arrives.
+ *     The CANVAS animation is no longer gated by this tick — the canvas
+ *     host computes its own frame on every rAF tick so traces scroll
+ *     smoothly at 60fps regardless of notification cadence. The tick here
+ *     only refreshes the DOM-side legend (which shows per-session latest
+ *     values that only change when data arrives).
+ *
+ * Why split the animation from the legend?
+ *   Store notifications are bursty (per-event pulses, per-tool-call
+ *   pulses, ~5s rate samples, session lifecycle). If the canvas only
+ *   redrew on notifications, traces would freeze between bumps then jump.
+ *   By letting the canvas host own its own rAF-driven `buildFrame` call,
+ *   the 60-second window's right edge tracks real time continuously.
+ *   The legend is a DOM element and only changes when data arrives, so
+ *   driving it from subscribe is correct and cheap.
  *
  * Effects confined to the store subscription; all derivation (frame
  * projection, hit-testing) lives in `domain/phosphor/` pure modules.
@@ -46,7 +57,9 @@ export const PhosphorScopeView = ({ store }: PhosphorScopeViewProps) => {
   const [, setTick] = useState<number>(0);
 
   // Subscribe to store notifications — each notification bumps the tick so
-  // the component re-renders and `buildFrame` runs against fresh state.
+  // the component re-renders, which refreshes the LEGEND (per-session latest
+  // values). The canvas host runs its own rAF loop and picks up fresh store
+  // state on every frame; it does not depend on this tick.
   useEffect(() => {
     const unsubscribe = store.subscribe(() => {
       setTick((previous) => previous + 1);
@@ -61,10 +74,12 @@ export const PhosphorScopeView = ({ store }: PhosphorScopeViewProps) => {
     setHoverSelection(null);
   }, []);
 
-  // Recompute the frame on every render. `buildFrame` is pure and O(sessions
-  // × samples-per-trace), so this is cheap; deterministic in store snapshot
-  // + metric + now.
-  const frame = buildFrame(store, selectedMetric, Date.now());
+  // Recompute a lightweight frame on every parent render to power the legend
+  // and the tooltip's unit. `buildFrame` is pure and cheap, and this path
+  // only fires on subscribe-driven re-renders (legend is a DOM element that
+  // only changes when data arrives). The canvas host owns its own rAF-driven
+  // frame computation for smooth animation.
+  const legendFrame = buildFrame(store, selectedMetric, Date.now());
 
   return (
     <div className="phosphor-scope" data-testid="phosphor-scope">
@@ -77,10 +92,14 @@ export const PhosphorScopeView = ({ store }: PhosphorScopeViewProps) => {
         onMetricChange={handleMetricChange}
       />
       <div className="phosphor-scope-canvas-wrap">
-        <PhosphorCanvasHost frame={frame} onHoverChange={setHoverSelection} />
-        <PhosphorHoverTooltip selection={hoverSelection} unit={frame.unit} />
+        <PhosphorCanvasHost
+          store={store}
+          selectedMetric={selectedMetric}
+          onHoverChange={setHoverSelection}
+        />
+        <PhosphorHoverTooltip selection={hoverSelection} unit={legendFrame.unit} />
       </div>
-      <PhosphorLegend legend={frame.legend} unit={frame.unit} />
+      <PhosphorLegend legend={legendFrame.legend} unit={legendFrame.unit} />
     </div>
   );
 };
