@@ -247,7 +247,7 @@ const isToolCallEvent = (eventType: string): boolean =>
   TOOL_EVENT_TYPES.has(eventType);
 
 // ---------------------------------------------------------------------------
-// OTel api_request token rate extraction — pure helpers
+// OTel api_request token extraction — pure helpers
 // ---------------------------------------------------------------------------
 
 /** Sum of all token fields on a Claude Code usage record. */
@@ -260,23 +260,22 @@ const totalTokensOf = (usage: Record<string, unknown>): number => {
 };
 
 /**
- * Extract the `(totalTokens, durationMs)` pair from an OTel api_request
- * payload for the tokens/s derivation. Returns `null` when the payload
- * is missing either field — the caller then skips the tokens/s sample
- * (pure: no throwing on malformed payloads).
+ * Extract the total tokens reported by an OTel `api_request` payload.
+ * Returns `null` when the payload's inner record or `usage` block is
+ * missing or malformed — the caller then skips the token accumulation.
+ *
+ * Production OTel payloads (see `get_session_events`) do NOT carry a
+ * `duration_ms` field; tokens/s is therefore accumulated per session
+ * across each 5-second rate-tick window and drained by `sampleRates`,
+ * mirroring the structure of events/s and toolcalls/s. Pure: no throwing
+ * on malformed payloads.
  */
-const extractOtelTokenRateInputs = (
-  payload: unknown,
-): { readonly totalTokens: number; readonly durationMs: number } | null => {
+const extractOtelTokenTotal = (payload: unknown): number | null => {
   const inner = extractInnerPayload(payload);
   if (!isRecord(inner)) return null;
   const usage = inner["usage"];
   if (!isRecord(usage)) return null;
-  const durationRaw = inner["duration_ms"];
-  const durationMs = typeof durationRaw === "number" ? durationRaw : 0;
-  if (durationMs <= 0) return null;
-  const totalTokens = totalTokensOf(usage);
-  return { totalTokens, durationMs };
+  return totalTokensOf(usage);
 };
 
 // ---------------------------------------------------------------------------
@@ -365,9 +364,15 @@ export const createHookProcessor = (
   // `sampleRates(now)` on each 5-second tick. The mutable cell lives in
   // this closure so the production effect boundary stays inside this
   // module (the composition root only owns the ticker scheduler).
+  //
+  // `tokens` accumulates the total tokens observed on OTel `api_request`
+  // events within the current 5s window. It mirrors `events` and
+  // `toolcalls` — production OTel payloads do not carry `duration_ms`,
+  // so per-event tokens/s derivation is not possible; tick accumulation
+  // is the only viable approach.
   const sessionCounters = new Map<
     string,
-    { events: number; toolcalls: number }
+    { events: number; toolcalls: number; tokens: number }
   >();
 
   // ---------------------------------------------------------------------
@@ -388,10 +393,10 @@ export const createHookProcessor = (
 
   const ensureCounters = (
     sessionId: string,
-  ): { events: number; toolcalls: number } => {
+  ): { events: number; toolcalls: number; tokens: number } => {
     const existing = sessionCounters.get(sessionId);
     if (existing) return existing;
-    const fresh = { events: 0, toolcalls: 0 };
+    const fresh = { events: 0, toolcalls: 0, tokens: 0 };
     sessionCounters.set(sessionId, fresh);
     return fresh;
   };
@@ -479,40 +484,35 @@ export const createHookProcessor = (
         }
       }
 
-      // Tokens/s is per-event (not per-tick) because OTel api_request
-      // events carry their own `duration_ms`. See v2-phosphor-architecture
-      // §5 Q1. Guarded on provider="otel" AND event_type="api_request" so
-      // only the tokens-bearing OTel stream drives this metric.
+      // Tokens/s is accumulated per-session and drained on the 5-second
+      // rate tick (see `sampleRates`). Production OTel payloads do not
+      // carry a `duration_ms` field, so per-event derivation is not
+      // possible — the counter pattern mirrors events/s and toolcalls/s.
+      // Guarded on provider="otel" AND event_type="api_request" so only
+      // the tokens-bearing OTel stream feeds the counter.
       if (
         appendRateSample &&
         provider === "otel" &&
         eventType === "api_request"
       ) {
-        const inputs = extractOtelTokenRateInputs(payload);
-        if (inputs) {
-          const sample = deriveTokensRate(
-            inputs.totalTokens,
-            inputs.durationMs,
-            now(),
-          );
-          appendRateSample(sessionId, "tokens", sample.t, sample.v);
-          if (isDev && !loggedFirstRateSample) {
-            loggedFirstRateSample = true;
-            // eslint-disable-next-line no-console
-            console.log(
-              `[phosphor] first tokens/s rate sample — session=${sessionId} v=${sample.v.toFixed(2)}`,
-            );
-          }
+        const total = extractOtelTokenTotal(payload);
+        if (total !== null && total > 0) {
+          counters.tokens += total;
         }
       }
     }
   };
 
   /**
-   * Drain the events / toolcalls counters as rate samples. Invoked by
-   * the composition root on its 5-second tick. Resets counters on exit
-   * so the next window starts from zero. Noop when `appendRateSample`
-   * was not injected (the v2 pathway is disabled).
+   * Drain the events / toolcalls / tokens counters as rate samples.
+   * Invoked by the composition root on its 5-second tick. Resets counters
+   * on exit so the next window starts from zero. Noop when
+   * `appendRateSample` was not injected (the v2 pathway is disabled).
+   *
+   * Tokens/s uses the same windowed-rate semantics as the other two
+   * metrics (total tokens observed in the window divided by the window
+   * duration in seconds) because production OTel `api_request` payloads
+   * do not carry `duration_ms` — per-event derivation is not possible.
    */
   const sampleRates = (tickBoundaryT: number): void => {
     if (!appendRateSample) return;
@@ -543,8 +543,28 @@ export const createHookProcessor = (
         toolcallsSample.v,
       );
 
+      // Tokens/s — total tokens accumulated this window divided by the
+      // window in seconds. `deriveTokensRate` is named for tokens but its
+      // math is identical to a count-over-window rate; passing
+      // `RATE_TICK_MS` as the window argument produces the per-second
+      // sample the phosphor scope expects.
+      const tokensSample = deriveTokensRate(
+        counters.tokens,
+        RATE_TICK_MS,
+        tickBoundaryT,
+      );
+      appendRateSample(sessionId, "tokens", tokensSample.t, tokensSample.v);
+      if (isDev && !loggedFirstRateSample && tokensSample.v > 0) {
+        loggedFirstRateSample = true;
+        // eslint-disable-next-line no-console
+        console.log(
+          `[phosphor] first tokens/s rate sample — session=${sessionId} v=${tokensSample.v.toFixed(2)}`,
+        );
+      }
+
       counters.events = 0;
       counters.toolcalls = 0;
+      counters.tokens = 0;
     }
   };
 

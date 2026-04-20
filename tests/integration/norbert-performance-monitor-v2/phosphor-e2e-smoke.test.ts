@@ -40,16 +40,20 @@ const makeHookPayload = (
   ...extras,
 });
 
+/**
+ * Shape matches production OTel api_request payloads as returned by
+ * get_session_events (see hookProcessor.test.ts lines 245-260). Real
+ * payloads do NOT carry `duration_ms`; the tokens/s derivation
+ * accumulates token counts per 5s rate-tick window instead.
+ */
 const makeOtelApiRequestPayload = (
   totalTokens: number,
-  durationMs: number,
 ): Record<string, unknown> => ({
   session_id: SESSION_ID,
   event_type: "api_request",
   provider: "otel",
   payload: {
     session_id: SESSION_ID,
-    duration_ms: durationMs,
     usage: {
       input_tokens: Math.floor(totalTokens * 0.6),
       output_tokens: totalTokens - Math.floor(totalTokens * 0.6),
@@ -153,19 +157,26 @@ describe("Phosphor v2 end-to-end smoke — real hookProcessor -> real store -> b
     expect(trace.latestValue).toBeGreaterThan(0);
   });
 
-  it("an OTel api_request event produces a tokens/s rate sample on the frame's trace", () => {
+  it("a 5-second tick of OTel api_request events produces a tokens/s rate sample on the frame's trace", () => {
     const store = createMultiSessionStore();
     const processor = wireProcessorToStore(store, () => Date.now());
 
-    // Given an OTel api_request reporting 500 tokens over 2 seconds
-    processor(makeOtelApiRequestPayload(500, 2_000));
+    // Arrange: two OTel api_request events arrive across a 5-second window
+    // with NO duration_ms (matching the production payload shape). The
+    // tokens/s derivation accumulates per session and drains on the
+    // 5s rate tick, mirroring the events/s and toolcalls/s structure.
+    processor(makeOtelApiRequestPayload(400)); // 400 tokens
+    vi.advanceTimersByTime(2_000);
+    processor(makeOtelApiRequestPayload(600)); // + 600 tokens = 1000 total
+    // Advance to the rate-tick boundary (5s after NOW) and drain the counter.
+    vi.advanceTimersByTime(3_000);
+    processor.sampleRates(Date.now());
 
-    // Then the tokens/s metric trace has one sample at 250 tok/s
     const frame = buildFrame(store, "tokens", Date.now());
     expect(frame.traces).toHaveLength(1);
     const trace = frame.traces[0];
+    // 1000 tokens / (5000ms / 1000) = 200 tokens per second
     expect(trace.samples.length).toBeGreaterThan(0);
-    // 500 tokens / (2000ms / 1000) = 250 tokens per second
-    expect(trace.latestValue).toBeCloseTo(250, 5);
+    expect(trace.latestValue).toBeCloseTo(200, 5);
   });
 });
