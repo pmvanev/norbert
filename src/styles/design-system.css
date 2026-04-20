@@ -1651,10 +1651,14 @@ code, pre, .mono,
   color: var(--text-p);
   white-space: nowrap;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
-  /* Nudge tooltip up-and-right of the cursor so it sits on the trace
-     without the cursor occluding its left edge. The left/top come from
-     displayX/displayY (canvas-local); the transform keeps it clear. */
-  transform: translate(10px, -120%);
+  /* Nudge tooltip down-and-right of the cursor. Below-right positioning
+     avoids clipping by `.phosphor-scope-canvas-wrap`'s `overflow: hidden`
+     when the hover snap lands near the top of the canvas (the prior
+     `translate(..., -120%)` pushed the tooltip above y=0 and the wrap
+     clipped it out of sight). The `left`/`top` values come from
+     displayX/displayY (canvas-local); the transform keeps it clear of
+     the cursor. */
+  transform: translate(10px, 10px);
   /* Sit above the canvas host (z-auto) and above any rAF-painted pixels. */
   z-index: 10;
 }
