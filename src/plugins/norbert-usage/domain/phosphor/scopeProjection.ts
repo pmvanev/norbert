@@ -28,11 +28,13 @@ import {
   METRICS,
   PULSE_LIFETIME_MS,
   WINDOW_MS,
+  YMAX_FLOOR,
   type MetricId,
   type Pulse,
   type RateSample,
 } from "./phosphorMetricConfig";
 import { decayFactor } from "./pulseTiming";
+import { niceCeil } from "./scale";
 
 // ---------------------------------------------------------------------------
 // Store surface — structural type, satisfied by adapters/multiSessionStore
@@ -295,8 +297,63 @@ const sortPulsesByStrengthDescending = (
 // ---------------------------------------------------------------------------
 
 /**
- * Pure projection. Deterministic in (store snapshot, metric, now). No side
- * effects, no hidden state.
+ * Y-axis scaling mode for `buildFrame`.
+ *
+ *   - `"fixed"` (default): yMax is the per-metric cap from `METRICS[metric]`.
+ *     Preserves the pre-existing contract exercised by the acceptance suite.
+ *   - `"dynamic"`: yMax is computed from the 60s-window peak across all
+ *     active sessions' samples, snapped to the next nice round number
+ *     (`niceCeil(peak * 1.2)`), then clamped to `[YMAX_FLOOR, METRICS.yMax]`.
+ *     Lets a quiet session fill more of the canvas without misrepresenting
+ *     a tiny signal.
+ */
+export type YMaxMode = "fixed" | "dynamic";
+
+export interface BuildFrameOptions {
+  readonly yMaxMode?: YMaxMode;
+}
+
+/** Peak across all traces' samples in the current window, or 0 when empty. */
+const peakAcrossTraces = (traces: ReadonlyArray<FrameTrace>): number => {
+  let peak = 0;
+  for (const trace of traces) {
+    for (const sample of trace.samples) {
+      if (sample.v > peak) peak = sample.v;
+    }
+  }
+  return peak;
+};
+
+/**
+ * Resolve yMax for the frame based on the requested mode.
+ *
+ *   - Fixed mode -> `METRICS[metric].yMax` verbatim.
+ *   - Dynamic mode with no in-window samples -> fall back to fixed cap.
+ *   - Dynamic mode with a peak -> `niceCeil(peak * 1.2)` clamped into
+ *     `[YMAX_FLOOR[metric], METRICS[metric].yMax]`.
+ *
+ * The frame's `yMax` field is the RESOLVED value; downstream callers (render,
+ * hit-test, axis labels) need not re-implement the cap/floor logic.
+ */
+const resolveYMax = (
+  metric: MetricId,
+  traces: ReadonlyArray<FrameTrace>,
+  mode: YMaxMode,
+): number => {
+  const cap = METRICS[metric].yMax;
+  if (mode === "fixed") return cap;
+  const peak = peakAcrossTraces(traces);
+  if (peak <= 0) return cap;
+  const floor = YMAX_FLOOR[metric];
+  const scaled = niceCeil(peak * 1.2);
+  if (scaled < floor) return floor;
+  if (scaled > cap) return cap;
+  return scaled;
+};
+
+/**
+ * Pure projection. Deterministic in (store snapshot, metric, now, opts). No
+ * side effects, no hidden state.
  *
  * Contract:
  *   - One trace per session returned by `store.getSessionIds()`.
@@ -305,7 +362,9 @@ const sortPulsesByStrengthDescending = (
  *   - Trace color is assigned by session-registration index into
  *     `SESSION_COLORS` (palette-wrapping beyond its length).
  *   - `latestValue` is the most recent raw arrived value, or `null`.
- *   - `yMax` and `unit` come from `METRICS[metric]`.
+ *   - `yMax` is resolved per `opts.yMaxMode` (default `"fixed"`). See
+ *     `YMaxMode` for the scaling semantics. `unit` always comes from
+ *     `METRICS[metric]`.
  *   - `pulses` contains one `FramePulse` per still-visible pulse across
  *     all sessions. A pulse is visible iff `decay(age, PULSE_LIFETIME_MS)`
  *     is greater than 0; pulses at or past the lifetime are absent even
@@ -318,6 +377,7 @@ export const buildFrame = (
   store: PhosphorStoreSurface,
   metric: MetricId,
   now: number,
+  opts?: BuildFrameOptions,
 ): Frame => {
   const sessionIds = store.getSessionIds();
   const traces = sessionIds.map((sessionId, index) =>
@@ -328,10 +388,12 @@ export const buildFrame = (
   );
   const legend = traces.map(legendEntryFor);
   const config = METRICS[metric];
+  const yMaxMode: YMaxMode = opts?.yMaxMode ?? "fixed";
+  const yMax = resolveYMax(metric, traces, yMaxMode);
   return {
     now,
     metric,
-    yMax: config.yMax,
+    yMax,
     unit: config.unit,
     traces,
     pulses,

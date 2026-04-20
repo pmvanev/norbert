@@ -86,6 +86,24 @@ export const METRICS: Readonly<Record<MetricId, MetricConfig>> = {
   },
 };
 
+/**
+ * Per-metric floors for dynamic Y-axis auto-scaling. When the actual peak
+ * is very small, dynamic auto-scale could stretch a 0.2 evt/s trace to fill
+ * the canvas — visually misleading. These floors keep the scope readable by
+ * clamping the resolved yMax to a minimum value that makes the metric
+ * recognizable in its typical operating range.
+ *
+ * Values are calibrated against the prototype: a quiet-session `events` trace
+ * sits comfortably within a 3 evt/s window; a quiet-session `tokens` trace
+ * within 10 tok/s; `toolcalls` is already sparse enough that 1 is the
+ * smallest useful ceiling.
+ */
+export const YMAX_FLOOR: Readonly<Record<MetricId, number>> = {
+  events: 3,
+  tokens: 10,
+  toolcalls: 1,
+};
+
 // ---------------------------------------------------------------------------
 // Session color palette
 // ---------------------------------------------------------------------------

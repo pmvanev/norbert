@@ -28,6 +28,7 @@ import {
   METRICS,
   PULSE_STRENGTHS,
   SESSION_COLORS,
+  YMAX_FLOOR,
   type MetricId,
   type Pulse,
   type PulseKind,
@@ -442,5 +443,158 @@ describe("buildFrame — pulse vertical-position honesty", () => {
     const trace = frame.traces.find((t) => t.sessionId === "s1");
     expect(trace).toBeDefined();
     expect(trace!.samples).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Dynamic yMax auto-scaling
+//
+// When opts.yMaxMode is "dynamic", buildFrame computes yMax from the 60s-
+// window peak across all active sessions' samples, snapped to the next nice
+// number (niceCeil(peak * 1.2)), then clamped to [YMAX_FLOOR, METRICS.yMax].
+// When the store is empty or has no samples, the resolved yMax falls back
+// to METRICS[metric].yMax (the fixed cap).
+//
+// The default mode ("fixed", also the absence of opts) preserves the
+// pre-existing acceptance-test contract: yMax always equals METRICS.yMax.
+// ---------------------------------------------------------------------------
+
+describe("buildFrame — yMax resolution (fixed mode, default)", () => {
+  it("defaults to fixed mode when opts is omitted — yMax equals METRICS.yMax", () => {
+    const store = makeFakeStore({
+      sessions: [{ id: "s1", rates: { events: history(3, () => 2) } }],
+    });
+    const frame = buildFrame(store, "events", NOW);
+    expect(frame.yMax).toBe(METRICS.events.yMax);
+  });
+
+  it("uses fixed cap when opts.yMaxMode is explicitly 'fixed'", () => {
+    const store = makeFakeStore({
+      sessions: [{ id: "s1", rates: { events: history(3, () => 2) } }],
+    });
+    const frame = buildFrame(store, "events", NOW, { yMaxMode: "fixed" });
+    expect(frame.yMax).toBe(METRICS.events.yMax);
+  });
+});
+
+describe("buildFrame — yMax resolution (dynamic mode)", () => {
+  it("uses METRICS.yMax as-is when the store has no sessions", () => {
+    const store = makeFakeStore({ sessions: [] });
+    const frame = buildFrame(store, "events", NOW, { yMaxMode: "dynamic" });
+    expect(frame.yMax).toBe(METRICS.events.yMax);
+  });
+
+  it("uses METRICS.yMax as-is when sessions have no samples in-window", () => {
+    const store = makeFakeStore({
+      sessions: [
+        { id: "s1" }, // no rates at all
+        { id: "s2", rates: { events: [{ t: NOW - 120_000, v: 99 }] } }, // stale
+      ],
+    });
+    const frame = buildFrame(store, "events", NOW, { yMaxMode: "dynamic" });
+    expect(frame.yMax).toBe(METRICS.events.yMax);
+  });
+
+  it("snaps low peaks up to the floor (events floor is 3)", () => {
+    // peak = 0.2 evt/s; niceCeil(0.24) = 1, which is below the events floor
+    // of 3. The resolved yMax must be 3 (the floor), not 1.
+    const store = makeFakeStore({
+      sessions: [{ id: "s1", rates: { events: history(3, () => 0.2) } }],
+    });
+    const frame = buildFrame(store, "events", NOW, { yMaxMode: "dynamic" });
+    expect(frame.yMax).toBe(YMAX_FLOOR.events);
+  });
+
+  it("picks the next nice number above peak * 1.2 for mid-range peaks", () => {
+    // peak = 5 evt/s; peak * 1.2 = 6; niceCeil(6) = 10; within [3, 15].
+    const store = makeFakeStore({
+      sessions: [{ id: "s1", rates: { events: history(3, () => 5) } }],
+    });
+    const frame = buildFrame(store, "events", NOW, { yMaxMode: "dynamic" });
+    expect(frame.yMax).toBe(10);
+  });
+
+  it("clamps to the METRICS.yMax cap when peak would produce a higher nice number", () => {
+    // peak = 14 evt/s; peak * 1.2 = 16.8; niceCeil(16.8) = 20; clamp to
+    // events cap (15). A user watching a spike near the cap gets the cap,
+    // not 20.
+    const store = makeFakeStore({
+      sessions: [{ id: "s1", rates: { events: history(3, () => 14) } }],
+    });
+    const frame = buildFrame(store, "events", NOW, { yMaxMode: "dynamic" });
+    expect(frame.yMax).toBe(METRICS.events.yMax);
+  });
+
+  it("gathers the peak across all active sessions", () => {
+    // Three sessions with peaks 2, 7, 3. Overall peak = 7. peak * 1.2 = 8.4;
+    // niceCeil(8.4) = 10.
+    const store = makeFakeStore({
+      sessions: [
+        { id: "s1", rates: { events: history(3, () => 2) } },
+        { id: "s2", rates: { events: history(3, () => 7) } },
+        { id: "s3", rates: { events: history(3, () => 3) } },
+      ],
+    });
+    const frame = buildFrame(store, "events", NOW, { yMaxMode: "dynamic" });
+    expect(frame.yMax).toBe(10);
+  });
+
+  it("ignores samples outside the 60s window when computing peak", () => {
+    // One stale sample at v=999 (older than 60s) and a fresh sample at v=2.
+    // Stale sample is outside the window and must not drive the scale.
+    // peak = 2; peak * 1.2 = 2.4; niceCeil = 5; clamp below events floor=3
+    // does not apply (5 > 3); cap = 15; resolved = 5.
+    const store = makeFakeStore({
+      sessions: [
+        {
+          id: "s1",
+          rates: {
+            events: [
+              { t: NOW - 120_000, v: 999 },
+              { t: NOW - 10_000, v: 2 },
+            ],
+          },
+        },
+      ],
+    });
+    const frame = buildFrame(store, "events", NOW, { yMaxMode: "dynamic" });
+    expect(frame.yMax).toBe(5);
+  });
+
+  it("reads from the requested metric's history only", () => {
+    // Tokens history has a spike at 80, events history is quiet at 1. When
+    // the caller requests 'tokens', the tokens spike drives the scale.
+    const store = makeFakeStore({
+      sessions: [
+        {
+          id: "s1",
+          rates: {
+            events: history(3, () => 1),
+            tokens: history(3, () => 80),
+          },
+        },
+      ],
+    });
+    const frame = buildFrame(store, "tokens", NOW, { yMaxMode: "dynamic" });
+    // peak = 80; peak * 1.2 = 96; niceCeil = 100; clamp to tokens cap = 100.
+    expect(frame.yMax).toBe(100);
+  });
+
+  it("clamps up to floor for toolcalls when peak is tiny", () => {
+    // peak = 0.1 calls/s; niceCeil(0.12) = 1; toolcalls floor = 1; cap = 3.
+    const store = makeFakeStore({
+      sessions: [{ id: "s1", rates: { toolcalls: history(3, () => 0.1) } }],
+    });
+    const frame = buildFrame(store, "toolcalls", NOW, { yMaxMode: "dynamic" });
+    expect(frame.yMax).toBe(YMAX_FLOOR.toolcalls);
+  });
+
+  it("never exceeds the fixed cap regardless of sample spikes", () => {
+    // peak = 500 tok/s; niceCeil(600) = 1000; clamp to tokens cap = 100.
+    const store = makeFakeStore({
+      sessions: [{ id: "s1", rates: { tokens: history(3, () => 500) } }],
+    });
+    const frame = buildFrame(store, "tokens", NOW, { yMaxMode: "dynamic" });
+    expect(frame.yMax).toBe(METRICS.tokens.yMax);
   });
 });
