@@ -15,7 +15,6 @@ import { aggregateEvent } from "./domain/metricsAggregator";
 import { computeInstantaneousRates } from "./domain/instantaneousRate";
 import {
   PULSE_STRENGTHS,
-  RATE_TICK_MS,
   type MetricId,
   type Pulse,
   type PulseKind,
@@ -375,6 +374,25 @@ export const createHookProcessor = (
     { events: number; toolcalls: number; tokens: number }
   >();
 
+  // Wall-clock timestamp of the previous `sampleRates` tick. Tracked so
+  // each emitted rate sample uses the REAL elapsed window (tickBoundaryT
+  // minus lastTickAt) rather than the nominal `RATE_TICK_MS` constant.
+  //
+  // The first invocation of `sampleRates` has no reference point: events
+  // that accumulated in `sessionCounters` before the ticker was ready
+  // could span any fraction of a full window (the plugin's onLoad fires
+  // before `setInterval`'s first tick, and the interval itself can be
+  // further delayed by event-loop pressure or background-tab throttling).
+  // Emitting a rate on that first tick would inflate the sample by
+  // dividing real events by an assumed-but-wrong 5s window — exactly the
+  // symptom Phil observed as a transient "thousands/s" spike at load.
+  //
+  // Instead, the first call primes `lastTickAt` and resets counters
+  // without emitting. Subsequent calls compute windowMs from the real
+  // delta and emit. Trade-off: first honest rate sample lands ~10s after
+  // plugin load (the second tick), not ~5s.
+  let lastTickAt: number | null = null;
+
   // ---------------------------------------------------------------------
   // DEV-only diagnostics. Guarded behind `import.meta.env.DEV` so
   // production builds emit nothing. Phil opens DevTools during a local
@@ -389,7 +407,8 @@ export const createHookProcessor = (
   let loggedFirstEvent = false;
   let loggedFirstRateSample = false;
   let loggedFirstPulse = false;
-  let loggedFirstTick = false;
+  let loggedPrimedTick = false;
+  let loggedFirstRealTick = false;
 
   const ensureCounters = (
     sessionId: string,
@@ -509,6 +528,18 @@ export const createHookProcessor = (
    * on exit so the next window starts from zero. Noop when
    * `appendRateSample` was not injected (the v2 pathway is disabled).
    *
+   * Uses the REAL elapsed window (tickBoundaryT minus lastTickAt) as the
+   * divisor rather than the nominal `RATE_TICK_MS` constant. This avoids
+   * rate inflation when the first tick fires against a counter populated
+   * over an unknown-length warm-up window, and it corrects for any jitter
+   * in the `setInterval` cadence (background-tab throttling, event-loop
+   * pressure) on subsequent ticks.
+   *
+   * First call: primes `lastTickAt`, resets counters, emits nothing.
+   * Negative / zero windowMs (clock skew): skipped entirely — counters
+   * and `lastTickAt` are left untouched, waiting for a forward-moving
+   * clock on the next tick.
+   *
    * Tokens/s uses the same windowed-rate semantics as the other two
    * metrics (total tokens observed in the window divided by the window
    * duration in seconds) because production OTel `api_request` payloads
@@ -516,24 +547,45 @@ export const createHookProcessor = (
    */
   const sampleRates = (tickBoundaryT: number): void => {
     if (!appendRateSample) return;
-    if (isDev && !loggedFirstTick) {
-      loggedFirstTick = true;
-      // eslint-disable-next-line no-console
-      console.log(
-        `[phosphor] first rate tick fired — sessionCount=${sessionCounters.size} t=${tickBoundaryT}`,
-      );
+
+    // First call: prime the reference timestamp and zero the counters
+    // without emitting. See `lastTickAt` docblock for the rationale.
+    if (lastTickAt === null) {
+      if (isDev && !loggedPrimedTick) {
+        loggedPrimedTick = true;
+        // eslint-disable-next-line no-console
+        console.log(
+          `[phosphor] rate ticker primed — sessionCount=${sessionCounters.size} t=${tickBoundaryT} (no samples emitted; awaiting next tick for real delta-t)`,
+        );
+      }
+      for (const counters of sessionCounters.values()) {
+        counters.events = 0;
+        counters.toolcalls = 0;
+        counters.tokens = 0;
+      }
+      lastTickAt = tickBoundaryT;
+      return;
     }
+
+    // Defensive: a non-forward-moving clock would yield a nonsensical
+    // rate. Skip this tick without touching counters or lastTickAt so the
+    // next forward-moving tick emits with a merged (larger) window.
+    const windowMs = tickBoundaryT - lastTickAt;
+    if (windowMs <= 0) {
+      return;
+    }
+
     for (const [sessionId, counters] of sessionCounters.entries()) {
       const eventsSample = deriveEventsRate(
         counters.events,
-        RATE_TICK_MS,
+        windowMs,
         tickBoundaryT,
       );
       appendRateSample(sessionId, "events", eventsSample.t, eventsSample.v);
 
       const toolcallsSample = deriveToolCallsRate(
         counters.toolcalls,
-        RATE_TICK_MS,
+        windowMs,
         tickBoundaryT,
       );
       appendRateSample(
@@ -544,13 +596,11 @@ export const createHookProcessor = (
       );
 
       // Tokens/s — total tokens accumulated this window divided by the
-      // window in seconds. `deriveTokensRate` is named for tokens but its
-      // math is identical to a count-over-window rate; passing
-      // `RATE_TICK_MS` as the window argument produces the per-second
-      // sample the phosphor scope expects.
+      // real elapsed window in seconds. `deriveTokensRate` is named for
+      // tokens but its math is identical to a count-over-window rate.
       const tokensSample = deriveTokensRate(
         counters.tokens,
-        RATE_TICK_MS,
+        windowMs,
         tickBoundaryT,
       );
       appendRateSample(sessionId, "tokens", tokensSample.t, tokensSample.v);
@@ -566,6 +616,18 @@ export const createHookProcessor = (
       counters.toolcalls = 0;
       counters.tokens = 0;
     }
+
+    // DEV-only: fire once on the first tick that actually emits samples,
+    // separate from the primed-tick log so Phil can see both boundaries.
+    if (isDev && !loggedFirstRealTick) {
+      loggedFirstRealTick = true;
+      // eslint-disable-next-line no-console
+      console.log(
+        `[phosphor] first real rate tick emitted — sessionCount=${sessionCounters.size} windowMs=${windowMs.toFixed(0)}`,
+      );
+    }
+
+    lastTickAt = tickBoundaryT;
   };
 
   // Function-with-property: the callable stays a `HookProcessor`

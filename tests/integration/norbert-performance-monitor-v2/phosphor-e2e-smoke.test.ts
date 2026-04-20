@@ -136,13 +136,20 @@ describe("Phosphor v2 end-to-end smoke — real hookProcessor -> real store -> b
     const store = createMultiSessionStore();
     const processor = wireProcessorToStore(store, () => Date.now());
 
+    // Prime the rate ticker. The first call establishes the lastTickAt
+    // reference and emits no samples (see hookProcessor `sampleRates`
+    // docblock for the rationale — we cannot honestly derive a rate for
+    // the pre-prime window because its length is unknown). Subsequent
+    // ticks use the real elapsed delta as the divisor.
+    processor.sampleRates(Date.now());
+
     // Arrange: three hook events arrive across a 5-second window.
     processor(makeHookPayload("PreToolUse"));
     vi.advanceTimersByTime(1_000);
     processor(makeHookPayload("PostToolUse"));
     vi.advanceTimersByTime(1_000);
     processor(makeHookPayload("PreToolUse"));
-    // Advance to the next rate-tick boundary (5s after NOW).
+    // Advance to the next rate-tick boundary (5s after the priming tick).
     vi.advanceTimersByTime(3_000);
     // The v2 rate ticker is driven by the composition root. In the test
     // we invoke the sampler directly via the processor's attached method
@@ -161,6 +168,11 @@ describe("Phosphor v2 end-to-end smoke — real hookProcessor -> real store -> b
     const store = createMultiSessionStore();
     const processor = wireProcessorToStore(store, () => Date.now());
 
+    // Prime the rate ticker. See events/s test for rationale — the first
+    // call emits no sample; the real tokens/s emission lands on the
+    // second call using the real elapsed window as the divisor.
+    processor.sampleRates(Date.now());
+
     // Arrange: two OTel api_request events arrive across a 5-second window
     // with NO duration_ms (matching the production payload shape). The
     // tokens/s derivation accumulates per session and drains on the
@@ -168,7 +180,8 @@ describe("Phosphor v2 end-to-end smoke — real hookProcessor -> real store -> b
     processor(makeOtelApiRequestPayload(400)); // 400 tokens
     vi.advanceTimersByTime(2_000);
     processor(makeOtelApiRequestPayload(600)); // + 600 tokens = 1000 total
-    // Advance to the rate-tick boundary (5s after NOW) and drain the counter.
+    // Advance to the rate-tick boundary (5s after the priming tick) and
+    // drain the counter.
     vi.advanceTimersByTime(3_000);
     processor.sampleRates(Date.now());
 
