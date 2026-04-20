@@ -133,6 +133,10 @@ const GRID_COLOR_PROP = "--phosphor-grid";
 const GRID_COLOR_FALLBACK = "rgba(255, 255, 255, 0.06)";
 const AXIS_LABEL_COLOR_PROP = "--phosphor-axis-label";
 const AXIS_LABEL_COLOR_FALLBACK = "rgba(200, 200, 200, 0.75)";
+// Per-session phosphor trace palette — exposed as --phosphor-session-0..4
+// in themes.css so the scope colors harmonize with the active theme.
+const PHOSPHOR_SESSION_PALETTE_SIZE = 5;
+const PHOSPHOR_SESSION_COLOR_PROP_PREFIX = "--phosphor-session-";
 
 /** Resolve a CSS custom property from a container, with a safe fallback. */
 const resolveThemeColor = (
@@ -143,6 +147,28 @@ const resolveThemeColor = (
   if (container === null || typeof window === "undefined") return fallback;
   const value = window.getComputedStyle(container).getPropertyValue(prop).trim();
   return value === "" ? fallback : value;
+};
+
+/**
+ * Resolve the 5-color session palette from the active theme's CSS custom
+ * properties. Unresolved slots are dropped so `buildFrame` falls back to
+ * `SESSION_COLORS` for the missing indices (an empty array returned here
+ * is treated as "palette omitted" downstream). Cheap — one getComputedStyle
+ * call plus five getPropertyValue reads; safe to call every rAF tick.
+ */
+const resolveSessionColors = (
+  container: HTMLElement | null,
+): ReadonlyArray<string> => {
+  if (container === null || typeof window === "undefined") return [];
+  const styles = window.getComputedStyle(container);
+  const resolved: string[] = [];
+  for (let i = 0; i < PHOSPHOR_SESSION_PALETTE_SIZE; i++) {
+    const raw = styles
+      .getPropertyValue(`${PHOSPHOR_SESSION_COLOR_PROP_PREFIX}${i}`)
+      .trim();
+    if (raw !== "") resolved.push(raw);
+  }
+  return resolved;
 };
 
 // ---------------------------------------------------------------------------
@@ -545,9 +571,16 @@ export const PhosphorCanvasHost = ({
   // resolved yMax falls back to `METRICS[metric].yMax`, preserving the
   // pre-existing `data-y-max === METRICS.*.yMax` observable exercised by
   // the scope-view suite.
+  //
+  // The theme session palette is resolved from the container's CSS custom
+  // properties on each render. This path fires when the parent re-renders
+  // (store notification, theme switch that triggers re-render upstream) so
+  // the render-time frame reflects the active theme's palette.
+  const renderFrameSessionColors = resolveSessionColors(containerRef.current);
   const renderFrame = buildFrame(store, selectedMetric, nowFn(), {
     yMaxMode: "dynamic",
     hiddenSessions: hiddenSessions ?? EMPTY_HIDDEN_SESSIONS,
+    sessionColors: renderFrameSessionColors,
   });
   const frameRef = useRef<Frame>(renderFrame);
   frameRef.current = renderFrame;
@@ -621,6 +654,12 @@ export const PhosphorCanvasHost = ({
     // previous architecture: `now` advances every rAF tick so traces scroll
     // smoothly even between store notifications. Dynamic yMax keeps the
     // scope filling vertical space when real peaks are well below the cap.
+    //
+    // Re-resolve the theme's session palette each tick rather than caching
+    // it. `getComputedStyle` + five property reads are sub-microsecond, and
+    // this removes the need for a MutationObserver to catch theme switches
+    // (the active theme becomes visible on the next rAF tick).
+    const activePalette = resolveSessionColors(containerRef.current);
     const activeFrame = buildFrame(
       storeRef.current,
       selectedMetricRef.current,
@@ -628,6 +667,7 @@ export const PhosphorCanvasHost = ({
       {
         yMaxMode: "dynamic",
         hiddenSessions: hiddenSessionsRef.current,
+        sessionColors: activePalette,
       },
     );
     // Refresh the ref so a pointer event arriving mid-tick hits against the

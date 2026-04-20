@@ -34,7 +34,7 @@
  * projection, hit-testing) lives in `domain/phosphor/` pure modules.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { MultiSessionStore } from "../../adapters/multiSessionStore";
 import {
   DEFAULT_METRIC,
@@ -47,6 +47,34 @@ import { PhosphorCanvasHost } from "./PhosphorCanvasHost";
 import { PhosphorHoverTooltip } from "./PhosphorHoverTooltip";
 import { PhosphorLegend } from "./PhosphorLegend";
 
+// Per-session phosphor trace palette — exposed as --phosphor-session-0..4
+// in themes.css. Duplicated with PhosphorCanvasHost (rather than imported)
+// so the domain-free view layer stays free of cross-view imports.
+const PHOSPHOR_SESSION_PALETTE_SIZE = 5;
+const PHOSPHOR_SESSION_COLOR_PROP_PREFIX = "--phosphor-session-";
+
+/**
+ * Resolve the 5-color session palette from the scope container's CSS
+ * custom properties. Unresolved slots are dropped so `buildFrame` falls
+ * back to `SESSION_COLORS` for missing indices. Called on each render so
+ * a theme switch (which changes `html.className`) is reflected on the
+ * next store notification.
+ */
+const resolveScopeSessionColors = (
+  container: HTMLElement | null,
+): ReadonlyArray<string> => {
+  if (container === null || typeof window === "undefined") return [];
+  const styles = window.getComputedStyle(container);
+  const resolved: string[] = [];
+  for (let i = 0; i < PHOSPHOR_SESSION_PALETTE_SIZE; i++) {
+    const raw = styles
+      .getPropertyValue(`${PHOSPHOR_SESSION_COLOR_PROP_PREFIX}${i}`)
+      .trim();
+    if (raw !== "") resolved.push(raw);
+  }
+  return resolved;
+};
+
 interface PhosphorScopeViewProps {
   readonly store: MultiSessionStore;
 }
@@ -58,6 +86,9 @@ export const PhosphorScopeView = ({ store }: PhosphorScopeViewProps) => {
     () => new Set<string>(),
   );
   const [, setTick] = useState<number>(0);
+  // Ref to the scope container so we can resolve theme-aware
+  // --phosphor-session-* variables on each render.
+  const scopeRef = useRef<HTMLDivElement>(null);
 
   // Subscribe to store notifications — each notification bumps the tick so
   // the component re-renders, which refreshes the LEGEND (per-session latest
@@ -106,12 +137,18 @@ export const PhosphorScopeView = ({ store }: PhosphorScopeViewProps) => {
   // `hiddenSessions` is threaded in so the legend carries the correct
   // `hidden` flag per entry; the canvas-facing `traces`/`pulses` of THIS
   // frame are unused (the canvas host builds its own frame).
+  //
+  // Theme-aware session palette resolves from the scope container on each
+  // render. A theme switch that changes `html.className` will be picked up
+  // on the next store notification (which re-renders this component).
+  const legendSessionColors = resolveScopeSessionColors(scopeRef.current);
   const legendFrame = buildFrame(store, selectedMetric, Date.now(), {
     hiddenSessions,
+    sessionColors: legendSessionColors,
   });
 
   return (
-    <div className="phosphor-scope" data-testid="phosphor-scope">
+    <div ref={scopeRef} className="phosphor-scope" data-testid="phosphor-scope">
       <div className="sec-hdr">
         <span className="sec-t">Performance Monitor</span>
         <span className="sec-a">60s · phosphor scope</span>

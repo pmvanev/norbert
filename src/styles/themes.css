@@ -103,6 +103,13 @@
   --badge-brand-b: rgba(0, 229, 204, 0.2);
   --badge-warn-bg: rgba(240, 146, 10, 0.1);
   --badge-warn-b: rgba(240, 146, 10, 0.25);
+  /* Phosphor scope per-session palette — vibrant phosphor against deep
+     dark-teal bg. Five distinct hues at roughly equal luminance. */
+  --phosphor-session-0: #f472b6; /* rose */
+  --phosphor-session-1: #a78bfa; /* violet */
+  --phosphor-session-2: #34d399; /* emerald */
+  --phosphor-session-3: #fbbf24; /* amber */
+  --phosphor-session-4: #60a5fa; /* sky */
 }
 
 /* ─── Claude Dark ─── */
@@ -203,6 +210,13 @@
   --badge-brand-b: rgba(218, 119, 86, 0.22);
   --badge-warn-bg: rgba(232, 136, 94, 0.1);
   --badge-warn-b: rgba(232, 136, 94, 0.22);
+  /* Phosphor scope per-session palette — warm, literary hues on warm dark
+     bg. Mirrors the Claude accents (coral, lavender, sage, honey, sky). */
+  --phosphor-session-0: #e8885e; /* coral */
+  --phosphor-session-1: #a78bfa; /* lavender */
+  --phosphor-session-2: #8fb5a8; /* sage */
+  --phosphor-session-3: #ead29a; /* honey */
+  --phosphor-session-4: #6ba3d6; /* sky */
 }
 
 /* ─── VS Code Dark ─── */
@@ -303,6 +317,14 @@
   --badge-brand-b: rgba(0, 120, 212, 0.28);
   --badge-warn-bg: rgba(204, 167, 0, 0.1);
   --badge-warn-b: rgba(204, 167, 0, 0.25);
+  /* Phosphor scope per-session palette — VS Code syntax-token hues on
+     neutral dark bg. Echoes the default-dark-plus theme tokens so the
+     scope feels native to VS Code users. */
+  --phosphor-session-0: #569cd6; /* azure (keyword) */
+  --phosphor-session-1: #4ec9b0; /* teal (type) */
+  --phosphor-session-2: #ce9178; /* rust (string) */
+  --phosphor-session-3: #dcdcaa; /* pale yellow (function) */
+  --phosphor-session-4: #c586c0; /* magenta (control) */
 }
 
 /* ─── Claude Light ─── */
@@ -403,6 +425,14 @@
   --badge-brand-b: rgba(218, 119, 86, 0.22);
   --badge-warn-bg: rgba(218, 119, 86, 0.1);
   --badge-warn-b: rgba(218, 119, 86, 0.22);
+  /* Phosphor scope per-session palette — dark, saturated mid hues for
+     legibility on warm near-white paper bg. Echoes the Claude warm
+     accents (burnt sienna, royal violet, dark teal, olive, royal blue). */
+  --phosphor-session-0: #be5a3a; /* burnt sienna */
+  --phosphor-session-1: #7c3aed; /* royal violet */
+  --phosphor-session-2: #0f766e; /* dark teal */
+  --phosphor-session-3: #a16207; /* dark amber-olive */
+  --phosphor-session-4: #1d4ed8; /* royal blue */
 }
 
 /* ─── VS Code Light ─── */
@@ -503,4 +533,12 @@
   --badge-brand-b: rgba(0, 120, 212, 0.25);
   --badge-warn-bg: rgba(191, 136, 3, 0.1);
   --badge-warn-b: rgba(191, 136, 3, 0.25);
+  /* Phosphor scope per-session palette — saturated primaries modeled on
+     VS Code's light-plus syntax tokens. Dark enough for legibility on
+     pure-white bg and mutually distinct in hue. */
+  --phosphor-session-0: #c41a16; /* crimson (error-accent) */
+  --phosphor-session-1: #267f99; /* teal (type) */
+  --phosphor-session-2: #795e26; /* olive-gold (function) */
+  --phosphor-session-3: #af00db; /* magenta (keyword) */
+  --phosphor-session-4: #1f5bb0; /* royal blue (namespace) */
 }
