@@ -10,7 +10,7 @@
 // NorbertAPI sub-API keys
 // ---------------------------------------------------------------------------
 
-/// The 7 sub-APIs that compose the NorbertAPI contract.
+/// The 8 sub-APIs that compose the NorbertAPI contract.
 /// Each plugin receives an api object with all of these as required properties.
 export const NORBERT_API_KEYS = [
   "db",
@@ -20,6 +20,7 @@ export const NORBERT_API_KEYS = [
   "events",
   "config",
   "plugins",
+  "host",
 ] as const;
 
 export type NorbertApiKey = (typeof NORBERT_API_KEYS)[number];
@@ -167,12 +168,31 @@ export interface PluginsAPI {
   readonly get: (pluginId: string) => Result<PluginPublicAPI>;
 }
 
+/// Host-side IPC bridge. Narrow escape hatch for plugins that need to
+/// invoke backend commands the host has registered (Tauri commands on the
+/// desktop build). This is the only approved way for a plugin to cross the
+/// front-end/back-end boundary — direct imports from the host platform
+/// (e.g. `@tauri-apps/api/core`) are enforced against by the plugin
+/// boundary test so the API stays swappable and future capability-gating
+/// can slot in here without touching plugins.
+///
+/// Today any registered host command is callable (first-party-only trust
+/// model). Future work: per-plugin capability scoping declared in the
+/// plugin manifest.
+export interface HostAPI {
+  readonly _brand: "HostAPI";
+  readonly invoke: <T = unknown>(
+    command: string,
+    args?: Record<string, unknown>,
+  ) => Promise<T>;
+}
+
 // ---------------------------------------------------------------------------
 // NorbertAPI — the contract exposed to each plugin
 // ---------------------------------------------------------------------------
 
 /// The complete API object passed to a plugin's onLoad callback.
-/// All 7 sub-APIs are required (non-optional) properties.
+/// All 8 sub-APIs are required (non-optional) properties.
 export interface NorbertAPI {
   readonly db: DbAPI;
   readonly hooks: HooksAPI;
@@ -181,6 +201,7 @@ export interface NorbertAPI {
   readonly events: EventsAPI;
   readonly config: ConfigAPI;
   readonly plugins: PluginsAPI;
+  readonly host: HostAPI;
 }
 
 // ---------------------------------------------------------------------------

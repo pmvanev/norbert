@@ -20,7 +20,7 @@ import {
 // ---------------------------------------------------------------------------
 
 describe("NORBERT_API_KEYS", () => {
-  it("contains exactly the 7 required sub-API keys", () => {
+  it("contains exactly the 8 required sub-API keys", () => {
     expect(NORBERT_API_KEYS).toEqual([
       "db",
       "hooks",
@@ -29,13 +29,14 @@ describe("NORBERT_API_KEYS", () => {
       "events",
       "config",
       "plugins",
+      "host",
     ]);
   });
 
-  it("has exactly 7 entries", () => {
+  it("has exactly 8 entries", () => {
     // The array is readonly at the type level via `as const`.
     // At runtime we verify the count matches expectations.
-    expect(NORBERT_API_KEYS).toHaveLength(7);
+    expect(NORBERT_API_KEYS).toHaveLength(8);
   });
 });
 

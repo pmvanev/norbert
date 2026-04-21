@@ -7,8 +7,6 @@
 /// This is a first-party plugin that loads via the standard plugin loader
 /// identically to any third-party plugin.
 
-import { invoke } from "@tauri-apps/api/core";
-
 import type { NorbertPlugin, NorbertAPI } from "../types";
 import { NORBERT_USAGE_MANIFEST } from "./manifest";
 import { createHookProcessor } from "./hookProcessor";
@@ -255,7 +253,7 @@ const onLoad = (api: NorbertAPI): void => {
   // behavior (empty scope, first-tick-prime fallback kicks in). No throw.
   void (async () => {
     try {
-      const response = await invoke<{
+      const response = await api.host.invoke<{
         buckets: ReadonlyArray<{
           sessionId: string;
           bucketEndMs: number;

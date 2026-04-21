@@ -64,6 +64,12 @@ const createStubApi = (): { api: NorbertAPI; calls: ApiCalls } => {
       _brand: "PluginsAPI" as const,
       get: () => ({ ok: false as const, error: "not available" }),
     },
+    host: {
+      _brand: "HostAPI" as const,
+      // Stub: the phosphor backfill swallows invoke failures, so the
+      // stub just rejects and the plugin onLoad path continues.
+      invoke: () => Promise.reject(new Error("host.invoke stub")),
+    },
   };
 
   return { api, calls };

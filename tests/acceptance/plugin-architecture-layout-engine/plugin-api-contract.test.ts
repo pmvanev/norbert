@@ -472,11 +472,11 @@ describe("Plugin with invalid manifest is rejected at load time", () => {
 });
 
 describe("NorbertAPI provides all required sub-APIs", () => {
-  it("api object contains db, hooks, ui, mcp, events, config, and plugins", () => {
+  it("api object contains db, hooks, ui, mcp, events, config, plugins, and host", () => {
     // GIVEN: the NorbertAPI contract defines required sub-APIs
     // WHEN: we inspect the NORBERT_API_KEYS constant
-    // THEN: all 7 sub-APIs are declared
-    const expectedKeys = ["db", "hooks", "ui", "mcp", "events", "config", "plugins"];
+    // THEN: all 8 sub-APIs are declared
+    const expectedKeys = ["db", "hooks", "ui", "mcp", "events", "config", "plugins", "host"];
 
     expect(NORBERT_API_KEYS).toEqual(expect.arrayContaining(expectedKeys));
     expect(NORBERT_API_KEYS).toHaveLength(expectedKeys.length);

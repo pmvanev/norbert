@@ -5,6 +5,8 @@
 /// namespace scoping via the sandboxEnforcer. The plugins sub-API provides
 /// access to declared dependencies' public APIs.
 
+import { invoke as tauriInvoke } from "@tauri-apps/api/core";
+
 import type {
   NorbertAPI,
   DbAPI,
@@ -14,6 +16,7 @@ import type {
   EventsAPI,
   ConfigAPI,
   PluginsAPI,
+  HostAPI,
   PluginPublicAPI,
   ViewRegistration,
   TabRegistration,
@@ -121,5 +124,14 @@ export const createNorbertAPI = (
     publicApiLookup
   );
 
-  return { db, hooks, ui, mcp, events, config, plugins };
+  /// Host IPC bridge — forwards to Tauri's invoke on the desktop build.
+  /// Every plugin receives the same bridge today; future work will scope
+  /// commands by manifest-declared capabilities.
+  const host: HostAPI = {
+    _brand: "HostAPI" as const,
+    invoke: <T = unknown>(command: string, args?: Record<string, unknown>) =>
+      tauriInvoke<T>(command, args),
+  };
+
+  return { db, hooks, ui, mcp, events, config, plugins, host };
 };
