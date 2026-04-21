@@ -266,7 +266,7 @@ code, pre, .mono,
      session is registered with the phosphor store; falls back to the
      brand color so sessions that haven't emitted a phosphor pulse yet
      still show a live dot. The glow is driven entirely by the @keyframes
-     below — pulses at the same ~1 Hz cadence as the Performance Monitor's
+     below — pulses at the same ~1 Hz cadence as the Activity view's
      hover-beat dot (classic PPI-radar sweep-blip rate). */
   background: var(--session-color, var(--brand));
   animation: heartbeat 1s ease-in-out infinite;
@@ -309,7 +309,7 @@ code, pre, .mono,
 }
 
 @keyframes heartbeat {
-  /* 1 Hz pulse synchronized in cadence with the Performance Monitor's
+  /* 1 Hz pulse synchronized in cadence with the Activity view's
      radar-rate hover-beat dot. The `box-shadow` blur radius animates from
      2 px to 12 px and back, producing the "phosphor glow" breath; the
      shadow color resolves through the same `--session-color` var as the
@@ -1086,14 +1086,7 @@ code, pre, .mono,
   color: var(--text-p);
 }
 
-/* ═══ PERFORMANCE MONITOR ═══ */
-
-.performance-monitor {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  gap: 2px;
-}
+/* ═══ PM CHARTS (shared rate-chart styles used by legacy/session views) ═══ */
 
 .pm-rate-chart {
   flex: 1;
@@ -1551,7 +1544,7 @@ code, pre, .mono,
   display: block;
 }
 
-/* ═══ PHOSPHOR SCOPE (Performance Monitor v2) ═══
+/* ═══ PHOSPHOR SCOPE (Activity view) ═══
    Mirrors the bounded-canvas pattern used by .oscilloscope / .osc-main
    so the internal <canvas> (which is imperatively sized from the host's
    ResizeObserver) can never feedback-loop the parent into unbounded
@@ -1637,7 +1630,10 @@ code, pre, .mono,
   font-size: 10px;
   letter-spacing: 1px;
   text-transform: uppercase;
-  color: var(--text-m);
+  /* Primary text so the metric name reads as brightly as the canvas tick
+     labels (whose on-canvas alpha accumulates through the persistence
+     buffer). A muted token would make this label disappear by comparison. */
+  color: var(--text-p);
   pointer-events: none;
   z-index: 1;
 }
@@ -1772,7 +1768,9 @@ code, pre, .mono,
 .phosphor-hover-value,
 .phosphor-hover-age {
   font-family: var(--font-mono);
-  color: var(--text-m);
+  /* Matches the tooltip's session-label brightness so the value / age read
+     at the same weight as the name. */
+  color: var(--text-p);
 }
 
 /* ═══ USAGE DASHBOARD ═══ */

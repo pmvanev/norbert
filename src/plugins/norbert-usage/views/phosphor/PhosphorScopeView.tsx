@@ -1,5 +1,5 @@
 /**
- * PhosphorScopeView — React shell for the Performance Monitor v2 scope.
+ * PhosphorScopeView — React shell for the Activity view's phosphor scope.
  *
  * Composes the phosphor view tree: PhosphorControls (per-metric toggles) +
  * one PhosphorCanvasHost per enabled metric (stacked, each owning its own
@@ -37,27 +37,65 @@ import {
 } from "../../domain/phosphor/phosphorMetricConfig";
 import { buildFrame } from "../../domain/phosphor/scopeProjection";
 import type { HoverSelection } from "../../domain/phosphor/scopeHitTest";
+import {
+  generatePhosphorPalette,
+  type PhosphorSpectrum,
+} from "../../domain/phosphor/phosphorSpectrum";
 import { PhosphorControls } from "./PhosphorControls";
 import { PhosphorCanvasHost } from "./PhosphorCanvasHost";
 import { PhosphorHoverTooltip } from "./PhosphorHoverTooltip";
 import { PhosphorLegend } from "./PhosphorLegend";
 
-const PHOSPHOR_SESSION_PALETTE_SIZE = 5;
-const PHOSPHOR_SESSION_COLOR_PROP_PREFIX = "--phosphor-session-";
-
-const resolveScopeSessionColors = (
+/**
+ * Resolve the active theme's phosphor spectrum from CSS custom properties.
+ * Returns null when any component is missing or unparseable — the view
+ * layer then falls back to the default `SESSION_COLORS` palette so a theme
+ * that hasn't declared the spectrum vars still renders sensibly.
+ */
+const resolvePhosphorSpectrum = (
   container: HTMLElement | null,
-): ReadonlyArray<string> => {
-  if (container === null || typeof window === "undefined") return [];
+): PhosphorSpectrum | null => {
+  if (container === null || typeof window === "undefined") return null;
   const styles = window.getComputedStyle(container);
-  const resolved: string[] = [];
-  for (let i = 0; i < PHOSPHOR_SESSION_PALETTE_SIZE; i++) {
-    const raw = styles
-      .getPropertyValue(`${PHOSPHOR_SESSION_COLOR_PROP_PREFIX}${i}`)
-      .trim();
-    if (raw !== "") resolved.push(raw);
+  const read = (prop: string): number | null => {
+    const raw = styles.getPropertyValue(prop).trim();
+    if (raw === "") return null;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  const hueStart = read("--phosphor-spectrum-hue-start");
+  const hueEnd = read("--phosphor-spectrum-hue-end");
+  const satStart = read("--phosphor-spectrum-sat-start");
+  const satEnd = read("--phosphor-spectrum-sat-end");
+  const lightStart = read("--phosphor-spectrum-light-start");
+  const lightEnd = read("--phosphor-spectrum-light-end");
+  if (
+    hueStart === null ||
+    hueEnd === null ||
+    satStart === null ||
+    satEnd === null ||
+    lightStart === null ||
+    lightEnd === null
+  ) {
+    return null;
   }
-  return resolved;
+  return { hueStart, hueEnd, satStart, satEnd, lightStart, lightEnd };
+};
+
+/**
+ * Build the `sessionColors` array for `buildFrame` from the current scope
+ * container. Returns an empty array when either the theme has no spectrum
+ * declared or the store has no sessions — `buildFrame` then falls back to
+ * the default palette. Called on every render / rAF tick; cost is 6
+ * getPropertyValue reads plus one hsl() string per session.
+ */
+const resolveSessionPalette = (
+  container: HTMLElement | null,
+  sessionCount: number,
+): ReadonlyArray<string> => {
+  const spectrum = resolvePhosphorSpectrum(container);
+  if (spectrum === null) return [];
+  return generatePhosphorPalette(spectrum, sessionCount);
 };
 
 interface HoverState {
@@ -134,7 +172,11 @@ export const PhosphorScopeView = ({ store }: PhosphorScopeViewProps) => {
   // first enabled metric is always defined; the fallback to METRIC_IDS[0]
   // satisfies the type checker for the empty-array edge case only.
   const legendMetric = orderedEnabledMetrics[0] ?? METRIC_IDS[0];
-  const legendSessionColors = resolveScopeSessionColors(scopeRef.current);
+  const sessionCount = store.getSessionIds().length;
+  const legendSessionColors = resolveSessionPalette(
+    scopeRef.current,
+    sessionCount,
+  );
   const legendFrame = buildFrame(store, legendMetric, Date.now(), {
     hiddenSessions,
     sessionColors: legendSessionColors,
@@ -155,8 +197,7 @@ export const PhosphorScopeView = ({ store }: PhosphorScopeViewProps) => {
   return (
     <div ref={scopeRef} className="phosphor-scope" data-testid="phosphor-scope">
       <div className="sec-hdr">
-        <span className="sec-t">Performance Monitor</span>
-        <span className="sec-a">60s · phosphor scope</span>
+        <span className="sec-t">Activity</span>
       </div>
       <PhosphorControls
         enabledMetrics={enabledMetrics}
