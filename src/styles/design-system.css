@@ -247,15 +247,28 @@ code, pre, .mono,
 }
 
 .sdot {
+  /* inline-block so width/height are honored when the dot lives directly
+     inside a <td> (the metrics-table layout) — as a plain inline span
+     those would otherwise be ignored and the dot would collapse to 0
+     visible size. `flex-shrink: 0` remains for older flex-row callers. */
+  display: inline-block;
   width: 6px;
   height: 6px;
   border-radius: 50%;
   flex-shrink: 0;
+  /* Vertically center against the cell baseline so the dot reads at the
+     same eyeline as the adjacent session name. */
+  vertical-align: middle;
 }
 
 .sdot.live {
-  background: var(--brand);
-  box-shadow: 0 0 8px var(--brand);
+  /* `--session-color` is set inline by SessionListView when the row's
+     session is registered with the phosphor store; falls back to the
+     brand color so sessions that haven't emitted a phosphor pulse yet
+     still show a live dot. The glow is driven entirely by the @keyframes
+     below — pulses at the same ~1 Hz cadence as the Performance Monitor's
+     hover-beat dot (classic PPI-radar sweep-blip rate). */
+  background: var(--session-color, var(--brand));
   animation: heartbeat 1s ease-in-out infinite;
 }
 
@@ -296,8 +309,19 @@ code, pre, .mono,
 }
 
 @keyframes heartbeat {
-  0%, 100% { opacity: 0.35; }
-  50% { opacity: 1; }
+  /* 1 Hz pulse synchronized in cadence with the Performance Monitor's
+     radar-rate hover-beat dot. The `box-shadow` blur radius animates from
+     2 px to 12 px and back, producing the "phosphor glow" breath; the
+     shadow color resolves through the same `--session-color` var as the
+     dot background so a session's glow matches its trace identity. */
+  0%, 100% {
+    opacity: 0.55;
+    box-shadow: 0 0 2px var(--session-color, var(--brand));
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 12px var(--session-color, var(--brand));
+  }
 }
 
 /* ═══ METRICS TABLE ═══ */

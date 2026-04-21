@@ -35,6 +35,51 @@ import type {
   SessionSummary,
 } from "../plugins/norbert-session/domain/sessionMetricsTableTypes";
 import { usageMultiSessionStore } from "../plugins/norbert-usage/index";
+import {
+  colorForSpectrumIndex,
+  type PhosphorSpectrum,
+} from "../plugins/norbert-usage/domain/phosphor/phosphorSpectrum";
+
+/**
+ * Resolve the active theme's phosphor spectrum from the `--phosphor-spectrum-*`
+ * CSS custom properties declared on the given container. Returns null when any
+ * component is missing or unparseable so the caller can fall back to the
+ * default dot color.
+ *
+ * Mirrored (small, intentional duplication) from the phosphor-view resolvers
+ * at `views/phosphor/PhosphorScopeView.tsx` and `PhosphorCanvasHost.tsx`. All
+ * three read the same vars; a future pass can consolidate into a shared
+ * module once the in-flight phosphor-spectrum WIP settles.
+ */
+const resolvePhosphorSpectrum = (
+  container: HTMLElement | null,
+): PhosphorSpectrum | null => {
+  if (container === null || typeof window === "undefined") return null;
+  const styles = window.getComputedStyle(container);
+  const read = (prop: string): number | null => {
+    const raw = styles.getPropertyValue(prop).trim();
+    if (raw === "") return null;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  const hueStart = read("--phosphor-spectrum-hue-start");
+  const hueEnd = read("--phosphor-spectrum-hue-end");
+  const satStart = read("--phosphor-spectrum-sat-start");
+  const satEnd = read("--phosphor-spectrum-sat-end");
+  const lightStart = read("--phosphor-spectrum-light-start");
+  const lightEnd = read("--phosphor-spectrum-light-end");
+  if (
+    hueStart === null ||
+    hueEnd === null ||
+    satStart === null ||
+    satEnd === null ||
+    lightStart === null ||
+    lightEnd === null
+  ) {
+    return null;
+  }
+  return { hueStart, hueEnd, satStart, satEnd, lightStart, lightEnd };
+};
 
 /// Props for the SessionListView component.
 interface SessionListViewProps {
@@ -80,10 +125,21 @@ function MetricsTableRow({
   row,
   isFocused,
   onSelect,
+  sessionColor,
 }: {
   readonly row: TableRow;
   readonly isFocused: boolean;
   readonly onSelect?: (sessionId: string) => void;
+  /**
+   * Phosphor-palette color assigned to this session in the Performance
+   * Monitor. Applied as a `--session-color` CSS custom property on the live
+   * dot so `.sdot.live` can render both the background fill and the pulsing
+   * box-shadow glow in the session's identity color. Only supplied for
+   * active rows whose session is registered in `usageMultiSessionStore`;
+   * inactive rows and not-yet-registered sessions fall back to `--brand`
+   * via the CSS `var()` fallback.
+   */
+  readonly sessionColor?: string;
 }) {
   const dotClass = row.isActive ? "sdot live" : "sdot done";
   const rowClass = row.isActive ? "srow live-s" : "srow";
@@ -91,6 +147,10 @@ function MetricsTableRow({
   const costHeat = deriveHeatClass(computeHeatLevel(row.cost, "cost"));
   const tokenHeat = deriveHeatClass(computeHeatLevel(row.totalTokens, "totalTokens"));
   const contextHeat = deriveHeatClass(computeHeatLevel(row.contextPercent, "contextPercent"));
+  const dotStyle =
+    row.isActive && sessionColor !== undefined
+      ? ({ ["--session-color" as string]: sessionColor } as React.CSSProperties)
+      : undefined;
 
   return (
     <tr
@@ -98,7 +158,7 @@ function MetricsTableRow({
       onClick={() => onSelect?.(row.sessionId)}
       data-session-id={row.sessionId}
     >
-      <td><span className={dotClass} /></td>
+      <td><span className={dotClass} style={dotStyle} /></td>
       <td className="sname">{row.name}</td>
       <td className={costHeat}>{formatCostColumn(row.cost)}</td>
       <td className={tokenHeat}>{formatTokenColumn(row.totalTokens)}</td>
@@ -210,6 +270,11 @@ export function SessionListView({ sessions, onSessionSelect }: SessionListViewPr
   const [recentCollapsed, setRecentCollapsed] = useState(false);
   const [focusIndex, setFocusIndex] = useState(-1);
   const tableRef = useRef<HTMLTableElement>(null);
+  // Ref on the outer <section> so we can read the theme's
+  // `--phosphor-spectrum-*` CSS vars via `getComputedStyle`. Resolving from a
+  // DOM node inside the tree (rather than `documentElement`) means future
+  // scoped-theme overrides still pick up the right spectrum.
+  const sectionRef = useRef<HTMLElement>(null);
 
   // Subscribe to multi-session store for live metrics
   const [allMetrics, setAllMetrics] = useState(() => usageMultiSessionStore.getSessions());
@@ -262,6 +327,26 @@ export function SessionListView({ sessions, onSessionSelect }: SessionListViewPr
     [pastSessions, allMetrics, metadataList, summaries, sortState],
   );
 
+  // Per-session color map keyed on registration order in the phosphor store
+  // (same order that drives the Performance Monitor palette). Ids not present
+  // in the store — or sessions seen before `sectionRef.current` has mounted
+  // and the theme vars can be read — simply fall out of the map; the row
+  // falls back to the default `--brand` via the CSS `var()` fallback.
+  //
+  // `getComputedStyle` inside the memo runs only when the metrics snapshot
+  // changes, not on every focus/sort/collapse render. The spectrum is
+  // re-resolved from the live DOM each time, so a theme switch flows through
+  // on the next store notification (~250 ms cadence).
+  const sessionColorMap = useMemo(() => {
+    const map = new Map<string, string>();
+    const spectrum = resolvePhosphorSpectrum(sectionRef.current);
+    if (spectrum === null) return map;
+    allMetrics.forEach((metrics, index) => {
+      map.set(metrics.sessionId, colorForSpectrumIndex(index, spectrum));
+    });
+    return map;
+  }, [allMetrics]);
+
   // Build visible rows list (respecting collapse state) for keyboard navigation
   const visibleRows = useMemo(() => {
     const rows: TableRow[] = [];
@@ -307,7 +392,7 @@ export function SessionListView({ sessions, onSessionSelect }: SessionListViewPr
   }
 
   return (
-    <section className="session-list">
+    <section className="session-list" ref={sectionRef}>
       <div className="sec-hdr">
         <span className="sec-t">Sessions</span>
       </div>
@@ -351,6 +436,7 @@ export function SessionListView({ sessions, onSessionSelect }: SessionListViewPr
                 row={row}
                 isFocused={visibleRows[focusIndex]?.sessionId === row.sessionId}
                 onSelect={onSessionSelect}
+                sessionColor={sessionColorMap.get(row.sessionId)}
               />
             ))}
           {!activeCollapsed && activeRows.length > 0 && (
@@ -371,6 +457,7 @@ export function SessionListView({ sessions, onSessionSelect }: SessionListViewPr
                 row={row}
                 isFocused={visibleRows[focusIndex]?.sessionId === row.sessionId}
                 onSelect={onSessionSelect}
+                sessionColor={sessionColorMap.get(row.sessionId)}
               />
             ))}
           {!recentCollapsed && pastRows.length > 0 && (
