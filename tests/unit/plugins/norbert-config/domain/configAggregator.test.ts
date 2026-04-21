@@ -67,7 +67,6 @@ describe("configAggregator properties", () => {
             commands: [],
             skills: [],
             settings: null,
-            claudeMdFiles: [],
             errors: [],
             scope: "both",
           };
@@ -89,7 +88,6 @@ describe("configAggregator properties", () => {
             commands,
             skills: [],
             settings: null,
-            claudeMdFiles: [],
             errors: [],
             scope: "both",
           };
@@ -111,7 +109,6 @@ describe("configAggregator properties", () => {
             commands: [],
             skills: [],
             settings: null,
-            claudeMdFiles: [],
             errors,
             scope: "both",
           };
@@ -134,7 +131,6 @@ describe("configAggregator properties", () => {
       commands: [],
       skills: [],
       settings: null,
-      claudeMdFiles: [],
       errors: [],
       scope: "both",
     };
@@ -163,7 +159,6 @@ describe("configAggregator properties", () => {
             commands: [],
             skills: [],
             settings: { path: settingsPath, content: settingsJson, scope, source: scope },
-            claudeMdFiles: [],
             errors: [],
             scope: "both",
           };
@@ -195,7 +190,6 @@ describe("configAggregator properties", () => {
             commands: [],
             skills: [],
             settings: null,
-            claudeMdFiles: [],
             errors: [],
             scope: "both",
           };
@@ -209,45 +203,12 @@ describe("configAggregator properties", () => {
     );
   });
 
-  it("docs output length equals claudeMdFiles input length with scope preserved", () => {
-    fc.assert(
-      fc.property(
-        fc.array(
-          fc.tuple(
-            fc.constantFrom("./CLAUDE.md", "~/.claude/CLAUDE.md"),
-            fc.string({ minLength: 1, maxLength: 50 }),
-            scopeArb,
-          ).map(([path, content, scope]) => ({ path, content, scope })),
-          { minLength: 0, maxLength: 3 },
-        ),
-        (claudeMdFiles) => {
-          const rawConfig: RawClaudeConfig = {
-            agents: [],
-            commands: [],
-            skills: [],
-            settings: null,
-            claudeMdFiles,
-            errors: [],
-            scope: "both",
-          };
-          const result = aggregateConfig(rawConfig);
-          expect(result.docs).toHaveLength(claudeMdFiles.length);
-          for (let i = 0; i < claudeMdFiles.length; i++) {
-            expect(result.docs[i].filePath).toBe(claudeMdFiles[i].path);
-            expect(result.docs[i].scope).toBe(claudeMdFiles[i].scope);
-          }
-        },
-      ),
-    );
-  });
-
   describe("skill name derivation", () => {
     const baseRaw = (skillFile: FileEntry): RawClaudeConfig => ({
       agents: [],
       commands: [],
       skills: [skillFile],
       settings: null,
-      claudeMdFiles: [],
       errors: [],
       scope: "both",
     } as RawClaudeConfig);

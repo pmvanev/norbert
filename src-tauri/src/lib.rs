@@ -327,7 +327,7 @@ struct PluginDetail {
 /// Claude configuration files collected from user and/or project scope.
 ///
 /// Returned by read_claude_config to provide the frontend with agents,
-/// commands, settings, hooks, rules, and CLAUDE.md files.
+/// commands, settings, hooks, and rules.
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ClaudeConfig {
@@ -337,7 +337,6 @@ struct ClaudeConfig {
     settings: Option<FileEntry>,
     hooks: Vec<FileEntry>,
     rules: Vec<FileEntry>,
-    claude_md_files: Vec<FileEntry>,
     installed_plugins: Option<FileEntry>,
     plugin_details: Vec<PluginDetail>,
     mcp_files: Vec<FileEntry>,
@@ -493,8 +492,8 @@ fn build_plugin_details(installed_plugins: &Option<FileEntry>) -> Vec<PluginDeta
 
 /// Collect Claude configuration files from a single scope directory.
 ///
-/// Reads agents/*.md, commands/*.md, rules/*.md, settings.json, and CLAUDE.md
-/// from the given base directory. Also reads installed_plugins.json if present.
+/// Reads agents/*.md, commands/*.md, rules/*.md, and settings.json from
+/// the given base directory. Also reads installed_plugins.json if present.
 fn collect_scope_config(
     base_dir: &std::path::Path,
     scope: &str,
@@ -513,11 +512,6 @@ fn collect_scope_config(
 
     let settings = read_optional_file(&base_dir.join("settings.json"), scope, source, &mut errors);
 
-    let mut claude_md_files = Vec::new();
-    if let Some(entry) = read_optional_file(&base_dir.join("CLAUDE.md"), scope, source, &mut errors) {
-        claude_md_files.push(entry);
-    }
-
     let installed_plugins = read_optional_file(
         &base_dir.join("plugins").join("installed_plugins.json"),
         scope, source, &mut errors,
@@ -533,7 +527,6 @@ fn collect_scope_config(
         settings,
         hooks: Vec::new(),
         rules,
-        claude_md_files,
         installed_plugins,
         plugin_details,
         mcp_files: Vec::new(),
@@ -794,7 +787,6 @@ fn collect_plugin_configs(claude_dir: &std::path::Path) -> ClaudeConfig {
         settings: None,
         hooks: all_hooks,
         rules: all_rules,
-        claude_md_files: Vec::new(),
         installed_plugins: None,
         plugin_details: Vec::new(),
         mcp_files: all_mcp_files,
@@ -813,7 +805,6 @@ fn merge_configs(a: ClaudeConfig, b: ClaudeConfig) -> ClaudeConfig {
         settings,
         hooks: [a.hooks, b.hooks].concat(),
         rules: [a.rules, b.rules].concat(),
-        claude_md_files: [a.claude_md_files, b.claude_md_files].concat(),
         installed_plugins,
         plugin_details: [a.plugin_details, b.plugin_details].concat(),
         mcp_files: [a.mcp_files, b.mcp_files].concat(),
@@ -823,8 +814,8 @@ fn merge_configs(a: ClaudeConfig, b: ClaudeConfig) -> ClaudeConfig {
 
 /// Read Claude Code configuration files from user and/or project scope.
 ///
-/// Scope "user" reads from ~/.claude/ (agents, commands, settings, CLAUDE.md).
-/// Scope "project" reads from ./.claude/ relative to CWD, plus CLAUDE.md at CWD root.
+/// Scope "user" reads from ~/.claude/ (agents, commands, settings).
+/// Scope "project" reads from ./.claude/ relative to CWD.
 /// Scope "both" merges results from both scopes.
 ///
 /// Missing directories produce empty lists. Per-file read failures are
@@ -838,7 +829,6 @@ fn read_claude_config(scope: String) -> Result<ClaudeConfig, String> {
         settings: None,
         hooks: Vec::new(),
         rules: Vec::new(),
-        claude_md_files: Vec::new(),
         installed_plugins: None,
         plugin_details: Vec::new(),
         mcp_files: Vec::new(),
@@ -867,12 +857,6 @@ fn read_claude_config(scope: String) -> Result<ClaudeConfig, String> {
             .map_err(|e| format!("Cannot determine current directory: {}", e))?;
         let project_claude_dir = cwd.join(".claude");
         let mut config = collect_scope_config(&project_claude_dir, "project", "project");
-        // Also read CLAUDE.md from the project root (standard Claude Code convention)
-        if let Some(entry) = read_optional_file(
-            &cwd.join("CLAUDE.md"), "project", "project", &mut config.errors,
-        ) {
-            config.claude_md_files.push(entry);
-        }
         // Read <cwd>/.mcp.json for MCP server definitions (project scope)
         if let Some(entry) = read_optional_file(
             &cwd.join(".mcp.json"), "project", ".mcp.json", &mut config.errors,
@@ -1341,7 +1325,6 @@ mod tests {
             settings: None,
             hooks: Vec::new(),
             rules: Vec::new(),
-            claude_md_files: Vec::new(),
             installed_plugins: None,
             plugin_details: Vec::new(),
             mcp_files: vec![FileEntry {
@@ -1367,7 +1350,6 @@ mod tests {
             settings: None,
             hooks: Vec::new(),
             rules: Vec::new(),
-            claude_md_files: Vec::new(),
             installed_plugins: None,
             plugin_details: Vec::new(),
             mcp_files: vec![FileEntry {
@@ -1385,7 +1367,6 @@ mod tests {
             settings: None,
             hooks: Vec::new(),
             rules: Vec::new(),
-            claude_md_files: Vec::new(),
             installed_plugins: None,
             plugin_details: Vec::new(),
             mcp_files: vec![FileEntry {

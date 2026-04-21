@@ -12,7 +12,6 @@ import type {
   AggregatedConfig,
   CommandDefinition,
   ConfigScope,
-  DocFile,
   EnvVarEntry,
   HookConfig,
   McpServerConfig,
@@ -54,7 +53,6 @@ export interface RawClaudeConfig {
   readonly settings: FileEntry | null;
   readonly hooks: readonly FileEntry[];
   readonly rules: readonly FileEntry[];
-  readonly claudeMdFiles: readonly FileEntry[];
   readonly installedPlugins: FileEntry | null;
   readonly pluginDetails: readonly RawPluginDetail[];
   readonly mcpFiles?: readonly FileEntry[];
@@ -228,22 +226,6 @@ function annotateFilePath<T extends { readonly filePath: string }>(
     ...item,
     filePath: entry.path,
   }));
-}
-
-// ---------------------------------------------------------------------------
-// Doc file aggregation
-// ---------------------------------------------------------------------------
-
-function aggregateDocs(claudeMdFiles: readonly FileEntry[]): readonly DocFile[] {
-  return claudeMdFiles.map(toDocFile);
-}
-
-function toDocFile(entry: FileEntry): DocFile {
-  return {
-    filePath: entry.path,
-    content: entry.content,
-    scope: entry.scope,
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -426,7 +408,6 @@ export function aggregateConfig(rawConfig: RawClaudeConfig): AggregatedConfig {
   const commands = aggregateCommands(rawConfig.commands);
   const skills = aggregateSkills(rawConfig.skills ?? []);
   const settings = aggregateSettings(rawConfig.settings);
-  const docs = aggregateDocs(rawConfig.claudeMdFiles);
   const errors = [...rawConfig.errors];
 
   // Merge hooks from settings.json + plugin hooks.json files
@@ -453,7 +434,6 @@ export function aggregateConfig(rawConfig: RawClaudeConfig): AggregatedConfig {
     rules: allRules,
     plugins: allPlugins,
     envVars: settings.envVars,
-    docs,
     errors,
   };
 }

@@ -18,7 +18,6 @@ import type {
   SkillDefinition,
   RuleEntry,
   PluginInfo,
-  DocFile,
   EnvVarEntry,
   SelectedConfigItem,
 } from "../domain/types";
@@ -295,25 +294,6 @@ const PluginRow: FC<{
   </button>
 );
 
-/** Derive a short display name from the doc file path. */
-const deriveDocName = (doc: DocFile): string =>
-  deriveFilename(doc.filePath);
-
-const DocRow: FC<{
-  readonly doc: DocFile;
-  readonly active: boolean;
-  readonly onSelect: () => void;
-}> = ({ doc, active, onSelect }) => (
-  <button
-    className={`config-list-row${active ? " active" : ""}`}
-    onClick={onSelect}
-    type="button"
-  >
-    <span className="config-list-name">{deriveDocName(doc)}</span>
-    <ScopeBadge scope={doc.scope} />
-  </button>
-);
-
 const EnvVarRow: FC<{
   readonly envVar: EnvVarEntry;
   readonly active: boolean;
@@ -353,8 +333,6 @@ const ruleKey = (r: RuleEntry, i: number): string =>
 
 const pluginKey = (p: PluginInfo): string =>
   `${p.name}-${p.filePath}`;
-
-const docKey = (d: DocFile): string => d.filePath;
 
 const envVarKey = (e: EnvVarEntry): string => `${e.key}-${e.filePath}`;
 
@@ -573,27 +551,6 @@ export const ConfigListPanel: FC<ConfigListPanelProps> = ({
                 plugin={plugin}
                 active={selectedKey === key}
                 onSelect={() => onSelect({ tag: "plugin", plugin }, key)}
-              />
-            );
-          })}
-        </div>
-      );
-    }
-
-    case "docs": {
-      if (config.docs.length === 0) {
-        return <EmptyState category="documentation" guidance="Add a CLAUDE.md file to your project root or ~/.claude/ directory." />;
-      }
-      return (
-        <div className="config-list" role="listbox" aria-label="Documentation">
-          {config.docs.map((doc) => {
-            const key = docKey(doc);
-            return (
-              <DocRow
-                key={key}
-                doc={doc}
-                active={selectedKey === key}
-                onSelect={() => onSelect({ tag: "doc", doc }, key)}
               />
             );
           })}

@@ -34,7 +34,6 @@ const emptyConfig: AggregatedConfig = {
   rules: [],
   plugins: [],
   envVars: [],
-  docs: [],
   errors: [],
 };
 
@@ -62,7 +61,7 @@ afterEach(() => {
 describe("Environment tab registration", () => {
   it("SUB_TAB_LABELS includes 'Environment' for env tab", async () => {
     const { SUB_TAB_LABELS } = await import(
-      "../../../src/plugins/norbert-config/views/ConfigViewerView"
+      "../../../src/plugins/norbert-config/views/ConfigurationView"
     ) as { SUB_TAB_LABELS: Record<string, string> };
 
     expect(SUB_TAB_LABELS).toHaveProperty("env");
@@ -71,7 +70,7 @@ describe("Environment tab registration", () => {
 
   it("SUB_TAB_ICONS includes an icon for env tab", async () => {
     const { SUB_TAB_ICONS } = await import(
-      "../../../src/plugins/norbert-config/views/ConfigViewerView"
+      "../../../src/plugins/norbert-config/views/ConfigurationView"
     ) as { SUB_TAB_ICONS: Record<string, string> };
 
     expect(SUB_TAB_ICONS).toHaveProperty("env");

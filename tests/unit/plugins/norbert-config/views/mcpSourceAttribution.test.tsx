@@ -46,7 +46,6 @@ const emptyConfig: AggregatedConfig = {
   rules: [],
   plugins: [],
   envVars: [],
-  docs: [],
   errors: [],
 };
 

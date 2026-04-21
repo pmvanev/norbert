@@ -1,7 +1,7 @@
 /// norbert-config plugin entry point.
 ///
 /// Implements the NorbertPlugin interface using only the public NorbertAPI.
-/// Registers a primary view (config-viewer) and a sidebar tab (config).
+/// Registers a primary view (configuration) and a sidebar tab (config).
 ///
 /// This is a first-party plugin that loads via the standard plugin loader
 /// identically to any third-party plugin.
@@ -13,9 +13,9 @@ import { NORBERT_CONFIG_MANIFEST } from "./manifest";
 // View constants
 // ---------------------------------------------------------------------------
 
-const CONFIG_VIEWER_VIEW_ID = "config-viewer";
-const CONFIG_VIEWER_VIEW_LABEL = "Configuration Viewer";
-const CONFIG_VIEWER_VIEW_ICON = "settings"; // gear icon
+const CONFIGURATION_VIEW_ID = "configuration";
+const CONFIGURATION_VIEW_LABEL = "Configuration";
+const CONFIGURATION_VIEW_ICON = "settings"; // gear icon
 
 // ---------------------------------------------------------------------------
 // Tab constants
@@ -30,16 +30,16 @@ const CONFIG_TAB_ORDER = 2;
 // Plugin lifecycle
 // ---------------------------------------------------------------------------
 
-/// Registers the config-viewer view and config sidebar tab via the public API.
+/// Registers the configuration view and config sidebar tab via the public API.
 ///
 /// Pure registration function: calls only api.ui.registerView() and
 /// api.ui.registerTab(). No internal Norbert modules are accessed.
 const onLoad = (api: NorbertAPI): void => {
-  // Register the Configuration Viewer as the primary view
+  // Register the Configuration view as the primary view
   api.ui.registerView({
-    id: CONFIG_VIEWER_VIEW_ID,
-    label: CONFIG_VIEWER_VIEW_LABEL,
-    icon: CONFIG_VIEWER_VIEW_ICON,
+    id: CONFIGURATION_VIEW_ID,
+    label: CONFIGURATION_VIEW_LABEL,
+    icon: CONFIGURATION_VIEW_ICON,
     primaryView: true,
     minWidth: 400,
     minHeight: 300,

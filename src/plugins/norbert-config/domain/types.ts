@@ -137,16 +137,6 @@ export interface PluginInfo {
 }
 
 // ---------------------------------------------------------------------------
-// DocFile -- raw CLAUDE.md content with source attribution
-// ---------------------------------------------------------------------------
-
-export interface DocFile {
-  readonly filePath: string;
-  readonly content: string;
-  readonly scope: ConfigScope;
-}
-
-// ---------------------------------------------------------------------------
 // ReadErrorInfo -- per-file read failure
 // ---------------------------------------------------------------------------
 
@@ -193,7 +183,6 @@ export interface AggregatedConfig {
   readonly rules: readonly RuleEntry[];
   readonly plugins: readonly PluginInfo[];
   readonly envVars: readonly EnvVarEntry[];
-  readonly docs: readonly DocFile[];
   readonly errors: readonly ReadErrorInfo[];
 }
 
@@ -217,7 +206,6 @@ export type SelectedConfigItem =
   | { readonly tag: "skill"; readonly skill: SkillDefinition }
   | { readonly tag: "rule"; readonly rule: RuleEntry }
   | { readonly tag: "plugin"; readonly plugin: PluginInfo }
-  | { readonly tag: "doc"; readonly doc: DocFile }
   | { readonly tag: "env"; readonly envVar: EnvVarEntry };
 
 // ---------------------------------------------------------------------------
@@ -232,7 +220,6 @@ export const CONFIG_SUB_TABS = [
   "rules",
   "mcp",
   "plugins",
-  "docs",
   "env",
 ] as const;
 

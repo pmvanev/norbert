@@ -33,7 +33,6 @@ const emptyConfig = (scope: "user" | "project" | "both"): RawClaudeConfig => ({
   settings: null,
   hooks: [],
   rules: [],
-  claudeMdFiles: [],
   installedPlugins: null,
   pluginDetails: [],
   errors: [],

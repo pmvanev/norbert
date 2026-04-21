@@ -15,7 +15,6 @@ import type {
   SkillDefinition,
   RuleEntry,
   PluginInfo,
-  DocFile,
   EnvVarEntry,
 } from "../domain/types";
 import { ScopeBadge, MaskedEnvVarRow, formatAgentDisplayName, deriveFilename } from "./shared";
@@ -294,18 +293,6 @@ const EnvVarDetail: FC<{ readonly envVar: EnvVarEntry }> = ({ envVar }) => (
   </div>
 );
 
-const DocDetail: FC<{ readonly doc: DocFile }> = ({ doc }) => (
-  <div className="config-detail-content">
-    <div className="config-detail-header">
-      <span className="config-card-source" data-mono="">{doc.filePath}</span>
-      <ScopeBadge scope={doc.scope} />
-    </div>
-    <div className="config-doc-body">
-      <Markdown remarkPlugins={[remarkGfm]}>{doc.content}</Markdown>
-    </div>
-  </div>
-);
-
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
@@ -339,8 +326,6 @@ export const ConfigDetailPanel: FC<ConfigDetailPanelProps> = ({ selection }) => 
         return <RuleDetail rule={selection.rule} />;
       case "plugin":
         return <PluginDetail plugin={selection.plugin} />;
-      case "doc":
-        return <DocDetail doc={selection.doc} />;
       case "env":
         return <EnvVarDetail envVar={selection.envVar} />;
     }

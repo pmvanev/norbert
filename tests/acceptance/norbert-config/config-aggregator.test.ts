@@ -43,7 +43,6 @@ const emptyConfig = (scope: "user" | "project" | "both"): RawClaudeConfig => ({
   commands: [],
   skills: [],
   settings: null,
-  claudeMdFiles: [],
   errors: [],
   scope,
 });
@@ -54,8 +53,8 @@ const emptyConfig = (scope: "user" | "project" | "both"): RawClaudeConfig => ({
 
 // @walking_skeleton
 describe("User sees all configuration categories from .claude/ directory", () => {
-  it("aggregates agents, hooks, skills, rules, MCP servers, and docs into unified view", () => {
-    // Given a .claude/ directory with agents, commands, settings, and CLAUDE.md
+  it("aggregates agents, hooks, skills, rules, and MCP servers into unified view", () => {
+    // Given a .claude/ directory with agents, commands, and settings
     const rawConfig: RawClaudeConfig = {
       agents: [
         fileEntry(
@@ -90,9 +89,6 @@ describe("User sees all configuration categories from .claude/ directory", () =>
         }),
         "user",
       ),
-      claudeMdFiles: [
-        fileEntry("./CLAUDE.md", "# Norbert\n\nLocal-first observability app.", "project"),
-      ],
       errors: [],
       scope: "both",
     };
@@ -114,9 +110,6 @@ describe("User sees all configuration categories from .claude/ directory", () =>
 
     // And 1 rule is available
     expect(aggregated.rules).toHaveLength(1);
-
-    // And 1 doc file is available
-    expect(aggregated.docs).toHaveLength(1);
 
     // And no errors occurred
     expect(aggregated.errors).toHaveLength(0);
@@ -172,7 +165,6 @@ describe("Both user and project scopes aggregated with source annotations", () =
       commands: [],
       skills: [],
       settings: null,
-      claudeMdFiles: [],
       errors: [],
       scope: "both",
     };
@@ -195,31 +187,6 @@ describe("Both user and project scopes aggregated with source annotations", () =
   });
 });
 
-describe("Doc files passed through with scope and path", () => {
-  it("includes CLAUDE.md files with their source paths and scopes", () => {
-    // Given CLAUDE.md files at project root and in .claude/
-    const rawConfig: RawClaudeConfig = {
-      ...emptyConfig("both"),
-      claudeMdFiles: [
-        fileEntry("./CLAUDE.md", "# Norbert\n\nProject instructions.", "project"),
-        fileEntry("~/.claude/CLAUDE.md", "# Memory Index\n\nUser memory.", "user"),
-      ],
-    };
-
-    // When the raw config is aggregated
-    const aggregated = aggregateConfig(rawConfig);
-
-    // Then 2 doc files are available
-    expect(aggregated.docs).toHaveLength(2);
-
-    // And each carries its file path and scope
-    expect(aggregated.docs[0].filePath).toBe("./CLAUDE.md");
-    expect(aggregated.docs[0].scope).toBe("project");
-    expect(aggregated.docs[1].filePath).toBe("~/.claude/CLAUDE.md");
-    expect(aggregated.docs[1].scope).toBe("user");
-  });
-});
-
 describe("Agents from both scopes combined in aggregated result", () => {
   it("merges user-level and project-level agent lists", () => {
     // Given 2 user agents and 1 project agent
@@ -232,7 +199,6 @@ describe("Agents from both scopes combined in aggregated result", () => {
       commands: [],
       skills: [],
       settings: null,
-      claudeMdFiles: [],
       errors: [],
       scope: "both",
     };
@@ -260,7 +226,6 @@ describe("Per-file read errors isolated from successful reads", () => {
       commands: [],
       skills: [],
       settings: null,
-      claudeMdFiles: [],
       errors: [
         readError("~/.claude/agents/broken.md", "Permission denied", "user"),
       ],
@@ -296,7 +261,6 @@ describe("Settings parse error does not break agent and skill lists", () => {
         "{ invalid json }",
         "user",
       ),
-      claudeMdFiles: [],
       errors: [],
       scope: "user",
     };
@@ -332,7 +296,6 @@ describe("Completely empty config produces all-empty aggregated result", () => {
     expect(aggregated.mcpServers).toEqual([]);
     expect(aggregated.rules).toEqual([]);
     expect(aggregated.plugins).toEqual([]);
-    expect(aggregated.docs).toEqual([]);
     expect(aggregated.errors).toEqual([]);
   });
 });

@@ -33,7 +33,7 @@ import { norbertUsagePlugin, usageMetricsStore, usageMultiSessionStore } from ".
 import { norbertConfigPlugin } from "./plugins/norbert-config/index";
 import { norbertNotifPlugin } from "./plugins/norbert-notif/index";
 import { NotificationCenterStandalone } from "./plugins/norbert-notif/views/NotificationCenterView";
-import { ConfigViewerView } from "./plugins/norbert-config/views/ConfigViewerView";
+import { ConfigurationView } from "./plugins/norbert-config/views/ConfigurationView";
 import { ConfigDetailPanel } from "./plugins/norbert-config/views/ConfigDetailPanel";
 import type { SelectedConfigItem } from "./plugins/norbert-config/domain/types";
 // v2 PhosphorScopeView is the production Performance Monitor view. v1
@@ -579,17 +579,17 @@ function App() {
     registry.set("session-status", SessionStatusWrapperInner);
 
     // norbert-config views: list view in main zone, detail view in secondary.
-    const ConfigViewerWrapper: FC = () => (
-      <ConfigViewerView onItemSelect={handleConfigItemSelectRef.current} />
+    const ConfigurationWrapper: FC = () => (
+      <ConfigurationView onItemSelect={handleConfigItemSelectRef.current} />
     );
-    ConfigViewerWrapper.displayName = "ConfigViewerWrapper";
+    ConfigurationWrapper.displayName = "ConfigurationWrapper";
 
     const ConfigDetailWrapper: FC = () => (
       <ConfigDetailPanel selection={selectedConfigItemRef.current} />
     );
     ConfigDetailWrapper.displayName = "ConfigDetailWrapper";
 
-    registry.set("config-viewer", ConfigViewerWrapper);
+    registry.set("configuration", ConfigurationWrapper);
     registry.set("config-detail", ConfigDetailWrapper);
 
     // norbert-notif view: notification center with DND toggle.

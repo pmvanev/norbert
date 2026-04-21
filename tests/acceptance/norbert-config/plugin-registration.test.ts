@@ -43,17 +43,17 @@ describe("User sees Config tab after norbert-config loads", () => {
     expect(norbertConfigPlugin.manifest.dependencies).toEqual({});
   });
 
-  it("onLoad registers 1 primary view 'config-viewer' and 1 sidebar tab 'config' at order 2", () => {
+  it("onLoad registers 1 primary view 'configuration' and 1 sidebar tab 'config' at order 2", () => {
     // When the plugin system loads norbert-config
     const registry = loadConfigPlugin();
 
     // Then the plugin is loaded successfully
     expect(registry.loadedPluginIds).toContain("norbert-config");
 
-    // And 1 view is registered: config-viewer
+    // And 1 view is registered: configuration
     const views = getViewsByPlugin(registry, "norbert-config");
     expect(views).toHaveLength(1);
-    expect(views[0].id).toBe("config-viewer");
+    expect(views[0].id).toBe("configuration");
     expect(views[0].primaryView).toBe(true);
 
     // And a sidebar tab "config" is registered at order 2

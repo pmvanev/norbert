@@ -1,4 +1,4 @@
-/// ConfigViewerView -- primary view for the norbert-config plugin.
+/// ConfigurationView -- primary view for the norbert-config plugin.
 ///
 /// Renders sub-tab navigation and a list of items for the active tab.
 /// Selecting an item calls onItemSelect to open the detail in the
@@ -28,7 +28,6 @@ export const SUB_TAB_LABELS: Record<ConfigSubTab, string> = {
   skills: "Skills",
   rules: "Rules",
   plugins: "Plugins",
-  docs: "Docs",
   env: "Environment",
 };
 
@@ -44,7 +43,6 @@ export const SUB_TAB_ICONS: Record<ConfigSubTab, string> = {
   skills: "sparkles",
   rules: "list",
   plugins: "package",
-  docs: "file-text",
   env: "key",
 };
 
@@ -65,8 +63,8 @@ type ConfigLoadState =
 // Props
 // ---------------------------------------------------------------------------
 
-/// Props for ConfigViewerView.
-export interface ConfigViewerViewProps {
+/// Props for ConfigurationView.
+export interface ConfigurationViewProps {
   readonly className?: string;
   readonly onItemSelect?: (item: SelectedConfigItem) => void;
 }
@@ -75,10 +73,10 @@ export interface ConfigViewerViewProps {
 // Component
 // ---------------------------------------------------------------------------
 
-/// ConfigViewerView renders sub-tab navigation and item list.
+/// ConfigurationView renders sub-tab navigation and item list.
 /// Selecting an item delegates to onItemSelect which opens the
 /// app-level secondary zone with the detail view.
-export const ConfigViewerView: FC<ConfigViewerViewProps> = ({
+export const ConfigurationView: FC<ConfigurationViewProps> = ({
   className,
   onItemSelect,
 }) => {
@@ -122,10 +120,10 @@ export const ConfigViewerView: FC<ConfigViewerViewProps> = ({
     <div
       className={`config-viewer${className ? ` ${className}` : ""}`}
       role="region"
-      aria-label="Configuration Viewer"
+      aria-label="Configuration"
     >
       <div className="sec-hdr">
-        <span className="sec-t">Configuration Viewer</span>
+        <span className="sec-t">Configuration</span>
         <button
           className={`config-reload-btn${loadState.tag === "loading" ? " is-loading" : ""}`}
           onClick={loadConfig}
