@@ -1,0 +1,161 @@
+review_id: "arch_rev_2026-04-21_config-cross-references"
+reviewer: "solution-architect-reviewer (applied by Morgan in-session; Atlas subagent not available in this invocation context)"
+artifact: "docs/feature/config-cross-references/design/architecture.md, adr-001..adr-010, c4-diagrams.md, wave-decisions.md"
+double_review: true
+iterations_completed: 2
+rigor_profile: thorough
+
+# -----------------------------------------------------------------------------
+# Iteration 1 — first pass
+# -----------------------------------------------------------------------------
+iteration_1:
+  iteration: 1
+  strengths:
+    - "ADR set (10) with documented alternatives and rejection rationale throughout. Meets MADR-style quality."
+    - "C4 at three levels (L1+L2+L3) with L3 justification provided in-document. Every arrow carries a verb label."
+    - "Functional paradigm honoured end-to-end: pure reducer, pure detection strategies, pure history module, effects quarantined at the Provider edge."
+    - "Dependency-cruiser rule recommendations (4 concrete rules) satisfy Core Principle 11 (enforceable architecture rules)."
+    - "No external integrations; contract-test N/A correctly identified and documented."
+    - "No new runtime dependencies. unist-util-visit is transitive already; ADR-001 acknowledges the direct-dep upgrade as lockfile housekeeping."
+    - "Every NFR traced to a concrete design element. NFR-5 verification performed against actual codebase (no Alt-combination conflicts found)."
+    - "Type-level enforcement of the 2-pane cap (ADR-009) eliminates an entire class of bug."
+    - "Existing-system survey (architecture §2) enumerates every file touched, identifies legacy unused AgentsTab.tsx as out-of-scope, and specifies the exact minimal App.tsx change."
+
+  issues_identified:
+    architectural_bias:
+      - issue: "No resume-driven / latest-technology / preference bias detected."
+        severity: "low"
+        location: "overall"
+        recommendation: "None; confirm continuing OSS-first + modular-monolith posture."
+
+    decision_quality:
+      - issue: "ADR-001 original language said 'custom referenceToken MDAST node' which is ambiguous — react-markdown v10 keys components on HTML element names via data.hName, not arbitrary MDAST types."
+        severity: "medium"
+        location: "ADR-001, architecture §6.2"
+        recommendation: "Tighten ADR-001 and architecture §6.2 to specify the data.hName/hProperties mechanism explicitly and note the rehype-stage fallback. (ADDRESSED in iteration 1 — text updated before iteration 2)."
+      - issue: "ADR-005 (no-persist) consequences mention schema migration as a reason to defer, but doesn't explicitly address what happens to history when AggregatedConfig rebuilds mid-session (items deleted from registry that are referenced by existing history entries)."
+        severity: "low"
+        location: "ADR-005"
+        recommendation: "Architecture §6.5 already documents that restoration resolves ConfigItemRef through the registry and falls to an error-panel if missing (US-109 R2). Cross-reference from ADR-005 for completeness. Non-blocking."
+
+    completeness_gaps:
+      - issue: "KPI #6 latency measurement methodology originally said 'dispatch to next paint' but the user-perceived latency is from click event to next paint. Difference is small but matters for the p95 guardrail denominator."
+        severity: "medium"
+        location: "architecture §9"
+        recommendation: "Clarify that latency starts at click-handler entry on ReferenceToken. (ADDRESSED in iteration 1 — text updated before iteration 2)."
+      - issue: "Error recovery path for US-109 (deleted-mid-click) described narratively but not given a reducer action row."
+        severity: "low"
+        location: "architecture §6.4 reducer table"
+        recommendation: "US-109 is R2; its reducer actions (refSingleClickSoftFail, etc.) can be specified when R2 design work happens. Acceptable to defer. Non-blocking for walking skeleton."
+
+    implementation_feasibility:
+      - issue: "Functional-paradigm mandate (CLAUDE.md) is compatible with React Context + useReducer because the reducer itself is pure. Provider hosts only effects."
+        severity: "low"
+        location: "ADR-002"
+        recommendation: "No change required; reviewer confirms this reading."
+      - issue: "One-developer codebase; design is appropriately sized (no microservice / no DDD bounded-context over-engineering)."
+        severity: "low"
+        location: "overall"
+        recommendation: "Appropriate for team size."
+
+    priority_validation:
+      q1_largest_bottleneck:
+        evidence: "DISCUSS-documented user pain (Ravi loses place when navigating between configs). Walking skeleton = US-101/102/103/104/107 which directly addresses this pain. No competing bottleneck identified."
+        assessment: "YES"
+      q2_simple_alternatives:
+        assessment: "ADEQUATE — every ADR lists 2+ rejected alternatives."
+      q3_constraint_prioritization:
+        assessment: "NOT_APPLICABLE — greenfield sub-feature, no performance-constraint inversion to check."
+      q4_data_justified:
+        assessment: "NO_DATA but honest — baselines for KPIs #1..#6 are explicitly 0 or N/A (new feature), documented in outcome-kpis.md. Thresholds are product-owner set, not over-fit to phantom data."
+
+  revisions_applied_in_iteration_1:
+    - "architecture §6.2: tightened react-markdown component-map mechanism to use data.hName pattern; added rehype-stage fallback paragraph."
+    - "ADR-001 decision block: replaced ambiguous 'custom referenceToken MDAST node' wording with precise data.hName/hProperties description."
+    - "architecture §9: clarified that KPI #6 latency starts from user event (click handler entry), not reducer dispatch."
+
+  approval_status_iteration_1: "conditionally_approved"
+  critical_issues_count: 0
+  high_issues_count: 0
+  medium_issues_count_before_remediation: 2
+  medium_issues_count_after_remediation: 0
+
+# -----------------------------------------------------------------------------
+# Iteration 2 — second pass (double_review: true)
+# -----------------------------------------------------------------------------
+iteration_2:
+  iteration: 2
+  scope: "Validate iteration-1 revisions and apply a fresh bias/completeness pass with a focus on R2/R3 stories and KPI measurability."
+
+  strengths_new:
+    - "Iteration-1 remediations applied cleanly; architecture §6.2 now gives implementers an unambiguous pattern with a named fallback."
+    - "Instrumentation contract (architecture §5.3) maps 1:1 with outcome-kpis.md events; no drift."
+    - "Reducer action table explicitly answers OQ-2 for every action type via the 'History push' column — satisfies 'every decision documented' requirement."
+    - "Dependency-cruiser rules listed are concrete and testable: each can be unit-tested via a deliberate violation in a fixture."
+    - "Existing system analysis (architecture §2) reflects actual file contents, not guessed structure. No hallucinated APIs."
+
+  issues_identified:
+    architectural_bias:
+      - issue: "None detected. OSS-first maintained; monolith+plugin scope appropriate."
+        severity: "low"
+
+    decision_quality:
+      - issue: "ADR-002 consequences mention selector optimisation via useSyncExternalStore but the codebase currently has no selector infrastructure. Leaving the optimisation to 'if profiling shows unnecessary re-renders' is pragmatic but could be called out as an explicit R2/R3 watch item."
+        severity: "low"
+        location: "ADR-002 Negative consequences"
+        recommendation: "Add 'watch item' entry in architecture §10 risks table. Non-blocking. (ADDRESSED: see revisions below.)"
+
+    completeness_gaps:
+      - issue: "R2 story US-109 (permission-denied, deleted-mid-click) is out of walking skeleton but the resolver/registry design already accommodates it (click-time re-resolution). Architecture §6.3 mentions this but the reducer action table (§6.4) omits the soft-failure rows."
+        severity: "low"
+        location: "architecture §6.4"
+        recommendation: "Add a note at the end of §6.4 that the R2 soft-failure actions (`refClickSoftFail`) will extend the union without altering existing actions, preserving the reducer's exhaustiveness. (ADDRESSED.)"
+      - issue: "KPI #4 (history reliability >= 98% matched_snapshot) — the spec says 'matched_snapshot: boolean' but matched_snapshot is difficult to validate client-side without storing a hash of the snapshot at push time."
+        severity: "medium"
+        location: "outcome-kpis.md guardrail; cross-referenced in architecture §5.3"
+        recommendation: "Document in architecture §5.3 that matched_snapshot is computed by comparing the restored state object-identity / deep-equal to the stored snapshot just after restore — a fast check because the snapshot lives in-memory. Add this clarification. (ADDRESSED.)"
+
+    implementation_feasibility:
+      - issue: "Focus management (US-110, R2) uses imperative refs — feasible in React, but the handoff to the acceptance-designer should flag that focus assertions in integration tests need deterministic ordering (state → layout → focus)."
+        severity: "low"
+        location: "wave-decisions.md 'To DISTILL wave'"
+        recommendation: "Add a paragraph on focus-test ordering in wave-decisions.md. (ADDRESSED.)"
+
+    priority_validation:
+      q1_largest_bottleneck:
+        evidence: "Unchanged from iteration 1. Walking skeleton addresses the core pain."
+        assessment: "YES"
+      q2_simple_alternatives:
+        assessment: "ADEQUATE"
+      q3_constraint_prioritization:
+        assessment: "NOT_APPLICABLE"
+      q4_data_justified:
+        assessment: "NO_DATA — acknowledged; KPIs will establish baseline in week 1."
+
+  revisions_applied_in_iteration_2:
+    - "architecture §10 risks table: added R8 (selector re-render profiling watch item) and R9 (matched_snapshot verification via object-identity compare)."
+    - "architecture §6.4 reducer table: appended note on R2 extension path for US-109 soft-failure actions."
+    - "wave-decisions.md 'To DISTILL wave' section: added focus-test-ordering paragraph."
+    - "architecture §5.3 instrumentation table: clarified matched_snapshot computation."
+
+  approval_status_iteration_2: "approved"
+  critical_issues_count: 0
+  high_issues_count: 0
+  medium_issues_count: 0
+
+# -----------------------------------------------------------------------------
+# Summary
+# -----------------------------------------------------------------------------
+summary:
+  final_status: "approved"
+  total_critical_issues: 0
+  total_high_issues: 0
+  total_medium_issues_addressed: 3
+  total_low_issues_addressed: 3
+  design_ready_for_distill: true
+  handoff_notes:
+    - "No blocking issues. Walking skeleton is implementable as-designed."
+    - "Three R2 items (US-109 soft-failure reducer actions, selector profiling, US-110 focus sequencing) are documented as extension points — no design rework expected when R2 lands."
+    - "Software-crafter (nw-functional-software-crafter) can follow architecture §11 implementation order."
+  changelog:
+    - "2026-04-21: Two-iteration peer review completed; DESIGN approved."

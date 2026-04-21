@@ -1,0 +1,279 @@
+reviewer: nw-solution-architect-reviewer (Atlas)
+model: sonnet
+date: 2026-04-21
+target_wave: DESIGN
+feature_id: config-cross-references
+iteration: 1 (independent, post-Morgan-self-review)
+
+verdict: approved_with_minor
+remediation_status: all_issues_addressed
+remediation_notes: |
+  All 5 findings (2 MEDIUM + 3 LOW) remediated directly in the design artifacts on 2026-04-21:
+  - MEDIUM #1 (ConfigurationView ↔ ConfigNavProvider prop contract + wrong L3 arrow):
+    architecture.md §6.1 adds "Integration-seam prop contract" paragraph;
+    c4-diagrams.md L3 replaces `Rel(navProvider, tauriBackend, …)` with
+    `Rel(configView, tauriBackend, …)` + `Rel(configView, navProvider, …)` to reflect
+    that ConfigurationView owns IPC and passes aggregatedConfig+isActive down.
+  - MEDIUM #2 (ARIA live region ownership + contract): new architecture.md §6.8
+    "NavAnnouncer" with aria-live="polite" choice rationale, announcement template
+    table for all 10 transition types, pure `announcementFor(prev, next)` helper
+    location; c4-diagrams.md L3 adds NavAnnouncer component + `Rel(navProvider,
+    announcer, …)` + row in responsibility table. Architecture §7 usability row
+    replaces "ARIA live region" with concrete mechanism reference.
+  - LOW #3 (US-106 bottom-pane reducer path): architecture.md §6.4 refSingleClick
+    row expanded to clarify that the same action handles clicks from either pane;
+    the 2-slot type-level invariant (ADR-009) enforces the correct write slot.
+  - LOW #4 (end-of-history timer location): ADR-003 Implementation Notes expanded
+    to explicitly state the setTimeout lives in useEffect, never in the reducer,
+    with cleanup on overlap. Preserves FP purity.
+  - LOW #5 (US-105 R1/R2 ambiguity): architecture.md §11 step 4 clarifies that
+    SplitLayout ships in R1 *with* its Close button + Esc handler, pulling US-105
+    scope (Close button + Esc) forward into R1 explicitly so DISTILL targets it
+    in R1 test coverage. No scope inflation beyond what a coherent split mechanism
+    requires.
+
+summary: >
+  The architecture is coherent, FP-paradigm-compliant, and implementable. All 10 ADRs
+  meet minimum quality: context, decision, 2+ alternatives with rejection rationale, and
+  consequences. Codebase spot-checks confirm Morgan's structural claims. Three minor
+  issues are identified — none blocking — primarily around a state-lifting integration
+  seam in ConfigurationView that the design under-specifies, a gap in the WCAG
+  accessibility claim for the ARIA live region, and the ambiguous hook from the bottom
+  pane to the reducer for the US-106 "click in bottom pane replaces bottom" case.
+  No critical or high-severity issues. Approved for handoff to DISTILL.
+
+strengths:
+  - "Ten ADRs with alternatives and rejection rationale. All meet MADR-style quality gate.
+     (ADR-001 through ADR-010 verified individually.)"
+  - "FP paradigm honoured end-to-end: domain/ is pure TS, effects quarantined in
+     ConfigNavProvider useEffect hooks, reducer is a total pure function.
+     CLAUDE.md mandate satisfied."
+  - "data.hName mechanism for react-markdown custom component rendering is correctly
+     specified (ADR-001 and architecture §6.2). Verified against react-markdown v10.1.0
+     which is in package.json. Rehype-stage fallback documented."
+  - "unist-util-visit transitivity confirmed via package-lock.json: version 5.1.0 is
+     already resolved as a dependency of remark-gfm and mdast-util-gfm. Direct-dep
+     promotion is lockfile-only, as claimed."
+  - "Alt+Left/Right non-collision confirmed independently: keyboardShortcuts.ts guards
+     entirely on ctrlOrMeta=true; no Alt combinations exist anywhere in src/. NFR-5
+     verified."
+  - "No existing Context providers in src/ — zero collision risk for new ConfigNavStore.
+     Confirmed by grep: no createContext/useContext/Context.Provider matches."
+  - "Type-level 2-pane cap (ADR-009 SplitState fixed-shape record) eliminates the
+     third-pane class of bug at compile time. Strong design choice."
+  - "Registry build strategy (O(N) single pass over AggregatedConfig) is realistic for
+     NFR-2. AggregatedConfig structure confirmed in domain/types.ts: flat arrays per
+     entity type. No nested map traversal required. Sub-millisecond for 500 items is
+     a credible estimate."
+  - "ConfigDetailPanel's existing Markdown call sites confirmed: AgentDetail,
+     CommandDetail, SkillDetail, RuleDetail, PluginDetail all use
+     <Markdown remarkPlugins={[remarkGfm]}>. The detection plugin insertion point
+     matches exactly. No missed call sites."
+  - ".dependency-cruiser.cjs confirmed to exist with working structure. Proposed rules
+     are additive to the existing forbidden array. No structural incompatibility."
+  - "sourceLabel() helper confirmed in ConfigListPanel.tsx line 33. ADR-007's
+     resolveFilterOnNav algorithm references the correct function. Extract-to-shared.tsx
+     call out is accurate."
+  - "SSOT deferral rationale is sound: feature is entirely within one plugin, upstream
+     SSOT sections (Titan/Hera) absent, premature structure commitment avoided."
+
+issues:
+  - severity: MEDIUM
+    dimension: codebase-fit
+    finding: >
+      ConfigurationView state-lifting integration seam is under-specified. The architecture
+      states ConfigNavProvider wraps the ConfigurationView subtree and "state lifted INTO
+      the plugin, not out of it" (architecture §2). However ConfigurationView.tsx currently
+      owns loadState (idle/loading/loaded/error) and calls loadConfig() itself. The design
+      calls ConfigNavProvider a child of ConfigurationView (c4-diagrams.md L3: ConfigurationView
+      "wraps subtree with" ConfigNavProvider). This means AggregatedConfig is produced INSIDE
+      ConfigurationView and must be passed DOWN to ConfigNavProvider so it can call
+      buildRegistry(). But ConfigNavProvider is described as receiving isActive from App.tsx,
+      not AggregatedConfig. Architecture §6.1 says "rebuild triggered by existing watcher",
+      and §6.8 says ConfigDetailPanel "passes detectionRemarkPlugin(registry, ctx)". The
+      exact prop contract between ConfigurationView (load state owner) and ConfigNavProvider
+      (registry owner) is not specified anywhere. The implementer must infer it. If
+      ConfigNavProvider receives AggregatedConfig as a prop (the natural seam), then the
+      integration is unambiguous. If it reads from a Context that ConfigurationView populates,
+      a second Context or prop-threading decision is needed. Neither option is documented.
+    evidence: "architecture.md §2 paragraph on ConfigurationView; architecture.md §6.1 'Rebuild
+      trigger'; c4-diagrams.md L3 Rel(navProvider, tauriBackend, 'Triggers...') which is
+      incorrect — navProvider does NOT call IPC; ConfigurationView.tsx line 92 (invoke call
+      lives there)."
+    recommendation: >
+      Add one sentence to architecture §6.1 or §6.8 specifying the prop:
+      ConfigNavProvider receives `aggregatedConfig: AggregatedConfig | null` from
+      ConfigurationView and calls buildRegistry() via useMemo. The L3 diagram arrow
+      from navProvider to tauriBackend is also wrong — update to show
+      ConfigurationView → tauriBackend and ConfigurationView → navProvider (passes config).
+
+  - severity: MEDIUM
+    dimension: operability-quality-attribute-realism
+    finding: >
+      ARIA live region for pane transitions (US-110 AC, architecture §7 usability row) is
+      cited as a concrete accessibility mechanism, but no component is designated to own it.
+      The component diagram (c4-diagrams.md L3) has no ARIA live region component.
+      Architecture §7 says "ARIA live region for pane transitions" under verification, and
+      US-110 AC states "ARIA live region announces pane changes." The design does not specify
+      where this region lives (ConfigNavProvider? ConfigDetailPanel? a new wrapper?), what
+      its aria-live level is (assertive vs polite), or what text it announces. WCAG 2.2 SC
+      4.1.3 (Status Messages) is the applicable criterion. "ARIA live region exists" is not
+      verifiable without a component owner and announcement text contract.
+    evidence: "architecture.md §7 usability row; US-110 AC 'ARIA live region announces pane
+      changes'; c4-diagrams.md L3 (no live region component listed)."
+    recommendation: >
+      Assign ownership to ConfigNavProvider (already the effect boundary) or a new
+      NavAnnouncer sub-component. Specify: aria-live="polite", text template per transition
+      type (e.g. "Preview open: {type} {name}, {scope} scope" for split open;
+      "Navigation: now viewing {type} {name}" for Ctrl+click). This is a one-paragraph
+      addition to architecture §6 and a one-line addition to the component table.
+
+  - severity: LOW
+    dimension: requirements-coherence
+    finding: >
+      US-106 "click in bottom pane replaces bottom" reducer path is ambiguous. The reducer
+      action table (architecture §6.4) shows refSingleClick updating
+      "splitState = {topRef: current, bottomRef: ref, ratio: 0.5}" — but this description
+      assumes the click originated from the top pane. US-106 §6.2 states clicks from the
+      BOTTOM pane also replace the bottom pane (with the top anchor preserved). The action
+      that handles a click from the bottom pane is not named or distinguished in the action
+      union (ADR-002) or the reducer table. It could be the same refSingleClick action with
+      the same behaviour, but neither the ADR nor the architecture §6.4 confirms this. If
+      a developer treats refSingleClick as "top pane only", they will implement a bug.
+    evidence: "architecture.md §6.4 action table row for refSingleClick; US-106 Domain
+      Example 2 'Click in bottom pane replaces bottom'; ADR-002 action union (no bottom-pane
+      variant listed)."
+    recommendation: >
+      Add one sentence to the refSingleClick row: "When the split is open and the click
+      originates from the bottom pane, the same action applies — bottomRef is replaced,
+      topRef is unchanged. The action does not carry click-origin metadata; the reducer's
+      split-open invariant enforces the correct write slot regardless of click origin."
+
+  - severity: LOW
+    dimension: fp-paradigm
+    finding: >
+      ADR-003 documents the end-of-history cue as a "transient `endOfHistory` flag" that
+      "auto-clears via a timer effect." The flag clearing via a timer effect is fine (effect
+      at the edge), but if the endOfHistory flag is stored inside ConfigNavState and cleared
+      by a setTimeout dispatch, this is a self-modifying state pattern (a timed side-effect
+      writing back into the reducer). This is not a purity violation (the reducer remains
+      pure), but the timer setup must live in ConfigNavProvider's useEffect, not in the
+      reducer itself, and the architecture does not clearly locate the timer. A developer
+      could plausibly put setTimeout(() => dispatch({tag:'clearEndOfHistory'}), 300) inside
+      the reducer action handler, which would violate FP constraints.
+    evidence: "ADR-003 Implementation Notes: 'The flag auto-clears via a timer effect';
+      architecture §6.6 references ADR-003 without elaboration."
+    recommendation: >
+      Add one sentence to ADR-003 Implementation Notes: "The clearEndOfHistory dispatch is
+      triggered from a useEffect in ConfigNavProvider that watches state.endOfHistory; the
+      reducer itself does not call setTimeout." Prevents the mutation-in-reducer trap.
+
+  - severity: LOW
+    dimension: requirements-coherence
+    finding: >
+      US-105 MoSCoW is "Should Have (R2)" but it appears in the walking skeleton
+      implementation order implicitly — architecture §6.4 includes the closeSplit action
+      (which pushes history), and SplitLayout is listed as a new component in the L3 diagram
+      and in §11 step 4. If SplitLayout is built in the walking skeleton, US-105 is
+      effectively delivered in R1. This is not wrong, but it creates an undocumented
+      scope expansion from the DISCUSS-declared walking skeleton (US-101/102/103/104/107).
+      DISTILL will produce tests for US-105 assuming R2; if the crafter delivers it in
+      R1, test coverage gaps are possible.
+    evidence: "user-stories.md US-105 MoSCoW: 'Should Have (R2)'; DISCUSS wave-decisions.md
+      'Walking skeleton = US-101/102/103/104/107'; architecture §11 step 4 lists SplitLayout
+      as an R1 implementation step."
+    recommendation: >
+      Either (a) note in architecture §11 that SplitLayout is built in R1 with the Close
+      button as part of US-102 delivery, effectively pulling US-105 forward, OR (b) note
+      that step 4 defers the Close/Esc mechanism to R2 and SplitLayout ships without it
+      initially. Either is acceptable; the choice should be explicit so DISTILL knows
+      which AC to target in R1 test coverage.
+
+oq_second_opinions:
+  - oq: OQ-1
+    morgan_resolution: "Reset filter only if it would hide the target (ADR-007 option 3)."
+    atlas_assessment: agree
+    rationale: >
+      Options 1 (always preserve) violates US-103 scrolling AC. Option 2 (always reset)
+      is needlessly destructive for same-sub-tab navigation. Option 3 is the only choice
+      that satisfies both the US-103 AC and respects user intent. The 3-second status line
+      is an appropriate transparency mechanism. No override warranted.
+
+  - oq: OQ-2
+    morgan_resolution: "Only cross-reference actions push history; manual nav does not (ADR-008)."
+    atlas_assessment: agree
+    rationale: >
+      Browser-history parity (every nav pushes) would dilute Alt+Left's semantic clarity.
+      The "reference chain timeline" mental model is more valuable and more predictable.
+      The documented negative (manual exploration not retraced) is correctly identified
+      and acceptable.
+
+  - oq: OQ-3
+    morgan_resolution: "Cap at 2 panes, enforced at type level via fixed-shape SplitState (ADR-009)."
+    atlas_assessment: agree
+    rationale: >
+      Type-level enforcement is strictly better than a runtime invariant for a fixed cap.
+      No demonstrated user scenario requires 3+ panes. The swap-top-and-bottom extension
+      (US-115, R3) is a one-line transform. No override warranted.
+
+  - oq: OQ-4
+    morgan_resolution: "v1 ships strategies 1 (markdown link) and 2 (inline code); bare prose OFF by default (ADR-010)."
+    atlas_assessment: agree
+    rationale: >
+      Bare prose false positives on names like 'release', 'build', 'test' are a
+      first-impression trust killer. The two shipped strategies cover the high-confidence
+      cases. ADR-010 provides a clean extension point for US-111 (R3). No override warranted.
+
+  - oq: OQ-5
+    morgan_resolution: "project > plugin > user precedence; popover always shown, precedence pre-highlights (ADR-004)."
+    atlas_assessment: agree
+    rationale: >
+      Matches Claude Code's own resolution order (documented in user-stories.md system
+      constraint #7). KPI #5 makes silent resolution a measurable guardrail failure.
+      The pre-highlight + immediate Enter path keeps keyboard efficiency for the 80%
+      default case. No override warranted.
+
+  - oq: OQ-6
+    morgan_resolution: "LRU 50 entries per Configuration view mount (ADR-006)."
+    atlas_assessment: agree
+    rationale: >
+      Memory budget is trivial (10 KB worst case). The cap is well above observed realistic
+      chain lengths (5-15 clicks per session per ADR-006 analysis). The invariants are
+      pure-function-testable. No override warranted.
+
+  - oq: OQ-7
+    morgan_resolution: "No persistence in v1; in-memory only, reset on view unmount (ADR-005)."
+    atlas_assessment: agree_with_caveat
+    rationale: >
+      The decision to reset on view unmount (not just on restart) is stronger than the
+      DISCUSS lock-in (D7 said "no persistence across restart"; ADR-005 extends this to
+      "no persistence across view unmount"). This is a defensible product decision — context
+      switches suggest new intent — but it was not explicitly validated with the user. The
+      DISCUSS product-owner recommendation was "in-memory only" which is consistent. The
+      caveat is: a user who switches to Sessions and back loses history. This may surprise
+      power users who expect browser-tab-like session retention. No override recommended
+      for v1, but flag to product-owner for inclusion in post-R1 interview questions.
+
+ssot_deferral: agree
+# Rationale: The feature is a delta on one existing plugin. No upstream Titan/Hera
+# SSOT sections exist to anchor an application-architecture entry. A one-section
+# brief.md would require reorganisation when those sections arrive. The feature
+# artifacts are self-contained and portable if/when SSOT bootstrap is triggered
+# as a dedicated session. Deferral is correct.
+
+overall_risk_to_deliver_wave: LOW
+# Rationale:
+# - No new runtime dependencies beyond a lockfile promotion.
+# - Integration seam between ConfigurationView (load state owner) and ConfigNavProvider
+#   (registry owner) needs one clarifying prop contract (MEDIUM issue above), but the
+#   right seam is obvious from the existing code — it is not a design flaw, only an
+#   under-documentation gap.
+# - Pure domain modules are independently testable; the walking skeleton can be built
+#   inside-out (domain first, then Provider, then views) per architecture §11.
+# - Codebase structure confirmed against actual files: no phantom APIs, no hallucinated
+#   hooks. Existing state management is entirely local useState — no Context collision.
+# - The one-developer team size is appropriate for the scope; no Conway-law coordination
+#   risk.
+# - Highest implementation risk is the react-markdown data.hName rendering mechanism,
+#   which has a documented fallback (rehype-stage) and is proven by ecosystem precedents
+#   (remark-toc, remark-external-links). Risk is LOW.
