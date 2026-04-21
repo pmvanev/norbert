@@ -1,34 +1,28 @@
 /**
  * PhosphorScopeView — React shell for the Performance Monitor v2 scope.
  *
- * Composes the phosphor view tree: PhosphorControls (metric toggle) +
- * PhosphorCanvasHost (owns the rAF render loop) + PhosphorHoverTooltip
- * (positioned overlay) + PhosphorLegend (per-session color / name /
- * latest value).
+ * Composes the phosphor view tree: PhosphorControls (per-metric toggles) +
+ * one PhosphorCanvasHost per enabled metric (stacked, each owning its own
+ * rAF render loop) + a single PhosphorHoverTooltip overlay + PhosphorLegend
+ * (per-session color / name / latest value).
  *
  * State owned here:
- *   - `selectedMetric` — initialized from `DEFAULT_METRIC`. Updated by the
- *     controls' `onMetricChange` callback. Changing the metric also clears
- *     the hover selection (the old selection's value lives on the prior
- *     metric's scale and would be misleading).
- *   - `hoverSelection` — the pure hit-test result surfaced by the canvas
- *     host's pointer handler, rendered by the tooltip.
+ *   - `enabledMetrics` — initialized to every metric in `METRIC_IDS` so the
+ *     user sees the full signal set on first launch and can toggle any one
+ *     off. When multiple are enabled, the canvases stack and divide the
+ *     available vertical space via flex; with only one enabled, it fills
+ *     the whole graph area. At least one metric must remain enabled (the
+ *     controls enforce this by disabling the last active button, and this
+ *     handler rejects the no-op).
+ *   - `hoverSelection` — the selection from whichever canvas last reported
+ *     hover, paired with the metric that canvas is displaying so the
+ *     tooltip shows the correct unit.
+ *   - `hiddenSessions` — per-session visibility toggled from the legend.
  *   - `tick` — a render-bumping counter the store's `subscribe` callback
  *     increments. Bumps the legend / tooltip unit text when data arrives.
- *     The CANVAS animation is no longer gated by this tick — the canvas
- *     host computes its own frame on every rAF tick so traces scroll
- *     smoothly at 60fps regardless of notification cadence. The tick here
- *     only refreshes the DOM-side legend (which shows per-session latest
- *     values that only change when data arrives).
- *
- * Why split the animation from the legend?
- *   Store notifications are bursty (per-event pulses, per-tool-call
- *   pulses, ~5s rate samples, session lifecycle). If the canvas only
- *   redrew on notifications, traces would freeze between bumps then jump.
- *   By letting the canvas host own its own rAF-driven `buildFrame` call,
- *   the 60-second window's right edge tracks real time continuously.
- *   The legend is a DOM element and only changes when data arrives, so
- *   driving it from subscribe is correct and cheap.
+ *     Each canvas host computes its own rAF frame on every tick so traces
+ *     scroll smoothly at 60fps regardless of notification cadence; the
+ *     tick only refreshes the DOM-side legend.
  *
  * Effects confined to the store subscription; all derivation (frame
  * projection, hit-testing) lives in `domain/phosphor/` pure modules.
@@ -37,7 +31,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MultiSessionStore } from "../../adapters/multiSessionStore";
 import {
-  DEFAULT_METRIC,
+  METRIC_IDS,
+  METRICS,
   type MetricId,
 } from "../../domain/phosphor/phosphorMetricConfig";
 import { buildFrame } from "../../domain/phosphor/scopeProjection";
@@ -47,19 +42,9 @@ import { PhosphorCanvasHost } from "./PhosphorCanvasHost";
 import { PhosphorHoverTooltip } from "./PhosphorHoverTooltip";
 import { PhosphorLegend } from "./PhosphorLegend";
 
-// Per-session phosphor trace palette — exposed as --phosphor-session-0..4
-// in themes.css. Duplicated with PhosphorCanvasHost (rather than imported)
-// so the domain-free view layer stays free of cross-view imports.
 const PHOSPHOR_SESSION_PALETTE_SIZE = 5;
 const PHOSPHOR_SESSION_COLOR_PROP_PREFIX = "--phosphor-session-";
 
-/**
- * Resolve the 5-color session palette from the scope container's CSS
- * custom properties. Unresolved slots are dropped so `buildFrame` falls
- * back to `SESSION_COLORS` for missing indices. Called on each render so
- * a theme switch (which changes `html.className`) is reflected on the
- * next store notification.
- */
 const resolveScopeSessionColors = (
   container: HTMLElement | null,
 ): ReadonlyArray<string> => {
@@ -75,25 +60,26 @@ const resolveScopeSessionColors = (
   return resolved;
 };
 
+interface HoverState {
+  readonly metric: MetricId;
+  readonly selection: HoverSelection;
+}
+
 interface PhosphorScopeViewProps {
   readonly store: MultiSessionStore;
 }
 
 export const PhosphorScopeView = ({ store }: PhosphorScopeViewProps) => {
-  const [selectedMetric, setSelectedMetric] = useState<MetricId>(DEFAULT_METRIC);
-  const [hoverSelection, setHoverSelection] = useState<HoverSelection | null>(null);
+  const [enabledMetrics, setEnabledMetrics] = useState<ReadonlySet<MetricId>>(
+    () => new Set<MetricId>(METRIC_IDS),
+  );
+  const [hoverSelection, setHoverSelection] = useState<HoverState | null>(null);
   const [hiddenSessions, setHiddenSessions] = useState<ReadonlySet<string>>(
     () => new Set<string>(),
   );
   const [, setTick] = useState<number>(0);
-  // Ref to the scope container so we can resolve theme-aware
-  // --phosphor-session-* variables on each render.
   const scopeRef = useRef<HTMLDivElement>(null);
 
-  // Subscribe to store notifications — each notification bumps the tick so
-  // the component re-renders, which refreshes the LEGEND (per-session latest
-  // values). The canvas host runs its own rAF loop and picks up fresh store
-  // state on every frame; it does not depend on this tick.
   useEffect(() => {
     const unsubscribe = store.subscribe(() => {
       setTick((previous) => previous + 1);
@@ -101,21 +87,25 @@ export const PhosphorScopeView = ({ store }: PhosphorScopeViewProps) => {
     return unsubscribe;
   }, [store]);
 
-  // Metric change: update selected metric and clear any stale hover (the
-  // prior selection sits on a different Y-scale and would mislead).
-  const handleMetricChange = useCallback((metric: MetricId): void => {
-    setSelectedMetric(metric);
+  // Toggle a metric on or off. Clears hover because the prior selection is
+  // scoped to a specific metric's Y-axis; if that metric is being turned off
+  // (or the active hover straddles a now-repositioned canvas), the selection
+  // would be stale. The controls disable the last-remaining metric's button,
+  // but this guard defends the invariant if called directly.
+  const handleMetricToggle = useCallback((metric: MetricId): void => {
+    setEnabledMetrics((previous) => {
+      const next = new Set(previous);
+      if (next.has(metric)) {
+        if (next.size === 1) return previous;
+        next.delete(metric);
+      } else {
+        next.add(metric);
+      }
+      return next;
+    });
     setHoverSelection(null);
   }, []);
 
-  // Toggle a session's visibility. Clicking an entry flips its membership
-  // in `hiddenSessions`. Kept as an immutable-update callback so the state
-  // update is atomic and the reference changes whenever the contents do
-  // (which is what drives `buildFrame` to recompute on the next render).
-  //
-  // Stale ids (sessions removed from the store while hidden) are simply
-  // carried forward; they're cheap, and session UUIDs are not reused so
-  // the worst case is a handful of bytes retained until window close.
   const handleToggleSession = useCallback((sessionId: string): void => {
     setHiddenSessions((previous) => {
       const next = new Set(previous);
@@ -128,24 +118,39 @@ export const PhosphorScopeView = ({ store }: PhosphorScopeViewProps) => {
     });
   }, []);
 
-  // Recompute a lightweight frame on every parent render to power the legend
-  // and the tooltip's unit. `buildFrame` is pure and cheap, and this path
-  // only fires on subscribe-driven re-renders (legend is a DOM element that
-  // only changes when data arrives). The canvas host owns its own rAF-driven
-  // frame computation for smooth animation.
-  //
-  // `hiddenSessions` is threaded in so the legend carries the correct
-  // `hidden` flag per entry; the canvas-facing `traces`/`pulses` of THIS
-  // frame are unused (the canvas host builds its own frame).
-  //
-  // Theme-aware session palette resolves from the scope container on each
-  // render. A theme switch that changes `html.className` will be picked up
-  // on the next store notification (which re-renders this component).
+  // Render-ordered list of currently enabled metrics. Using METRIC_IDS as the
+  // canonical order keeps the stack stable when the user toggles metrics —
+  // enabling tokens never reorders events above toolcalls.
+  const orderedEnabledMetrics = METRIC_IDS.filter((metric) =>
+    enabledMetrics.has(metric),
+  );
+
+  // The legend is a single DOM element for the whole scope; its per-session
+  // "latest value" column targets the FIRST enabled metric (canonical order).
+  // That keeps the legend legible when multiple metrics stack, without
+  // duplicating N value columns per session. The session toggle itself is
+  // metric-agnostic — hiding a session hides it on every active canvas.
+  // `enabledMetrics` is guaranteed non-empty by `handleMetricToggle`, so the
+  // first enabled metric is always defined; the fallback to METRIC_IDS[0]
+  // satisfies the type checker for the empty-array edge case only.
+  const legendMetric = orderedEnabledMetrics[0] ?? METRIC_IDS[0];
   const legendSessionColors = resolveScopeSessionColors(scopeRef.current);
-  const legendFrame = buildFrame(store, selectedMetric, Date.now(), {
+  const legendFrame = buildFrame(store, legendMetric, Date.now(), {
     hiddenSessions,
     sessionColors: legendSessionColors,
   });
+
+  // Tooltip only surfaces if the hover's metric is still enabled — a race
+  // where the user toggles a metric off while hovering should hide the
+  // tooltip rather than leaving it pinned to a vanished canvas.
+  const tooltipSelection =
+    hoverSelection !== null && enabledMetrics.has(hoverSelection.metric)
+      ? hoverSelection.selection
+      : null;
+  const tooltipUnit =
+    hoverSelection !== null && enabledMetrics.has(hoverSelection.metric)
+      ? METRICS[hoverSelection.metric].unit
+      : legendFrame.unit;
 
   return (
     <div ref={scopeRef} className="phosphor-scope" data-testid="phosphor-scope">
@@ -154,17 +159,32 @@ export const PhosphorScopeView = ({ store }: PhosphorScopeViewProps) => {
         <span className="sec-a">60s · phosphor scope</span>
       </div>
       <PhosphorControls
-        selectedMetric={selectedMetric}
-        onMetricChange={handleMetricChange}
+        enabledMetrics={enabledMetrics}
+        onMetricToggle={handleMetricToggle}
       />
-      <div className="phosphor-scope-canvas-wrap">
-        <PhosphorCanvasHost
-          store={store}
-          selectedMetric={selectedMetric}
-          onHoverChange={setHoverSelection}
-          hiddenSessions={hiddenSessions}
-        />
-        <PhosphorHoverTooltip selection={hoverSelection} unit={legendFrame.unit} />
+      <div className="phosphor-scope-canvases" data-testid="phosphor-scope-canvases">
+        {orderedEnabledMetrics.map((metric) => (
+          <div
+            className="phosphor-scope-canvas-wrap"
+            key={metric}
+            data-metric-wrap={metric}
+          >
+            <span className="phosphor-scope-metric-label">
+              {METRICS[metric].name}
+            </span>
+            <PhosphorCanvasHost
+              store={store}
+              selectedMetric={metric}
+              onHoverChange={(selection) =>
+                setHoverSelection(
+                  selection === null ? null : { metric, selection },
+                )
+              }
+              hiddenSessions={hiddenSessions}
+            />
+          </div>
+        ))}
+        <PhosphorHoverTooltip selection={tooltipSelection} unit={tooltipUnit} />
       </div>
       <PhosphorLegend
         legend={legendFrame.legend}

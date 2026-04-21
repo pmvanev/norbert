@@ -2,18 +2,22 @@
  * @vitest-environment jsdom
  */
 /**
- * Unit tests: PhosphorScopeView (Step 09-01)
+ * Unit tests: PhosphorScopeView.
  *
  * The scope view:
- *   - initializes `selectedMetric` from DEFAULT_METRIC ("events")
- *   - subscribes to multiSessionStore and re-renders on notification
- *   - calls `buildFrame(store, selectedMetric, Date.now())` and passes the
- *     frame down to the (stubbed in 09-01) PhosphorCanvasHost
- *   - updates selectedMetric when PhosphorControls fires onMetricChange
+ *   - initializes `enabledMetrics` to every supported metric, so every
+ *     metric's canvas host renders on first launch.
+ *   - subscribes to multiSessionStore and re-renders on notification so each
+ *     host's projected frame reflects store changes.
+ *   - toggles a metric off when its enabled control button is clicked,
+ *     removing that host from the DOM.
+ *   - toggles a metric back on when its disabled control button is clicked,
+ *     restoring that host to the DOM.
+ *   - refuses to toggle off the sole remaining enabled metric.
  *
- * The canvas host is stubbed in this step (it lands in 09-02); the stub
- * exposes its received `frame.metric` / `frame.yMax` / trace count via
- * data attributes so the view's wiring is observable.
+ * Each PhosphorCanvasHost surfaces `data-metric` / `data-y-max` /
+ * `data-trace-count` so the view's wiring is observable without reading the
+ * canvas's pixel buffer.
  */
 
 import { describe, it, expect, afterEach } from "vitest";
@@ -21,60 +25,97 @@ import { act, render, screen, cleanup, fireEvent } from "@testing-library/react"
 import "@testing-library/jest-dom/vitest";
 import { PhosphorScopeView } from "./PhosphorScopeView";
 import { createMultiSessionStore } from "../../adapters/multiSessionStore";
-import { DEFAULT_METRIC, METRICS } from "../../domain/phosphor/phosphorMetricConfig";
+import { METRIC_IDS, METRICS } from "../../domain/phosphor/phosphorMetricConfig";
 
 afterEach(cleanup);
 
 describe("PhosphorScopeView", () => {
-  it("initializes selected metric from DEFAULT_METRIC on first render", () => {
+  it("initializes with a canvas host for every supported metric", () => {
     const store = createMultiSessionStore();
     render(<PhosphorScopeView store={store} />);
 
-    // The canvas host stub surfaces frame.metric via data-metric.
-    const host = screen.getByTestId("phosphor-canvas-host");
-    expect(host.getAttribute("data-metric")).toBe(DEFAULT_METRIC);
-    expect(host.getAttribute("data-y-max")).toBe(String(METRICS[DEFAULT_METRIC].yMax));
+    const hosts = screen.getAllByTestId("phosphor-canvas-host");
+    expect(hosts).toHaveLength(METRIC_IDS.length);
+    const metrics = hosts.map((host) => host.getAttribute("data-metric"));
+    for (const id of METRIC_IDS) {
+      expect(metrics).toContain(id);
+    }
   });
 
-  it("subscribes to multiSessionStore and rebuilds the frame when the store notifies", () => {
+  it("subscribes to multiSessionStore and rebuilds every host's frame when the store notifies", () => {
     const store = createMultiSessionStore();
 
     render(<PhosphorScopeView store={store} />);
 
-    // Before any session exists, zero traces are projected.
-    expect(screen.getByTestId("phosphor-canvas-host").getAttribute("data-trace-count")).toBe("0");
+    for (const host of screen.getAllByTestId("phosphor-canvas-host")) {
+      expect(host.getAttribute("data-trace-count")).toBe("0");
+    }
 
-    // Adding a session causes the store to notify. The view must recompute
-    // the frame and the trace count surfaced by the host must now be 1.
-    // This observable re-render — driven solely by a store notification —
-    // is proof that the view is subscribed; an unsubscribed view would
-    // still show 0 traces.
     act(() => {
       store.addSession("sess-a");
     });
 
-    expect(screen.getByTestId("phosphor-canvas-host").getAttribute("data-trace-count")).toBe("1");
+    for (const host of screen.getAllByTestId("phosphor-canvas-host")) {
+      expect(host.getAttribute("data-trace-count")).toBe("1");
+    }
   });
 
-  it("updates selectedMetric when PhosphorControls fires onMetricChange", () => {
+  it("removes a metric's canvas host when its enabled button is clicked", () => {
     const store = createMultiSessionStore();
     render(<PhosphorScopeView store={store} />);
 
-    // Click the tokens button — the host's data-metric should switch to "tokens".
     fireEvent.click(screen.getByRole("button", { name: METRICS.tokens.name }));
 
-    const host = screen.getByTestId("phosphor-canvas-host");
-    expect(host.getAttribute("data-metric")).toBe("tokens");
-    expect(host.getAttribute("data-y-max")).toBe(String(METRICS.tokens.yMax));
+    const hosts = screen.getAllByTestId("phosphor-canvas-host");
+    expect(hosts).toHaveLength(METRIC_IDS.length - 1);
+    const metrics = hosts.map((host) => host.getAttribute("data-metric"));
+    expect(metrics).not.toContain("tokens");
   });
 
-  it("renders the legend alongside the canvas host and controls", () => {
+  it("restores a metric's canvas host when its disabled button is clicked again", () => {
     const store = createMultiSessionStore();
     render(<PhosphorScopeView store={store} />);
 
-    expect(screen.getByTestId("phosphor-canvas-host")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: METRICS.tokens.name }));
+    expect(screen.getAllByTestId("phosphor-canvas-host")).toHaveLength(
+      METRIC_IDS.length - 1,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: METRICS.tokens.name }));
+    const hosts = screen.getAllByTestId("phosphor-canvas-host");
+    expect(hosts).toHaveLength(METRIC_IDS.length);
+    const metrics = hosts.map((host) => host.getAttribute("data-metric"));
+    expect(metrics).toContain("tokens");
+  });
+
+  it("will not disable the sole remaining enabled metric", () => {
+    const store = createMultiSessionStore();
+    render(<PhosphorScopeView store={store} />);
+
+    // Toggle off every metric except the first: the last remaining button
+    // must refuse further disable attempts.
+    const [survivor, ...toDisable] = METRIC_IDS;
+    for (const metric of toDisable) {
+      fireEvent.click(screen.getByRole("button", { name: METRICS[metric].name }));
+    }
+    expect(screen.getAllByTestId("phosphor-canvas-host")).toHaveLength(1);
+
+    const survivorButton = screen.getByRole("button", {
+      name: METRICS[survivor].name,
+    });
+    expect(survivorButton).toBeDisabled();
+    fireEvent.click(survivorButton);
+    expect(screen.getAllByTestId("phosphor-canvas-host")).toHaveLength(1);
+  });
+
+  it("renders the legend alongside the canvas hosts and controls", () => {
+    const store = createMultiSessionStore();
+    render(<PhosphorScopeView store={store} />);
+
+    expect(screen.getAllByTestId("phosphor-canvas-host").length).toBeGreaterThan(0);
     expect(screen.getByTestId("phosphor-legend")).toBeInTheDocument();
-    // Controls button present.
-    expect(screen.getByRole("button", { name: METRICS.events.name })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: METRICS.events.name }),
+    ).toBeInTheDocument();
   });
 });

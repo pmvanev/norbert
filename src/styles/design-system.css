@@ -1582,14 +1582,40 @@ code, pre, .mono,
   border-color: var(--brand);
 }
 
-.phosphor-scope-canvas-wrap {
+/* Container for one or more stacked canvas wraps. Flex:1 so it fills the
+ * vertical space between controls and legend; column layout so N enabled
+ * metrics each take an equal 1/N share of that space. Position: relative so
+ * overlays (hover tooltip / future affordances) anchor here. */
+.phosphor-scope-canvases {
   flex: 1;
-  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   min-height: 120px;
+  position: relative;
+}
+
+.phosphor-scope-canvas-wrap {
+  flex: 1 1 0;
+  position: relative;
+  min-height: 80px;
   overflow: hidden;
   background: var(--bg-card);
   border: 1px solid var(--border-card);
   border-radius: var(--card-r);
+}
+
+.phosphor-scope-metric-label {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  font-family: var(--font-ui);
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-m);
+  pointer-events: none;
+  z-index: 1;
 }
 
 .phosphor-canvas-host {

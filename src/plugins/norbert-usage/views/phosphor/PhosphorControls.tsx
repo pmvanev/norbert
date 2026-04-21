@@ -1,14 +1,13 @@
 /**
- * PhosphorControls — metric segmented control.
+ * PhosphorControls — per-metric toggle control.
  *
  * Renders one button per supported MetricId (events | tokens | toolcalls).
- * The active button is marked via `aria-pressed="true"`; clicking a
- * non-active button calls `onMetricChange(metric)`. No internal state —
- * the selected metric is owned by the parent (`PhosphorScopeView`) so the
- * whole view tree re-renders consistently on change.
+ * Each button reflects whether its metric is currently enabled via
+ * `aria-pressed`; clicking a button calls `onMetricToggle(metric)`. The
+ * parent owns `enabledMetrics` so the whole view tree stays consistent.
  *
- * The button set is generated from `METRIC_IDS` so adding a new metric is
- * purely a data-layer change (add to the METRICS config + ordered list).
+ * At least one metric must remain enabled: when only one metric is active,
+ * that button is disabled so the user cannot turn every graph off.
  */
 
 import {
@@ -18,18 +17,19 @@ import {
 } from "../../domain/phosphor/phosphorMetricConfig";
 
 interface PhosphorControlsProps {
-  readonly selectedMetric: MetricId;
-  readonly onMetricChange: (metric: MetricId) => void;
+  readonly enabledMetrics: ReadonlySet<MetricId>;
+  readonly onMetricToggle: (metric: MetricId) => void;
 }
 
-/** One segmented-control button for a single metric. */
 const MetricButton = ({
   metric,
-  isActive,
+  isEnabled,
+  isDisabled,
   onSelect,
 }: {
   readonly metric: MetricId;
-  readonly isActive: boolean;
+  readonly isEnabled: boolean;
+  readonly isDisabled: boolean;
   readonly onSelect: (metric: MetricId) => void;
 }) => {
   const config = METRICS[metric];
@@ -37,11 +37,12 @@ const MetricButton = ({
     <button
       type="button"
       className={
-        isActive
+        isEnabled
           ? "phosphor-controls-btn phosphor-controls-btn-active"
           : "phosphor-controls-btn"
       }
-      aria-pressed={isActive}
+      aria-pressed={isEnabled}
+      disabled={isDisabled}
       onClick={() => onSelect(metric)}
     >
       {config.name}
@@ -50,22 +51,29 @@ const MetricButton = ({
 };
 
 export const PhosphorControls = ({
-  selectedMetric,
-  onMetricChange,
+  enabledMetrics,
+  onMetricToggle,
 }: PhosphorControlsProps) => (
   <div
     className="phosphor-controls"
     role="group"
-    aria-label="Scope metric"
+    aria-label="Scope metrics"
     data-testid="phosphor-controls"
   >
-    {METRIC_IDS.map((metric) => (
-      <MetricButton
-        key={metric}
-        metric={metric}
-        isActive={metric === selectedMetric}
-        onSelect={onMetricChange}
-      />
-    ))}
+    {METRIC_IDS.map((metric) => {
+      const isEnabled = enabledMetrics.has(metric);
+      // The sole remaining enabled metric can't be toggled off — at least
+      // one graph must stay on screen.
+      const isDisabled = isEnabled && enabledMetrics.size === 1;
+      return (
+        <MetricButton
+          key={metric}
+          metric={metric}
+          isEnabled={isEnabled}
+          isDisabled={isDisabled}
+          onSelect={onMetricToggle}
+        />
+      );
+    })}
   </div>
 );
