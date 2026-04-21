@@ -45,8 +45,8 @@ const perSessionSnapshots = new Map<string, MetricsSnapshot>();
 // v2 phosphor rate ticker handle. Scheduled by onLoad, cleared by onUnload.
 // The ticker drains the hookProcessor's per-session events / toolcalls
 // counters every RATE_TICK_MS and appends the derived rate samples to the
-// v2 store so per-session traces on the Performance Monitor phosphor scope
-// reflect live upstream activity.
+// v2 store so per-session traces on the Activity phosphor scope reflect
+// live upstream activity.
 let rateTickHandle: ReturnType<typeof setInterval> | null = null;
 
 // v2 phosphor DEV-only silence watchdog. Scheduled alongside rateTickHandle
@@ -61,7 +61,7 @@ let firstEventReceivedAt: number | null = null;
 // View constants
 // ---------------------------------------------------------------------------
 
-const PERFORMANCE_MONITOR_VIEW_ICON = "square-activity";
+const ACTIVITY_VIEW_ICON = "square-activity";
 
 // Session Status view: combined gauges + dashboard, shown in the secondary
 // panel when a session is selected. Not registered as a sidebar entry.
@@ -69,8 +69,8 @@ const SESSION_STATUS_VIEW_ID = "session-status";
 const SESSION_STATUS_VIEW_LABEL = "Session Status";
 const SESSION_STATUS_VIEW_ICON = "layout-dashboard";
 
-const PERFORMANCE_MONITOR_VIEW_ID = "performance-monitor";
-const PERFORMANCE_MONITOR_VIEW_LABEL = "Performance Monitor";
+const ACTIVITY_VIEW_ID = "activity";
+const ACTIVITY_VIEW_LABEL = "Activity";
 
 // ---------------------------------------------------------------------------
 // Tab constants
@@ -115,11 +115,11 @@ const onLoad = (api: NorbertAPI): void => {
     floatMetric: null,
   });
 
-  // Register the Performance Monitor view (multi-session mode view)
+  // Register the Activity view (multi-session phosphor scope)
   api.ui.registerView({
-    id: PERFORMANCE_MONITOR_VIEW_ID,
-    label: PERFORMANCE_MONITOR_VIEW_LABEL,
-    icon: PERFORMANCE_MONITOR_VIEW_ICON,
+    id: ACTIVITY_VIEW_ID,
+    label: ACTIVITY_VIEW_LABEL,
+    icon: ACTIVITY_VIEW_ICON,
     primaryView: false,
     minWidth: 400,
     minHeight: 300,

@@ -89,28 +89,28 @@ describe("norbert-usage manifest", () => {
 // ---------------------------------------------------------------------------
 
 describe("norbert-usage onLoad view registrations", () => {
-  it("registers exactly 2 views: session-status, performance-monitor", () => {
+  it("registers exactly 2 views: session-status, activity", () => {
     const { api, calls } = createStubApi();
     norbertUsagePlugin.onLoad(api);
 
     expect(calls.views).toHaveLength(2);
     const viewIds = calls.views.map((v) => v.id);
     expect(viewIds).toContain("session-status");
-    expect(viewIds).toContain("performance-monitor");
+    expect(viewIds).toContain("activity");
     expect(viewIds).not.toContain("usage-dashboard");
     expect(viewIds).not.toContain("gauge-cluster");
     expect(viewIds).not.toContain("session-dashboard");
   });
 
-  it("performance-monitor is not primary and has no floatMetric", () => {
+  it("activity view is not primary and has no floatMetric", () => {
     const { api, calls } = createStubApi();
     norbertUsagePlugin.onLoad(api);
 
-    const pm = calls.views.find((v) => v.id === "performance-monitor");
-    expect(pm).toBeDefined();
-    expect(pm!.primaryView).toBe(false);
-    expect(pm!.floatMetric).toBeNull();
-    expect(pm!.label).toBe("Performance Monitor");
+    const activity = calls.views.find((v) => v.id === "activity");
+    expect(activity).toBeDefined();
+    expect(activity!.primaryView).toBe(false);
+    expect(activity!.floatMetric).toBeNull();
+    expect(activity!.label).toBe("Activity");
   });
 
   it("session-status is secondary-only and has no floatMetric", () => {
@@ -131,13 +131,13 @@ describe("norbert-usage onLoad view registrations", () => {
     expect(calls.views.every((v) => v.primaryView === false)).toBe(true);
   });
 
-  it("performance-monitor uses the activity icon", () => {
+  it("activity view uses the square-activity icon", () => {
     const { api, calls } = createStubApi();
     norbertUsagePlugin.onLoad(api);
 
-    const pm = calls.views.find((v) => v.id === "performance-monitor");
-    expect(pm).toBeDefined();
-    expect(pm!.icon).toBe("square-activity");
+    const activity = calls.views.find((v) => v.id === "activity");
+    expect(activity).toBeDefined();
+    expect(activity!.icon).toBe("square-activity");
   });
 });
 

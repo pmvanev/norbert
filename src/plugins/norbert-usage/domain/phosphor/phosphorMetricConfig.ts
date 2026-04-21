@@ -1,8 +1,8 @@
 /**
  * Phosphor metric configuration — pure data.
  *
- * Three user-toggleable Y-axis metrics for the Performance Monitor v2
- * phosphor scope. Each entry declares the display name, unit, Y-axis
+ * Three user-toggleable Y-axis metrics for the Activity view's phosphor
+ * scope. Each entry declares the display name, unit, Y-axis
  * maximum, and legend caption. Values are sourced from the prototype
  * (docs/design/performance-monitor-phosphor-prototype.html).
  *
@@ -36,7 +36,7 @@ export type MetricId = "events" | "tokens" | "toolcalls";
 export const METRIC_IDS: ReadonlyArray<MetricId> = ["events", "tokens", "toolcalls"];
 
 /**
- * The metric the Performance Monitor shows at first launch and on initial
+ * The metric the Activity view shows at first launch and on initial
  * render of the phosphor scope view. Single source of truth for the
  * first-launch metric — views initialize their `selectedMetric` state from
  * this constant rather than hard-coding `"events"`.

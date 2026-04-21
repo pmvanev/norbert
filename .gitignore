@@ -29,6 +29,9 @@ src-tauri/binaries/
 # Release artifacts
 norbert-v*.tar.gz
 
+# npm pack tarballs (stray downloads at repo root)
+*.tgz
+
 # nWave runtime data
 .nwave/des/logs/
 src-tauri/.nwave/

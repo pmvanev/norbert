@@ -328,7 +328,7 @@ export function SessionListView({ sessions, onSessionSelect }: SessionListViewPr
   );
 
   // Per-session color map keyed on registration order in the phosphor store
-  // (same order that drives the Performance Monitor palette). Ids not present
+  // (same order that drives the Activity view palette). Ids not present
   // in the store — or sessions seen before `sectionRef.current` has mounted
   // and the theme vars can be read — simply fall out of the map; the row
   // falls back to the default `--brand` via the CSS `var()` fallback.

@@ -36,8 +36,8 @@ import { NotificationCenterStandalone } from "./plugins/norbert-notif/views/Noti
 import { ConfigurationView } from "./plugins/norbert-config/views/ConfigurationView";
 import { ConfigDetailPanel } from "./plugins/norbert-config/views/ConfigDetailPanel";
 import type { SelectedConfigItem } from "./plugins/norbert-config/domain/types";
-// v2 PhosphorScopeView is the production Performance Monitor view. v1
-// PerformanceMonitorView was removed in Step 10-01 per v2-phosphor-architecture.md §5 Q5.
+// PhosphorScopeView is the production Activity view (phosphor oscilloscope
+// rendering of per-session events / tokens / tool-calls).
 import { PhosphorScopeView } from "./plugins/norbert-usage/views/phosphor/PhosphorScopeView";
 import { CostTicker } from "./plugins/norbert-usage/views/CostTicker";
 import { SessionStatusView, type SessionEvent as DashboardSessionEvent } from "./plugins/norbert-usage/views/SessionStatusView";
@@ -545,17 +545,14 @@ function App() {
     };
     CostTickerWrapper.displayName = "CostTickerWrapper";
 
-    // v2 phosphor scope replaces v1 PerformanceMonitorView for the
-    // "performance-monitor" view id (per v2-phosphor-architecture.md §5 Q5).
-    // The v1 component file still exists at this step and becomes unused;
-    // it is deleted by Step 10-01.
-    const PerformanceMonitorWrapper: FC = () => (
+    // Activity view: phosphor oscilloscope of per-session activity.
+    const ActivityWrapper: FC = () => (
       <PhosphorScopeView store={usageMultiSessionStore} />
     );
-    PerformanceMonitorWrapper.displayName = "PerformanceMonitorWrapper";
+    ActivityWrapper.displayName = "ActivityWrapper";
 
     registry.set("cost-ticker", CostTickerWrapper);
-    registry.set("performance-monitor", PerformanceMonitorWrapper);
+    registry.set("activity", ActivityWrapper);
 
     // Session Status: combined gauges + session dashboard, shown in the
     // secondary panel when a session is selected. Data fetching handled
