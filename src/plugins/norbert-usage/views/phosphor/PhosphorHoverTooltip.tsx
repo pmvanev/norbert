@@ -35,6 +35,7 @@
  */
 
 import {
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -45,6 +46,11 @@ import {
   clampTooltipLeft,
   clampTooltipTop,
 } from "../../domain/phosphor/tooltipPositioning";
+import {
+  HOVER_BEAT_FREQ_HZ,
+  computeHoverBeatAlpha,
+  computeHoverBeatRadius,
+} from "../../domain/phosphor/hoverBeat";
 
 interface PhosphorHoverTooltipProps {
   readonly selection: HoverSelection | null;
@@ -53,6 +59,19 @@ interface PhosphorHoverTooltipProps {
 
 // Offset from the cursor so the tooltip never sits beneath the pointer tip.
 const TOOLTIP_OFFSET_PX = 12;
+// Tooltip pulse parameters — phase-locked to the canvas-drawn hover-beat dot
+// via the shared `HOVER_BEAT_FREQ_HZ`. Both sites compute `sin(2π · freq · t)`
+// using `Date.now()`, so identical inputs yield identical phase.
+//
+// Opacity: 0.85 ± 0.15 → [0.70, 1.00]. Text stays readable at the trough
+// while still delivering a perceptible "breath" at the peak.
+// Glow:    0–12 px halo radius (half-rectified envelope, never negative)
+//          painted in the hovered trace's color for the "flash" effect
+//          synchronized with the dot's brightest frame.
+const TOOLTIP_PULSE_ALPHA_BASE = 0.85;
+const TOOLTIP_PULSE_ALPHA_AMPLITUDE = 0.15;
+const TOOLTIP_PULSE_GLOW_BASE_PX = 0;
+const TOOLTIP_PULSE_GLOW_AMPLITUDE_PX = 12;
 // Fallback estimates used on the very first render before useLayoutEffect
 // measures the tooltip's actual rendered size. Kept wider than the old
 // hardcoded 220×30 so even the pre-measurement placement is unlikely to
@@ -180,6 +199,49 @@ export const PhosphorHoverTooltip = ({
     width: number;
     height: number;
   } | null>(null);
+
+  // rAF-driven pulse: opacity + colored box-shadow glow modulated at
+  // `HOVER_BEAT_FREQ_HZ`, phase-locked to the canvas dot because both use
+  // the same `Date.now()` + frequency + math. Writes directly to the DOM
+  // style to avoid re-rendering React at 60fps. The loop only runs while a
+  // selection is active (the effect's dependency on `selection === null`
+  // starts/stops it, and the ref bails out cleanly if the element has been
+  // unmounted between frames).
+  useEffect(() => {
+    if (selection === null || typeof window === "undefined") return;
+    let rafId: number | null = null;
+    const tick = () => {
+      const node = tooltipRef.current;
+      if (node !== null) {
+        const nowMs = Date.now();
+        const alpha = computeHoverBeatAlpha(
+          nowMs,
+          HOVER_BEAT_FREQ_HZ,
+          TOOLTIP_PULSE_ALPHA_BASE,
+          TOOLTIP_PULSE_ALPHA_AMPLITUDE,
+        );
+        // Half-rectified envelope for the glow radius so it never goes
+        // negative — `computeHoverBeatRadius` with base 0 gives a [0, amp]
+        // bounce that peaks on the same frame as the dot's brightest alpha.
+        const glowPx = computeHoverBeatRadius(
+          nowMs,
+          HOVER_BEAT_FREQ_HZ,
+          TOOLTIP_PULSE_GLOW_BASE_PX,
+          TOOLTIP_PULSE_GLOW_AMPLITUDE_PX,
+        );
+        node.style.opacity = `${alpha}`;
+        // Two-layer shadow: the pre-existing drop shadow for depth, plus a
+        // colored halo that pulses in the hovered trace's color so the
+        // tooltip "flashes" to match the dot's color identity.
+        node.style.boxShadow = `0 2px 10px rgba(0, 0, 0, 0.45), 0 0 ${glowPx}px ${selection.color}`;
+      }
+      rafId = window.requestAnimationFrame(tick);
+    };
+    rafId = window.requestAnimationFrame(tick);
+    return () => {
+      if (rafId !== null) window.cancelAnimationFrame(rafId);
+    };
+  }, [selection === null, selection?.color]);
 
   useLayoutEffect(() => {
     if (tooltipRef.current === null) {

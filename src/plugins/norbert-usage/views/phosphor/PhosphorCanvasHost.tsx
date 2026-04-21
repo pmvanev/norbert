@@ -63,6 +63,7 @@ import { scopeHitTest, type HoverSelection } from "../../domain/phosphor/scopeHi
 import { timeToX, valueToY } from "../../domain/phosphor/canvasGeometry";
 import { stepPolyline } from "../../domain/phosphor/stepPolyline";
 import {
+  HOVER_BEAT_FREQ_HZ,
   computeHoverBeatAlpha,
   computeHoverBeatRadius,
 } from "../../domain/phosphor/hoverBeat";
@@ -71,6 +72,10 @@ import {
   ensurePersistenceBuffer,
   type PersistenceBufferCell,
 } from "./ensurePersistenceBuffer";
+import {
+  generatePhosphorPalette,
+  type PhosphorSpectrum,
+} from "../../domain/phosphor/phosphorSpectrum";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -88,12 +93,9 @@ const PULSE_BASE_RADIUS = 10;
 const EMPTY_HIDDEN_SESSIONS: ReadonlySet<string> = new Set<string>();
 // Hover-beat (breathing dot at the hovered sample).
 //
-// Frequency note: Phil's sketch mentioned "60 Hz". At our 60fps render
-// cadence a 60 Hz sinusoid aliases to a static dot — each frame samples the
-// same phase. 2 Hz (120 bpm) sits well below Nyquist, gives a clearly
-// visible pulse, and feels like a heartbeat. Swap this constant if a
-// different tempo is wanted.
-const HOVER_BEAT_FREQ_HZ = 2;
+// Frequency: imported from `domain/phosphor/hoverBeat` so the DOM tooltip's
+// synchronized pulse reads the same constant and phase-locks automatically
+// (both compute `sin(2π · freq · Date.now())` with identical inputs).
 const HOVER_BEAT_BASE_RADIUS_PX = 4;
 const HOVER_BEAT_AMPLITUDE_PX = 3;
 // Alpha modulation: 0.7 ± 0.3 → [0.4, 1.0]. Keeps the dot always visible
@@ -133,10 +135,9 @@ const GRID_COLOR_PROP = "--phosphor-grid";
 const GRID_COLOR_FALLBACK = "rgba(255, 255, 255, 0.06)";
 const AXIS_LABEL_COLOR_PROP = "--phosphor-axis-label";
 const AXIS_LABEL_COLOR_FALLBACK = "rgba(200, 200, 200, 0.75)";
-// Per-session phosphor trace palette — exposed as --phosphor-session-0..4
-// in themes.css so the scope colors harmonize with the active theme.
-const PHOSPHOR_SESSION_PALETTE_SIZE = 5;
-const PHOSPHOR_SESSION_COLOR_PROP_PREFIX = "--phosphor-session-";
+// Per-session phosphor trace spectrum is resolved from theme CSS custom
+// properties (`--phosphor-spectrum-*`) and generated via golden-ratio
+// stepping in `domain/phosphor/phosphorSpectrum.ts`.
 
 /** Resolve a CSS custom property from a container, with a safe fallback. */
 const resolveThemeColor = (
@@ -150,25 +151,55 @@ const resolveThemeColor = (
 };
 
 /**
- * Resolve the 5-color session palette from the active theme's CSS custom
- * properties. Unresolved slots are dropped so `buildFrame` falls back to
- * `SESSION_COLORS` for the missing indices (an empty array returned here
- * is treated as "palette omitted" downstream). Cheap — one getComputedStyle
- * call plus five getPropertyValue reads; safe to call every rAF tick.
+ * Resolve the active theme's phosphor spectrum from CSS custom properties
+ * (`--phosphor-spectrum-hue-start` / `-end` / `-sat-*` / `-light-*`).
+ * Returns null when any component is missing or unparseable so `buildFrame`
+ * falls back to the default `SESSION_COLORS` palette. Cheap — one
+ * getComputedStyle call plus six getPropertyValue reads; safe per rAF tick.
  */
-const resolveSessionColors = (
+const resolvePhosphorSpectrum = (
   container: HTMLElement | null,
-): ReadonlyArray<string> => {
-  if (container === null || typeof window === "undefined") return [];
+): PhosphorSpectrum | null => {
+  if (container === null || typeof window === "undefined") return null;
   const styles = window.getComputedStyle(container);
-  const resolved: string[] = [];
-  for (let i = 0; i < PHOSPHOR_SESSION_PALETTE_SIZE; i++) {
-    const raw = styles
-      .getPropertyValue(`${PHOSPHOR_SESSION_COLOR_PROP_PREFIX}${i}`)
-      .trim();
-    if (raw !== "") resolved.push(raw);
+  const read = (prop: string): number | null => {
+    const raw = styles.getPropertyValue(prop).trim();
+    if (raw === "") return null;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  const hueStart = read("--phosphor-spectrum-hue-start");
+  const hueEnd = read("--phosphor-spectrum-hue-end");
+  const satStart = read("--phosphor-spectrum-sat-start");
+  const satEnd = read("--phosphor-spectrum-sat-end");
+  const lightStart = read("--phosphor-spectrum-light-start");
+  const lightEnd = read("--phosphor-spectrum-light-end");
+  if (
+    hueStart === null ||
+    hueEnd === null ||
+    satStart === null ||
+    satEnd === null ||
+    lightStart === null ||
+    lightEnd === null
+  ) {
+    return null;
   }
-  return resolved;
+  return { hueStart, hueEnd, satStart, satEnd, lightStart, lightEnd };
+};
+
+/**
+ * Build the `sessionColors` array by resolving the theme's spectrum and
+ * generating one color per registered session. Returns an empty array when
+ * no spectrum is declared or no sessions are registered — `buildFrame`
+ * falls back to `SESSION_COLORS` in that case.
+ */
+const resolveSessionPalette = (
+  container: HTMLElement | null,
+  sessionCount: number,
+): ReadonlyArray<string> => {
+  const spectrum = resolvePhosphorSpectrum(container);
+  if (spectrum === null) return [];
+  return generatePhosphorPalette(spectrum, sessionCount);
 };
 
 // ---------------------------------------------------------------------------
@@ -576,7 +607,10 @@ export const PhosphorCanvasHost = ({
   // properties on each render. This path fires when the parent re-renders
   // (store notification, theme switch that triggers re-render upstream) so
   // the render-time frame reflects the active theme's palette.
-  const renderFrameSessionColors = resolveSessionColors(containerRef.current);
+  const renderFrameSessionColors = resolveSessionPalette(
+    containerRef.current,
+    store.getSessionIds().length,
+  );
   const renderFrame = buildFrame(store, selectedMetric, nowFn(), {
     yMaxMode: "dynamic",
     hiddenSessions: hiddenSessions ?? EMPTY_HIDDEN_SESSIONS,
@@ -655,11 +689,14 @@ export const PhosphorCanvasHost = ({
     // smoothly even between store notifications. Dynamic yMax keeps the
     // scope filling vertical space when real peaks are well below the cap.
     //
-    // Re-resolve the theme's session palette each tick rather than caching
-    // it. `getComputedStyle` + five property reads are sub-microsecond, and
-    // this removes the need for a MutationObserver to catch theme switches
+    // Re-resolve the theme's spectrum each tick rather than caching it.
+    // `getComputedStyle` + six property reads are sub-microsecond, and this
+    // removes the need for a MutationObserver to catch theme switches
     // (the active theme becomes visible on the next rAF tick).
-    const activePalette = resolveSessionColors(containerRef.current);
+    const activePalette = resolveSessionPalette(
+      containerRef.current,
+      storeRef.current.getSessionIds().length,
+    );
     const activeFrame = buildFrame(
       storeRef.current,
       selectedMetricRef.current,

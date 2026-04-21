@@ -15,14 +15,30 @@
  *
  * Frequency note (display):
  *   At a 60fps render cadence, a frequency close to 60 Hz aliases into a
- *   near-static dot (sampling exactly the same phase each frame). ~2 Hz
- *   (120 bpm) gives a clearly-visible pulse well below Nyquist and stays
- *   free of aliasing under varying render rates. Caller picks the
- *   constant; these helpers are oblivious to render cadence.
+ *   near-static dot (sampling exactly the same phase each frame). ~1 Hz
+ *   (the classic-radar "sweep blip" cadence) gives a clearly-visible pulse
+ *   well below Nyquist and stays free of aliasing under varying render
+ *   rates. Caller picks the constant; these helpers are oblivious to
+ *   render cadence.
+ *
+ * Phase-locking consumers:
+ *   Multiple UI surfaces (the canvas-drawn dot and the DOM tooltip) both
+ *   pulse with this math. Because the helpers are pure functions of
+ *   `Date.now()` + `freqHz`, any two consumers passing the SAME `nowMs`
+ *   and `freqHz` produce identical phase — no explicit sync channel is
+ *   needed. `HOVER_BEAT_FREQ_HZ` is exported so both sites cannot drift.
  *
  * Pure: no imports from `react`, `adapters`, `views`, `window`, `document`,
  * or `domain/oscilloscope`. No effects. Deterministic in inputs.
  */
+
+/**
+ * Shared hover-beat pulse frequency (Hz). ~1 Hz matches the visible
+ * "sweep blip" cadence of a classic PPI radar display. Exported so the
+ * canvas-drawn dot and the DOM tooltip can phase-lock by referencing the
+ * same constant rather than each declaring their own.
+ */
+export const HOVER_BEAT_FREQ_HZ = 1;
 
 /** Angular position (radians) at time `nowMs` for a sinusoid at `freqHz`. */
 const phase = (nowMs: number, freqHz: number): number =>
