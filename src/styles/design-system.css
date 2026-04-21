@@ -2105,7 +2105,8 @@ code, pre, .mono,
 
 .config-list-meta {
   font-size: 9px;
-  color: var(--text-m);
+  color: var(--text-p);
+  opacity: 0.75;
   flex-shrink: 0;
 }
 
@@ -2124,7 +2125,8 @@ code, pre, .mono,
 
 .config-list-desc {
   font-size: 9px;
-  color: var(--text-m);
+  color: var(--text-p);
+  opacity: 0.75;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2343,7 +2345,8 @@ code, pre, .mono,
 
 .config-card-preview {
   font-size: 10px;
-  color: var(--text-s);
+  color: var(--text-p);
+  opacity: 0.82;
   padding: 0 10px 8px;
   line-height: 1.4;
 }
@@ -2355,7 +2358,8 @@ code, pre, .mono,
 
 .config-card-description {
   font-size: 10px;
-  color: var(--text-s);
+  color: var(--text-p);
+  opacity: 0.82;
   line-height: 1.5;
   margin-bottom: 8px;
 }
