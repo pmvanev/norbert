@@ -1,0 +1,524 @@
+schema_version: 1
+
+journey:
+  name: "Cross-Reference Navigation"
+  goal: >
+    User reading one configuration item follows its references to other items
+    (and back) without losing their place, so they can build a mental map of
+    how their Claude Code configs compose.
+  persona: "Ravi Patel -- Claude Code power user (inherited from norbert-config)"
+
+  emotional_arc:
+    start: "Curious -- 'what does this config touch?'"
+    middle: "Engaged -- 'following references without losing my spot'"
+    end: "Oriented -- 'I see how the pieces compose'"
+
+steps:
+  - id: 1
+    name: "Spot a reference in the detail pane"
+    command: "User reads detail markdown in secondary panel"
+
+    tui_mockup: |
+      +-- Detail pane ------------------------------------+
+      | # /release (project-scope command)                |
+      |                                                   |
+      | 1. Load the ~nw-bdd-requirements~ skill           |
+      | 2. Invoke the ~nw-product-owner~ agent            |
+      | 3. See ~./release-notes.md~                       |
+      |                                                   |
+      | Related: ~.claude/hooks/pre-release.sh~           |
+      +---------------------------------------------------+
+
+      Tokens ~foo~ are references, rendered with:
+        default  -> dotted underline (subtle)
+        hover    -> solid underline + arrow glyph + pointer cursor
+        focus    -> focus ring
+        dead     -> strikethrough + muted + tooltip
+
+    shared_artifacts:
+      - name: "reference_registry"
+        source: "plugin-maintained index of {type, scope, name -> item}"
+        displayed_as: "reference tokens styled as clickable in detail markdown"
+        consumers: ["detail pane renderer", "resolver on click"]
+      - name: "reference_token_style"
+        source: "DESIGN wave design tokens (TBD)"
+        displayed_as: "subtle dotted underline by default"
+        consumers: ["all detail panes", "split-bottom preview pane"]
+
+    emotional_state:
+      entry: "Curious"
+      exit: "Oriented -- I can see what's navigable"
+
+    integration_checkpoint: |
+      Every reference detected during render resolves to the same registry
+      entry a click-time lookup would return. Detection must not introduce
+      false positives that look clickable but resolve to nothing.
+
+    failure_modes:
+      - "Plain word in markdown collides with a config item name (e.g. 'release')
+         and is wrongly styled as a reference"
+      - "Reference registry is stale (file added/removed since panel mounted)"
+      - "Markdown contains code blocks where references should NOT be linkified
+         (literal code samples)"
+
+    gherkin: |
+      Scenario: Reference tokens are visually discoverable in detail markdown
+        Given Ravi is viewing the /release command detail
+        And the command body references skill "nw-bdd-requirements"
+        When the detail pane renders
+        Then "nw-bdd-requirements" appears with a subtle dotted underline
+        And hovering it reveals a solid underline and pointer cursor
+
+      Scenario: Literal code samples are not linkified as references
+        Given the /release command body contains a fenced code block
+        And that block includes the word "nw-bdd-requirements"
+        When the detail pane renders
+        Then the occurrence inside the code block is NOT styled as a reference
+        And only occurrences in prose are clickable
+
+  - id: 2
+    name: "Single-click to peek (vertical split)"
+    command: "User clicks a reference token"
+
+    tui_mockup: |
+      +-- Detail TOP (unchanged source item) -------------+
+      | # /release                                        |
+      | ... body ...                                      |
+      | 1. Load the ~nw-bdd-requirements~ (clicked)       |
+      +---------------------------------------------------+
+      +-- Detail BOTTOM (preview of target) --------------+
+      | Preview: Skill (user scope)                       |
+      | # nw-bdd-requirements                             |
+      | BDD requirements discovery through conversation   |
+      |                                                   |
+      | [ Open fully (Ctrl+click) ]   [ x Close ]         |
+      +---------------------------------------------------+
+
+    shared_artifacts:
+      - name: "split_state"
+        source: "ConfigDetailPanel controlled state"
+        displayed_as: "null | { topRef, bottomRef, dividerRatio }"
+        consumers: ["detail pane layout", "history stack entries"]
+      - name: "nav_history_stack"
+        source: "Config-view-scoped in-memory state"
+        displayed_as: "stack of snapshots {sub_tab, list_item, split_state}"
+        consumers: ["Alt+Left/Right handlers"]
+      - name: "reference_registry"
+        source: "plugin-maintained index"
+        displayed_as: "resolution of clicked token -> target item"
+        consumers: ["split opener"]
+
+    emotional_state:
+      entry: "Curious -- want to peek without committing"
+      exit: "Engaged -- can see the target and my original at once"
+
+    integration_checkpoint: |
+      Split depth is capped at 2 (top + bottom). Clicking a reference inside
+      the bottom pane REPLACES the bottom target; it does not create a third
+      pane. Primary (list) pane is NOT modified by single-click.
+
+    failure_modes:
+      - "Single-click inside bottom pane creates a third split instead of replacing"
+      - "Bottom pane preview escapes the container (layout overflow)"
+      - "Target file exists in registry but has been deleted between render and click"
+      - "Resize divider state lost when split is closed and reopened"
+
+    gherkin: |
+      Scenario: Single-click opens a vertical split preview
+        Given Ravi is viewing the /release command detail
+        When Ravi single-clicks the "nw-bdd-requirements" reference
+        Then the detail pane splits vertically
+        And the top half still shows /release
+        And the bottom half shows a preview of skill "nw-bdd-requirements"
+        And the list pane selection is still "/release"
+        And a history entry is pushed
+
+      Scenario: Single-click inside the split replaces the bottom pane
+        Given the detail pane is split with /release on top and skill X on bottom
+        When Ravi single-clicks a reference to skill Y inside the top pane
+        Then the bottom pane now shows a preview of skill Y
+        And the pane structure remains 1 top + 1 bottom (no third split)
+
+      Scenario: Closing the split returns to single-pane view
+        Given the detail pane is split
+        When Ravi presses Esc or clicks the bottom-pane Close button
+        Then the split collapses to the single-pane view showing the top item
+        And a history entry is pushed reflecting split=closed
+
+  - id: 3
+    name: "Ctrl+click to commit (replace + sync primary)"
+    command: "User Ctrl+clicks a reference token"
+
+    tui_mockup: |
+      Before: sub-tab=commands, selected=/release, split maybe open
+      Action: Ctrl+click on "nw-bdd-requirements" (skill, different sub-tab)
+      After:  sub-tab=skills,   selected=nw-bdd-requirements, split=closed
+
+      +-- Configuration -----------------------------------+
+      |  [Cmds]  [Skills*] ...   <- sub-tab switched       |
+      +----------------------------------------------------+
+      | Skills list            | Detail: nw-bdd-req (full) |
+      | > nw-bdd-requirements  | Scope: user               |
+      |   nw-discovery-method  | Source: ~/.claude/...     |
+      |   ...                  | ... skill body ...        |
+      +----------------------------------------------------+
+
+    shared_artifacts:
+      - name: "active_sub_tab"
+        source: "ConfigListPanel controlled state"
+        displayed_as: "highlighted sub-tab in the list pane"
+        consumers: ["list pane header", "history stack"]
+      - name: "selected_list_item"
+        source: "ConfigListPanel controlled state"
+        displayed_as: "highlighted row in list pane"
+        consumers: ["list pane", "detail pane input", "history stack"]
+      - name: "split_state"
+        source: "ConfigDetailPanel controlled state"
+        displayed_as: "forced to null on Ctrl+click"
+        consumers: ["detail pane layout"]
+
+    emotional_state:
+      entry: "Decisive -- I want to go THERE"
+      exit: "Confident -- the whole UI moved with me"
+
+    integration_checkpoint: |
+      A Ctrl+click MUST update all of {active_sub_tab, selected_list_item,
+      detail_primary} atomically. Partial updates (sub-tab changes but list
+      doesn't scroll to target) are a bug. Split state resets to closed.
+
+    failure_modes:
+      - "Sub-tab switches but list pane does not scroll to target item"
+      - "Detail loads but list pane shows wrong selection"
+      - "Ctrl+click triggers browser/OS default behavior instead of app handler"
+      - "Ctrl+click on an ambiguous reference proceeds without disambiguation"
+      - "Filter bar on the target sub-tab still has stale filter from previous use"
+
+    gherkin: |
+      Scenario: Ctrl+click replaces the secondary panel and syncs the list
+        Given Ravi is viewing the /release command detail in sub-tab "commands"
+        When Ravi Ctrl+clicks the "nw-bdd-requirements" reference
+        Then the sub-tab switches to "skills"
+        And the list pane highlights and scrolls to "nw-bdd-requirements"
+        And the detail pane shows the full skill page (no split)
+        And a history entry is pushed
+
+      Scenario: Ctrl+click within the same sub-tab swaps only the selection
+        Given Ravi is viewing skill "nw-bdd-requirements" in sub-tab "skills"
+        When Ravi Ctrl+clicks a reference to skill "nw-discovery-methodology"
+        Then the sub-tab remains "skills"
+        And the list pane selection moves to "nw-discovery-methodology"
+        And the detail pane shows the new skill
+        And a history entry is pushed
+
+      Scenario: Ctrl+click on unresolved reference does nothing destructive
+        Given Ravi is viewing the /release command detail
+        And the reference "nw-deleted-skill" is marked dead
+        When Ravi Ctrl+clicks the dead reference
+        Then the sub-tab does not change
+        And the list selection does not change
+        And the detail pane does not change
+        And a tooltip or inline message explains why
+
+  - id: 4
+    name: "Traverse history with Alt+Left / Alt+Right"
+    command: "User presses Alt+Left or Alt+Right"
+
+    tui_mockup: |
+      History stack (HEAD at top):
+        [3] skills / nw-bdd-requirements / split=closed       <- HEAD
+        [2] commands / release / split={bottom: pre-release.sh}
+        [1] commands / release / split={bottom: nw-bdd-req}
+        [0] commands / release / split=closed
+
+      Alt+Left from [3] -> restore state [2]:
+        sub-tab back to commands, list back to /release,
+        split reopened with pre-release.sh in bottom pane.
+
+      Alt+Right from [2] -> returns HEAD to [3].
+
+    shared_artifacts:
+      - name: "nav_history_stack"
+        source: "Config-view-scoped in-memory state"
+        displayed_as: "Alt+Left/Right buttons enabled/disabled based on position"
+        consumers: ["history handler", "potential toolbar buttons"]
+
+    emotional_state:
+      entry: "Lost or deliberate -- wanting to retrace"
+      exit: "Reassured -- nothing is ever one-way"
+
+    integration_checkpoint: |
+      Alt+Left/Right are scoped to the Configuration view only. They do not
+      intercept keystrokes when another top-level Norbert view is active.
+      Each restore operation reinstates the full state snapshot
+      (sub-tab + list item + split).
+
+    failure_modes:
+      - "Alt+Left intercepted globally, breaking other views' shortcuts"
+      - "History restore leaves stale split state mismatched with snapshot"
+      - "Forward stack not cleared when a new navigation is performed mid-history"
+      - "History grows unbounded over long sessions"
+
+    gherkin: |
+      Scenario: Alt+Left restores the previous navigation state
+        Given the navigation history has 4 entries with HEAD at index 3
+        When Ravi presses Alt+Left
+        Then the UI state matches the snapshot at index 2 exactly
+        And HEAD moves to index 2
+        And Alt+Right is now enabled
+
+      Scenario: A new navigation clears the forward stack
+        Given HEAD is at index 2 of a 4-entry history (entries 3 exist ahead)
+        When Ravi single-clicks a new reference
+        Then the old entry 3 is discarded
+        And the new state becomes the new HEAD at index 3
+
+      Scenario: Alt+Left at start of history is a no-op
+        Given HEAD is at index 0
+        When Ravi presses Alt+Left
+        Then the UI does not change
+        And a subtle end-of-history cue is shown (e.g. brief shake or status line)
+
+      Scenario: Alt+Left/Right only act within the Configuration view
+        Given Norbert's top-level active view is "Sessions" (not Configuration)
+        When Ravi presses Alt+Left
+        Then the Configuration history does not change
+        And the keystroke falls through to the browser/OS default
+
+  - id: 5
+    name: "Handle a dead reference"
+    command: "User attempts to click an unresolvable reference"
+
+    tui_mockup: |
+      +-- Detail pane -----------------------------------+
+      | See also: ~nw-old-skill-that-was-deleted~         |
+      |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^         |
+      |           (strikethrough + muted)                 |
+      |                                                   |
+      |  on hover / focus:                                |
+      |  +-- tooltip -----------------------------------+ |
+      |  | Not found in your config.                    | |
+      |  | Searched scopes: user, project, plugin.      | |
+      |  +----------------------------------------------+ |
+      +--------------------------------------------------+
+
+    shared_artifacts:
+      - name: "reference_registry"
+        source: "plugin-maintained index"
+        displayed_as: "negative lookup returns 'not found'"
+        consumers: ["detail pane renderer (strike-through)", "click handler (no-op)"]
+
+    emotional_state:
+      entry: "Hopeful"
+      exit: "Informed (not frustrated) -- the UI explained the dead end"
+
+    integration_checkpoint: |
+      Dead references never throw. They never navigate. They always explain
+      via tooltip. They never push a history entry.
+
+    failure_modes:
+      - "Dead reference click navigates to empty detail view (bad)"
+      - "Dead reference click crashes renderer"
+      - "Tooltip does not appear on keyboard focus (accessibility gap)"
+
+    gherkin: |
+      Scenario: Dead reference is visually distinct and non-interactive
+        Given the detail body contains "nw-deleted-skill"
+        And no item with that name exists in any scope
+        When the detail pane renders
+        Then "nw-deleted-skill" appears with strikethrough and muted color
+        And hovering or focusing it shows a tooltip explaining it was not found
+        And clicking it does not open a split, sync the list, or push history
+
+  - id: 6
+    name: "Disambiguate a name collision"
+    command: "User clicks a reference that matches multiple items"
+
+    tui_mockup: |
+      User clicks "release" which matches:
+        - [project] command .claude/commands/release.md
+        - [user]    command ~/.claude/commands/release.md
+
+      +-- Disambiguation popover ------------------------+
+      | release -- 2 matches                             |
+      | > [project] Cuts a release                      |
+      |   [user]    Generic release script               |
+      |                                                  |
+      | Enter to open, arrow keys to choose, Esc cancel  |
+      +--------------------------------------------------+
+
+    shared_artifacts:
+      - name: "scope_resolution_order"
+        source: "constant (proposed: project > plugin > user)"
+        displayed_as: "top item in disambiguation popover pre-selected"
+        consumers: ["popover", "click-through-with-Enter fallback"]
+      - name: "reference_registry"
+        source: "plugin-maintained index (returns list, not single)"
+        displayed_as: "one chip per candidate"
+        consumers: ["popover"]
+
+    emotional_state:
+      entry: "Slightly confused -- ambiguous word"
+      exit: "In control -- the choice was surfaced, not hidden"
+
+    integration_checkpoint: |
+      Ambiguous references MUST surface a disambiguation UI before resolving.
+      Silent fallback to the 'winner' by precedence is not acceptable without
+      at least visual cue.
+
+    failure_modes:
+      - "Disambiguation dismissed silently and lower-precedence item opened"
+      - "Keyboard path (Tab-focus, Enter) doesn't trigger the popover"
+      - "Popover placed off-screen near viewport edges"
+
+    gherkin: |
+      Scenario: Ambiguous reference surfaces a disambiguation popover
+        Given the word "release" appears in the detail body
+        And "release" exists as a command in both "project" and "user" scopes
+        When Ravi single-clicks "release"
+        Then a disambiguation popover appears listing both matches with scope badges
+        And the default-selected match is the project-scope command
+        And arrow keys change the highlighted candidate
+        And Enter opens the highlighted candidate using single-click semantics
+
+      Scenario: Ctrl+click on ambiguous reference also uses disambiguation
+        Given the same ambiguous "release" reference
+        When Ravi Ctrl+clicks the reference
+        Then the disambiguation popover appears
+        And confirming a choice applies Ctrl+click semantics (replace + sync)
+
+integration_validation:
+  shared_artifact_consistency:
+    - artifact: "reference_registry"
+      must_match_across: [1, 2, 3, 5, 6]
+      failure_message: >
+        Registry used at render time MUST equal registry used at click time
+        (beyond genuine filesystem changes between render and click).
+
+    - artifact: "nav_history_stack"
+      must_match_across: [2, 3, 4]
+      failure_message: >
+        Every state-changing navigation (single-click, Ctrl+click, split close)
+        MUST push exactly one entry. Alt+Left/Right MUST restore entries
+        bit-for-bit.
+
+    - artifact: "active_sub_tab + selected_list_item + split_state (tuple)"
+      must_match_across: [3, 4]
+      failure_message: >
+        Ctrl+click updates all three atomically. Alt+Left restores all three
+        atomically. Partial updates are bugs.
+
+    - artifact: "reference_token_style"
+      must_match_across: [1, 2, 5, 6]
+      failure_message: >
+        Token styling is consistent across the top pane, bottom split preview,
+        and disambiguation chips. Dead/ambiguous variants are distinguishable.
+
+error_paths:
+  - id: "dead-reference"
+    trigger: "Reference does not resolve to any item"
+    display: "Strikethrough + muted + tooltip 'Not found in your config'"
+    recovery: "User edits the source file to fix the reference, or ignores"
+
+  - id: "ambiguous-reference"
+    trigger: "Reference name matches items in multiple scopes"
+    display: "Disambiguation popover listing all matches with scope badges"
+    recovery: "User selects the intended match"
+
+  - id: "deleted-mid-click"
+    trigger: "File exists at render time but is deleted before click resolves"
+    display: "Inline toast in the pane: 'This item was removed. Showing last known data.' followed by transition to dead-reference styling on next render"
+    recovery: "Registry re-index; user navigates elsewhere"
+
+  - id: "permission-error"
+    trigger: "Reference target exists but cannot be read (permission denied)"
+    display: "Split opens with bottom pane showing a 'permission denied' panel that still shows the item's name, type, scope, and path so the user can diagnose"
+    recovery: "User fixes file permissions, triggers registry refresh"
+
+  - id: "malformed-markdown"
+    trigger: "Detail body contains malformed markdown that breaks reference detection"
+    display: "Fallback: references inside affected region are not detected, but the rest of the pane renders normally. Inline warning chip at the pane header."
+    recovery: "User fixes the markdown"
+
+  - id: "unsupported-reference-type"
+    trigger: "Reference resolves to an artifact type we don't support (future-proofing)"
+    display: "Tooltip: 'This reference type is not yet supported. Open the file from: {path}'"
+    recovery: "User opens file manually; we extend support in a later release"
+
+  - id: "history-alt-left-at-start"
+    trigger: "Alt+Left pressed with HEAD at index 0"
+    display: "Subtle status-line message 'Start of history' or brief pane shake"
+    recovery: "User navigates forward normally"
+
+open_questions:
+  - id: "OQ-1"
+    question: "On Ctrl+click that switches sub-tabs, should the destination sub-tab's filter bar be preserved or reset?"
+    options:
+      - "Preserve (user's filter is sacred)"
+      - "Reset (Ctrl+click should reveal the target, even if filter would hide it)"
+      - "Reset only if filter would hide the target, otherwise preserve"
+    recommendation: "Reset only if the filter would hide the target -- compromises between respecting user intent and ensuring target visibility"
+    who_decides: "DESIGN wave with user input"
+
+  - id: "OQ-2"
+    question: "Should manual list-item selection or manual sub-tab switching push a history entry?"
+    options:
+      - "Yes, all navigation is history-worthy (browser-like)"
+      - "No, only cross-reference actions push history (sub-tab clicks are mode switches, not navigation)"
+      - "Yes for list-item selection, no for sub-tab switch"
+    recommendation: "No -- only cross-reference actions (single-click, Ctrl+click, split close) push history. Manual sub-tab / list-row selection is a fresh context, not a timeline entry. Alt+Left should take the user back to where the cross-reference chain started, not replay their list-scrolling history."
+    who_decides: "DESIGN wave with user input"
+
+  - id: "OQ-3"
+    question: "How many splits can be open simultaneously? Proposed: cap at 2 (top + bottom)."
+    options:
+      - "Cap at 2 (simple mental model, matches most IDE diff views)"
+      - "Allow arbitrary nesting (power user flexibility, risks visual chaos)"
+      - "Cap at 2 but allow swapping top<->bottom via a keyboard shortcut"
+    recommendation: "Cap at 2. Adding a swap shortcut is cheap if users ask for it."
+    who_decides: "DESIGN wave with user input"
+
+  - id: "OQ-4"
+    question: "How is a 'reference' detected in markdown? Proposed: a prioritized pipeline."
+    options:
+      - "Plugin-provided explicit registry only: detect only tokens matching known item names. Simplest, safest, misses relative paths."
+      - "Remark AST walk: parse markdown, inspect link nodes and inline code; regex fallback for bare names. Most accurate."
+      - "Regex over rendered text: simple, fragile."
+    recommendation: >
+      Pipeline: (1) explicit markdown links resolved first (e.g. [x](./foo.md)),
+      (2) inline code spans matching a known item name, (3) bare prose tokens
+      ONLY when they appear in a curated 'Related:' section, OR when the
+      surrounding context strongly signals a reference (e.g. after 'Load the',
+      'Invoke', 'See'). Bare prose detection is OFF by default to avoid false
+      positives; user can opt-in via a setting. This needs validation.
+    who_decides: "DESIGN wave with user input; bare-prose strategy may need spike"
+
+  - id: "OQ-5"
+    question: "Scope precedence for disambiguation default selection: proposed project > plugin > user."
+    options:
+      - "project > plugin > user (most-local wins)"
+      - "plugin > project > user (plugin-aware most specific)"
+      - "Always show popover, never pre-select"
+    recommendation: "project > plugin > user, but always show the popover so the user confirms. Never silently resolve on ambiguity."
+    who_decides: "DESIGN wave with user input"
+
+  - id: "OQ-6"
+    question: "History stack size -- unbounded, or LRU cap?"
+    options:
+      - "Unbounded within a session (reset on Norbert restart)"
+      - "LRU with cap of 50 entries"
+      - "LRU with configurable cap"
+    recommendation: "LRU cap of 50 per Configuration view session. More than that and the user has lost track anyway."
+    who_decides: "DESIGN wave"
+
+  - id: "OQ-7"
+    question: "Should navigation history persist across Norbert restarts?"
+    options:
+      - "No, in-memory only (simplest)"
+      - "Yes, persist last N entries per workspace"
+    recommendation: "No, in-memory only for v1. Persisted history is a delight feature, not a core need."
+    who_decides: "DESIGN wave"
+
+changelog:
+  - date: "2026-04-21"
+    feature: "config-cross-references"
+    change: "Initial journey created for cross-reference navigation in Configuration view"

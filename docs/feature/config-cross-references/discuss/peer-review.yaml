@@ -1,0 +1,186 @@
+review_id: "req_rev_20260421_001"
+reviewer: "product-owner (review mode, self-peer)"
+artifact: "docs/feature/config-cross-references/discuss/ (full wave output)"
+iteration: 1
+
+strengths:
+  - "Journey YAML explicitly enumerates failure_modes per step, easing DISTILL's error-scenario generation work"
+  - "Every story traces to an outcome KPI in outcome-kpis.md (no orphan stories) -- Orphan-Story Check table in outcome-kpis.md makes traceability auditable at a glance"
+  - "Scope precedence decision (project > plugin > user) is documented in System Constraint #7 AND in US-108 AND in journey YAML step 6, with KPI #5 as a guardrail preventing silent precedence resolution -- triple-consistent"
+  - "Walking skeleton correctly includes US-107 (dead-reference safety) rather than deferring it -- avoids a trust-erosion path in the walking skeleton"
+  - "7 open questions surfaced explicitly with recommendations, so DESIGN wave has a clear decision list rather than ambient ambiguity"
+  - "Shared artifacts registry identifies HIGH integration risk on `nav_history_stack` and proposes property-test validation -- catches a common desync failure pattern"
+  - "US-110 (keyboard path) is specified as an end-to-end composable flow, not just 'each interaction supports keyboard' -- this catches focus-trap gaps that per-interaction specs miss"
+  - "Scenario titles follow business-outcome rule (no implementation details like 'reducer writes split_state')"
+
+issues_identified:
+  confirmation_bias:
+    - issue: "Happy-path bias partially present: the journey mockups show the smooth-flow scenario first. Mitigated by US-107, US-108, US-109 covering dead, ambiguous, deleted, and permission-denied paths, each with dedicated stories."
+      severity: "low"
+      location: "journey-cross-reference-navigation-visual.md Step 1-4"
+      recommendation: "Acceptable as-is. The error paths are fully covered in separate stories and the journey YAML error_paths block."
+
+    - issue: "Technology-bias risk on the proposed detection pipeline (Remark AST). The journey YAML mentions 'remark AST walk' in the feature brief context and OQ-4 settles on a pipeline -- but this is closer to a solution hint than a requirement. DESIGN wave should validate whether Remark is the right tool or if a simpler approach suffices."
+      severity: "medium"
+      location: "journey YAML OQ-4, user-stories US-101 Technical Notes"
+      recommendation: "In US-101 Technical Notes, soften 'Extend existing react-markdown pipeline' to 'Integrate with the existing markdown rendering path' so DESIGN has room to pick the tool. Leave OQ-4 recommendation as-is because it names tools neutrally."
+
+    - issue: "Availability bias on keyboard shortcuts: Alt+Left/Right chosen because 'browser-like' feels natural. No evidence these are available / unused by Norbert's existing shortcut map."
+      severity: "medium"
+      location: "US-104, system constraint #5"
+      recommendation: "Add a DESIGN-wave check: verify Alt+Left/Right are not already bound in Norbert. If they are, negotiate an alternative. This is captured implicitly by D4 ('scoped to Configuration view only') but should be an explicit DESIGN task."
+
+  completeness_gaps:
+    - issue: "No story covers the reference-registry refresh mechanism. If a user creates a new agent via CLI while the Config viewer is open, when does it become a live reference? Parent norbert-config already watches the filesystem, but the cross-reference index's refresh is not explicitly covered."
+      severity: "high"
+      location: "missing in user-stories.md"
+      recommendation: "Add to US-109 or as a small note in US-101 Technical Notes: 'reference registry is rebuilt when the parent plugin's filesystem watcher fires; detection pipeline consumes the latest snapshot'. Cite the parent behaviour rather than re-specifying."
+
+    - issue: "'Unsupported reference type' is mentioned in US-101 (the fourth variant) but has no dedicated UAT scenario explaining what this covers. What reference types today are supported vs unsupported?"
+      severity: "medium"
+      location: "US-101 variant list"
+      recommendation: "Clarify in US-101 Technical Notes: supported types are agents, commands, skills, hooks, MCP servers, rules, plugins (the 7 norbert-config tabs plus commands). File-path references that don't match any of these (e.g. a reference to a random project-local script) may fall under 'unsupported'. Consider whether this variant is v1 needed at all or a forward-compat hook only."
+
+    - issue: "No explicit non-functional requirement for reference-registry build time on large configs. A user with hundreds of skills could hit a slow initial index."
+      severity: "medium"
+      location: "missing NFR"
+      recommendation: "Add to wave-decisions.md R4 (performance risk) is already noted but add an explicit NFR: 'Reference registry build completes within 500ms for up to 500 items, p95'. DESIGN wave sets the actual target after prototyping."
+
+    - issue: "No NFR on memory usage for the history stack. With LRU 50 and each entry being a state snapshot, this is probably trivial but should be stated."
+      severity: "low"
+      location: "wave-decisions D6 / OQ-6"
+      recommendation: "Add informational: 'History snapshots are small (~200 bytes each). Memory impact negligible.' to wave-decisions.md."
+
+  clarity_issues:
+    - issue: "The phrase 'cross-reference session' is used in outcome-kpis.md KPI #3 without a definition. When does a session start and end?"
+      severity: "high"
+      location: "outcome-kpis.md KPI #3, US-106 KPI"
+      recommendation: "Define: 'A cross-reference session is the span from the first click that opens a split OR triggers Ctrl+click, through any chain of subsequent clicks, until either the user closes the split AND performs no new cross-reference click for 60s, OR the user leaves the Configuration view.' Either add this to outcome-kpis.md glossary or to wave-decisions.md."
+
+    - issue: "'Pane structure stays 1 top + 1 bottom' in US-106 -- does 'top' always equal the source of the reference chain, or does it change under any circumstances?"
+      severity: "medium"
+      location: "US-106"
+      recommendation: "US-106 domain example 2 already clarifies ('The TOP pane is still /release (anchor unchanged)'). But add an explicit AC: 'The top pane changes only on Ctrl+click or history traversal; it NEVER changes due to a click in the bottom pane.' This is implicit but not stated."
+
+    - issue: "'Scope precedence: project > plugin > user' is stated as a constant but the rationale is only in the journey-visual.md. A reviewer without context might wonder why."
+      severity: "low"
+      location: "System Constraints #7"
+      recommendation: "Add parenthetical to constraint #7: '(matches Claude Code's own resolution order)'."
+
+  testability_concerns:
+    - issue: "AC 'Click-to-render completes within 250ms' (KPI #6 guardrail) is measurable, but US-102/US-103 do not restate this as a per-story AC. Performance guardrails can get lost between stories and global KPIs."
+      severity: "medium"
+      location: "US-102 AC, US-103 AC"
+      recommendation: "Add to US-102 AC and US-103 AC: 'Click-to-render-complete p95 <= 250ms for references resolving within the in-memory registry (per global guardrail KPI #6).' This makes per-story DoD testable."
+
+    - issue: "US-110 AC 'Focus lands on a sensible focal element' is qualitative. 'Sensible' is not testable."
+      severity: "high"
+      location: "US-110 AC item 7"
+      recommendation: "Rewrite as: 'Focus lands on one of: (a) the list-pane row of the new selection after Ctrl+click, (b) the focused reference token if it still exists after history restore, (c) the detail pane root element (tabindex=-1) if neither (a) nor (b) applies.' Enumerated target makes it automatable."
+
+    - issue: "Dead-reference tooltip timing ('within 500ms of hover') in US-107 is a new AC that doesn't appear in the AC checklist -- only in a scenario."
+      severity: "low"
+      location: "US-107 AC"
+      recommendation: "Add AC: 'Tooltip appears within 500ms of hover.'"
+
+  priority_validation:
+    q1_largest_bottleneck: "YES"
+    q1_reasoning: "The feature brief explicitly states user pain: 'I just want to navigate easily across elements in the configuration view.' The proposed interaction set (peek / commit / back-forward) directly addresses the navigation friction. There is no larger bottleneck being ignored -- other norbert-config improvements are independent of this one."
+
+    q2_simple_alternatives: "ADEQUATE"
+    q2_reasoning: "The wave considered alternative interaction designs in OQ-1 through OQ-7, each with rejected options documented (e.g. arbitrary nesting of splits was considered and rejected). Simpler alternative: 'just add clickable links that replace detail pane, no split, no history' -- rejected implicitly because it loses the anchor-while-peeking value prop. Could be explicit in wave-decisions.md."
+
+    q3_constraint_prioritization: "CORRECT"
+    q3_reasoning: "Accessibility constraint (WCAG 2.2 AA), performance budget (250ms p95), and trust guardrails (no silent precedence, no dead-ref crash) are correctly elevated. Visual polish is explicitly deferred to R3 and beyond. No minority constraint dominating."
+
+    q4_data_justified: "NO_DATA"
+    q4_reasoning: "Target thresholds (70% click success, 50% retention, 3 median chain length) are team estimates, not data-derived. This is acceptable for a brownfield feature with no existing telemetry -- KPI baselines explicitly say 0 and the 30/60-day measurement establishes the actual numbers. Risk R1 in wave-decisions.md notes the inference chain from parent feature's JS-1..JS-4."
+    q4_verdict: "Acceptable given context; revisit targets after 30-day telemetry."
+
+    verdict: "PASS"
+
+approval_status: "conditionally_approved"
+critical_issues_count: 0
+high_issues_count: 3
+medium_issues_count: 5
+low_issues_count: 4
+
+approval_conditions:
+  - "Apply the 3 HIGH-severity remediations before DESIGN handoff"
+  - "MEDIUM and LOW severity items can be addressed in DESIGN wave kickoff or folded into first DESIGN-wave review"
+
+# --- Iteration 2: remediations applied ---
+iteration_2:
+  applied_remediations:
+    - "REM-1 applied: US-101 Technical Notes expanded to cover registry refresh and supported reference types"
+    - "REM-2 applied: outcome-kpis.md now includes a Glossary section defining cross-reference session, engaged session, reference chain, click, and variant terminology"
+    - "REM-3 applied: US-110 AC item rewritten with enumerated focal-element targets (a/b/c)"
+    - "OPT-1 applied: US-102 and US-103 now include click-to-render p95 AC"
+    - "OPT-2 applied: US-106 AC now explicitly forbids top-pane changes from bottom-pane clicks"
+    - "OPT-3 applied: US-107 AC now includes the 500ms tooltip timing"
+    - "OPT-4 applied: wave-decisions.md now includes NFR section with NFR-1..NFR-5"
+    - "OPT-5 applied: US-101 Technical Notes now defines supported reference types and unsupported variant semantics"
+    - "OPT-6 applied: US-101 Technical Notes softened technology language"
+    - "OPT-7 applied: wave-decisions.md NFR-5 records the Alt-key availability check as a DESIGN-wave task"
+    - "OPT-8 applied: wave-decisions.md NFR-3 documents history memory impact"
+    - "OPT-9 applied: System Constraint #7 now cites Claude Code resolution order as rationale"
+    - "OPT-10 applied: wave-decisions.md 'Alternatives Considered and Rejected' section documents ALT-1..ALT-5"
+
+  remaining_items: "None"
+
+  final_approval_status: "approved"
+  final_verdict: "All 3 HIGH-severity remediations applied. All 10 optional remediations also applied. Wave is ready for DESIGN handoff."
+
+required_remediations_before_handoff:
+  - id: "REM-1"
+    issue: "Reference-registry refresh coverage missing from stories"
+    fix: "Add note to US-101 Technical Notes: 'Reference registry is rebuilt when the parent plugin's filesystem watcher fires. This story consumes the current registry snapshot on each detail pane render; no new watcher required.'"
+
+  - id: "REM-2"
+    issue: "'Cross-reference session' not defined for KPI #3"
+    fix: "Add a 'Glossary' section to outcome-kpis.md defining cross-reference session."
+
+  - id: "REM-3"
+    issue: "US-110 AC item 7 'sensible focal element' not testable"
+    fix: "Rewrite as enumerated target list (three cases a/b/c)."
+
+optional_remediations:
+  - id: "OPT-1"
+    issue: "Performance guardrail not per-story"
+    fix: "Add click-to-render AC to US-102 and US-103."
+
+  - id: "OPT-2"
+    issue: "Top-pane anchor rule implicit"
+    fix: "Add explicit AC to US-106: top pane never changes from bottom-pane clicks."
+
+  - id: "OPT-3"
+    issue: "Tooltip timing not in AC for US-107"
+    fix: "Add 'Tooltip appears within 500ms of hover' to AC."
+
+  - id: "OPT-4"
+    issue: "Reference-registry build-time NFR missing"
+    fix: "Add NFR to wave-decisions.md."
+
+  - id: "OPT-5"
+    issue: "Unsupported reference-type variant needs clarity"
+    fix: "Clarify in US-101 Technical Notes."
+
+  - id: "OPT-6"
+    issue: "Technology-bias softening for Remark"
+    fix: "Soften language in US-101 Technical Notes."
+
+  - id: "OPT-7"
+    issue: "Alt+Left/Right availability check"
+    fix: "Add explicit DESIGN-wave task to verify no conflicts with existing Norbert shortcuts."
+
+  - id: "OPT-8"
+    issue: "History memory usage note"
+    fix: "Add informational note to wave-decisions.md."
+
+  - id: "OPT-9"
+    issue: "Scope precedence rationale"
+    fix: "Add parenthetical rationale to System Constraint #7."
+
+  - id: "OPT-10"
+    issue: "Rejected simpler-alternative: 'no split' interaction"
+    fix: "Document in wave-decisions.md that a no-split design was considered and rejected because it loses the 'anchor while peeking' value prop."
