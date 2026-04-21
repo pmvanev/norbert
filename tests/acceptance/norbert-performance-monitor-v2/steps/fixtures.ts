@@ -31,27 +31,29 @@ export interface MetricConfig {
   readonly caption: string;
 }
 
-// Prototype-derived values (docs/design/performance-monitor-phosphor-prototype.html).
+// Values match src/plugins/norbert-usage/domain/phosphor/phosphorMetricConfig.ts.
+// Tokens is the ITPM signal (tok/min) Anthropic rate-limits on; events/toolcalls
+// yMax ceilings are headroom caps above which the dynamic axis won't scale.
 export const METRICS: Readonly<Record<MetricId, MetricConfig>> = {
   events: {
     id: "events",
     name: "Events per second",
     unit: "evt/s",
-    yMax: 15,
+    yMax: 500,
     caption: "Events/s blends hook events with OTel log arrivals.",
   },
   tokens: {
     id: "tokens",
-    name: "Tokens per second",
-    unit: "tok/s",
-    yMax: 100,
-    caption: "Tokens/s is throughput-proper.",
+    name: "Tokens per minute",
+    unit: "tok/min",
+    yMax: 500_000,
+    caption: "Input + cache-creation tok/min — the ITPM signal Anthropic rate-limits on.",
   },
   toolcalls: {
     id: "toolcalls",
     name: "Tool-calls per second",
     unit: "calls/s",
-    yMax: 3,
+    yMax: 100,
     caption: "Tool-calls/s is sparsest and most diagnostic.",
   },
 };

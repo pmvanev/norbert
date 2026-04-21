@@ -79,22 +79,22 @@ describe("IC-S1: A 5-second tick of hook arrivals derives an events-per-second s
 });
 
 // ---------------------------------------------------------------------------
-// IC-S2: An OTel api-request event derives a tokens-per-second sample
+// IC-S2: An OTel api-request event derives a tokens-per-minute sample
 // Tag: @driving_port @US-PM-001
 // ---------------------------------------------------------------------------
 
-describe("IC-S2: An OTel api-request event derives a tokens-per-second sample", () => {
-  it("500 tokens over 2 seconds yields a sample of 250", () => {
+describe("IC-S2: An OTel api-request event derives a tokens-per-minute sample", () => {
+  it("500 tokens over 2 seconds yields a sample of 15000 tok/min", () => {
     // Given an OTel api-request event with 500 tokens and 2-second duration
     const totalTokens = 500;
     const durationMs = 2000;
     const t = NOW;
 
-    // When the tokens-per-second derivation runs for that event
+    // When the tokens-per-minute derivation runs for that event
     const sample = deriveTokensRate(totalTokens, durationMs, t);
 
-    // Then a sample of 250 tok/s is produced
-    expect(sample.v).toBeCloseTo(250, 5);
+    // Then a sample of 15000 tok/min is produced (500 tokens * 60000ms / 2000ms)
+    expect(sample.v).toBeCloseTo(15000, 5);
     expect(sample.t).toBe(t);
   });
 });

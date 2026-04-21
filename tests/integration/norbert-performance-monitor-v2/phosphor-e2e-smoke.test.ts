@@ -164,19 +164,19 @@ describe("Phosphor v2 end-to-end smoke — real hookProcessor -> real store -> b
     expect(trace.latestValue).toBeGreaterThan(0);
   });
 
-  it("a 5-second tick of OTel api_request events produces a tokens/s rate sample on the frame's trace", () => {
+  it("a 5-second tick of OTel api_request events produces a tok/min rate sample on the frame's trace", () => {
     const store = createMultiSessionStore();
     const processor = wireProcessorToStore(store, () => Date.now());
 
     // Prime the rate ticker. See events/s test for rationale — the first
-    // call emits no sample; the real tokens/s emission lands on the
+    // call emits no sample; the real tok/min emission lands on the
     // second call using the real elapsed window as the divisor.
     processor.sampleRates(Date.now());
 
     // Arrange: two OTel api_request events arrive across a 5-second window
     // with NO duration_ms (matching the production payload shape). The
-    // tokens/s derivation accumulates per session and drains on the
-    // 5s rate tick, mirroring the events/s and toolcalls/s structure.
+    // tok/min derivation accumulates per session and drains on the 5s rate
+    // tick, mirroring the events/s and toolcalls/s structure.
     processor(makeOtelApiRequestPayload(400)); // 400 tokens
     vi.advanceTimersByTime(2_000);
     processor(makeOtelApiRequestPayload(600)); // + 600 tokens = 1000 total
@@ -188,8 +188,10 @@ describe("Phosphor v2 end-to-end smoke — real hookProcessor -> real store -> b
     const frame = buildFrame(store, "tokens", Date.now());
     expect(frame.traces).toHaveLength(1);
     const trace = frame.traces[0];
-    // 1000 tokens / (5000ms / 1000) = 200 tokens per second
+    // tok/min counts ITPM-consuming tokens (input + cache_creation, not
+    // output). Each payload here has 60% input_tokens, 40% output_tokens,
+    // 0 cache. So 1000 total -> 600 ITPM tokens * 60000 / 5000ms = 7200.
     expect(trace.samples.length).toBeGreaterThan(0);
-    expect(trace.latestValue).toBeCloseTo(200, 5);
+    expect(trace.latestValue).toBeCloseTo(7200, 5);
   });
 });
