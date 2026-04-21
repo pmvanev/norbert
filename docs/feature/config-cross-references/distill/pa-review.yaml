@@ -1,0 +1,312 @@
+reviewer: nw-platform-architect-reviewer
+model: sonnet
+date: 2026-04-21
+target_wave: DISTILL
+feature_id: config-cross-references
+
+approval_status: rejected_pending_revisions
+
+environment_coverage:
+  clean_no_claude_dir: covered
+  # Evidence: registry.test.ts live scenario "buildRegistry returns an empty registry when given
+  # an empty aggregated config" uses emptyAggregatedConfig; walking-skeleton.feature
+  # "Loading state with no aggregated configuration renders no tokens and no crash".
+  stale_or_null_config: covered
+  # Evidence: architecture §6.1 integration seam explicitly exercised by the same scenario above.
+  # ConfigNavProvider receives aggregatedConfig=null and buildRegistry no-ops to empty registry.
+  dead_reference: covered
+  # Evidence: walking-skeleton.feature US-107 — three scenarios: single-click no-op,
+  # Ctrl+click no-op, tooltip on keyboard focus. detection.test.ts "Reference to a missing item
+  # renders as a dead token".
+  permission_denied_click_time: covered
+  # Evidence: milestone-2-robustness.feature "Permission denied at click time opens the split
+  # with a permission-denied panel"; provider.test.tsx matching describe block.
+  deleted_mid_click: covered
+  # Evidence: milestone-2-robustness.feature "Reference target deleted between render and click
+  # surfaces a soft-fail toast"; provider.test.tsx matching describe block.
+
+instrumentation_coverage:
+  cross_ref_click_event: gap
+  # No scenario in any test file asserts that a cross_ref_click event is emitted.
+  # Feature files verify click behavioural outcomes (split opens, list updates).
+  # No scenario verifies the event is fired from the Provider effect with the
+  # required fields (source_item_id, target_item_id, result, latency_ms).
+  # KPI #1 guardrail has no acceptance-level anchor.
+  nav_history_restore_event: gap
+  # No scenario asserts that a nav_history_restore event is emitted after Alt+Left/Right.
+  # history.test.ts and walking-skeleton.feature verify state restoration correctness
+  # but do not assert event emission. KPI #4 guardrail (>= 98% matched_snapshot events)
+  # has no acceptance-level anchor for the event itself.
+  ambiguous_ref_resolve_event: gap
+  # No scenario asserts that an ambiguous_ref_resolve event is emitted on popover
+  # confirm or cancel. milestone-1 scenarios verify popover behaviour only.
+  # KPI #5 guardrail has no acceptance-level anchor for the event.
+  emission_at_effect_not_reducer: gap
+  # Architecture §5.3 and ADR-003 specify emission from a useEffect (never from the
+  # reducer). No test verifies the emission point. Without this, a DELIVER crafter
+  # could emit from the reducer (breaking FP paradigm + ADR-003 purity constraint)
+  # and all behavioral tests would still pass.
+  matched_snapshot_check: gap
+  # walking-skeleton.feature KPI scenario asserts "restored state matches the previous
+  # history snapshot exactly" at the Gherkin level (DOM: sub-tab, list selection,
+  # split). This verifies state restoration correctness but does NOT verify that
+  # matched_snapshot: boolean is computed and emitted in the nav_history_restore event.
+  # The KPI #4 guardrail requires the field itself. provider.test.tsx skipped test
+  # does not include a matched_snapshot field assertion.
+  nav_announcer_text_per_transition: covered
+  # Evidence: announcements.test.ts covers all §6.8 template-table rows (split open,
+  # bottom replace, split close, cross-tab ctrl+click, same-tab ctrl+click,
+  # end-of-history back, disambiguation open, dead-ref silence). walking-skeleton.feature
+  # and milestone-1 assert exact announcement strings inline per transition.
+  # provider.test.tsx "Each pane transition is announced via the ARIA live region"
+  # exercises the live region at the component level.
+  # Minor gap: announcements.test.ts has no "end-of-history forward direction" case
+  # (only back direction covered); however the Gherkin template is symmetric and
+  # the implementation risk is LOW — captured as a LOW-severity issue below.
+
+performance_nfr_coverage:
+  registry_build_500_items: gap
+  # No scenario exercises a 500-item registry build. Architecture §7 states
+  # "property test on registry build under 500 items" as the verification strategy
+  # for NFR-2 (<= 500 ms p95). The test-scenarios.md scenario inventory contains no
+  # such scenario in registry.test.ts, the Gherkin files, or the @property tag set.
+  # The @property scenarios in registry.test.ts are limited to: single-entry
+  # lookup, cross-scope collision, version increment — none at scale.
+  click_to_paint_hook_present: gap
+  # Architecture §9 specifies latency_ms = performance.now() delta from user event
+  # timestamp to next paint via requestAnimationFrame. No scenario asserts this hook
+  # exists or captures a non-zero value. test-scenarios.md explicitly documents
+  # KPI #6 latency measurement as a DEVOPS-wave concern, which is appropriate, but
+  # no placeholder/smoke scenario verifies the instrumentation plumbing is wired
+  # (i.e., that cross_ref_click.latency_ms is present in the emitted event payload).
+  # This compounds the cross_ref_click_event gap above.
+  reducer_O1_invariant: covered
+  # Reducer is pure with discriminated union action; TypeScript exhaustiveness check
+  # enforces O(1) case dispatch at compile time. No runtime measurement needed
+  # at the acceptance layer. The DELIVER crafter is directed to use a Map/switch
+  # (not a linear scan). This is a compile-time structural guarantee, not a runtime
+  # observable property measurable in vitest.
+
+accessibility_coverage:
+  keyboard_only_end_to_end: covered
+  # Evidence: milestone-2-robustness.feature "Keyboard-only path peek then commit
+  # then back" — tab-focus, Enter (peek), Shift+Tab, Ctrl+Enter (commit), Alt+Left
+  # (restore). Covers the full US-110 AC keyboard chain across three pane states.
+  ctrl_click_focus_management: covered
+  # Evidence: milestone-2-robustness.feature "After Ctrl+click commit the focus
+  # moves to the new selected list row"; provider.test.tsx matching describe block
+  # asserts document.activeElement === new list row.
+  aria_live_region_announcements: covered
+  # Evidence: milestone-2-robustness.feature "Each pane transition is announced via
+  # the ARIA live region"; provider.test.tsx matching describe block asserts live
+  # region text for open + close transitions; announcements.test.ts unit-tests all
+  # §6.8 template-table variants at the pure helper level.
+  popover_focus_trap_role_dialog: gap
+  # milestone-1 "Disambiguation popover is announced to assistive technology when
+  # opened" asserts role="dialog" (covered). However no scenario verifies Tab-key
+  # cycling is trapped within the popover (WCAG 2.2 AA SC 2.1.2 No Keyboard Trap).
+  # "After disambiguation confirmation focus returns to the triggering reference
+  # token" verifies return focus on confirm but not the trap invariant during
+  # popover interaction. A Tab-key sequence test is missing.
+
+architectural_enforcement:
+  dependency_cruiser_rules_flagged_for_devops: no
+  # Architecture §4 defines four dependency-cruiser rules (no-tauri-from-domain,
+  # no-react-from-domain, no-views-from-domain, detection-strategies-isolated).
+  # test-scenarios.md contains no acknowledgment of these rules and does not flag
+  # them as DEVOPS-wave enforcement items. The document omits the lint:boundaries
+  # check from scope discussion entirely. Rules exist in the architecture but have
+  # no DISTILL traceability entry.
+
+issues:
+  - severity: BLOCKER
+    finding: >
+      Three §5.3 instrumentation events (cross_ref_click, nav_history_restore,
+      ambiguous_ref_resolve) have zero test coverage for event emission. No scenario
+      in any acceptance test file asserts that any event is fired. The KPI guardrails
+      (#1 click success rate, #4 history reliability, #5 ambiguity trust) are defined
+      entirely in terms of these events — if they are never emitted, all three guardrails
+      produce silent zero data rather than a failing test. A DELIVER crafter can make
+      all behavioral scenarios green while never wiring the instrumentation.
+    location: >
+      provider.test.tsx — no event-emission describe block exists.
+      tests/acceptance/config-cross-references/*.test.ts — none assert event emission.
+      docs/feature/config-cross-references/distill/test-scenarios.md — no KPI coverage
+      row exists for event-emission verification; §5.3 contract is untraced.
+    recommendation: >
+      Add three scenarios to provider.test.tsx (or a new instrumentation.test.tsx)
+      that spy on the event-emission function (or assert on a captured event queue),
+      each verifying: (1) cross_ref_click emitted with correct fields after a live
+      reference click; (2) nav_history_restore emitted with matched_snapshot:boolean
+      after Alt+Left; (3) ambiguous_ref_resolve emitted with method:'popover' after
+      disambiguation confirm. Add a fourth scenario asserting the emission does NOT
+      occur synchronously inside the reducer (verify via a spy placed before and
+      after the dispatch call boundary). Update test-scenarios.md KPI mapping table
+      with these four scenarios.
+
+  - severity: HIGH
+    finding: >
+      No scenario verifies that emission_at_effect_not_reducer holds at runtime.
+      Architecture §5.3 and ADR-003 explicitly require instrumentation to be a side
+      effect at the edge (useEffect), never inside the reducer. The FP paradigm
+      constraint in CLAUDE.md and the ADR-003 timer-placement rationale both depend
+      on this. A DELIVER crafter placing an emit() call inside the reduce() function
+      would satisfy all behavioral tests while violating the architectural constraint.
+    location: >
+      reducer.test.ts — tests assert state shape only, not side-effect absence.
+      provider.test.tsx — no test verifies that dispatch(action) alone does not
+      trigger an event; only the subsequent useEffect commit should.
+    recommendation: >
+      Add a scenario to reducer.test.ts: call reduce(state, action) and assert
+      the return value is a plain state object (no emit side-effects observable in
+      the test). In provider.test.tsx, add a scenario that captures all emitted
+      events via a spy, dispatches an action directly to the reducer (bypassing the
+      Provider), and asserts zero events were emitted — confirming emission is gated
+      on the effect flush, not the reducer call.
+
+  - severity: HIGH
+    finding: >
+      NFR-2 (registry build <= 500 ms p95 for 500 items) has no acceptance-level
+      scenario. Architecture §7 names "property test on registry build under 500 items"
+      as the verification strategy. test-scenarios.md scenario inventory contains no
+      such test. The algorithmic shape (O(N) single pass, sub-millisecond) is only
+      asserted in prose in architecture §6.2. Without a scenario exercising a 500-item
+      config, a non-linear implementation would pass all acceptance tests undetected.
+    location: >
+      registry.test.ts — largest fixture is walkingSkeletonConfig (2 commands, 2 skills,
+      1 hook — 5 items total). No large-registry scenario exists.
+      docs/feature/config-cross-references/distill/test-scenarios.md — NFR-2 is absent
+      from the scenario inventory and KPI mapping table.
+    recommendation: >
+      Add a scenario to registry.test.ts (tagged @property or @performance):
+      "buildRegistry with 500 items completes synchronously and produces the correct
+      entry count." Use makeAggregatedConfig with arrays of 500 generated items
+      (spread across types using the existing builders). Assert registry.byName.size
+      equals the expected item count. Assert completion within a generous synchronous
+      budget (no async needed — this is a pure function; vitest can measure wall-clock
+      via performance.now() around the call). Add this scenario to test-scenarios.md.
+
+  - severity: HIGH
+    finding: >
+      matched_snapshot deep-equal check is present at the Gherkin behavioral level
+      ("the restored state matches the previous history snapshot exactly") but is not
+      wired to the nav_history_restore event's matched_snapshot: boolean field.
+      The KPI #4 guardrail (>= 98% matched events) is measured via the instrumentation
+      field, not the DOM. No test asserts that matched_snapshot: true is emitted
+      when restoration is correct, or that matched_snapshot: false is emitted and
+      logged when it is not. The mismatch-detection path described in architecture §9
+      is entirely untested.
+    location: >
+      provider.test.tsx — Alt+Left describe block checks DOM state (sub-tab, list
+      selection, split) but contains no assertion on the matched_snapshot field.
+      history.test.ts — goBack/goForward tests verify headIndex movement only.
+      docs/feature/config-cross-references/distill/test-scenarios.md — KPI #4 row
+      in the KPI mapping table does not mention matched_snapshot field verification.
+    recommendation: >
+      Extend the provider.test.tsx "Alt+Left restores the previous navigation snapshot"
+      scenario to additionally assert that the captured nav_history_restore event
+      payload contains matched_snapshot: true after a correct restoration. Add a
+      second scenario simulating a mismatch (inject a corrupted history entry) and
+      assert matched_snapshot: false is emitted and that a console.error or logger
+      call is made (per architecture §9 "emit false + log"). Update the KPI #4 row
+      in test-scenarios.md to reference these scenarios.
+
+  - severity: MEDIUM
+    finding: >
+      Dependency-cruiser 4-rule set from architecture §4 is absent from
+      test-scenarios.md entirely. The document has no entry flagging these rules as
+      DEVOPS-wave items, no acknowledgment that lint:boundaries is the enforcement
+      mechanism, and no note that they are untestable at the acceptance layer.
+      A reviewer reading test-scenarios.md cannot determine whether the boundary
+      rules are in scope for any wave.
+    location: >
+      docs/feature/config-cross-references/distill/test-scenarios.md — no section
+      references dependency-cruiser rules or lint:boundaries.
+      architecture.md §4 — defines the four rules but does not cross-reference
+      to the DISTILL artifact.
+    recommendation: >
+      Add a section to test-scenarios.md under a heading "Architectural Enforcement
+      (DEVOPS Wave)" that lists the four dependency-cruiser rules by name, states they
+      are verified by `npm run lint:boundaries` in the CI pipeline, and are explicitly
+      out of scope for acceptance tests. This satisfies the architectural traceability
+      requirement and makes the scope boundary explicit for the DELIVER crafter.
+
+  - severity: MEDIUM
+    finding: >
+      No acceptance scenario verifies that click-to-paint latency_ms is captured in
+      the cross_ref_click event payload. Architecture §9 specifies a concrete
+      measurement mechanism (performance.now() delta from user event timestamp to next
+      requestAnimationFrame callback). test-scenarios.md documents KPI #6 as a
+      DEVOPS-wave measurement, which is appropriate, but there is no placeholder
+      scenario validating that the instrumentation plumbing exists (i.e., that
+      latency_ms is a non-undefined numeric field in the emitted event). Without
+      this, the DEVOPS wave will attempt to instrument a field that may not exist
+      in the event schema.
+    location: >
+      provider.test.tsx — no latency_ms assertion in any describe block.
+      docs/feature/config-cross-references/distill/test-scenarios.md — KPI #6 row
+      states "Documented gap" with no placeholder scenario or hook reference.
+    recommendation: >
+      Add a scenario to provider.test.tsx: after a live reference single-click,
+      capture the emitted cross_ref_click event and assert that event.latency_ms is
+      a finite number greater than zero. This is not a p95 test — it is a schema
+      presence test confirming the measurement hook is wired. Update test-scenarios.md
+      KPI #6 row to reference this scenario and note that p95 aggregation is a
+      DEVOPS-wave concern.
+
+  - severity: MEDIUM
+    finding: >
+      DisambiguationPopover focus trap behavior (Tab-key cycling within the popover)
+      is not covered. WCAG 2.2 AA SC 2.1.2 requires that keyboard focus does not
+      become trapped in a component (no trap), and WCAG SC 2.4.3 requires that
+      focus order within a dialog is logical. The role="dialog" assertion in
+      milestone-1 confirms the semantic, but no scenario verifies that Tab cycles
+      through the candidate list items, that Shift+Tab reverses, and that focus does
+      not escape the popover while it is open. NFR-4 WCAG 2.2 AA is the quality
+      attribute; DisambiguationPopover is explicitly listed in the §7 verification
+      column.
+    location: >
+      milestone-1-resolution-and-disambiguation.feature — "Arrow Down moves the
+      highlight to the next candidate" covers ArrowDown only; no Tab-key scenario.
+      provider.test.tsx — disambiguation describe blocks assert DOM structure and
+      announcement text only; no Tab/Shift+Tab sequence.
+    recommendation: >
+      Add a scenario to milestone-1-resolution-and-disambiguation.feature:
+      "Tab key cycles focus through popover candidates in order." Assert that Tab
+      from the first candidate focuses the second, and Shift+Tab from the second
+      returns to the first. Add a corresponding it.skip in provider.test.tsx
+      with the @testing-library userEvent Tab sequence. Additionally verify that
+      while the popover is open, Tab from the last candidate does not move focus
+      outside the popover (wraps to first or is intercepted).
+
+  - severity: LOW
+    finding: >
+      announcements.test.ts covers the "No further history in back direction"
+      end-of-history announcement but is missing the symmetric "No further history
+      in forward direction" case. The §6.8 table template is
+      "No further history in {direction} direction" — both directions should be
+      independently tested to catch an off-by-one in the direction substitution.
+    location: >
+      tests/acceptance/config-cross-references/announcements.test.ts line 52 —
+      "End-of-history boundary in back direction is announced" exists.
+      No corresponding "forward direction" describe block exists.
+    recommendation: >
+      Add an it.skip describe block: "End-of-history boundary in forward direction
+      is announced" — announcementFor with endOfHistory='forward' returns
+      'No further history in forward direction'. One line addition to
+      announcements.test.ts.
+
+summary: >
+  The acceptance test suite is structurally sound: all three feature files are present,
+  49 scenarios cover 43% error/edge paths (meeting the 40% mandate), driving-port
+  discipline is maintained throughout, and all five default environment scenarios have
+  coverage. The critical gap is instrumentation: the §5.3 three-event contract
+  (cross_ref_click, nav_history_restore, ambiguous_ref_resolve) has zero acceptance
+  coverage for event emission, emission-point correctness (effect not reducer), and
+  the matched_snapshot field that feeds the KPI #4 guardrail — a DELIVER crafter can
+  satisfy all behavioral tests while leaving the entire observability contract unwired.
+  Two additional HIGH gaps (no 500-item registry build scenario for NFR-2, no
+  matched_snapshot field verification) and three MEDIUM gaps (latency hook presence,
+  popover focus trap, dependency-cruiser DEVOPS flagging) must be addressed before
+  the suite can be approved. Approval is withheld pending revisions to instrumentation
+  coverage and the NFR-2 performance scenario.

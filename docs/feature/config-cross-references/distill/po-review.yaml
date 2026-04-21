@@ -1,0 +1,139 @@
+reviewer: nw-product-owner-reviewer
+model: sonnet
+date: 2026-04-21
+target_wave: DISTILL
+feature_id: config-cross-references
+
+approval_status: approved
+
+# Skill files were missing from the local skills directory; review conducted
+# from first principles using the agent's embedded methodology. The full
+# story-to-scenario crosswalk for all 10 R1+R2 stories was performed and
+# every story has at least one scenario across walking-skeleton.feature,
+# milestone-1-resolution-and-disambiguation.feature,
+# milestone-2-robustness.feature, and the seven Vitest test files.
+
+unmapped_stories: []
+
+# Highlights only -- the full per-story / per-AC crosswalk was performed.
+unaddressed_ac_bullets:
+  - story: US-101
+    ac: "Each of the four variants (live, ambiguous, dead, unsupported) has a visually distinct style meeting 4.5:1 contrast."
+    gap: >
+      The 'unsupported' variant has no dedicated scenario. US-101 Technical Notes
+      state DESIGN wave may narrow unsupported-variant scope; wave-decisions.md
+      does not explicitly confirm it was removed. If unsupported is still in scope
+      for v1, a scenario is needed. If out of scope, user-stories.md AC should be
+      updated to remove it.
+    severity: MEDIUM
+  - story: US-102
+    ac: "Bottom pane shows type, scope, name, source path, and content preview."
+    gap: >
+      No scenario explicitly asserts all five metadata fields individually.
+      The walking-skeleton.feature scenario says 'preview of nw-bdd-requirements'
+      without enumerating fields.
+    severity: LOW
+  - story: US-103
+    ac: "The browser/OS default for Ctrl+click on a link is suppressed inside the Configuration viewer."
+    gap: "No scenario asserts event.preventDefault() suppression."
+    severity: LOW
+  - story: US-110
+    ac: "All interactive elements have visible focus ring meeting 4.5:1 contrast."
+    gap: "Visual-only check; not assertable at this test layer. Accepted systematic gap."
+    severity: LOW
+
+decisions_check:
+  D1: covered # max-2-pane invariant via property test + reducer test + ADR-009 type enforcement
+  D2: covered # dead-ref no-op covered for both single-click and Ctrl+click
+  D3: covered # always-popover for ambiguous via property scenario
+  D5: covered # Ctrl+click atomicity via reducer single-call test
+  D6: covered # single-click in split replaces bottom only via 3 scenarios
+
+r3_exclusion_assessment: justified
+r3_exclusion_notes:
+  - story: US-111 (bare-prose toggle)
+    rationale: ADR-010 OFF in v1; no extension point; "Bare prose is not detected" tests the OFF state correctly.
+  - story: US-112 (remember-my-choice)
+    rationale: ADR-004 always-popover; no persistence slot.
+  - story: US-113
+    rationale: not in user-stories.md; no architectural support for v1.
+  - story: US-114 (persist history)
+    rationale: OQ-7 deferred per wave-decisions.md; NavHistory in-memory only.
+  - story: US-115
+    rationale: not in user-stories.md; no architectural hook.
+
+issues:
+  - severity: MEDIUM
+    finding: >
+      'unsupported' reference variant (US-101 Solution + AC bullet 4) has no scenario
+      anywhere. Either add one or update AC to remove the variant.
+    recommendation: >
+      Add a scenario to detection.test.ts: "detection over a path reference that
+      matches no supported item type produces an unsupported token annotation",
+      plus a corresponding Gherkin scenario in walking-skeleton.feature; OR if
+      DESIGN confirmed unsupported is deferred, update the AC bullet in
+      user-stories.md to remove 'unsupported' from the four-variant list and add
+      a note in test-scenarios.md.
+
+  - severity: MEDIUM
+    finding: >
+      US-108 / US-110 AC "Popover is keyboard-navigable (... focus trap while open)"
+      has no scenario. Tab-trap behavior unverified.
+    recommendation: >
+      Add a Gherkin scenario "Tab inside the open disambiguation popover keeps focus
+      within the popover" plus an it.skip in provider.test.tsx.
+
+  - severity: MEDIUM
+    finding: >
+      walking-skeleton.feature contains two US-106 (R2) scenarios within the R1 file
+      (max-split-depth invariants are architecturally load-bearing for the skeleton).
+      MoSCoW alignment is technically violated but the rationale is sound.
+    recommendation: >
+      Annotate the two scenarios in the feature file with a comment citing the
+      architectural rationale (as test-scenarios.md does) so DELIVER reviewers do
+      not mistake them for MoSCoW misalignment. Documentation-only.
+
+  - severity: LOW
+    finding: >
+      US-102 AC "Bottom pane shows type, scope, name, source path, and content
+      preview" not verified field-by-field for the normal preview path. (Permission-
+      denied error panel does verify these fields.)
+    recommendation: >
+      Add an it.skip in provider.test.tsx asserting all five fields render in the
+      bottom pane preview chrome for a normal preview.
+
+  - severity: LOW
+    finding: >
+      US-104 AC "Alt+Right at end of history is a no-op" has unit coverage in
+      history.test.ts but no Gherkin scenario in walking-skeleton.feature.
+    recommendation: >
+      Add a Gherkin scenario "Alt+Right at the end of history is a no-op" for
+      symmetry with the Alt+Left boundary case.
+
+  - severity: LOW
+    finding: >
+      US-103 AC "browser/OS default for Ctrl+click ... is suppressed" has no test.
+    recommendation: >
+      Add an it.skip in provider.test.tsx with a spy on event.preventDefault().
+
+  - severity: LOW
+    finding: >
+      US-108 ArrowUp navigation has no scenario (only ArrowDown is tested).
+    recommendation: >
+      Add a Gherkin scenario "Arrow Up moves the highlight to the previous candidate"
+      mirroring the ArrowDown scenario.
+
+  - severity: LOW
+    finding: >
+      history.test.ts includes a "goForward at end" scenario that is omitted from
+      the test-scenarios.md US-104 mapping table.
+    recommendation: >
+      Update test-scenarios.md US-104 row to include this scenario. Documentation-only.
+
+summary: >
+  All ten R1 and R2 stories (US-101 through US-110) have scenario coverage across
+  the three Gherkin feature files and seven Vitest test files. No story is
+  unmapped. Two MEDIUM issues require attention before DELIVER: the unsupported
+  reference-variant gap (US-101 AC) and the disambiguation-popover focus-trap
+  gap (US-108/US-110 AC). The R3 exclusion of US-111..US-115 is justified by the
+  absence of v1 architectural extension points.

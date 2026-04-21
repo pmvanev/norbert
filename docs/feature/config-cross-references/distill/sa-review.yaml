@@ -1,0 +1,267 @@
+reviewer: nw-solution-architect-reviewer
+model: sonnet
+date: 2026-04-21
+target_wave: DISTILL
+feature_id: config-cross-references
+
+approval_status: conditionally_approved
+
+driving_port_coverage:
+  pure_domain_ports:
+    - port: buildRegistry / ReferenceRegistry (lookupByName, lookupByPath)
+      tested_in: registry.test.ts
+      verified: true
+      note: >
+        One live scenario anchors the outer-loop failure. All others are it.skip
+        with comment-body contracts. Public interface fields only.
+
+    - port: reduce (ConfigNavReducer)
+      tested_in: reducer.test.ts
+      verified: true
+      note: >
+        All it.skip, comment-only bodies. Assertions target public ConfigNavState
+        fields (splitState, activeSubTab, selectedItemKey, history.entries.length).
+        No React imports, no mock-call assertions.
+
+    - port: pushEntry / goBack / goForward / canGoBack / canGoForward (NavHistory)
+      tested_in: history.test.ts
+      verified: true
+      note: >
+        All it.skip. Assertions on public headIndex and entries fields.
+
+    - port: detectionRemarkPlugin (pure unified plugin)
+      tested_in: detection.test.ts
+      verified: true
+      note: >
+        All it.skip. Assertions on data.hName and data.hProperties per
+        architecture.md section 6.2 specified output contract.
+
+    - port: announcementFor
+      tested_in: announcements.test.ts
+      verified: true
+      note: All it.skip. Asserts string return value of pure function.
+
+    - port: ScopePrecedence.preHighlight
+      tested_in: scope-precedence.test.ts
+      verified: true
+      note: All it.skip. Asserts index return value of pure function.
+
+    - port: resolve (ReferenceResolver)
+      tested_in: MISSING -- no resolver.test.ts exists
+      verified: false
+      note: >
+        architecture.md section 6.3 defines resolve(ref, registry) as a pure
+        driving port with four tagged outcomes (live/ambiguous/dead/unsupported).
+        No dedicated test file was produced. Resolution outcomes are exercised
+        indirectly through detection.test.ts (annotated node variants) but the
+        resolve function itself is not invoked as a driving port in any test.
+
+  driving_adapter_ports:
+    - port: <ConfigNavProvider>
+      tested_in: provider.test.tsx
+      verified: true
+      note: >
+        All it.skip. Uses @testing-library/react patterns throughout. DOM-only
+        assertions (getByRole, toHaveTextContent, toHaveAttribute,
+        document.activeElement). No internal reducer mock-call assertions.
+
+    - port: <ConfigDetailPanel> / <ReferenceToken>
+      tested_in: provider.test.tsx
+      verified: true
+      note: >
+        ReferenceToken rendering (live/dead/ambiguous variants, data-ref-variant
+        attribute) and detail pane regions (getByRole "region") covered in
+        provider.test.tsx scenarios.
+
+    - port: <DisambiguationPopover>
+      tested_in: provider.test.tsx
+      verified: true
+      note: >
+        Role=dialog assertions, option list, aria-selected pre-highlight, Esc
+        cancel, and ARIA live region all covered in provider.test.tsx scenarios.
+
+anti_pattern_findings:
+  internal_state_assertions: []
+
+  mock_call_assertions_internal: []
+
+  boundary_leakage: []
+  # All pure-domain test files (registry, reducer, history, detection,
+  # announcements, scope-precedence) import no React. provider.test.tsx
+  # imports no pure domain internals beyond the public module exports.
+  # _helpers/tauriMock.ts mocks only the @tauri-apps/api/core IPC boundary.
+
+  implementation_coupling:
+    - file_and_scenario: >
+        walking-skeleton.feature:
+        "Ctrl+click across sub-tabs switches sub-tab, list selection, and detail
+        in one atomic update"
+      step: >
+        Then: "And exactly one committed state contains all four field updates"
+      finding: >
+        This Then step asserts the number of React commit cycles, not an
+        observable user outcome. Verifying it requires either inspecting React
+        internals (e.g. act() call count) or spying on the reducer, both of
+        which are anti-patterns. Atomicity is a construction-time guarantee
+        (reducer returns one immutable state; ADR-002 and architecture section
+        6.7 establish this). The implementation test for it belongs at the
+        reducer layer as a structural assertion on the returned state object,
+        not as a React-render-count assertion.
+      recommendation: >
+        Replace with an observable behavioral step:
+        "And the active sub-tab, list selection, and detail pane are all
+        consistent with the target in the same rendered frame."
+        The reducer.test.ts comment already expresses the correct form:
+        "(Single returned state contains all 4 -- atomicity by construction.)"
+        Remove the feature-file step or rewrite it to assert the DOM snapshot
+        post-click, not the mechanism.
+
+  type_level_duplication:
+    - file_and_scenario: >
+        milestone-2-robustness.feature:
+        "For any sequence of single-clicks on live references, the split is
+        always exactly 2 panes" and
+        "When the split is open the selected list item key always equals the
+        top pane reference key"
+      finding: >
+        ADR-009 establishes that SplitState is a fixed-shape record with exactly
+        topRef and bottomRef -- a third pane is a compile-time error. The property
+        scenario testing "pane structure is always exactly one top pane and one
+        bottom pane" partially duplicates the type-level invariant as a runtime
+        check. This is LOW risk because the property scenario exercises the
+        reducer's behavior across action sequences (which is valid), but the
+        framing as a 2-pane count assertion duplicates what TypeScript enforces
+        structurally. The top==selectedItemKey invariant (section 6.7) is NOT
+        type-enforced -- it is a logical invariant that correctly belongs in a
+        runtime property test.
+      recommendation: >
+        Retain the selectedItemKey == topRef.itemKey property test (not type-
+        enforced). For the 2-pane invariant, reframe the test body comment to
+        assert that splitState has the topRef and bottomRef fields present (not
+        a count), distinguishing the runtime behavioral check from the structural
+        type guarantee.
+
+  atomicity_violations: []
+  # reducer.test.ts correctly models the Ctrl+click atomicity as a single
+  # reduce() call returning one state. The feature-file step issue is logged
+  # under implementation_coupling above. No test asserts a sequence of
+  # intermediate states for one action.
+
+architecture_seam_verification:
+  empty_config_no_crash: covered
+  # registry.test.ts live scenario: buildRegistry(emptyAggregatedConfig, 0)
+  # asserts byName.size=0, byFilePath.size=0, version>0. No crash path.
+  # walking-skeleton.feature scenario also covers the full rendering no-crash
+  # contract.
+
+  ctrl_click_atomicity: covered
+  # reducer.test.ts comment documents the single-reduce-call verification.
+  # feature-file Then step is implementation-coupled (see issues) but does
+  # not introduce an intermediate-state assertion. Net: atomicity is covered
+  # at the reducer layer.
+
+  effects_at_react_layer: partial_gap
+  # Keyboard listener (Alt+Left scope gating): covered in provider.test.tsx.
+  # Focus management post-Ctrl+click: covered in provider.test.tsx.
+  # NavAnnouncer ARIA live region integration: covered for single-click,
+  # close, Ctrl+click, disambiguation scenarios.
+  # MISSING: end-of-history timer effect (setTimeout dispatching
+  # clearEndOfHistory per ADR-003 implementation notes) is not tested in
+  # provider.test.tsx. The reducer-level no-op is tested in history.test.ts
+  # but the effect that drives the transient CSS cue and auto-clear is absent.
+
+issues:
+  - severity: HIGH
+    finding: >
+      resolve(ref, registry) -- the pure ReferenceResolver port defined in
+      architecture.md section 6.3 with four discriminated outcomes
+      (live/ambiguous/dead/unsupported) -- has no dedicated acceptance test
+      file. Detection tests assert MDAST node annotations but do not invoke
+      resolve() directly. The unsupported variant (file-path resolves to an
+      item type the plugin does not expose) has zero test coverage anywhere.
+    file_and_scenario: >
+      MISSING: tests/acceptance/config-cross-references/resolver.test.ts
+    recommendation: >
+      Add resolver.test.ts covering:
+      (1) resolve() with a live ref -> { tag: 'live', entry }
+      (2) resolve() with a name matching 2+ entries -> { tag: 'ambiguous', candidates }
+      (3) resolve() with no match -> { tag: 'dead', searchedScopes }
+      (4) resolve() with a file-path ref to an unsupported item type ->
+          { tag: 'unsupported', path, reason }
+      All four are pure function calls requiring no React.
+
+  - severity: MEDIUM
+    finding: >
+      walking-skeleton.feature Then step "And exactly one committed state
+      contains all four field updates" (Ctrl+click atomicity scenario) is
+      implementation-coupled. It asserts a React render-commit mechanism, not
+      an observable user outcome. At test implementation time this step can
+      only be satisfied by asserting on React internals or reducer call counts,
+      both anti-patterns (Core Principle 4 / task requirement 4).
+    file_and_scenario: >
+      tests/acceptance/config-cross-references/walking-skeleton.feature:
+      "Ctrl+click across sub-tabs switches sub-tab, list selection, and detail
+      in one atomic update" -- Then clause line ~137
+    recommendation: >
+      Remove or rewrite to: "And the rendered state shows the active sub-tab as
+      'skills', list selection as 'nw-bdd-requirements', and a single-pane
+      detail" -- assertable via DOM queries in provider.test.tsx without
+      inspecting render internals.
+
+  - severity: MEDIUM
+    finding: >
+      End-of-history timer effect (ADR-003 implementation notes: setTimeout
+      dispatching clearEndOfHistory inside a useEffect watching state.endOfHistory)
+      has no scenario in provider.test.tsx. The feature walking-skeleton.feature
+      scenario "Alt+Left at the start of history is a no-op with end-of-history
+      cue" has a Then step "And the end-of-history cue is shown for the back
+      direction" that requires the effect chain to fire, but no provider.test.tsx
+      it.skip block covers this path. The pure no-op is in history.test.ts but
+      the effect (visual cue + auto-clear) lives in useEffect and must be
+      tested at the React layer per architecture.md section 6.6 and ADR-003.
+    file_and_scenario: >
+      tests/acceptance/config-cross-references/provider.test.tsx:
+      gap -- no scenario for "Alt+Left at the start of history is a no-op with
+      end-of-history cue"
+    recommendation: >
+      Add an it.skip to provider.test.tsx:
+      describe("Alt+Left at the start of history is a no-op with end-of-history cue")
+      asserting that after Alt+Left with empty history, a DOM element with the
+      end-of-history CSS class or aria attribute is transiently present
+      (screen.getByRole or a data attribute), then absent after the timer fires
+      (use vi.useFakeTimers() + vi.advanceTimersByTime(300)).
+
+  - severity: LOW
+    finding: >
+      The two milestone-2-robustness.feature property scenarios testing the
+      2-pane invariant ("the split is always exactly 2 panes") partially
+      duplicate what TypeScript enforces at compile time via the fixed-shape
+      SplitState type (ADR-009). The runtime property test is not harmful but
+      the test-body comment framing should distinguish the structural guarantee
+      from the logical behavioral check to avoid misleading the DELIVER author
+      into writing a pane-count assertion when a field-presence check is the
+      correct form.
+    file_and_scenario: >
+      tests/acceptance/config-cross-references/reducer.test.ts:
+      "For any sequence of single-clicks on live references the split is always
+      exactly 2 panes"
+    recommendation: >
+      Revise the comment in the it.skip body to assert
+      `final.splitState === null || (final.splitState.topRef !== undefined &&
+      final.splitState.bottomRef !== undefined)` and add a note that
+      TypeScript already prevents a third pane at compile time -- the runtime
+      test verifies the logical invariant (split closes correctly, etc.),
+      not the type shape.
+
+summary: >
+  The test suite is architecturally sound: pure domain ports are tested via
+  direct function invocation with no React imports, React adapter ports are
+  tested via @testing-library/react with DOM-only assertions, Tauri IPC is
+  mocked only at the invoke boundary, and all Given/Then steps use public
+  interfaces and observable outcomes. Three gaps require remediation before
+  DELIVER handoff: (1) the resolve() pure port has no test file -- the
+  unsupported variant in particular has zero coverage; (2) one Then step in
+  the Ctrl+click atomicity scenario is implementation-coupled to React's render
+  cycle rather than asserting a DOM-observable outcome; (3) the end-of-history
+  timer effect (ADR-003) is not represented in provider.test.tsx. Zero BLOCKER
+  findings; two HIGH/MEDIUM issues gate conditional approval.

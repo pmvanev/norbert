@@ -1,0 +1,132 @@
+reviewer: nw-platform-architect-reviewer
+model: sonnet
+date: 2026-04-21
+target_wave: DISTILL
+feature_id: config-cross-references
+revision_cycle: 1
+prior_review: pa-review.yaml
+
+approval_status: approved
+
+closure_check:
+
+  blocker_instrumentation_events: closed
+  # Evidence:
+  #   instrumentation.test.tsx exists. Five it.skip scenarios cover all four
+  #   required events plus the emission-point invariant:
+  #     1. cross_ref_click (instrumentation.test.tsx line 49) -- asserts all
+  #        source/target/interaction/result fields.
+  #     2. nav_history_restore matched_snapshot=true (line 90) -- back direction,
+  #        correct restore.
+  #     3. nav_history_restore matched_snapshot=false (line 111) -- divergence
+  #        scenario with console.error spy.
+  #     4. ambiguous_ref_resolve method=popover (line 138) -- candidate_count,
+  #        chosen_scope, method fields.
+  #     5. emission-point invariant (line 168) -- dual-step: direct reducer call
+  #        -> zero events; Provider render -> event after effect flush.
+  #   Spy is the public eventSink seam (prop or setEventSink() call),
+  #   not on internal functions. Documented at instrumentation.test.tsx lines
+  #   14-20 and test-scenarios.md lines 41-63 (event-sink seam section).
+
+  high_emission_at_effect_not_reducer: closed
+  # Evidence:
+  #   instrumentation.test.tsx lines 167-201: describe block
+  #   "Dispatching an action directly through the pure reducer emits no
+  #   instrumentation events; dispatching through the Provider does."
+  #   it.skip body specifies:
+  #     Step 1: reduce(state, action) called directly -> expect(events).toHaveLength(0).
+  #     Step 2: same action through <ConfigNavProvider eventSink={captureSink}>
+  #             -> await waitFor(() => expect(events.some(e => e.type === "cross_ref_click")).toBe(true)).
+  #   Listed in test-scenarios.md line 169 (instrumentation table,
+  #   "Emission-point invariant (ADR-002 + ADR-003 + FP)" row).
+
+  high_nfr2_500_item: closed
+  # Evidence:
+  #   registry.test.ts lines 135-164: describe block tagged @property @performance
+  #   @driving_port. Scenario: "buildRegistry with 500 items completes synchronously
+  #   and produces the correct entry count." it.skip body specifies:
+  #     const start = performance.now();
+  #     const registry = buildRegistry(config, 0);
+  #     const elapsed = performance.now() - start;
+  #     expect(registry.byName.size).toBe(500);
+  #     expect(elapsed).toBeLessThan(100);   // generous CI budget; p95 is DEVOPS scope.
+  #   Listed in test-scenarios.md line 90 with [rev 1] marker and
+  #   @property @performance @driving_port tags. Also in @property KPI list
+  #   (test-scenarios.md line 215).
+
+  high_matched_snapshot: closed
+  # Evidence:
+  #   1. matched_snapshot=true: instrumentation.test.tsx lines 89-107 asserts
+  #      event.matched_snapshot === true after correct Alt+Left restore.
+  #   2. matched_snapshot=false + console.error: instrumentation.test.tsx
+  #      lines 110-128 asserts event.matched_snapshot === false and
+  #      vi.spyOn(console, 'error') toHaveBeenCalled() on corrupted history entry.
+  #   3. Pairing scenario: provider.test.tsx lines 239-253 asserts both DOM
+  #      state (detailPaneTopRegion, detailPaneBottomRegion) AND
+  #      event.matched_snapshot === true in one test.
+  #   4. KPI #4 row in test-scenarios.md lines 202-203 now references all
+  #      three scenarios with file:line citations.
+
+  medium_deps_cruiser_traced: closed
+  # Evidence:
+  #   test-scenarios.md lines 227-244: section "Architectural Enforcement
+  #   (DEVOPS Wave)" present. Table lists all four rules by name:
+  #     no-tauri-from-domain, no-react-from-domain, no-views-from-domain,
+  #     detection-strategies-isolated.
+  #   Each row states what the rule enforces. Line 244 explicitly notes
+  #   this closes the PA MEDIUM finding.
+
+  medium_latency_hook: closed
+  # Evidence:
+  #   instrumentation.test.tsx lines 74-78: within the cross_ref_click it.skip:
+  #     expect(Number.isFinite(event.latency_ms)).toBe(true);
+  #     expect(event.latency_ms).toBeGreaterThan(0);
+  #   Comment at line 75 states "(closes PA MEDIUM click_to_paint_hook_present;
+  #   the schema-presence check, NOT a p95 budget)".
+  #   test-scenarios.md line 204: KPI #6 row updated to reference this scenario
+  #   and distinguish schema-presence (DISTILL) from p95 aggregation (DEVOPS).
+
+  medium_focus_trap: closed
+  # Evidence:
+  #   Gherkin: milestone-1-resolution-and-disambiguation.feature lines 104-110
+  #     "Tab inside the open disambiguation popover keeps focus within the popover"
+  #     Then steps: "keyboard focus moves to the next candidate" AND
+  #     "keyboard focus remains within the popover dialog".
+  #   Gherkin: milestone-1-resolution-and-disambiguation.feature lines 112-117
+  #     "Shift+Tab from the first candidate wraps focus within the popover"
+  #     Then: "keyboard focus remains within the popover dialog".
+  #   Component: provider.test.tsx lines 299-310 it.skip asserts
+  #     expect(document.activeElement).toBe(options[1]) after Tab
+  #     AND expect(dialog.contains(document.activeElement)).toBe(true).
+  #   Component: provider.test.tsx lines 312-325 it.skip asserts
+  #     expect(dialog.contains(document.activeElement)).toBe(true) after Shift+Tab,
+  #     with two acceptable end-states documented (wrap to last OR cancel button).
+  #   test-scenarios.md lines 135-138 list all four scenarios with [rev 1] markers.
+
+  low_forward_end_of_history: closed
+  # Evidence:
+  #   announcements.test.ts lines 56-62: describe block
+  #   "End-of-history boundary in forward direction is announced", it.skip
+  #   asserts announcementFor with endOfHistory='forward' returns
+  #   'No further history in forward direction'.
+  #   walking-skeleton.feature lines 239-244: Gherkin scenario
+  #   "Alt+Right at the end of history is a no-op with end-of-history cue"
+  #   also present (beyond the LOW closure requirement).
+
+new_findings: []
+# No new issues introduced by the revisions.
+
+residual_issues: []
+# All BLOCKER, HIGH, MEDIUM, and LOW findings closed.
+
+summary: >
+  All eight issues from revision cycle 1 -- one BLOCKER, three HIGH, three
+  MEDIUM, and one LOW -- are closed with specific file and line evidence.
+  The instrumentation.test.tsx file addresses the BLOCKER and both HIGH gaps
+  related to event emission and matched_snapshot in a single cohesive file
+  using the boundary-level eventSink seam, consistent with the FP paradigm
+  and ADR-003. The registry.test.ts NFR-2 scenario, the four focus-trap
+  scenarios across milestone-1.feature and provider.test.tsx, the
+  dependency-cruiser DEVOPS section in test-scenarios.md, and the forward
+  end-of-history announcement complete the remediation set with no new issues
+  introduced. The suite is approved for the DELIVER wave.
