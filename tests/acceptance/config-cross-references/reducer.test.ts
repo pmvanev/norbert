@@ -28,7 +28,10 @@
 
 import { describe, expect, it } from "vitest";
 
-import { reduce } from "../../../src/plugins/norbert-config/domain/nav/reducer";
+import {
+  reduce,
+  type ConfigNavState,
+} from "../../../src/plugins/norbert-config/domain/nav/reducer";
 import {
   initialNavState,
   makeWalkingSkeletonReducerArrangement,
@@ -185,12 +188,57 @@ describe("Ctrl+click across sub-tabs switches sub-tab, list selection, and detai
 
 // @walking_skeleton @driving_port
 describe("Ctrl+click within the same sub-tab swaps only the list selection and detail", () => {
-  it.skip("refCtrlClick to a target in the same sub-tab leaves activeSubTab unchanged", () => {
-    // Given: state.activeSubTab === 'skills'
-    // When:  next = reduce(state, { tag: 'refCtrlClick', ref: refTo(skill nw-discovery-methodology) })
-    // Then:  next.activeSubTab === 'skills'
-    //        next.selectedItemKey changes to nw-discovery-methodology
-    //        next.splitState === null
+  it("refCtrlClick to a target in the same sub-tab leaves activeSubTab unchanged", () => {
+    // Arrange: the user is already on the 'skills' sub-tab with the user-scope
+    // skill nw-bdd-requirements selected. They Ctrl+click an inline reference
+    // to a DIFFERENT skill in the SAME sub-tab -- the project-scope skill
+    // nw-discovery-methodology. Per ADR-002 / architecture sec 6.7 the
+    // reducer must commit the same-tab navigation atomically, swapping
+    // selectedItemKey while leaving activeSubTab unchanged. This scenario
+    // discriminates the same-tab branch from the cross-tab branch covered by
+    // 04-03; the unconditional `refTypeToSubTab` assignment from 04-03 is
+    // expected to be idempotent here (assigning 'skills' when current is
+    // already 'skills' produces no change), validating that the atomic
+    // 4-field update naturally subsumes both branches.
+    const { registry } = makeWalkingSkeletonReducerArrangement();
+    const sourceRef = refTo(registry, "nw-bdd-requirements");
+    if (sourceRef.tag !== "live") {
+      throw new Error(
+        `walkingSkeletonConfig must yield a live ref for nw-bdd-requirements, got ${sourceRef.tag}`,
+      );
+    }
+    const targetRef = refTo(registry, "nw-discovery-methodology");
+    if (targetRef.tag !== "live") {
+      throw new Error(
+        `walkingSkeletonConfig must yield a live ref for nw-discovery-methodology, got ${targetRef.tag}`,
+      );
+    }
+    const stateBefore: ConfigNavState = {
+      ...initialNavState,
+      activeSubTab: "skills",
+      selectedItemKey: sourceRef.entry.itemKey,
+    };
+    // Pre-condition: this is a SAME-tab Ctrl+click. Both source and target
+    // resolve into the 'skills' sub-tab; the test would no longer
+    // discriminate the same-tab branch if the target's RefType mapped
+    // elsewhere.
+    expect(stateBefore.activeSubTab).toBe("skills");
+    expect(targetRef.entry.type).toBe("skill");
+
+    // Act: dispatch refCtrlClick on the same-tab live target.
+    const next = reduce(stateBefore, {
+      tag: "refCtrlClick",
+      ref: targetRef,
+    });
+
+    // Assert: activeSubTab unchanged, selectedItemKey swapped to target,
+    // splitState remains null, history grows by exactly one entry.
+    expect(next.activeSubTab).toBe("skills");
+    expect(next.selectedItemKey).toBe(targetRef.entry.itemKey);
+    expect(next.splitState).toBeNull();
+    expect(next.history.entries.length).toBe(
+      stateBefore.history.entries.length + 1,
+    );
   });
 });
 
