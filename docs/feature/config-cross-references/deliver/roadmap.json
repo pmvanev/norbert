@@ -2,9 +2,9 @@
   "roadmap": {
     "project_id": "config-cross-references",
     "created_at": "2026-04-21",
-    "total_steps": 16,
-    "phases": 3,
-    "scope": "walking-skeleton-plus-resolver-plus-history",
+    "total_steps": 28,
+    "phases": 4,
+    "scope": "walking-skeleton-plus-resolver-plus-history-plus-reducer",
     "paradigm": "functional",
     "crafter": "nw-functional-software-crafter",
     "created_by": "nw-solution-architect"
@@ -349,6 +349,240 @@
           "implementation_notes": "The LRU behaviour is already implemented from 03-06. This step un-skips the specific eviction scenario to lock in the contract with an example. Add makeFiftyEntries helper to fixtures.ts."
         }
       ]
+    },
+    {
+      "id": "04",
+      "name": "ConfigNavReducer state machine",
+      "description": "Pure reducer that owns Configuration-view-scoped navigation state. Composes registry, resolver, and NavHistory into the action-driven state machine that the Provider will dispatch into. Walking-skeleton scope (12 R1 scenarios); 2 R2 property tests deferred.",
+      "default_agent": "nw-software-crafter",
+      "default_deps_strategy": "sequential",
+      "steps": [
+        {
+          "id": "04-01",
+          "name": "Stub reducer with refSingleClick opens split",
+          "criteria": [
+            "Importing reduce ConfigNavState ConfigNavAction from the reducer module no longer fails",
+            "refSingleClick on a live ref opens splitState with topRef from current selection and bottomRef from target",
+            "Selected item key and active sub-tab are unchanged",
+            "History gains exactly one entry"
+          ],
+          "agent": "nw-software-crafter",
+          "deps": ["03-07"],
+          "scenario": "Single-click on a live reference opens a vertical split with the target previewed",
+          "test_file": "tests/acceptance/config-cross-references/reducer.test.ts",
+          "scenario_name": "refSingleClick on a live reference produces a split with topRef=current and bottomRef=target",
+          "files_to_modify": [
+            "src/plugins/norbert-config/domain/nav/reducer.ts",
+            "tests/acceptance/config-cross-references/_helpers/fixtures.ts"
+          ],
+          "implementation_notes": "Create reducer.ts with ConfigNavState (activeSubTab selectedItemKey splitState history filter popover endOfHistory filterResetCue) and ConfigNavAction discriminated union. SplitState shape per ADR-009 fixed two-pane record with topRef bottomRef dividerRatio. Implement reduce as pure total function with switch on action.tag and never exhaustiveness default. For this step only refSingleClick on live ResolvedRef produces split with new history entry. Other action variants land in 04-02..04-12. Use registry RegistryEntry type for refs. Add initialNavState fixture to fixtures.ts plus a refTo helper that constructs a Reference and resolves it via the registry. Pure FP no IO no React."
+        },
+        {
+          "id": "04-02",
+          "name": "refSingleClick in open split replaces bottom only",
+          "criteria": [
+            "refSingleClick when splitState is non-null replaces bottomRef",
+            "topRef is unchanged after the replace",
+            "History gains one entry per replace",
+            "Previously live scenarios continue to pass"
+          ],
+          "agent": "nw-software-crafter",
+          "deps": ["04-01"],
+          "scenario": "Single-click in an open split replaces the bottom pane only",
+          "test_file": "tests/acceptance/config-cross-references/reducer.test.ts",
+          "scenario_name": "refSingleClick when splitState !== null replaces bottomRef and keeps topRef unchanged",
+          "files_to_modify": [
+            "src/plugins/norbert-config/domain/nav/reducer.ts"
+          ],
+          "implementation_notes": "Extend the refSingleClick branch. When state.splitState is non-null preserve topRef and replace bottomRef. When null keep the open-from-empty behaviour from 04-01. The 2-slot fixed shape from ADR-009 makes the third-pane case structurally impossible at the type level."
+        },
+        {
+          "id": "04-03",
+          "name": "refCtrlClick across sub-tabs is atomic",
+          "criteria": [
+            "refCtrlClick to a target in a different sub-tab updates activeSubTab and selectedItemKey",
+            "splitState becomes null as part of the commit",
+            "History gains one entry",
+            "All four field changes appear in one returned state"
+          ],
+          "agent": "nw-software-crafter",
+          "deps": ["04-02"],
+          "scenario": "Ctrl+click across sub-tabs switches sub-tab list selection and detail in one atomic update",
+          "test_file": "tests/acceptance/config-cross-references/reducer.test.ts",
+          "scenario_name": "refCtrlClick to a target in another sub-tab updates 4 fields in one returned state",
+          "files_to_modify": [
+            "src/plugins/norbert-config/domain/nav/reducer.ts"
+          ],
+          "implementation_notes": "Add refCtrlClick action variant. Single immutable update sets activeSubTab from ref entry sub-tab selectedItemKey from ref entry itemKey splitState to null and pushes one history entry. Atomicity is by construction one return statement composing the next state."
+        },
+        {
+          "id": "04-04",
+          "name": "refCtrlClick within same sub-tab swaps selection only",
+          "criteria": [
+            "refCtrlClick to a target in the same sub-tab leaves activeSubTab unchanged",
+            "selectedItemKey changes to the target",
+            "splitState becomes null",
+            "Previously live scenarios continue to pass"
+          ],
+          "agent": "nw-software-crafter",
+          "deps": ["04-03"],
+          "scenario": "Ctrl+click within the same sub-tab swaps only the list selection and detail",
+          "test_file": "tests/acceptance/config-cross-references/reducer.test.ts",
+          "scenario_name": "refCtrlClick to a target in the same sub-tab leaves activeSubTab unchanged",
+          "files_to_modify": [
+            "src/plugins/norbert-config/domain/nav/reducer.ts"
+          ],
+          "implementation_notes": "Likely outcome b validation only since 04-03 already handles the same-tab case (sub-tab assignment is idempotent when target sub-tab equals current). Document in commit body if so."
+        },
+        {
+          "id": "04-05",
+          "name": "refCtrlClick closes any open split",
+          "criteria": [
+            "refCtrlClick when splitState is non-null returns splitState null",
+            "activeSubTab and selectedItemKey reflect the target",
+            "Previously live scenarios continue to pass"
+          ],
+          "agent": "nw-software-crafter",
+          "deps": ["04-04"],
+          "scenario": "Ctrl+click closes any open split as part of the commit",
+          "test_file": "tests/acceptance/config-cross-references/reducer.test.ts",
+          "scenario_name": "refCtrlClick when splitState !== null returns splitState === null",
+          "files_to_modify": [
+            "src/plugins/norbert-config/domain/nav/reducer.ts"
+          ],
+          "implementation_notes": "Likely outcome b validation only since 04-03 already sets splitState to null unconditionally. Document if so."
+        },
+        {
+          "id": "04-06",
+          "name": "refCtrlClick preserves matching filter",
+          "criteria": [
+            "refCtrlClick with target source matching the existing filter leaves filter intact",
+            "filterResetCue is not set",
+            "Previously live scenarios continue to pass"
+          ],
+          "agent": "nw-software-crafter",
+          "deps": ["04-05"],
+          "scenario": "Ctrl+click preserves a filter that already shows the target",
+          "test_file": "tests/acceptance/config-cross-references/reducer.test.ts",
+          "scenario_name": "refCtrlClick with a target whose source matches the existing filter leaves the filter intact",
+          "files_to_modify": [
+            "src/plugins/norbert-config/domain/nav/reducer.ts"
+          ],
+          "implementation_notes": "Add filter handling per ADR-007. Read state.filter.bySubTab[targetSubTab].source. If null or matches the target source no change. Pure helper resolveFilterOnNav prevState target returns either same filter or cleared filter plus the resetCue. Implement the matching branch first."
+        },
+        {
+          "id": "04-07",
+          "name": "refCtrlClick resets filter that would hide target plus emits cue",
+          "criteria": [
+            "refCtrlClick with target source mismatching the existing filter clears that sub-tab filter",
+            "filterResetCue is set to the target sub-tab id",
+            "Other sub-tab filters are unchanged",
+            "Previously live scenarios continue to pass"
+          ],
+          "agent": "nw-software-crafter",
+          "deps": ["04-06"],
+          "scenario": "Ctrl+click resets the destination filter when it would hide the target",
+          "test_file": "tests/acceptance/config-cross-references/reducer.test.ts",
+          "scenario_name": "refCtrlClick with a target whose source mismatches the existing filter clears the filter and emits the cue",
+          "files_to_modify": [
+            "src/plugins/norbert-config/domain/nav/reducer.ts"
+          ],
+          "implementation_notes": "Complete resolveFilterOnNav with the mismatch branch. Clear only the target sub-tab filter not all filters. filterResetCue is a transient flag the Provider will read for the 3-second status line per ADR-007 then dispatch a clearFilterResetCue action in a future step (deferred for now since not in walking skeleton)."
+        },
+        {
+          "id": "04-08",
+          "name": "refSingleClick on dead is no-op",
+          "criteria": [
+            "refSingleClick with a dead ResolvedRef returns equivalent state",
+            "History length is unchanged",
+            "splitState is unchanged",
+            "Previously live scenarios continue to pass"
+          ],
+          "agent": "nw-software-crafter",
+          "deps": ["04-07"],
+          "scenario": "Single-click on a dead reference is a complete no-op",
+          "test_file": "tests/acceptance/config-cross-references/reducer.test.ts",
+          "scenario_name": "refSingleClick with a dead ResolvedRef returns the same state reference",
+          "files_to_modify": [
+            "src/plugins/norbert-config/domain/nav/reducer.ts"
+          ],
+          "implementation_notes": "Guard refSingleClick on ref.tag === live before mutating state. For tag dead return state unchanged. Same shape applies to ambiguous and unsupported variants in later phases though only dead is exercised here."
+        },
+        {
+          "id": "04-09",
+          "name": "refCtrlClick on dead is no-op",
+          "criteria": [
+            "refCtrlClick with a dead ResolvedRef leaves activeSubTab selectedItemKey splitState unchanged",
+            "History length is unchanged",
+            "Previously live scenarios continue to pass"
+          ],
+          "agent": "nw-software-crafter",
+          "deps": ["04-08"],
+          "scenario": "Ctrl+click on a dead reference is a complete no-op",
+          "test_file": "tests/acceptance/config-cross-references/reducer.test.ts",
+          "scenario_name": "refCtrlClick with a dead ResolvedRef returns the same state reference",
+          "files_to_modify": [
+            "src/plugins/norbert-config/domain/nav/reducer.ts"
+          ],
+          "implementation_notes": "Symmetric to 04-08. Guard refCtrlClick on live tag before mutating."
+        },
+        {
+          "id": "04-10",
+          "name": "selectItem does not push history",
+          "criteria": [
+            "selectItem updates selectedItemKey",
+            "History entries length is unchanged",
+            "Previously live scenarios continue to pass"
+          ],
+          "agent": "nw-software-crafter",
+          "deps": ["04-09"],
+          "scenario": "Manual list-row selection does not push a history entry",
+          "test_file": "tests/acceptance/config-cross-references/reducer.test.ts",
+          "scenario_name": "selectItem leaves history.entries.length unchanged",
+          "files_to_modify": [
+            "src/plugins/norbert-config/domain/nav/reducer.ts"
+          ],
+          "implementation_notes": "Add selectItem action variant. Updates selectedItemKey and possibly activeSubTab if the action carries a sub-tab. Does NOT push history per ADR-008."
+        },
+        {
+          "id": "04-11",
+          "name": "switchSubTab does not push history and resets selection",
+          "criteria": [
+            "switchSubTab updates activeSubTab",
+            "selectedItemKey becomes null after switchSubTab",
+            "History entries length is unchanged",
+            "Previously live scenarios continue to pass"
+          ],
+          "agent": "nw-software-crafter",
+          "deps": ["04-10"],
+          "scenario": "Manual sub-tab switch does not push a history entry",
+          "test_file": "tests/acceptance/config-cross-references/reducer.test.ts",
+          "scenario_name": "switchSubTab leaves history.entries.length unchanged",
+          "files_to_modify": [
+            "src/plugins/norbert-config/domain/nav/reducer.ts"
+          ],
+          "implementation_notes": "Add switchSubTab action variant. Updates activeSubTab and resets selectedItemKey to null. Does NOT push history per ADR-008. Mode-switch resets selection so the list-pane scroll lands at the top of the new sub-tab."
+        },
+        {
+          "id": "04-12",
+          "name": "closeSplit collapses split and pushes history",
+          "criteria": [
+            "closeSplit returns splitState null",
+            "History gains one entry",
+            "Other state fields are unchanged",
+            "All previously live scenarios continue to pass"
+          ],
+          "agent": "nw-software-crafter",
+          "deps": ["04-11"],
+          "scenario": "Close button collapses the split back to a single pane",
+          "test_file": "tests/acceptance/config-cross-references/reducer.test.ts",
+          "scenario_name": "closeSplit returns splitState === null and pushes one history entry",
+          "files_to_modify": [
+            "src/plugins/norbert-config/domain/nav/reducer.ts"
+          ],
+          "implementation_notes": "Add closeSplit action variant. Sets splitState to null and pushes one history entry capturing the post-close state."
+        }
+      ]
     }
   ],
   "validation": {
@@ -357,7 +591,9 @@
     "review_file": "docs/feature/config-cross-references/deliver/roadmap-review.yaml",
     "phase_02_reviewer": "approved",
     "phase_02_review_file": "docs/feature/config-cross-references/deliver/roadmap-review-phase-02.yaml",
-    "phase_03_reviewer": "pending",
-    "phase_03_review_file": "docs/feature/config-cross-references/deliver/roadmap-review-phase-03.yaml"
+    "phase_03_reviewer": "approved",
+    "phase_03_review_file": "docs/feature/config-cross-references/deliver/roadmap-review-phase-03.yaml",
+    "phase_04_reviewer": "pending",
+    "phase_04_review_file": "docs/feature/config-cross-references/deliver/roadmap-review-phase-04.yaml"
   }
 }

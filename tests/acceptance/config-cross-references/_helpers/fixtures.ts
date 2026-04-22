@@ -31,6 +31,17 @@ import {
   type NavEntry,
   type NavHistory,
 } from "../../../../src/plugins/norbert-config/domain/nav/history";
+import {
+  buildRegistry,
+  lookupByName,
+  type ReferenceRegistry,
+  type RegistryEntry,
+} from "../../../../src/plugins/norbert-config/domain/references/registry";
+import {
+  resolve,
+  type ResolvedRef,
+} from "../../../../src/plugins/norbert-config/domain/references/resolver";
+import type { ConfigNavState } from "../../../../src/plugins/norbert-config/domain/nav/reducer";
 
 /**
  * Re-export of the domain sentinel. Tests import `emptyHistory` from this
@@ -307,3 +318,63 @@ export const ambiguousReleaseConfig: AggregatedConfig = makeAggregatedConfig({
     makeCommand("release", "user", undefined, "# user release"),
   ],
 });
+
+// ---------------------------------------------------------------------------
+// ConfigNavReducer fixtures (Phase 04)
+// ---------------------------------------------------------------------------
+
+/**
+ * Empty starting nav state. Used by reducer scenarios as the baseline before
+ * arranging step-specific overrides via spread. `selectedItemKey === null`
+ * means refSingleClick has no current anchor; tests that need a top pane
+ * should set `selectedItemKey` AND pass a matching `currentEntry` in the
+ * action payload.
+ *
+ * `activeSubTab: 'commands'` mirrors the walking-skeleton config's anchor
+ * (the `/release` command), keeping fixture state aligned with how a real
+ * Configuration view would arrive at a refSingleClick on a skill or hook.
+ */
+export const initialNavState: ConfigNavState = {
+  activeSubTab: "commands",
+  selectedItemKey: null,
+  splitState: null,
+  history: emptyHistoryConst,
+  filter: { bySubTab: {} },
+  filterResetCue: null,
+  endOfHistory: null,
+  popover: null,
+};
+
+/**
+ * Resolve a name through a registry to a ResolvedRef. Reducer scenarios use
+ * this to build the action payload from a fixture name like
+ * `refTo(reg, 'nw-bdd-requirements')` rather than constructing Reference
+ * literals inline. Mirrors how the Provider would build the action from a
+ * detection-annotated link click.
+ */
+export function refTo(registry: ReferenceRegistry, name: string): ResolvedRef {
+  return resolve({ kind: "name", value: name }, registry);
+}
+
+/**
+ * Build the registry-and-current-entry pair the walking-skeleton reducer
+ * scenario needs. The current entry is the `/release` command (project scope);
+ * the target is resolved on demand via {@link refTo}.
+ *
+ * Throws when the expected `release` command is not found in the registry --
+ * the fixture and the walking-skeleton config must stay in sync.
+ */
+export function makeWalkingSkeletonReducerArrangement(): {
+  readonly registry: ReferenceRegistry;
+  readonly releaseEntry: RegistryEntry;
+} {
+  const registry = buildRegistry(walkingSkeletonConfig, 0);
+  const releaseMatches = lookupByName(registry, "release");
+  const releaseEntry = releaseMatches[0];
+  if (releaseEntry === undefined) {
+    throw new Error(
+      "walkingSkeletonConfig must contain a 'release' command for reducer fixtures",
+    );
+  }
+  return { registry, releaseEntry };
+}

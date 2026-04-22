@@ -26,18 +26,54 @@
  *   user-stories.md US-102, US-103, US-104, US-105, US-106, US-107
  */
 
-import { describe, it } from "vitest";
+import { describe, expect, it } from "vitest";
+
+import { reduce } from "../../../src/plugins/norbert-config/domain/nav/reducer";
+import {
+  initialNavState,
+  makeWalkingSkeletonReducerArrangement,
+  refTo,
+} from "./_helpers/fixtures";
 
 // @walking_skeleton @driving_port
 describe("Single-click on a live reference opens a vertical split with the target previewed", () => {
-  it.skip("refSingleClick on a live reference produces a split with topRef=current and bottomRef=target", () => {
-    // Driving port: const next = reduce(state, { tag: 'refSingleClick', ref: liveResolvedRef });
-    // Then: next.splitState !== null
-    //       next.splitState.topRef.itemKey === state.selectedItemKey
-    //       next.splitState.bottomRef.itemKey === target.itemKey
-    //       next.selectedItemKey === state.selectedItemKey   (list pane unchanged)
-    //       next.activeSubTab === state.activeSubTab          (sub-tab unchanged)
-    //       next.history.entries.length === state.history.entries.length + 1
+  it("refSingleClick on a live reference produces a split with topRef=current and bottomRef=target", () => {
+    // Arrange: a /release command is the currently-selected list item; the
+    // user single-clicks an inline reference to the user-scope skill
+    // `nw-bdd-requirements`.
+    const { registry, releaseEntry } = makeWalkingSkeletonReducerArrangement();
+    const targetRef = refTo(registry, "nw-bdd-requirements");
+    if (targetRef.tag !== "live") {
+      throw new Error(
+        `walkingSkeletonConfig must yield a live ref for nw-bdd-requirements, got ${targetRef.tag}`,
+      );
+    }
+    const stateBefore = {
+      ...initialNavState,
+      selectedItemKey: releaseEntry.itemKey,
+    };
+
+    // Act: dispatch refSingleClick on the live target with the current
+    // selection as the top anchor.
+    const next = reduce(stateBefore, {
+      tag: "refSingleClick",
+      ref: targetRef,
+      currentEntry: releaseEntry,
+    });
+
+    // Assert: split opens with top=current, bottom=target; list pane and
+    // sub-tab unchanged; history grows by exactly one entry.
+    expect(next.splitState).not.toBeNull();
+    if (next.splitState === null) {
+      throw new Error("splitState must be non-null after refSingleClick on a live ref");
+    }
+    expect(next.splitState.topRef.itemKey).toBe(releaseEntry.itemKey);
+    expect(next.splitState.bottomRef.itemKey).toBe(targetRef.entry.itemKey);
+    expect(next.selectedItemKey).toBe(stateBefore.selectedItemKey);
+    expect(next.activeSubTab).toBe(stateBefore.activeSubTab);
+    expect(next.history.entries.length).toBe(
+      stateBefore.history.entries.length + 1,
+    );
   });
 });
 
