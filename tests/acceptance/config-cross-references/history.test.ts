@@ -19,7 +19,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { canGoBack, goBack, goForward, pushEntry } from "../../../src/plugins/norbert-config/domain/nav/history";
+import { canGoBack, canGoForward, goBack, goForward, pushEntry } from "../../../src/plugins/norbert-config/domain/nav/history";
 import { makeHistoryWith4Entries } from "./_helpers/fixtures";
 
 // @walking_skeleton @driving_port
@@ -65,11 +65,14 @@ describe("Alt+Left at the start of history is a no-op with end-of-history cue", 
 
 // @walking_skeleton @driving_port
 describe("Alt+Right at end of history is a no-op", () => {
-  it.skip("goForward on a history with headIndex=entries.length-1 returns the same history", () => {
-    // const h = { entries: [e0, e1], headIndex: 1 };
-    // const next = goForward(h);
-    // expect(next).toEqual(h);
-    // expect(canGoForward(h)).toBe(false);
+  it("goForward on a history with headIndex=entries.length-1 returns the same history", () => {
+    const h = { entries: [{ k: "e0" }, { k: "e1" }] as const, headIndex: 1 };
+    const next = goForward(h);
+    expect(next).toEqual(h);
+    expect(canGoForward(h)).toBe(false);
+    // Regression-guard for the happy case: canGoForward is true mid-stack.
+    const h0 = { entries: [{ k: "e0" }, { k: "e1" }] as const, headIndex: 0 };
+    expect(canGoForward(h0)).toBe(true);
   });
 });
 

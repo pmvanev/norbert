@@ -112,10 +112,11 @@ export function canGoBack(history: NavHistory): boolean {
 }
 
 /**
- * Placeholder: real implementation lands in step 03-05. Conservatively
- * returns false so any premature consumer treats the forward action as
- * unavailable rather than silently allowing it.
+ * True iff goForward would change `headIndex`. Mirrors the upper-bound guard
+ * in {@link goForward} and aligns with ADR-006 invariant 2
+ * (`headIndex < entries.length`): forward navigation is available only while
+ * a strictly newer entry exists in the stack.
  */
-export function canGoForward(_history: NavHistory): boolean {
-  return false;
+export function canGoForward(history: NavHistory): boolean {
+  return history.headIndex < history.entries.length - 1;
 }
