@@ -24,6 +24,36 @@ module.exports = {
           '^(react|src/plugins/norbert-usage/adapters|src/plugins/norbert-usage/views|window|document|src/plugins/norbert-usage/domain/oscilloscope)',
       },
     },
+    {
+      name: 'no-tauri-from-config-domain',
+      severity: 'error',
+      comment:
+        'Pure norbert-config domain modules must not import @tauri-apps/* ' +
+        'packages. IO/effect dependencies belong in adapters; the domain ' +
+        'remains framework-free per architecture §4 (Core Principle 11).',
+      from: { path: '^src/plugins/norbert-config/domain' },
+      to: { path: '^@tauri-apps/' },
+    },
+    {
+      name: 'no-react-from-config-domain',
+      severity: 'error',
+      comment:
+        'Pure norbert-config domain modules must not import react or ' +
+        'react-dom. Rendering concerns live exclusively in views; the domain ' +
+        'remains framework-free per architecture §4 (Core Principle 11).',
+      from: { path: '^src/plugins/norbert-config/domain' },
+      to: { path: '^(react|react-dom)$' },
+    },
+    {
+      name: 'no-views-from-config-domain',
+      severity: 'error',
+      comment:
+        'Pure norbert-config domain modules must not import from the views ' +
+        'layer. Dependency direction is views -> domain (never the inverse) ' +
+        'per architecture §4 (Core Principle 11).',
+      from: { path: '^src/plugins/norbert-config/domain' },
+      to: { path: '^src/plugins/norbert-config/views/' },
+    },
   ],
   options: {
     doNotFollow: {

@@ -1,0 +1,108 @@
+reviewer: nw-software-crafter-reviewer
+model: sonnet
+date: 2026-04-22
+target_wave: DELIVER (config-cross-references Phase 03 NavHistory)
+pass: 2 of 2 (focus: API design + maintainability + forward-compat)
+
+approval_status: approved
+
+api_ergonomics: >
+  The five-function surface (pushEntry, goBack, goForward, canGoBack, canGoForward)
+  is exactly what the reducer and Provider need and nothing more. Reducer's
+  historyBack reduces to goBack(state.history); canGoBack/canGoForward give the
+  Provider's Alt+Left guard a single conditional with no state decoding. All five
+  functions are pure and take history first — partial application and point-free
+  composition trivial. No ergonomic friction.
+
+type_design: >
+  NavEntry opaque deferral (Readonly<Record<string, unknown>>) is clean and
+  intentional for this isolated pure module. The concrete shape (subTab/
+  selectedItemKey/splitState/at from ADR-006) is a reducer-level concern that
+  correctly lives at integration step. One terminology gap: ADR-006 names the
+  type HistoryEntry, the module exports NavEntry. Harmless at runtime; creates
+  an ADR↔code divergence — see LOW issue 2.
+
+empty_history_sentinel_assessment: >
+  headIndex: -1 sentinel is sound. All five functions handle emptyHistory without
+  special-casing: pushEntry yields headIndex 0 correctly; goBack/goForward no-op;
+  canGoBack/canGoForward both false. The sentinel eliminates a null/undefined
+  branch in every consumer.
+
+naming_discoverability: >
+  All identifiers self-documenting, no acronyms. canGoBack/canGoForward exactly
+  match Safari's History API convention. Nav- prefix consistent with module
+  cluster. emptyHistory accurately signals vacuous state. No issues.
+
+comment_quality_post_refactor: >
+  Refactor pass produced clean purposeful comments. Every exported symbol has
+  contract-stating JSDoc. LRU inline comment in pushEntry earns its space. One
+  comment is now stale: canGoBack JSDoc references "step 03-04" implying not-yet-
+  final but all 7 steps complete. Module docstring footer says "remaining four
+  functions are minimal placeholders" — also stale. See LOW issue 1.
+
+edge_case_coverage: >
+  All six edge cases resolve correctly. pushEntry(emptyHistory) yields headIndex 0.
+  goBack/goForward on emptyHistory no-op. canGoBack/canGoForward on emptyHistory
+  return false. Mid-stack LRU + truncation compose cleanly: truncation runs first
+  so eviction never races with a non-empty forward tail. No coverage gaps.
+
+maintainability_under_change: >
+  Module shape maximally change-friendly. Adding peekCurrent: one trivial pure
+  function. Replacing NavEntry with concrete HistoryEntry at reducer step requires
+  only updating the type alias export. MAX_HISTORY_ENTRIES export ensures cap
+  changes propagate from one edit site. No magic numbers in function bodies.
+
+refactor_quality: >
+  refactor-03 pass complete. No over-extraction (5 functions, no internal helpers,
+  no unnecessary abstractions), no leftover artefacts (no TODO comments, no
+  commented-out code). Public-API separator is the only structural annotation
+  and is justified by module length. LRU logic in pushEntry expressed in three
+  readable lines with one inline comment.
+
+issues:
+  - severity: low
+    finding: >
+      Two comments are stale post-completion of all seven Phase 03 steps:
+      canGoBack JSDoc says "refined exposure lands with the reducer integration
+      in step 03-04" (function is already final); module docstring footer says
+      "remaining four functions are minimal placeholders" (all are now full
+      implementations). A reader will incorrectly infer the module is partial.
+    file_and_line: >
+      src/plugins/norbert-config/domain/nav/history.ts module docstring footer;
+      canGoBack JSDoc
+    recommendation: >
+      Remove the forward-reference language. Module docstring footer can be
+      removed entirely (function bodies are self-evident). canGoBack JSDoc
+      should mirror canGoForward's final rationale.
+
+  - severity: low
+    finding: >
+      NavEntry (exported name) and HistoryEntry (ADR-006 name) are the same
+      concept with different identifiers. Documentation-to-code drift to
+      untangle later.
+    file_and_line: >
+      src/plugins/norbert-config/domain/nav/history.ts (NavEntry type);
+      adr-006-history-lru-50.md (HistoryEntry type)
+    recommendation: >
+      At reducer integration step, export a type alias
+      `export type HistoryEntry = NavEntry` from history.ts to bridge the
+      terminology. Or add a one-line note to ADR-006 acknowledging the rename.
+      Type alias is preferable.
+
+  - severity: low
+    finding: >
+      makeHistoryWith4Entries documents caller-responsibility for valid headIndex
+      but does not validate. A test author passing headIndex: 5 to a 4-entry
+      history creates an invariant-violating NavHistory silently.
+    file_and_line: >
+      tests/acceptance/config-cross-references/_helpers/fixtures.ts (makeHistoryWith4Entries)
+    recommendation: >
+      Add a RangeError guard at the top of the helper. Fixture helper —
+      failing fast on invalid inputs improves test debuggability.
+
+summary: >
+  Phase 03 NavHistory delivers a clean, minimal, forward-compatible pure module.
+  Five-function API maps directly onto reducer/Provider with no adapter required.
+  emptyHistory sentinel is mathematically sound across all functions. Three LOW
+  issues — all documentation or fixture-guard polish, none affect correctness.
+  Zero BLOCKER, zero HIGH. Approved.

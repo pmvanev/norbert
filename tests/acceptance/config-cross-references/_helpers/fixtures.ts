@@ -42,10 +42,16 @@ export const emptyHistory: NavHistory = emptyHistoryConst;
  * Build a 4-entry NavHistory with distinct opaque entries (k: 'e0'..'e3') and
  * the supplied `headIndex`. Used by US-104 walking-skeleton scenarios.
  *
- * Caller is responsible for picking a `headIndex` consistent with ADR-006
- * invariant 1 (0 <= headIndex < entries.length); the helper does not validate.
+ * Throws `RangeError` when `headIndex` falls outside `0..3` so an invalid
+ * input fails fast at the call site rather than producing a NavHistory that
+ * silently violates ADR-006 invariant 1 (0 <= headIndex < entries.length).
  */
 export function makeHistoryWith4Entries(headIndex: number): NavHistory {
+  if (headIndex < 0 || headIndex >= 4) {
+    throw new RangeError(
+      `makeHistoryWith4Entries: headIndex must be 0..3, got ${headIndex}`,
+    );
+  }
   const entries: readonly NavEntry[] = [
     { k: "e0" },
     { k: "e1" },

@@ -1,0 +1,118 @@
+reviewer: nw-software-crafter-reviewer
+model: sonnet
+date: 2026-04-22
+target_wave: DELIVER (config-cross-references Phase 03 NavHistory)
+pass: 1 of 2 (focus: TDD discipline + Testing Theater)
+
+approval_status: approved
+
+testing_theater_check:
+  pattern_1_tautological: clean
+  pattern_2_mock_call_count_only: clean
+  pattern_3_implementation_leak: clean
+  pattern_4_test_passes_no_matter_what: clean
+  pattern_5_skip_as_coverage: clean
+  pattern_6_loop_of_one: clean
+  pattern_7_dependency_only: clean
+  pattern_8_hidden_seam_swap: clean
+
+deletion_test_per_step:
+  - step: 03-01 (stub + goBack)
+    deletion_test: yes
+    rationale: >
+      Reverting goBack to a no-op would leave headIndex at 3, failing
+      expect(next.headIndex).toBe(2). Deleting the module breaks the import.
+  - step: 03-02 (goForward)
+    deletion_test: yes
+    rationale: >
+      Reverting goForward to a no-op leaves headIndex at 2, failing
+      expect(next.headIndex).toBe(3).
+  - step: 03-03 (pushEntry truncates -- validation-only)
+    deletion_test: yes
+    rationale: >
+      Reverting the slice(0, headIndex+1) truncation in pushEntry would leave
+      e3 in entries, failing the exact-array assertion. Validation-only is
+      correct; the test locks in a contract earlier code already satisfied.
+  - step: 03-04 (goBack at start -- validation-only)
+    deletion_test: yes
+    rationale: >
+      Reverting the headIndex <= 0 guard would decrement to -1 on a headIndex=0
+      history. canGoBack === false would fail if the predicate were removed.
+  - step: 03-05 (goForward at end + canGoForward)
+    deletion_test: yes
+    rationale: >
+      Reverting the upper-bound guard would increment headIndex past
+      entries.length-1. canGoForward false at end + true mid-stack provide
+      independent predicate coverage.
+  - step: 03-06 (LRU property)
+    deletion_test: yes
+    rationale: >
+      Removing the LRU cap allows |entries| to exceed 50 after 60+ pushes,
+      falsifying the property within fast-check's 100 default runs given
+      minLength: 60.
+  - step: 03-07 (LRU eviction example -- validation-only)
+    deletion_test: yes
+    rationale: >
+      Reverting the 03-06 LRU cap leaves entries.length at 51 with entries[0]
+      unchanged, failing both assertions.
+
+driving_port_discipline: clean
+des_integrity: clean
+# Phase 03 events: 7 steps × 5 phases = 35 entries; PREPARE logged for all 7.
+# No PREPARE-skipped recurrence from Phase 02. Validation-only steps record
+# rationale in RED_ACCEPTANCE detail field.
+fp_paradigm: clean
+architectural_rules: violations
+# .dependency-cruiser.cjs contains exactly one rule (no-effects-in-phosphor-
+# domain) scoped to norbert-usage/domain/phosphor. NO machine-enforced rule
+# exists for src/plugins/norbert-config/domain/**. The architecture §4 spec
+# lists 4 rules (no-tauri-from-domain, no-react-from-domain, no-views-from-
+# domain, detection-strategies-isolated) but they were never added to the
+# config. Module is clean today; the gap is enforcement, not violation.
+property_test_quality: clean
+# fc.array minLength:60 ensures sequences breach 50-cap. numRuns defaults 100.
+# size:"max" controls value complexity, not iteration count. Weighting 3:1:1
+# documented inline. Not loop-of-one.
+
+issues:
+  - severity: medium
+    finding: >
+      The dependency-cruiser rule set does not cover
+      src/plugins/norbert-config/domain/**. The single existing rule targets
+      the phosphor domain (norbert-usage). Architecture §4 specifies 4 rules
+      that were never implemented as cruiser rules. The module is FP-clean
+      today but there is no automated enforcement to prevent future regressions
+      (e.g., a React or Tauri import slipping into history.ts, registry.ts, or
+      resolver.ts). The Phase 01 review claimed "lint:boundaries clean" — this
+      is technically true (no violations of the existing single rule) but
+      misleading because the relevant rules don't exist yet.
+    file_and_line: ".dependency-cruiser.cjs (no rule for norbert-config/domain/**)"
+    recommendation: >
+      Add 4 forbidden rules per architecture §4 covering
+      src/plugins/norbert-config/domain/**: forbid imports from react,
+      react-dom, @tauri-apps/*, ../views/**. Mirror the phosphor rule shape.
+      This closes a long-standing enforcement gap that affects all 3 phases
+      (registry/resolver/nav). Not a blocker for Phase 03 approval but should
+      land in remediation alongside Phase 03 closeout.
+
+  - severity: low
+    finding: >
+      refactor-03 may not yet be in execution-log.json (depends on whether the
+      parallel refactor agent completed in time). If a refactor was performed,
+      its 5 phase entries must be present; if no refactor was needed, a single
+      PREPARE entry with NOT_APPLICABLE rationale documents the explicit
+      decision.
+    file_and_line: "docs/feature/config-cross-references/deliver/execution-log.json"
+    recommendation: >
+      After refactor-03 agent completes, verify 5 entries are present (or
+      explicitly document no-refactor decision). Re-run integrity verifier.
+
+summary: >
+  Phase 03 NavHistory passes all TDD discipline checks. All 7 tests enter
+  exclusively through driving-port functions, assert concrete observable
+  state, and are falsifiable by reverting production changes -- including the
+  3 validation-only steps. Property test is not loop-of-one (minLength:60,
+  default numRuns 100, weighting documented). One MEDIUM (dep-cruiser
+  coverage gap for norbert-config/domain/** -- affects all 3 phases, not just
+  Phase 03) and one LOW (refactor-03 log entries TBD). Zero BLOCKER, zero
+  HIGH. Approved.
