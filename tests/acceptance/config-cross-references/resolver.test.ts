@@ -125,3 +125,131 @@ describe("Resolving a file-path reference to an item type the plugin does not ex
     expect(liveResult.entry.name).toBe("nw-bdd-requirements");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Mutation-coverage tests
+//
+// These tests target boundary-, string-literal-, and dispatch-mutants that
+// the four "happy outcome" scenarios above leave alive (verified via Stryker
+// against stryker.config-cross-references-resolver.conf.json). Each block
+// below names the mutant family it kills so future readers can map a fail
+// back to a behavioural rule rather than a "magic" assertion.
+// ---------------------------------------------------------------------------
+
+// @mutation_coverage
+describe("Resolving a path that does not lie under .claude returns the dead outcome (extractDotClaudeCategory miss branch)", () => {
+  it.each([
+    ["/tmp/random/file.txt", "leading-slash path with no .claude segment"],
+    // No-leading-slash path whose first segment ('agents') happens to be a
+    // SUPPORTED_CATEGORIES literal. Locks the dead outcome when the first
+    // segment of a non-.claude path coincides with a supported category.
+    ["agents/foo.md", "no-.claude path whose first segment matches a supported category"],
+    // No-leading-slash path whose first segment is NOT a supported category.
+    // If the L100 early-return guard
+    // (`if (claudeIndex === -1) return null`) is mutated to `if (false)` or
+    // to an empty body, `extractDotClaudeCategory` would skip the guard,
+    // compute `next = segments[indexOf(.claude) + 1] = segments[0] = 'tmp'`,
+    // return `'tmp'` to `resolvePathReference`, and -- because 'tmp' is NOT
+    // in SUPPORTED_CATEGORIES -- the resolver would return `unsupported`
+    // instead of `dead`. The dead expectation pins the early return.
+    ["tmp/random/file.txt", "no-.claude path whose first segment is not a supported category"],
+  ])("resolve({ kind: 'path', value: %s }) returns dead (%s)", (pathValue) => {
+    const registry = buildRegistry(walkingSkeletonConfig, 0);
+
+    const result = resolve({ kind: "path", value: pathValue }, registry);
+
+    expect(result.tag).toBe("dead");
+    if (result.tag !== "dead") {
+      throw new Error(`Expected dead outcome for non-.claude path ${pathValue}`);
+    }
+    expect(result.searchedScopes.length).toBeGreaterThan(0);
+    for (const scope of result.searchedScopes) {
+      expect(["user", "project", "plugin"]).toContain(scope);
+    }
+  });
+});
+
+// @mutation_coverage
+describe("Resolving a path that ends exactly at .claude with no segment after returns the dead outcome (no category to inspect)", () => {
+  it.each([
+    ["~/.claude", "trailing .claude with no slash -> next === undefined"],
+    ["~/.claude/", "trailing slash -> next === ''"],
+  ])("resolve({ kind: 'path', value: %s }) returns dead (%s)", (pathValue) => {
+    // Kills the L104 ConditionalExpression / LogicalOperator / StringLiteral
+    // mutants in `extractDotClaudeCategory`'s second guard
+    // (`next === undefined || next === ""`). Without these inputs, the guard
+    // is exercised only when `next` is a real category name.
+    const registry = buildRegistry(walkingSkeletonConfig, 0);
+
+    const result = resolve({ kind: "path", value: pathValue }, registry);
+
+    expect(result.tag).toBe("dead");
+    if (result.tag !== "dead") {
+      throw new Error(`Expected dead outcome for path ${pathValue}`);
+    }
+  });
+});
+
+// @mutation_coverage
+describe("Resolving a path under a SUPPORTED .claude category that misses the registry returns the dead outcome (not unsupported)", () => {
+  it("resolve({ kind: 'path', value: '~/.claude/skills/never-registered/SKILL.md' }) returns dead", () => {
+    // Kills the L128 LogicalOperator and ConditionalExpression mutants
+    // (`category !== null && !SUPPORTED_CATEGORIES.includes(category)`).
+    // Mutating `&&` -> `||` or the predicate -> `true` would push this
+    // input -- which uses a SUPPORTED category but is not in the registry --
+    // into the `unsupported` branch. The dead expectation pins the AND.
+    const registry = buildRegistry(walkingSkeletonConfig, 0);
+
+    const result = resolve(
+      { kind: "path", value: "~/.claude/skills/never-registered/SKILL.md" },
+      registry,
+    );
+
+    expect(result.tag).toBe("dead");
+    if (result.tag !== "dead") {
+      throw new Error("Expected dead outcome for unregistered path under supported category");
+    }
+  });
+});
+
+// @mutation_coverage
+describe("The unsupported reason names every supported category and the offending category, joined by ', '", () => {
+  it("reason contains each SUPPORTED_CATEGORIES entry, the joiner, and the offending category", () => {
+    // Kills the L132 StringLiteral mutant (`", "` -> `""`) and the L75-81
+    // StringLiteral / L74 ArrayDeclaration mutants on SUPPORTED_CATEGORIES
+    // by asserting each canonical category name appears verbatim in the
+    // reason and that the join uses ", " as the separator.
+    const registry = buildRegistry(walkingSkeletonConfig, 0);
+
+    const result = resolve(
+      { kind: "path", value: "~/.claude/unknown-kind/foo.bin" },
+      registry,
+    );
+
+    expect(result.tag).toBe("unsupported");
+    if (result.tag !== "unsupported") {
+      throw new Error("Expected unsupported outcome");
+    }
+
+    // Each SUPPORTED_CATEGORIES literal must appear in the reason.
+    for (const category of [
+      "agents",
+      "commands",
+      "skills",
+      "hooks",
+      "mcpServers",
+      "rules",
+      "plugins",
+    ]) {
+      expect(result.reason).toContain(category);
+    }
+
+    // The join separator must be ", " (kills the join("") mutant).
+    expect(result.reason).toContain("agents, commands");
+    expect(result.reason).toContain("rules, plugins");
+
+    // The offending category must be quoted in the reason.
+    expect(result.reason).toContain('"unknown-kind"');
+  });
+});
+

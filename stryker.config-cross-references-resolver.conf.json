@@ -1,0 +1,18 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stryker-mutator/stryker/master/packages/core/schema/stryker-schema.json",
+  "mutate": [
+    "src/plugins/norbert-config/domain/references/resolver.ts"
+  ],
+  "testRunner": "vitest",
+  "reporters": ["clear-text", "json", "html"],
+  "jsonReporter": {
+    "fileName": "docs/feature/config-cross-references/deliver/mutation/resolver-stryker-report.json"
+  },
+  "htmlReporter": {
+    "fileName": "docs/feature/config-cross-references/deliver/mutation/resolver-mutation-report.html"
+  },
+  "vitest": {
+    "configFile": "vitest.mutation.config-cross-references-resolver.ts"
+  },
+  "tempDirName": ".stryker-tmp-resolver"
+}
