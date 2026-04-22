@@ -30,7 +30,7 @@ import {
   type NavEntry,
   type NavHistory,
 } from "../../../src/plugins/norbert-config/domain/nav/history";
-import { emptyHistory, makeHistoryWith4Entries } from "./_helpers/fixtures";
+import { emptyHistory, makeFiftyEntries, makeHistoryWith4Entries } from "./_helpers/fixtures";
 
 // @walking_skeleton @driving_port
 describe("Alt+Left restores the previous navigation snapshot", () => {
@@ -141,12 +141,14 @@ describe("For any sequence of navigation actions the history never exceeds 50 en
 
 // @walking_skeleton @driving_port
 describe("LRU eviction at cap of 50 evicts the oldest entry and shifts headIndex", () => {
-  it.skip("pushEntry on a 50-entry history at headIndex=49 evicts entries[0] and stays at headIndex=49", () => {
-    // const h = { entries: makeFiftyEntries(), headIndex: 49 };
-    // const next = pushEntry(h, e50);
-    // expect(next.entries.length).toBe(50);
-    // expect(next.entries[0]).not.toEqual(h.entries[0]);  // oldest evicted
-    // expect(next.entries[49]).toEqual(e50);
-    // expect(next.headIndex).toBe(49);
+  it("pushEntry on a 50-entry history at headIndex=49 evicts entries[0] and stays at headIndex=49", () => {
+    const entries = makeFiftyEntries();
+    const h: NavHistory = { entries, headIndex: 49 };
+    const e50: NavEntry = { k: "e50" };
+    const next = pushEntry(h, e50);
+    expect(next.entries.length).toBe(50);
+    expect(next.entries[0]).not.toEqual(h.entries[0]); // oldest evicted
+    expect(next.entries[49]).toEqual(e50);
+    expect(next.headIndex).toBe(49);
   });
 });

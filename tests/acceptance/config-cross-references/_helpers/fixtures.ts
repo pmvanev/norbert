@@ -55,6 +55,15 @@ export function makeHistoryWith4Entries(headIndex: number): NavHistory {
   return { entries, headIndex };
 }
 
+/**
+ * Build a 50-entry sequence of distinct opaque NavEntries (k: 'e0'..'e49').
+ * Used by US-104 LRU-cap scenarios that need a history sitting exactly at
+ * MAX_HISTORY_ENTRIES so the next pushEntry exercises eviction (ADR-006).
+ */
+export function makeFiftyEntries(): readonly NavEntry[] {
+  return Array.from({ length: 50 }, (_, i) => ({ k: `e${i}` }));
+}
+
 export const emptyAggregatedConfig: AggregatedConfig = {
   agents: [],
   commands: [],
