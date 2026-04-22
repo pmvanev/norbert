@@ -26,7 +26,7 @@
  */
 
 import type { ConfigSubTab } from "../types";
-import type { RegistryEntry } from "../references/registry";
+import type { RefType, RegistryEntry } from "../references/registry";
 import type { ResolvedRef } from "../references/resolver";
 import { pushEntry, type NavEntry, type NavHistory } from "./history";
 
@@ -132,6 +132,62 @@ function makeRefClickEntry(
 }
 
 /**
+ * Pure mapping from a registry entry's {@link RefType} to the
+ * {@link ConfigSubTab} that surfaces items of that type in the Configuration
+ * view. Encoded as a total `Record<RefType, ConfigSubTab>` so adding a new
+ * RefType is a compile-time error here until the mapping is extended --
+ * the type system, not a runtime check, keeps cross-tab navigation in sync
+ * with the registry surface.
+ *
+ * Most types pluralise (`agent` -> `agents`); `mcp` is intentionally
+ * identical because the sub-tab id is also `mcp`.
+ */
+const REF_TYPE_TO_SUB_TAB: Readonly<Record<RefType, ConfigSubTab>> = {
+  agent: "agents",
+  command: "commands",
+  skill: "skills",
+  hook: "hooks",
+  mcp: "mcp",
+  rule: "rules",
+  plugin: "plugins",
+};
+
+function refTypeToSubTab(type: RefType): ConfigSubTab {
+  return REF_TYPE_TO_SUB_TAB[type];
+}
+
+/**
+ * Handle the `refCtrlClick` branch.
+ *
+ * Per ADR-002 / architecture sec 6.7, a Ctrl+click on a live cross-reference
+ * commits the navigation in a single returned state -- no intermediate
+ * render. Four fields are updated atomically:
+ *   - `activeSubTab`     : derived from the target's RefType
+ *   - `selectedItemKey`  : the target's itemKey
+ *   - `splitState`       : forced to null (Ctrl+click closes any open split
+ *                          as part of the commit; refined by 04-05)
+ *   - `history`          : exactly one entry pushed (ADR-008)
+ *
+ * Dead/ambiguous/unsupported branches are no-ops in the walking-skeleton
+ * scope; later steps (04-07, 04-08) refine them.
+ */
+function handleRefCtrlClick(
+  state: ConfigNavState,
+  ref: ResolvedRef,
+): ConfigNavState {
+  if (ref.tag !== "live") {
+    return state;
+  }
+  return {
+    ...state,
+    activeSubTab: refTypeToSubTab(ref.entry.type),
+    selectedItemKey: ref.entry.itemKey,
+    splitState: null,
+    history: pushEntry(state.history, makeRefClickEntry("refCtrlClick", ref.entry.itemKey)),
+  };
+}
+
+/**
  * Handle the `refSingleClick` branch.
  *
  * Two structural sub-cases (per ADR-009 the 2-slot SplitState shape makes a
@@ -204,10 +260,11 @@ export function reduce(
     case "refSingleClick":
       return handleRefSingleClick(state, action.ref, action.currentEntry);
     case "refCtrlClick":
+      return handleRefCtrlClick(state, action.ref);
     case "selectItem":
     case "switchSubTab":
     case "closeSplit":
-      // Walking-skeleton placeholder: implementations land in 04-02..04-12.
+      // Walking-skeleton placeholder: implementations land in 04-04..04-12.
       return state;
     default: {
       const _exhaustive: never = action;

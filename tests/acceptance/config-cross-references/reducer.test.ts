@@ -143,13 +143,43 @@ describe("Single-click in an open split replaces the bottom pane only", () => {
 
 // @walking_skeleton @driving_port
 describe("Ctrl+click across sub-tabs switches sub-tab, list selection, and detail in one atomic update", () => {
-  it.skip("refCtrlClick to a target in another sub-tab updates 4 fields in one returned state", () => {
-    // Driving port: next = reduce(state, { tag: 'refCtrlClick', ref: refTo(skill nw-bdd-requirements user-scope) })
-    // Then: next.activeSubTab === 'skills'
-    //       next.selectedItemKey === 'nw-bdd-requirements'   (or its derived item key)
-    //       next.splitState === null
-    //       next.history.entries.length === state.history.entries.length + 1
-    //       (Single returned state contains all 4 -- atomicity by construction.)
+  it("refCtrlClick to a target in another sub-tab updates 4 fields in one returned state", () => {
+    // Arrange: the user is on the 'commands' sub-tab with /release selected
+    // (initialNavState.activeSubTab === 'commands'). They Ctrl+click an
+    // inline reference to the user-scope skill nw-bdd-requirements (a target
+    // in a DIFFERENT sub-tab -- 'skills'). Per ADR-002 / architecture sec
+    // 6.7 the reducer must commit the cross-tab navigation in a single
+    // returned state -- no intermediate render.
+    const { registry, releaseEntry } = makeWalkingSkeletonReducerArrangement();
+    const targetRef = refTo(registry, "nw-bdd-requirements");
+    if (targetRef.tag !== "live") {
+      throw new Error(
+        `walkingSkeletonConfig must yield a live ref for nw-bdd-requirements, got ${targetRef.tag}`,
+      );
+    }
+    const stateBefore = {
+      ...initialNavState,
+      selectedItemKey: releaseEntry.itemKey,
+    };
+    // Pre-condition: this is a CROSS-tab Ctrl+click. If the target's sub-tab
+    // matches the current one, the test would no longer discriminate the
+    // cross-tab branch from the same-tab branch.
+    expect(stateBefore.activeSubTab).not.toBe("skills");
+    expect(targetRef.entry.type).toBe("skill");
+
+    // Act: dispatch refCtrlClick on the cross-tab live target.
+    const next = reduce(stateBefore, {
+      tag: "refCtrlClick",
+      ref: targetRef,
+    });
+
+    // Assert: all 4 fields updated atomically in one returned state.
+    expect(next.activeSubTab).toBe("skills");
+    expect(next.selectedItemKey).toBe(targetRef.entry.itemKey);
+    expect(next.splitState).toBeNull();
+    expect(next.history.entries.length).toBe(
+      stateBefore.history.entries.length + 1,
+    );
   });
 });
 
