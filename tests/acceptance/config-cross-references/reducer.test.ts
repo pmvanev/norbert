@@ -431,11 +431,67 @@ describe("Ctrl+click resets the destination filter when it would hide the target
 
 // @walking_skeleton @driving_port
 describe("Single-click on a dead reference is a complete no-op", () => {
-  it.skip("refSingleClick with a dead ResolvedRef returns the same state reference", () => {
-    // Given: any state
-    // When:  next = reduce(state, { tag: 'refSingleClick', ref: deadResolvedRef })
-    // Then:  next === state  (or deep-equal with no history change)
-    //        next.history.entries.length === state.history.entries.length
+  it("refSingleClick with a dead ResolvedRef returns the same state reference", () => {
+    // Arrange: a non-trivial pre-state with a populated selection, an open
+    // split, an active per-sub-tab filter and a stale filterResetCue, so the
+    // no-op assertion is meaningful (a buggy reducer that mutates ANY of
+    // these would be caught). The dead ref is constructed via the real
+    // resolver against a registry that does not contain the looked-up name --
+    // this is more honest about the contract than hand-rolling a
+    // `{ tag: 'dead', ... }` literal because the test exercises the same
+    // path the Provider would take when it dispatches a refSingleClick on a
+    // detection-annotated link whose target was deleted between page-load
+    // and click.
+    //
+    // Per ADR-008 dead refs do not push history; per ADR-009 dead refs do
+    // not open splits. The 04-01 guard `if (action.ref.tag !== 'live')
+    // return state;` already produces this no-op for any non-live tag, so
+    // outcome (b) validation-only is expected.
+    const { registry, releaseEntry } = makeWalkingSkeletonReducerArrangement();
+    const deadRef = refTo(registry, "this-name-is-not-in-the-registry");
+    if (deadRef.tag !== "dead") {
+      throw new Error(
+        `Expected a dead ResolvedRef for an unknown name, got ${deadRef.tag}`,
+      );
+    }
+    const stateBefore: ConfigNavState = {
+      ...initialNavState,
+      selectedItemKey: releaseEntry.itemKey,
+      splitState: {
+        topRef: releaseEntry,
+        bottomRef: releaseEntry,
+        dividerRatio: 0.5,
+      },
+      filter: {
+        bySubTab: {
+          skills: { source: "user", sort: "name" },
+        },
+      },
+      filterResetCue: "agents",
+    };
+
+    // Act: dispatch refSingleClick on the dead target with a non-null
+    // currentEntry (the action payload otherwise looks identical to a live
+    // single-click; the only thing that should suppress state change is the
+    // dead tag).
+    const next = reduce(stateBefore, {
+      tag: "refSingleClick",
+      ref: deadRef,
+      currentEntry: releaseEntry,
+    });
+
+    // Assert: every observable field is unchanged AND the returned reference
+    // is the same object (no spread, no allocation -- the early-return guard
+    // returns `state` verbatim per 04-01).
+    expect(next).toBe(stateBefore);
+    expect(next.splitState).toBe(stateBefore.splitState);
+    expect(next.selectedItemKey).toBe(stateBefore.selectedItemKey);
+    expect(next.activeSubTab).toBe(stateBefore.activeSubTab);
+    expect(next.history.entries.length).toBe(
+      stateBefore.history.entries.length,
+    );
+    expect(next.filter).toBe(stateBefore.filter);
+    expect(next.filterResetCue).toBe(stateBefore.filterResetCue);
   });
 });
 
