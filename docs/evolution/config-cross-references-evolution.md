@@ -159,3 +159,169 @@ Continue from `walking-skeleton.md` step 6 onward:
 The registry's `version` field is the memoisation key for the detection
 pipeline; downstream consumers should gate on it rather than on config
 object identity.
+
+---
+
+## Phase 02 — Reference Resolver (2026-04-22)
+
+**Wave segment**: DELIVER (resolver slice — driving port for detection and the navigation reducer)
+**Paradigm**: functional
+**Crafter**: nw-functional-software-crafter
+
+### Scope Shipped
+
+The pure-domain `ReferenceResolver` module (architecture §6.3) plus two new
+shared constants exported from `registry.ts`. Four TDD steps, one per
+ResolvedRef outcome, followed by a refactor pass, a mutation pass, and a
+consolidated remediation closing all open review findings:
+
+| Step | Behaviour |
+|------|-----------|
+| 02-01 | Stub `resolve` + `live` outcome for single-name match against the registry |
+| 02-02 | `ambiguous` outcome when name lookup returns ≥ 2 candidates (deterministic ordering) |
+| 02-03 | `dead` outcome when both name and path lookups miss; `searchedScopes` populated from registry coverage |
+| 02-04 | `unsupported` outcome when a path-shaped reference points under `.claude/<unknown-category>/`; supported-category paths still resolve as `live` |
+
+### Wave Timeline
+
+| Wave | Commit | Notes |
+|------|--------|-------|
+| DELIVER 02-01 | `156c93d` | Stub `resolve` live outcome; deviation from §6.3 `Reference` shape documented in module docstring |
+| DELIVER 02-02 | `7131597` | Ambiguous outcome activated; deterministic across builds |
+| DELIVER 02-03 | `3cc3203` | Dead outcome with `searchedScopes` from `ConfigScope` literal union |
+| DELIVER 02-04 | `ca55fc6` | Unsupported outcome; `.claude/<category>/` heuristic with reason string |
+| DELIVER refactor-02 | `2eded1e` | L1 + L4 sweep — extracted `resolveNameReference` / `resolvePathReference` / `extractDotClaudeCategory` helpers; `resolve` reduced to a three-line dispatcher with `never`-typed exhaustiveness check |
+| DELIVER mutation-02 | `82dd330` | Stryker run on resolver only (separate scoped config); 97.26% kill rate (71/73) after three iterations |
+| DELIVER remediation-02 | `4e45f44` | Consolidated remediation closing 6 review findings (1 MEDIUM + 2 LOW from pass 1; 3 MEDIUM + 1 LOW from pass 2) |
+
+### What This Enables
+
+The resolver is the gating dependency for the navigation surfaces:
+
+- **Detection pipeline** (architecture §6.2 / ADR-001) — produces `Reference`
+  values directly from MDAST (`inlineCode.value` → `{ kind: 'name' }`,
+  `link.url` → `{ kind: 'path' }`) and feeds them through `resolve()` to
+  decide which `ReferenceToken` variant to render. Now unblocked.
+- **`ConfigNavReducer`** (§6.4) — consumes the `ResolvedRef` discriminated
+  union to drive UI behaviour: `live` opens preview / commits navigation,
+  `ambiguous` opens the disambiguation popover (ADR-004), `dead` shows the
+  tooltip with `searchedScopes`, `unsupported` shows the typed `category`
+  in the tooltip without parsing a reason string.
+
+### Quality Summary
+
+| Dimension | Result |
+|-----------|--------|
+| Live acceptance scenarios | 11 (4 outcome scenarios + 4 mutation-coverage describe blocks; 7 `it` cases beyond the original 4) |
+| Mutation kill rate | **97.26%** (71/73 mutants killed; gate ≥ 80%) |
+| NoCoverage mutants | 2 — both on the `default:` branch of the `switch (ref.kind)` exhaustiveness check; statically unreachable under the current discriminated union (TS narrows to `never`) |
+| Surviving mutants | 0 |
+| DES execution log entries | 9 steps × 5 phases = 45 with 7 `NOT_APPLICABLE` skips on RED phases for refactor / mutation / remediation passes; 2 BACKFILL PREPARE entries for 02-02 and 02-04 |
+| Reviews (DELIVER) | 2 — pass-1 TDD/Theater approved (1 MEDIUM + 2 LOW); pass-2 API/maintainability approved (3 MEDIUM + 1 LOW); all 6 closed in commit `4e45f44` |
+| DES integrity | 9/9 steps complete (verify_deliver_integrity passes after backfill) |
+| Architectural rules | dependency-cruiser clean; resolver imports only `ConfigScope` (type-only) and registry items; no `node:*`, no React, no Tauri |
+| FP paradigm | Pure functions only; readonly types throughout; `never`-typed exhaustiveness check; no input mutation |
+| Public API drift vs §6.3 | **Deliberate** — see "Architecture deviation" below |
+
+### Architecture Deviation
+
+The shipped `Reference` shape diverged from architecture §6.3 as a deliberate
+design improvement that emerged during implementation. The original spec was
+`{ kind: 'markdown-link' | 'inline-code', rawText, resolveHint }`; the
+shipped shape is `{ kind: 'name' | 'path', value }`. The original
+`unsupported` arm carried only `{ path, reason }`; the shipped arm adds a
+typed `category` field. The reasoning — source-syntax belongs at the
+detection layer per ADR-001, not at the resolver; lookup-strategy is the
+resolver's only concern — was reviewed and approved in
+`roadmap-review-phase-02.yaml` (reviewer agreement) and
+`review-pass-2-phase-02.yaml` (typed-category recommendation), and is
+back-propagated to `docs/feature/config-cross-references/design/architecture.md`
+§6.3 with a `Changed Assumptions` block as part of this finalize step.
+
+### Notable Engineering Decisions
+
+- **Shared `REGISTRY_SCOPES` and `REGISTRY_CATEGORIES`** exported from
+  `registry.ts` and imported by the resolver. Eliminates the silent-divergence
+  hazard between the resolver's hardcoded `searchedScopes` / supported-category
+  list and the registry's actual surface coverage. Closes review pass-2 MEDIUM
+  findings 2 and 3 in a single move; downstream consumers (detection, future
+  ScopePrecedence) get the same source of truth.
+- **Typed `category` field on the `unsupported` arm** (rather than embedding
+  the unrecognised category in a parseable substring of `reason`). UI
+  consumers like the dead-token tooltip and disambiguation popover can read
+  `category` as a first-class datum; `reason` remains for human-readable
+  context. Closes review pass-2 MEDIUM finding 1; types-as-documentation.
+- **Refactor-02 pass before mutation testing**, not after — the
+  `resolveNameReference` / `resolvePathReference` / `extractDotClaudeCategory`
+  helper extraction made the mutation-coverage gaps (boundary conditions on
+  `claudeIndex === -1`, `next === undefined / next === ""`, the `&&` in the
+  unsupported branch) much easier to reason about and target precisely.
+- **Backfilled 2 PREPARE entries** for steps 02-02 and 02-04 with
+  `BACKFILL:`-prefixed framing in the `d` field. The PREPARE work was
+  performed (file reads, contract review) but the DES CLI was not called at
+  the time. Honesty about the original logging gap rather than silent
+  reconstruction; the timestamps reflect the backfill point, not the
+  original action.
+
+### Outside-In TDD Notes
+
+All four resolver scenarios are exercised exclusively through the `resolve()`
+driving port — the three post-refactor internal helpers
+(`resolveNameReference`, `resolvePathReference`, `extractDotClaudeCategory`)
+are not exported and not referenced by any test. Pass-1 review verified
+deletion tests for every step: reverting the relevant branch in the
+production code causes the primary tag assertion to fail (live → dead;
+ambiguous → dead; dead → live; unsupported → dead). No Testing Theater
+patterns present.
+
+### Open Debt
+
+The four LOW findings from Phase 01 review pass 2 (registry comment /
+documentation additions) remain open from the walking-skeleton wave; nothing
+new from Phase 02 since all six pass-1 + pass-2 findings closed in commit
+`4e45f44`. The three deferred `it.skip` scenarios in `registry.test.ts`
+(unknown-name returns empty list, version increments on rebuild,
+cross-scope collision via `makeAggregatedConfig`) are still in scope for a
+future polish wave — they were architecturally deferred at DISTILL and have
+not regressed.
+
+### Files Touched
+
+#### Production
+- `src/plugins/norbert-config/domain/references/resolver.ts` (NEW)
+- `src/plugins/norbert-config/domain/references/registry.ts` (MODIFIED — exports `REGISTRY_SCOPES` and `REGISTRY_CATEGORIES`)
+
+#### Tests
+- `tests/acceptance/config-cross-references/resolver.test.ts` (NEW — 11 `it` cases across 8 describe blocks)
+
+#### Mutation tooling
+- `stryker.config-cross-references-resolver.conf.json` (NEW — scoped to resolver only; keeps registry's existing config + report intact)
+- `vitest.mutation.config-cross-references-resolver.ts` (NEW — includes only `resolver.test.ts`)
+
+#### DELIVER artefacts
+- `docs/feature/config-cross-references/deliver/roadmap.json` (extended with Phase 02)
+- `docs/feature/config-cross-references/deliver/roadmap-review-phase-02.yaml` (NEW)
+- `docs/feature/config-cross-references/deliver/review-pass-1-phase-02.yaml` (NEW)
+- `docs/feature/config-cross-references/deliver/review-pass-2-phase-02.yaml` (NEW)
+- `docs/feature/config-cross-references/deliver/execution-log.json` (extended; includes 2 BACKFILL PREPARE entries)
+- `docs/feature/config-cross-references/deliver/mutation/resolver-mutation-summary.md` (NEW)
+- `docs/feature/config-cross-references/deliver/mutation/resolver-stryker-report.json` (NEW)
+- `docs/feature/config-cross-references/deliver/mutation/resolver-mutation-report.html` (NEW)
+
+#### Architecture back-propagation (this finalize)
+- `docs/feature/config-cross-references/design/architecture.md` (§6.3 + new "Changed Assumptions" block + changelog entry)
+
+### Next Wave Pointer
+
+Continue from `walking-skeleton.md` step 7:
+
+1. `history.test.ts` — pure LRU-50 stack module (US-104, ADR-006)
+2. Navigation reducer (US-103, US-105, US-106 — pure transitions; consumes `ResolvedRef`)
+3. Detection strategies 1 + 2 (markdown link + inline code; produces `Reference` values for `resolve()`)
+4. `NavAnnouncer` ARIA live region (DESIGN §6.8)
+5. Scope-precedence pre-highlight (OQ-5)
+6. `ConfigNavProvider` + instrumentation effect (US-110, KPI sink)
+
+The resolver's `ResolvedRef` discriminated union is the contract surface for
+the navigation reducer; downstream consumers should switch exhaustively on
+`tag` rather than testing for individual field presence.

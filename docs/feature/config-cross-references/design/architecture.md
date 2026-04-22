@@ -227,24 +227,31 @@ Reference for this pattern: the `remark-toc`, `remark-gh-link`, and `remark-exte
 ```ts
 // domain/references/resolver.ts
 
-type Reference = Readonly<{
-  kind: 'markdown-link' | 'inline-code';
-  rawText: string;         // what the user wrote
-  resolveHint: { byName?: string; byPath?: string };
-}>;
+type Reference = Readonly<
+  | { kind: 'name'; value: string }
+  | { kind: 'path'; value: string }
+>;
 
 type ResolvedRef =
   | { tag: 'live';        entry: RegistryEntry }
   | { tag: 'ambiguous';   candidates: readonly RegistryEntry[] }
   | { tag: 'dead';        searchedScopes: readonly ConfigScope[] }
-  | { tag: 'unsupported'; path: string; reason: string };
+  | { tag: 'unsupported'; path: string; category: string; reason: string };
 
 function resolve(ref: Reference, reg: ReferenceRegistry): ResolvedRef;
 ```
 
-Pure. `ambiguous` when `candidates.length >= 2`. `dead` when both lookups miss. `unsupported` when a file-path reference resolves to an item type the plugin does not expose (US-101 technical note).
+Pure. The `kind` discriminator selects the **lookup strategy** (which registry surface to query) — `name` dispatches to `lookupByName`, `path` dispatches to `lookupByPath`. `ambiguous` when name lookup returns `candidates.length >= 2`. `dead` when the lookup misses; `searchedScopes` is sourced from the shared `REGISTRY_SCOPES` constant exported by `registry.ts`. `unsupported` when a path-shaped reference points under `.claude/<category>/` where `<category>` is not one of the surfaces the plugin exposes (the location is recognised but the item type cannot be surfaced — US-101 AC bullet 4); `category` carries the unrecognised segment as a first-class typed datum so UI consumers do not have to parse `reason`. The plugin's exposed categories are sourced from the shared `REGISTRY_CATEGORIES` constant exported by `registry.ts`.
 
 **Click-time re-resolution** (US-109 R2): the reducer's `refSingleClick`/`refCtrlClick` actions carry the ResolvedRef captured at render time. The provider additionally re-checks `lookupByPath` / `lookupByName` at click dispatch time using the current registry; if the item has vanished, it dispatches a soft-failure action instead (R2).
+
+#### Changed Assumptions
+
+The shipped `Reference` shape diverges from the original §6.3 spec — `{ kind: 'markdown-link' | 'inline-code', rawText, resolveHint }` was replaced by `{ kind: 'name' | 'path', value }` during Phase 02 implementation. The `unsupported` arm gained a typed `category` field.
+
+- **Why the change**: the original shape conflated **source-syntax** (markdown-link vs inline-code, an ADR-001 detection-layer concern) with **lookup strategy** (which registry surface to query, the resolver's only concern). The shipped shape gives a cleaner, more composable resolver: the resolver does not need to know which markdown construct produced a reference, only how to look it up. Symmetrically, the typed `category` field on `unsupported` removes the need for UI consumers to parse the human-readable `reason` string to learn the unrecognised category name (types-as-documentation).
+- **Reference**: `roadmap-review-phase-02.yaml` (reviewer agreement), `review-pass-2-phase-02.yaml` (typed-category recommendation), commit `156c93d` module docstring (deviation guard), and the Phase 02 entry in `docs/evolution/config-cross-references-evolution.md`.
+- **Detection consumer**: when the detection pipeline (§6.2) lands, it constructs `Reference` values directly from MDAST nodes — an `inlineCode` node's `value` becomes `{ kind: 'name', value }`; a `link` node's `url` becomes `{ kind: 'path', value: url }`. No adapter layer is required between detection and the resolver.
 
 ### 6.4 State and Reducer
 
@@ -429,3 +436,4 @@ Each step is independently testable. BDD scenarios from user-stories.md map to i
 ## 13. Changelog
 
 - 2026-04-21: Initial DESIGN wave deliverable. Ten ADRs, three C4 levels, one architecture document, one wave-decisions.
+- 2026-04-22: §6.3 back-propagation from DELIVER Phase 02 (resolver). `Reference` shape switched from source-syntax discriminant (`markdown-link | inline-code`) to lookup-strategy discriminant (`name | path`); `unsupported` arm gained typed `category` field. Added §6.3 "Changed Assumptions" block documenting rationale and forward references.
