@@ -224,6 +224,31 @@ export function makeAggregatedConfig(parts: {
 // Common scenarios
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Bulk fixtures (NFR-2 performance scenarios)
+// ---------------------------------------------------------------------------
+
+const range = (n: number): readonly number[] =>
+  Array.from({ length: n }, (_, i) => i);
+
+/**
+ * 500-item AggregatedConfig: 100 each of skills, commands, agents, hooks, and
+ * mcpServers. Names are unique across the entire 500-item set because the
+ * per-category prefix disambiguates them (skill-0..99, command-0..99, etc.),
+ * so a registry built from this config has byName.size === 500.
+ *
+ * Used by the NFR-2 acceptance scenario in registry.test.ts to validate the
+ * O(N) algorithmic shape of buildRegistry against a realistic-scale input.
+ */
+export function make500ItemConfig(): AggregatedConfig {
+  const skills = range(100).map((i) => makeSkill(`skill-${i}`, "user"));
+  const commands = range(100).map((i) => makeCommand(`command-${i}`, "project"));
+  const agents = range(100).map((i) => makeAgent(`agent-${i}`, "user"));
+  const hooks = range(100).map((i) => makeHook(`hook-${i}.sh`, "project"));
+  const mcpServers = range(100).map((i) => makeMcpServer(`mcp-${i}`, "user"));
+  return makeAggregatedConfig({ skills, commands, agents, hooks, mcpServers });
+}
+
 /**
  * Walking-skeleton baseline: /release command on project scope referencing
  * a user-scope skill nw-bdd-requirements and a project-scope hook pre-release.sh.

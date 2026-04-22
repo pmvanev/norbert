@@ -25,6 +25,7 @@ import {
   emptyAggregatedConfig,
   walkingSkeletonConfig,
   ambiguousReleaseConfig,
+  make500ItemConfig,
   makeAggregatedConfig,
   makeSkill,
   makeCommand,
@@ -134,31 +135,19 @@ describe("Cross-scope name collisions appear as separate registry entries", () =
 
 // @property @performance @driving_port
 describe("buildRegistry with 500 items completes synchronously and produces the correct entry count", () => {
-  it.skip("a 500-item AggregatedConfig builds to a registry whose byName.size equals 500 within a generous synchronous budget", () => {
-    // Driving port:
-    //   const config = make500ItemConfig();   // 100 each of skills, commands,
-    //                                          // agents, hooks, mcpServers
-    //                                          // (or another spread totalling 500)
-    //   const start = performance.now();
-    //   const registry = buildRegistry(config, 0);
-    //   const elapsed = performance.now() - start;
-    //
-    // Then:
-    //   expect(registry.byName.size).toBe(500);
-    //   expect(elapsed).toBeLessThan(100);   // generous: arch estimates sub-ms
-    //                                        // for 500 items; jsdom + CI need slack;
-    //                                        // p95 budget is DEVOPS scope (KPI #6).
-    //
-    // (Closes PA HIGH NFR-2 gap. Helper -- to be added by DELIVER crafter to
-    //  _helpers/fixtures.ts:
-    //    export function make500ItemConfig(): AggregatedConfig {
-    //      const skills    = range(100).map((i) => makeSkill(`skill-${i}`,    "user"));
-    //      const commands  = range(100).map((i) => makeCommand(`command-${i}`, "project"));
-    //      const agents    = range(100).map((i) => makeAgent(`agent-${i}`,    "user"));
-    //      const hooks     = range(100).map((i) => makeHook(`hook-${i}.sh`,   "project"));
-    //      const mcpServers = range(100).map((i) => makeMcpServer(`mcp-${i}`,  "user"));
-    //      return makeAggregatedConfig({ skills, commands, agents, hooks, mcpServers });
-    //    }
-    // )
+  it("a 500-item AggregatedConfig builds to a registry whose byName.size equals 500 within a generous synchronous budget", () => {
+    const config = make500ItemConfig();
+
+    const start = performance.now();
+    const registry = buildRegistry(config, 0);
+    const elapsed = performance.now() - start;
+
+    // buildRegistry is synchronous: returns a registry value, not a Promise.
+    expect(registry).not.toBeInstanceOf(Promise);
+    expect(registry.byName.size).toBe(500);
+    // Generous budget: architecture estimates sub-millisecond for 500 items;
+    // 100 ms accommodates jsdom + CI variance. Tighter p95 budgets are
+    // DEVOPS-wave scope (KPI #6).
+    expect(elapsed).toBeLessThan(100);
   });
 });
