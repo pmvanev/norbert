@@ -92,14 +92,36 @@ describe("Resolving a reference that matches no registry entry returns the dead 
 
 // @walking_skeleton @driving_port
 describe("Resolving a file-path reference to an item type the plugin does not expose returns the unsupported outcome", () => {
-  it.skip("resolve({ kind: 'path', value: '~/.claude/unknown-kind/foo.bin' }, registry) returns { tag: 'unsupported', path, reason }", () => {
-    // Driving port:
-    //   const result = resolve({ kind: 'path', value: '~/.claude/unknown-kind/foo.bin' }, registry);
-    // Then:
-    //   result.tag === 'unsupported'
-    //   result.path === '~/.claude/unknown-kind/foo.bin'
-    //   typeof result.reason === 'string' && result.reason.length > 0
-    //   (architecture sec 6.3 -- 'unsupported' when the path resolves to an item
-    //    type the plugin does not expose; closes PO MEDIUM #1 / US-101 AC bullet 4.)
+  it("resolve({ kind: 'path', value: '~/.claude/unknown-kind/foo.bin' }, registry) returns { tag: 'unsupported', path, reason }", () => {
+    const registry = buildRegistry(walkingSkeletonConfig, 0);
+    const unsupportedPath = "~/.claude/unknown-kind/foo.bin";
+
+    const result = resolve({ kind: "path", value: unsupportedPath }, registry);
+
+    expect(result.tag).toBe("unsupported");
+    if (result.tag !== "unsupported") {
+      throw new Error("Expected unsupported outcome");
+    }
+    expect(result.path).toBe(unsupportedPath);
+    // The reason must be a non-empty string identifying the unsupported
+    // category (architecture sec 6.3 -- 'unsupported' when the path resolves
+    // to an item type the plugin does not expose; closes PO MEDIUM #1 /
+    // US-101 AC bullet 4).
+    expect(typeof result.reason).toBe("string");
+    expect(result.reason.length).toBeGreaterThan(0);
+    expect(result.reason).toContain("unknown-kind");
+
+    // Regression guard: a path that DOES point at a supported, registered
+    // item type still resolves as live via lookupByPath.
+    const liveResult = resolve(
+      { kind: "path", value: "~/.claude/skills/nw-bdd-requirements/SKILL.md" },
+      registry,
+    );
+    expect(liveResult.tag).toBe("live");
+    if (liveResult.tag !== "live") {
+      throw new Error("Expected live outcome for supported path");
+    }
+    expect(liveResult.entry.type).toBe("skill");
+    expect(liveResult.entry.name).toBe("nw-bdd-requirements");
   });
 });

@@ -39,12 +39,18 @@
  * architecture sec 6.4 / ADR-004 they belong to ScopePrecedence so the
  * resolver stays a pure derivation independent of policy.
  *
- * The path branch (`kind: 'path'`) still falls through to the placeholder
- * dead outcome for now; 02-04 adds the unsupported branch.
+ * Step 02-04 dispatches `kind: 'path'` through `lookupByPath`. On a hit, the
+ * outcome is `live`. On a miss, the path is inspected: if it sits under
+ * `.claude/<category>/...` and the category is NOT one of the supported
+ * surfaces, the outcome is `unsupported` (the plugin recognises the location
+ * but does not expose that item type). All other misses (supported category
+ * but no registered file, or a path outside `.claude/` entirely) fall through
+ * to `dead`. The supported-category set is a module-level constant so
+ * adding a new surface is a one-line change.
  */
 
 import type { ConfigScope } from "../types";
-import { lookupByName, type ReferenceRegistry, type RegistryEntry } from "./registry";
+import { lookupByName, lookupByPath, type ReferenceRegistry, type RegistryEntry } from "./registry";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -72,6 +78,50 @@ export type ResolvedRef =
  */
 const SEARCHED_SCOPES: readonly ConfigScope[] = ["user", "project", "plugin"];
 
+/**
+ * The set of `.claude/<category>/...` segments the plugin exposes as
+ * navigable item types. A path-kind reference whose `.claude/` category is
+ * absent from this set yields the `unsupported` outcome -- the resolver
+ * recognises the location but the plugin cannot surface that item type.
+ * Held as a module-level constant so adding a new surface is a one-line
+ * change here.
+ */
+const SUPPORTED_CATEGORIES: readonly string[] = [
+  "agents",
+  "commands",
+  "skills",
+  "hooks",
+  "mcpServers",
+  "rules",
+  "plugins",
+];
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Extract the path segment immediately after `.claude` from a forward- or
+ * backward-slashed path. Returns `null` when `.claude` is not present as a
+ * standalone segment, or when no segment follows it.
+ *
+ * Pure JS string transform -- no node:path -- so the domain stays
+ * platform-agnostic and the dependency-cruiser boundary rule against node:*
+ * under domain/** holds.
+ */
+function extractDotClaudeCategory(path: string): string | null {
+  const segments = path.split(/[/\\]/);
+  const claudeIndex = segments.indexOf(".claude");
+  if (claudeIndex === -1) {
+    return null;
+  }
+  const next = segments[claudeIndex + 1];
+  if (next === undefined || next === "") {
+    return null;
+  }
+  return next;
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -86,9 +136,11 @@ const SEARCHED_SCOPES: readonly ConfigScope[] = ["user", "project", "plugin"];
  *     ScopePrecedence concern per architecture sec 6.4 / ADR-004)
  *   - `kind: 'name'` with no matching entry -> dead (searchedScopes lists
  *     every ConfigScope the registry covers, informing the dead-token tooltip)
- *
- * The path branch (`kind: 'path'`) still falls through to the dead outcome
- * for now; 02-04 adds the unsupported branch.
+ *   - `kind: 'path'` resolved via `lookupByPath`:
+ *       - hit                                            -> live
+ *       - miss, path under `.claude/<unknown-category>/` -> unsupported
+ *       - miss, path under `.claude/<known-category>/`   -> dead
+ *       - miss, path not under `.claude/` at all         -> dead
  */
 export function resolve(ref: Reference, registry: ReferenceRegistry): ResolvedRef {
   if (ref.kind === "name") {
@@ -102,6 +154,20 @@ export function resolve(ref: Reference, registry: ReferenceRegistry): ResolvedRe
     return { tag: "dead", searchedScopes: SEARCHED_SCOPES };
   }
 
-  // Placeholder fallback for the path branch; 02-04 adds the unsupported branch.
+  // kind === "path"
+  const hit = lookupByPath(registry, ref.value);
+  if (hit !== null) {
+    return { tag: "live", entry: hit };
+  }
+
+  const category = extractDotClaudeCategory(ref.value);
+  if (category !== null && !SUPPORTED_CATEGORIES.includes(category)) {
+    return {
+      tag: "unsupported",
+      path: ref.value,
+      reason: `under .claude/ but not a recognised category (${SUPPORTED_CATEGORIES.join(", ")}); got "${category}"`,
+    };
+  }
+
   return { tag: "dead", searchedScopes: SEARCHED_SCOPES };
 }
