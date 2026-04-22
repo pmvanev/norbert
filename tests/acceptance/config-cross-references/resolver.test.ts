@@ -70,13 +70,23 @@ describe("Resolving a reference whose name matches two or more registry entries 
 
 // @walking_skeleton @driving_port
 describe("Resolving a reference that matches no registry entry returns the dead outcome with the searched scopes", () => {
-  it.skip("resolve({ kind: 'name', value: 'nw-retired-skill' }, registry) returns { tag: 'dead', searchedScopes: [...] }", () => {
-    // Driving port:
-    //   const result = resolve({ kind: 'name', value: 'nw-retired-skill' }, walkingSkeletonRegistry);
-    // Then:
-    //   result.tag === 'dead'
-    //   result.searchedScopes is a non-empty list of ConfigScope values
-    //   (architecture sec 6.3 -- 'dead' when both lookupByName and lookupByPath miss)
+  it("resolve({ kind: 'name', value: 'nw-retired-skill' }, registry) returns { tag: 'dead', searchedScopes: [...] }", () => {
+    const registry = buildRegistry(walkingSkeletonConfig, 0);
+
+    const result = resolve({ kind: "name", value: "nw-retired-skill" }, registry);
+
+    expect(result.tag).toBe("dead");
+    if (result.tag !== "dead") {
+      throw new Error("Expected dead outcome");
+    }
+    // searchedScopes informs the dead-token tooltip per US-101 AC
+    // (architecture sec 6.3 -- 'dead' when both lookupByName and lookupByPath miss).
+    expect(result.searchedScopes.length).toBeGreaterThan(0);
+    // Every entry must be a valid ConfigScope literal.
+    for (const scope of result.searchedScopes) {
+      expect(["user", "project", "plugin"]).toContain(scope);
+    }
+    // Resolver does not throw on a dead outcome (executing this far proves it).
   });
 });
 

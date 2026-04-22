@@ -28,15 +28,19 @@
  *
  * Step 02-01 implements only the `kind: 'name'` -> single-match -> live path.
  * Step 02-02 adds the `kind: 'name'` -> multi-match -> ambiguous branch.
+ * Step 02-03 refines the `kind: 'name'` -> no-match path to return a `dead`
+ * outcome reporting the full set of ConfigScopes that were searched. The
+ * scope list is a module-level constant so the resolver does not reach into
+ * the registry's internal scope set -- the registry is built from all three
+ * scopes' worth of input by contract, so returning the full set is correct
+ * and observable for the dead-token tooltip per US-101 AC.
  * Candidate ordering is preserved as registry insertion order; sorting and
  * scope precedence are deliberately NOT this module's concern -- per
  * architecture sec 6.4 / ADR-004 they belong to ScopePrecedence so the
  * resolver stays a pure derivation independent of policy.
  *
- * The remaining ResolvedRef variants land in 02-03..02-04 as their scenarios
- * are un-skipped one at a time. The placeholder fallback returns a `dead`
- * outcome with an empty searchedScopes list so it is distinguishable from a
- * real dead-reference result once 02-03 fills in the searched scopes.
+ * The path branch (`kind: 'path'`) still falls through to the placeholder
+ * dead outcome for now; 02-04 adds the unsupported branch.
  */
 
 import type { ConfigScope } from "../types";
@@ -57,6 +61,18 @@ export type ResolvedRef =
   | { readonly tag: "unsupported"; readonly path: string; readonly reason: string };
 
 // ---------------------------------------------------------------------------
+// Module constants
+// ---------------------------------------------------------------------------
+
+/**
+ * The full set of ConfigScopes a registry indexes across. The registry is
+ * built from user-, project-, and plugin-scope input by contract, so a name
+ * miss has searched all three. Held as a module-level constant so the
+ * resolver does not reach into the registry's internal scope set.
+ */
+const SEARCHED_SCOPES: readonly ConfigScope[] = ["user", "project", "plugin"];
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -68,10 +84,11 @@ export type ResolvedRef =
  *   - `kind: 'name'` with two or more matching entries -> ambiguous
  *     (candidates passed through in registry insertion order; sorting is a
  *     ScopePrecedence concern per architecture sec 6.4 / ADR-004)
+ *   - `kind: 'name'` with no matching entry -> dead (searchedScopes lists
+ *     every ConfigScope the registry covers, informing the dead-token tooltip)
  *
- * All other input shapes (path lookups, unmatched names) fall through to a
- * placeholder dead outcome with no searched scopes; 02-03 fills in the
- * searched scopes and 02-04 adds the unsupported branch.
+ * The path branch (`kind: 'path'`) still falls through to the dead outcome
+ * for now; 02-04 adds the unsupported branch.
  */
 export function resolve(ref: Reference, registry: ReferenceRegistry): ResolvedRef {
   if (ref.kind === "name") {
@@ -82,9 +99,9 @@ export function resolve(ref: Reference, registry: ReferenceRegistry): ResolvedRe
     if (matches.length >= 2) {
       return { tag: "ambiguous", candidates: matches };
     }
+    return { tag: "dead", searchedScopes: SEARCHED_SCOPES };
   }
 
-  // Placeholder fallback for all not-yet-implemented branches. Refined in
-  // 02-03 (dead w/ searched scopes) and 02-04 (unsupported).
-  return { tag: "dead", searchedScopes: [] };
+  // Placeholder fallback for the path branch; 02-04 adds the unsupported branch.
+  return { tag: "dead", searchedScopes: SEARCHED_SCOPES };
 }
