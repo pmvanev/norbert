@@ -519,6 +519,76 @@
       "s": "EXECUTED",
       "d": "PASS",
       "t": "2026-04-22T16:55:06Z"
+    },
+    {
+      "sid": "03-01",
+      "p": "COMMIT",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-04-22T17:01:27Z"
+    },
+    {
+      "sid": "03-02",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-04-22T17:03:07Z"
+    },
+    {
+      "sid": "03-02",
+      "p": "RED_ACCEPTANCE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-04-22T17:04:44Z"
+    },
+    {
+      "sid": "03-02",
+      "p": "RED_UNIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: pure-domain scenario; acceptance test asserts via direct module invocation",
+      "t": "2026-04-22T17:05:29Z"
+    },
+    {
+      "sid": "03-02",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-04-22T17:09:19Z"
+    },
+    {
+      "sid": "03-02",
+      "p": "COMMIT",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-04-22T17:12:54Z"
+    },
+    {
+      "sid": "03-03",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-04-22T17:14:48Z"
+    },
+    {
+      "sid": "03-03",
+      "p": "RED_ACCEPTANCE",
+      "s": "EXECUTED",
+      "d": "PASS_IMMEDIATELY: outcome (b) \u2014 03-01 pushEntry already implements slice(0, headIndex+1).concat(entry); no production change required",
+      "t": "2026-04-22T17:16:59Z"
+    },
+    {
+      "sid": "03-03",
+      "p": "RED_UNIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: pure-domain scenario; acceptance test asserts via direct module invocation",
+      "t": "2026-04-22T17:17:55Z"
+    },
+    {
+      "sid": "03-03",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS: no production change (outcome b); tsc/lint:boundaries/vitest all green",
+      "t": "2026-04-22T17:20:26Z"
     }
   ]
 }
