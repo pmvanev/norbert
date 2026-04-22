@@ -2,9 +2,9 @@
   "roadmap": {
     "project_id": "config-cross-references",
     "created_at": "2026-04-21",
-    "total_steps": 9,
-    "phases": 2,
-    "scope": "walking-skeleton-plus-resolver",
+    "total_steps": 16,
+    "phases": 3,
+    "scope": "walking-skeleton-plus-resolver-plus-history",
     "paradigm": "functional",
     "crafter": "nw-functional-software-crafter",
     "created_by": "nw-solution-architect"
@@ -205,13 +205,159 @@
           "implementation_notes": "For kind path call lookupByPath. If it misses classify as unsupported when the path suggests a known-but-unexposed item type otherwise dead. Simple heuristic for v1 paths under .claude that do not match a supported category return unsupported with a reason naming the missing category."
         }
       ]
+    },
+    {
+      "id": "03",
+      "name": "NavHistory LRU-50 stack",
+      "description": "Pure LRU-50 navigation history. Powers Alt+Left and Alt+Right per ADR-006.",
+      "default_agent": "nw-software-crafter",
+      "default_deps_strategy": "sequential",
+      "steps": [
+        {
+          "id": "03-01",
+          "name": "Stub NavHistory with goBack happy path",
+          "criteria": [
+            "Importing pushEntry goBack goForward canGoBack canGoForward from the history module no longer fails",
+            "goBack on a 4-entry history with headIndex 3 returns headIndex 2",
+            "Entries array is unchanged by goBack",
+            "Module is pure and synchronous"
+          ],
+          "agent": "nw-software-crafter",
+          "deps": ["02-04"],
+          "scenario": "Alt+Left restores the previous navigation snapshot",
+          "test_file": "tests/acceptance/config-cross-references/history.test.ts",
+          "scenario_name": "goBack on a 4-entry history with headIndex=3 returns headIndex=2",
+          "files_to_modify": [
+            "src/plugins/norbert-config/domain/nav/history.ts",
+            "tests/acceptance/config-cross-references/_helpers/fixtures.ts"
+          ],
+          "implementation_notes": "Create history.ts with types NavEntry and NavHistory per ADR-006. Entries array and headIndex number. Exports pushEntry goBack goForward canGoBack canGoForward all pure. NavEntry can be any readonly record for now concrete shape in future waves. Add makeHistoryWith4Entries and emptyHistory helpers to fixtures.ts. goBack decrements headIndex when greater than 0 else returns the same history."
+        },
+        {
+          "id": "03-02",
+          "name": "goForward happy path",
+          "criteria": [
+            "goForward on a 4-entry history with headIndex 2 returns headIndex 3",
+            "Entries array is unchanged by goForward",
+            "goBack from 03-01 continues to pass"
+          ],
+          "agent": "nw-software-crafter",
+          "deps": ["03-01"],
+          "scenario": "Alt+Right re-advances after going back",
+          "test_file": "tests/acceptance/config-cross-references/history.test.ts",
+          "scenario_name": "goForward on a 4-entry history with headIndex=2 returns headIndex=3",
+          "files_to_modify": [
+            "src/plugins/norbert-config/domain/nav/history.ts"
+          ],
+          "implementation_notes": "goForward increments headIndex when less than entries.length minus 1 else returns the same history. Symmetric to goBack."
+        },
+        {
+          "id": "03-03",
+          "name": "pushEntry truncates forward stack before pushing",
+          "criteria": [
+            "pushEntry on a history with headIndex less than entries.length minus 1 truncates the tail",
+            "New entry appended after truncation",
+            "headIndex advances to new last index",
+            "Previously live scenarios continue to pass"
+          ],
+          "agent": "nw-software-crafter",
+          "deps": ["03-02"],
+          "scenario": "A new cross-reference action after Alt+Left clears the forward stack",
+          "test_file": "tests/acceptance/config-cross-references/history.test.ts",
+          "scenario_name": "pushEntry on a history with headIndex < entries.length-1 truncates the tail before pushing",
+          "files_to_modify": [
+            "src/plugins/norbert-config/domain/nav/history.ts"
+          ],
+          "implementation_notes": "pushEntry takes history and an entry. Truncate entries to entries.slice(0, headIndex + 1) then concat the new entry. New headIndex is the new last index. LRU cap handled in 03-06 and 03-07."
+        },
+        {
+          "id": "03-04",
+          "name": "goBack at start of history is a no-op",
+          "criteria": [
+            "goBack on a history with headIndex 0 returns the same history by structural equality",
+            "canGoBack returns false when headIndex is 0",
+            "goBack does not throw",
+            "Previously live scenarios continue to pass"
+          ],
+          "agent": "nw-software-crafter",
+          "deps": ["03-03"],
+          "scenario": "Alt+Left at the start of history is a no-op with end-of-history cue",
+          "test_file": "tests/acceptance/config-cross-references/history.test.ts",
+          "scenario_name": "goBack on a history with headIndex=0 returns the same history",
+          "files_to_modify": [
+            "src/plugins/norbert-config/domain/nav/history.ts"
+          ],
+          "implementation_notes": "goBack already had the guard from 03-01 this step adds canGoBack as a pure predicate. canGoBack returns headIndex greater than 0. The end-of-history cue itself lives in the provider effect not in this module."
+        },
+        {
+          "id": "03-05",
+          "name": "goForward at end of history is a no-op",
+          "criteria": [
+            "goForward on a history with headIndex equal to entries.length minus 1 returns the same history",
+            "canGoForward returns false at the end",
+            "goForward does not throw",
+            "Previously live scenarios continue to pass"
+          ],
+          "agent": "nw-software-crafter",
+          "deps": ["03-04"],
+          "scenario": "Alt+Right at end of history is a no-op",
+          "test_file": "tests/acceptance/config-cross-references/history.test.ts",
+          "scenario_name": "goForward on a history with headIndex=entries.length-1 returns the same history",
+          "files_to_modify": [
+            "src/plugins/norbert-config/domain/nav/history.ts"
+          ],
+          "implementation_notes": "Symmetric to 03-04. canGoForward returns headIndex less than entries.length minus 1."
+        },
+        {
+          "id": "03-06",
+          "name": "LRU 50 invariant as a property test",
+          "criteria": [
+            "For any sequence of pushEntry goBack goForward actions the entries length stays at most 50",
+            "headIndex is always within valid bounds",
+            "fast-check runs with default numRuns not loop-of-one",
+            "Existing example-based scenarios continue to pass"
+          ],
+          "agent": "nw-software-crafter",
+          "deps": ["03-05"],
+          "scenario": "For any sequence of navigation actions the history never exceeds 50 entries",
+          "test_file": "tests/acceptance/config-cross-references/history.test.ts",
+          "scenario_name": "property: |entries| <= 50 and 0 <= headIndex < |entries| after any sequence of pushEntry/goBack/goForward",
+          "files_to_modify": [
+            "src/plugins/norbert-config/domain/nav/history.ts"
+          ],
+          "implementation_notes": "pushEntry enforces the LRU cap. When entries.length equals 50 drop entries[0] before appending. headIndex adjusts so it still points at the new last entry. Use fast-check fc.array of an action arbitrary union of pushEntry goBack goForward. Initial state is emptyHistory. Reduce actions then assert invariants."
+        },
+        {
+          "id": "03-07",
+          "name": "LRU eviction drops oldest and pins headIndex",
+          "criteria": [
+            "pushEntry on a 50-entry history evicts entries 0",
+            "entries length remains 50",
+            "New entry is at index 49",
+            "headIndex remains 49 after eviction",
+            "Existing scenarios continue to pass"
+          ],
+          "agent": "nw-software-crafter",
+          "deps": ["03-06"],
+          "scenario": "LRU eviction at cap of 50 evicts the oldest entry and shifts headIndex",
+          "test_file": "tests/acceptance/config-cross-references/history.test.ts",
+          "scenario_name": "pushEntry on a 50-entry history at headIndex=49 evicts entries[0] and stays at headIndex=49",
+          "files_to_modify": [
+            "src/plugins/norbert-config/domain/nav/history.ts",
+            "tests/acceptance/config-cross-references/_helpers/fixtures.ts"
+          ],
+          "implementation_notes": "The LRU behaviour is already implemented from 03-06. This step un-skips the specific eviction scenario to lock in the contract with an example. Add makeFiftyEntries helper to fixtures.ts."
+        }
+      ]
     }
   ],
   "validation": {
     "status": "approved",
     "reviewer": "nw-software-crafter-reviewer",
     "review_file": "docs/feature/config-cross-references/deliver/roadmap-review.yaml",
-    "phase_02_reviewer": "pending",
-    "phase_02_review_file": "docs/feature/config-cross-references/deliver/roadmap-review-phase-02.yaml"
+    "phase_02_reviewer": "approved",
+    "phase_02_review_file": "docs/feature/config-cross-references/deliver/roadmap-review-phase-02.yaml",
+    "phase_03_reviewer": "pending",
+    "phase_03_review_file": "docs/feature/config-cross-references/deliver/roadmap-review-phase-03.yaml"
   }
 }

@@ -26,6 +26,34 @@ import type {
   AgentParseResult,
   ReadErrorInfo,
 } from "../../../../src/plugins/norbert-config/domain/types";
+import {
+  emptyHistory as emptyHistoryConst,
+  type NavEntry,
+  type NavHistory,
+} from "../../../../src/plugins/norbert-config/domain/nav/history";
+
+/**
+ * Re-export of the domain sentinel. Tests import `emptyHistory` from this
+ * fixtures module so all helpers and arrange-blocks share a single source.
+ */
+export const emptyHistory: NavHistory = emptyHistoryConst;
+
+/**
+ * Build a 4-entry NavHistory with distinct opaque entries (k: 'e0'..'e3') and
+ * the supplied `headIndex`. Used by US-104 walking-skeleton scenarios.
+ *
+ * Caller is responsible for picking a `headIndex` consistent with ADR-006
+ * invariant 1 (0 <= headIndex < entries.length); the helper does not validate.
+ */
+export function makeHistoryWith4Entries(headIndex: number): NavHistory {
+  const entries: readonly NavEntry[] = [
+    { k: "e0" },
+    { k: "e1" },
+    { k: "e2" },
+    { k: "e3" },
+  ];
+  return { entries, headIndex };
+}
 
 export const emptyAggregatedConfig: AggregatedConfig = {
   agents: [],

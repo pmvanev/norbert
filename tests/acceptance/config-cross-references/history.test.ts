@@ -17,15 +17,18 @@
  *   user-stories.md US-104 acceptance criteria
  */
 
-import { describe, it } from "vitest";
+import { describe, expect, it } from "vitest";
+
+import { goBack } from "../../../src/plugins/norbert-config/domain/nav/history";
+import { makeHistoryWith4Entries } from "./_helpers/fixtures";
 
 // @walking_skeleton @driving_port
 describe("Alt+Left restores the previous navigation snapshot", () => {
-  it.skip("goBack on a 4-entry history with headIndex=3 returns headIndex=2", () => {
-    // const h = makeHistoryWith4Entries(3);
-    // const next = goBack(h);
-    // expect(next.headIndex).toBe(2);
-    // expect(next.entries).toEqual(h.entries);  // entries themselves unchanged
+  it("goBack on a 4-entry history with headIndex=3 returns headIndex=2", () => {
+    const h = makeHistoryWith4Entries(3);
+    const next = goBack(h);
+    expect(next.headIndex).toBe(2);
+    expect(next.entries).toEqual(h.entries); // entries themselves unchanged
   });
 });
 
