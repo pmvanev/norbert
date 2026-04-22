@@ -32,10 +32,6 @@ import type {
   SkillDefinition,
 } from "../types";
 
-// ---------------------------------------------------------------------------
-// RefType -- the kinds of config items the registry can index
-// ---------------------------------------------------------------------------
-
 export type RefType =
   | "agent"
   | "command"
@@ -44,10 +40,6 @@ export type RefType =
   | "mcp"
   | "rule"
   | "plugin";
-
-// ---------------------------------------------------------------------------
-// RegistryEntry -- one indexed config item
-// ---------------------------------------------------------------------------
 
 export interface RegistryEntry {
   readonly type: RefType;
@@ -58,25 +50,20 @@ export interface RegistryEntry {
   readonly itemKey: string;
 }
 
-// ---------------------------------------------------------------------------
-// ReferenceRegistry -- the indexed structure consumed by resolution/detection
-// ---------------------------------------------------------------------------
-
 export interface ReferenceRegistry {
   readonly byName: ReadonlyMap<string, readonly RegistryEntry[]>;
   readonly byFilePath: ReadonlyMap<string, RegistryEntry>;
   readonly version: number;
 }
 
-// ---------------------------------------------------------------------------
-// Internal: per-collection projections to RegistryEntry
-//
-// Each projector is a small pure function that takes one item from an
-// AggregatedConfig collection and returns the corresponding RegistryEntry.
-// Keeping them named (rather than inlining a giant switch) preserves the
-// "small composable functions" principle and lets new RefType additions
-// land as a one-line table entry.
-// ---------------------------------------------------------------------------
+// Per-collection projections to RegistryEntry. Each projector is a small pure
+// function so a new RefType lands as a one-line table entry rather than an
+// extra branch in a giant switch.
+
+function basename(filePath: string): string {
+  const segments = filePath.split(/[/\\]/);
+  return segments[segments.length - 1] ?? "";
+}
 
 function makeItemKey(type: RefType, scope: ConfigScope, name: string): string {
   return `${type}:${scope}:${name}`;
@@ -168,30 +155,21 @@ function entryFromPlugin(plugin: PluginInfo): RegistryEntry {
   };
 }
 
-function basename(filePath: string): string {
-  const segments = filePath.split(/[/\\]/);
-  return segments[segments.length - 1] ?? "";
-}
-
-// ---------------------------------------------------------------------------
-// Internal: pure path normaliser
+// Pure path normaliser. The registry compares paths structurally so absolute
+// markdown-link hrefs and indexed item filePaths collide on the same key when
+// they refer to the same file (architecture sec 6.1).
 //
-// Architecture sec 6.1 -- the registry compares paths structurally so that an
-// absolute markdown-link href and an indexed item's filePath collide on the
-// same key when they refer to the same file. This MUST stay a pure JS string
-// transform (no node:os, no node:path) so the domain is platform-agnostic and
-// the dependency-cruiser boundary rule against node:* under domain/** holds.
+// MUST stay a pure JS string transform (no node:os, no node:path) so the
+// domain is platform-agnostic and the dependency-cruiser boundary rule against
+// node:* under domain/** holds.
 //
 // Rules (all idempotent):
 //   1. Backslashes -> forward slashes (cross-platform fixture ergonomics).
-//   2. Collapse '/./' segments and a leading './' (e.g. '/a/./b' -> '/a/b',
-//      './a' -> 'a').
+//   2. Collapse '/./' segments and a leading './'.
 //   3. Strip a single trailing '/' unless the path is exactly '/'.
-//   4. Leave a leading '~/' as-is. The tilde is the canonical user-scope form
-//      throughout the registry; we deliberately do NOT expand to an absolute
-//      home path here (that would couple the domain to node:os and to the host
-//      filesystem). Resolver-level absolute-home expansion is a later concern.
-// ---------------------------------------------------------------------------
+//   4. Leave a leading '~/' as-is. The tilde is the canonical user-scope form;
+//      expanding to an absolute home path would couple the domain to node:os
+//      and to the host filesystem. Resolver-level expansion is a later concern.
 
 function normalisePath(input: string): string {
   // 1. Backslashes -> forward slashes.
@@ -216,11 +194,8 @@ function normalisePath(input: string): string {
   return path;
 }
 
-// ---------------------------------------------------------------------------
-// Internal: collect all entries from an AggregatedConfig in a single pass per
-// collection. Agents are filtered to the parsed branch only.
-// ---------------------------------------------------------------------------
-
+// Collect all entries from an AggregatedConfig in a single pass per collection.
+// Agents are filtered to the parsed branch only.
 function collectEntries(config: AggregatedConfig): readonly RegistryEntry[] {
   const agents = config.agents
     .map(entryFromAgent)
@@ -235,12 +210,9 @@ function collectEntries(config: AggregatedConfig): readonly RegistryEntry[] {
   return [...agents, ...commands, ...skills, ...hooks, ...mcpServers, ...rules, ...plugins];
 }
 
-// ---------------------------------------------------------------------------
-// Internal: index a flat entry list into the byName multimap and byFilePath
-// unique map. A build-time mutable Map is used internally; the returned
-// ReadonlyMap views prevent caller mutation.
-// ---------------------------------------------------------------------------
-
+// Index a flat entry list into the byName multimap and byFilePath unique map.
+// A build-time mutable Map is used internally; the returned ReadonlyMap views
+// prevent caller mutation.
 interface RegistryIndices {
   readonly byName: ReadonlyMap<string, readonly RegistryEntry[]>;
   readonly byFilePath: ReadonlyMap<string, RegistryEntry>;

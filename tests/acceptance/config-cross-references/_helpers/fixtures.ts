@@ -27,10 +27,6 @@ import type {
   ReadErrorInfo,
 } from "../../../../src/plugins/norbert-config/domain/types";
 
-// ---------------------------------------------------------------------------
-// Empty / null
-// ---------------------------------------------------------------------------
-
 export const emptyAggregatedConfig: AggregatedConfig = {
   agents: [],
   commands: [],
@@ -42,10 +38,6 @@ export const emptyAggregatedConfig: AggregatedConfig = {
   envVars: [],
   errors: [],
 };
-
-// ---------------------------------------------------------------------------
-// Builders
-// ---------------------------------------------------------------------------
 
 const userScopePath = (relative: string) => `~/.claude/${relative}`;
 const projectScopePath = (relative: string) => `.claude/${relative}`;
@@ -220,13 +212,7 @@ export function makeAggregatedConfig(parts: {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Common scenarios
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
 // Bulk fixtures (NFR-2 performance scenarios)
-// ---------------------------------------------------------------------------
 
 const range = (n: number): readonly number[] =>
   Array.from({ length: n }, (_, i) => i);
