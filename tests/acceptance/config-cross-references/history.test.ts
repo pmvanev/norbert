@@ -152,3 +152,47 @@ describe("LRU eviction at cap of 50 evicts the oldest entry and shifts headIndex
     expect(next.headIndex).toBe(49);
   });
 });
+
+// @walking_skeleton @driving_port
+describe("emptyHistory sentinel encodes the no-head-yet state", () => {
+  it("emptyHistory has zero entries and headIndex=-1", () => {
+    // Pins the sentinel shape so any drift in the literal (entries non-empty,
+    // headIndex flipped to a non-negative value) is caught immediately.
+    expect(emptyHistory.entries).toEqual([]);
+    expect(emptyHistory.entries.length).toBe(0);
+    expect(emptyHistory.headIndex).toBe(-1);
+    // canGoBack/canGoForward must both reject on the sentinel.
+    expect(canGoBack(emptyHistory)).toBe(false);
+    expect(canGoForward(emptyHistory)).toBe(false);
+  });
+});
+
+// @walking_skeleton @driving_port
+describe("canGoBack is true for any history with headIndex > 0", () => {
+  it("canGoBack returns true on a 4-entry history at headIndex=2", () => {
+    // Pins the positive branch of canGoBack so a mutation that always returns
+    // false (e.g. `headIndex > 0` -> `false`) is caught.
+    const h = makeHistoryWith4Entries(2);
+    expect(canGoBack(h)).toBe(true);
+  });
+});
+
+// @walking_skeleton @driving_port
+describe("LRU cap does not evict when the resulting stack would be exactly at the cap", () => {
+  it("pushEntry on a 49-entry history at headIndex=48 grows to 50 without dropping the oldest entry", () => {
+    // Pins the strict-greater-than boundary in the cap check: appending must
+    // only evict when the resulting length would EXCEED MAX_HISTORY_ENTRIES,
+    // never at exact equality. Catches `>` -> `>=` and `>` -> `true`.
+    const fortyNine: readonly NavEntry[] = Array.from(
+      { length: MAX_HISTORY_ENTRIES - 1 },
+      (_, i) => ({ k: `e${i}` }),
+    );
+    const h: NavHistory = { entries: fortyNine, headIndex: MAX_HISTORY_ENTRIES - 2 };
+    const eNew: NavEntry = { k: "eNew" };
+    const next = pushEntry(h, eNew);
+    expect(next.entries.length).toBe(MAX_HISTORY_ENTRIES);
+    expect(next.entries[0]).toEqual({ k: "e0" }); // oldest preserved (not evicted)
+    expect(next.entries[MAX_HISTORY_ENTRIES - 1]).toEqual(eNew);
+    expect(next.headIndex).toBe(MAX_HISTORY_ENTRIES - 1);
+  });
+});
