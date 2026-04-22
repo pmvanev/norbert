@@ -79,12 +79,65 @@ describe("Single-click on a live reference opens a vertical split with the targe
 
 // @walking_skeleton @driving_port
 describe("Single-click in an open split replaces the bottom pane only", () => {
-  it.skip("refSingleClick when splitState !== null replaces bottomRef and keeps topRef unchanged", () => {
-    // Given: state has splitState = { topRef: A, bottomRef: B, dividerRatio }
-    // When:  next = reduce(state, { tag: 'refSingleClick', ref: refTo(C) })
-    // Then:  next.splitState.topRef === A
-    //        next.splitState.bottomRef.itemKey === C
-    //        next.history.entries.length === state.history.entries.length + 1
+  it("refSingleClick when splitState !== null replaces bottomRef and keeps topRef unchanged", () => {
+    // Arrange: a split is already open with /release on top (A) and the
+    // user-scope skill nw-bdd-requirements on the bottom (B). The user has
+    // since clicked into the bottom pane so the list-pane anchor (and thus
+    // the action payload's currentEntry) is now B, NOT A. The user then
+    // single-clicks an inline reference to a different live target -- the
+    // project-scope skill nw-discovery-methodology (C).
+    //
+    // Per ADR-009 the 2-slot SplitState shape forbids a third pane, so the
+    // only sensible semantics is "replace the bottom pane and preserve the
+    // top anchor (A)". This test is constructed so that A !== currentEntry,
+    // which discriminates the bottom-replace branch from the 04-01 open-
+    // from-empty branch (the latter would set the new top to currentEntry,
+    // i.e. B, dropping A).
+    const { registry, releaseEntry } = makeWalkingSkeletonReducerArrangement();
+    const bRef = refTo(registry, "nw-bdd-requirements");
+    if (bRef.tag !== "live") {
+      throw new Error(
+        `walkingSkeletonConfig must yield a live ref for nw-bdd-requirements, got ${bRef.tag}`,
+      );
+    }
+    const cRef = refTo(registry, "nw-discovery-methodology");
+    if (cRef.tag !== "live") {
+      throw new Error(
+        `walkingSkeletonConfig must yield a live ref for nw-discovery-methodology, got ${cRef.tag}`,
+      );
+    }
+    const stateBefore = {
+      ...initialNavState,
+      selectedItemKey: bRef.entry.itemKey,
+      splitState: {
+        topRef: releaseEntry,
+        bottomRef: bRef.entry,
+        dividerRatio: 0.5,
+      },
+    };
+
+    // Act: dispatch refSingleClick on C while the split is open. The
+    // currentEntry payload is B (the current list-pane anchor), NOT A --
+    // a correct implementation must read the top anchor from
+    // state.splitState.topRef, not from action.currentEntry.
+    const next = reduce(stateBefore, {
+      tag: "refSingleClick",
+      ref: cRef,
+      currentEntry: bRef.entry,
+    });
+
+    // Assert: the top anchor (A = releaseEntry) is preserved exactly; the
+    // bottom pane is replaced by C; history grows by exactly one entry.
+    expect(next.splitState).not.toBeNull();
+    if (next.splitState === null) {
+      throw new Error("splitState must remain non-null after a bottom-replace");
+    }
+    expect(next.splitState.topRef).toBe(stateBefore.splitState.topRef);
+    expect(next.splitState.topRef.itemKey).toBe(releaseEntry.itemKey);
+    expect(next.splitState.bottomRef.itemKey).toBe(cRef.entry.itemKey);
+    expect(next.history.entries.length).toBe(
+      stateBefore.history.entries.length + 1,
+    );
   });
 });
 

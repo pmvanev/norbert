@@ -134,11 +134,23 @@ function makeRefClickEntry(
 /**
  * Handle the `refSingleClick` branch.
  *
- * Step 04-01 scope: a live ref with a non-null current entry opens the
- * split with current on top, target on bottom, and pushes a history entry.
- * All other sub-cases (split-already-open swap, dead/ambiguous/unsupported
- * branches, missing-anchor handling) land in 04-02..04-09 and currently
- * fall through to a state-unchanged return.
+ * Two structural sub-cases (per ADR-009 the 2-slot SplitState shape makes a
+ * third pane impossible, so these two exhaust the live-ref space):
+ *
+ *   1. `state.splitState === null` (Step 04-01 -- open-from-empty):
+ *      a non-null `currentEntry` becomes the new top, the target becomes
+ *      the bottom, and a history entry is pushed.
+ *
+ *   2. `state.splitState !== null` (Step 04-02 -- bottom-replace):
+ *      the existing `topRef` is preserved as the top anchor (the action's
+ *      `currentEntry` is intentionally ignored here -- the user's spatial
+ *      anchor is the open top pane, not the list selection), the target
+ *      becomes the new bottom, `dividerRatio` is preserved, and a history
+ *      entry is pushed. This preserves the user's mental model: the top
+ *      pane stays put while successive single-clicks scan through bottoms.
+ *
+ * Dead/ambiguous/unsupported branches and missing-anchor handling land in
+ * 04-03..04-09 and currently fall through to a state-unchanged return.
  */
 function handleRefSingleClick(
   state: ConfigNavState,
@@ -147,6 +159,18 @@ function handleRefSingleClick(
 ): ConfigNavState {
   if (ref.tag !== "live") {
     return state;
+  }
+  if (state.splitState !== null) {
+    const replacedSplit: SplitState = {
+      topRef: state.splitState.topRef,
+      bottomRef: ref.entry,
+      dividerRatio: state.splitState.dividerRatio,
+    };
+    return {
+      ...state,
+      splitState: replacedSplit,
+      history: pushEntry(state.history, makeRefClickEntry("refSingleClick", ref.entry.itemKey)),
+    };
   }
   if (currentEntry === null) {
     return state;
