@@ -59,17 +59,24 @@ export const emptyHistory: NavHistory = {
 
 /**
  * Append `entry` to the history, truncating any forward tail first so that a
- * new navigation action after Alt+Left clears the redo stack.
- *
- * Step 03-01 minimal body: no LRU eviction yet (the 4-entry walking-skeleton
- * fixture is well under the 50-entry cap). Eviction lands in step 03-06.
+ * new navigation action after Alt+Left clears the redo stack. When the
+ * resulting stack would exceed {@link MAX_HISTORY_ENTRIES}, the oldest
+ * entries are dropped from the front (LRU eviction per ADR-006). The new
+ * entry is always the head, so `headIndex` ends at `entries.length - 1`.
  */
 export function pushEntry(history: NavHistory, entry: NavEntry): NavHistory {
   const keep = history.entries.slice(0, history.headIndex + 1);
-  const nextEntries = [...keep, entry];
+  const appended = [...keep, entry];
+  // LRU cap: if appending would exceed the cap, drop the oldest entries from
+  // the front so the most-recent MAX_HISTORY_ENTRIES survive. The new entry
+  // is always retained as the head.
+  const capped =
+    appended.length > MAX_HISTORY_ENTRIES
+      ? appended.slice(appended.length - MAX_HISTORY_ENTRIES)
+      : appended;
   return {
-    entries: nextEntries,
-    headIndex: nextEntries.length - 1,
+    entries: capped,
+    headIndex: capped.length - 1,
   };
 }
 

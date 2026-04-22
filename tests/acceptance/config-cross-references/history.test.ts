@@ -18,9 +18,19 @@
  */
 
 import { describe, expect, it } from "vitest";
+import fc from "fast-check";
 
-import { canGoBack, canGoForward, goBack, goForward, pushEntry } from "../../../src/plugins/norbert-config/domain/nav/history";
-import { makeHistoryWith4Entries } from "./_helpers/fixtures";
+import {
+  canGoBack,
+  canGoForward,
+  goBack,
+  goForward,
+  pushEntry,
+  MAX_HISTORY_ENTRIES,
+  type NavEntry,
+  type NavHistory,
+} from "../../../src/plugins/norbert-config/domain/nav/history";
+import { emptyHistory, makeHistoryWith4Entries } from "./_helpers/fixtures";
 
 // @walking_skeleton @driving_port
 describe("Alt+Left restores the previous navigation snapshot", () => {
@@ -78,11 +88,54 @@ describe("Alt+Right at end of history is a no-op", () => {
 
 // @walking_skeleton @driving_port @property
 describe("For any sequence of navigation actions the history never exceeds 50 entries", () => {
-  it.skip("property: |entries| <= 50 and 0 <= headIndex < |entries| after any sequence of pushEntry/goBack/goForward", () => {
-    // fc.assert(fc.property(fc.array(actionArb, { maxLength: 200 }), (actions) => {
-    //   const final = actions.reduce(applyAction, emptyHistory);
-    //   return final.entries.length <= 50 && final.headIndex >= 0 && final.headIndex < Math.max(1, final.entries.length);
-    // }));
+  it("property: |entries| <= 50 and 0 <= headIndex < |entries| after any sequence of pushEntry/goBack/goForward", () => {
+    type Action =
+      | { readonly type: "push"; readonly entry: NavEntry }
+      | { readonly type: "back" }
+      | { readonly type: "forward" };
+
+    const pushArb: fc.Arbitrary<Action> = fc.record({
+      type: fc.constant("push" as const),
+      entry: fc.record({ k: fc.string() }),
+    });
+    const backArb: fc.Arbitrary<Action> = fc.record({
+      type: fc.constant("back" as const),
+    });
+    const forwardArb: fc.Arbitrary<Action> = fc.record({
+      type: fc.constant("forward" as const),
+    });
+    // Bias toward pushes so sequences routinely exceed the 50-entry LRU cap;
+    // otherwise random back/forward intermixing keeps |entries| naturally small
+    // and the cap invariant is not exercised.
+    const actionArb: fc.Arbitrary<Action> = fc.oneof(
+      { arbitrary: pushArb, weight: 3 },
+      { arbitrary: backArb, weight: 1 },
+      { arbitrary: forwardArb, weight: 1 },
+    );
+
+    const applyAction = (h: NavHistory, a: Action): NavHistory => {
+      if (a.type === "push") return pushEntry(h, a.entry);
+      if (a.type === "back") return goBack(h);
+      return goForward(h);
+    };
+
+    fc.assert(
+      fc.property(
+        fc.array(actionArb, { minLength: 60, maxLength: 200, size: "max" }),
+        (actions) => {
+          const final = actions.reduce(applyAction, emptyHistory);
+          // LRU cap invariant
+          expect(final.entries.length).toBeLessThanOrEqual(MAX_HISTORY_ENTRIES);
+          // Head index invariants (ADR-006)
+          if (final.entries.length === 0) {
+            expect(final.headIndex).toBe(-1);
+          } else {
+            expect(final.headIndex).toBeGreaterThanOrEqual(0);
+            expect(final.headIndex).toBeLessThan(final.entries.length);
+          }
+        },
+      ),
+    );
   });
 });
 

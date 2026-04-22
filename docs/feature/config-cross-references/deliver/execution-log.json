@@ -589,6 +589,111 @@
       "s": "EXECUTED",
       "d": "PASS: no production change (outcome b); tsc/lint:boundaries/vitest all green",
       "t": "2026-04-22T17:20:26Z"
+    },
+    {
+      "sid": "03-03",
+      "p": "COMMIT",
+      "s": "EXECUTED",
+      "d": "PASS: ccc4b45 \u2014 test(nav-history) un-skip; outcome (b) validation-only, no production change",
+      "t": "2026-04-22T17:25:20Z"
+    },
+    {
+      "sid": "03-04",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-04-22T17:29:17Z"
+    },
+    {
+      "sid": "03-04",
+      "p": "RED_ACCEPTANCE",
+      "s": "EXECUTED",
+      "d": "PASS_IMMEDIATE: outcome-b (validation-only); goBack lower-bound guard and canGoBack predicate already final per step 03-01",
+      "t": "2026-04-22T17:31:05Z"
+    },
+    {
+      "sid": "03-04",
+      "p": "RED_UNIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: pure-domain scenario; acceptance test asserts via direct module invocation",
+      "t": "2026-04-22T17:31:47Z"
+    },
+    {
+      "sid": "03-04",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS: outcome-b no production change; tsc+lint:boundaries clean; history.test 4 pass / 3 skip",
+      "t": "2026-04-22T17:34:39Z"
+    },
+    {
+      "sid": "03-04",
+      "p": "COMMIT",
+      "s": "EXECUTED",
+      "d": "PASS: commit b09f540 test(nav-history): un-skip goBack at start-of-history no-op scenario",
+      "t": "2026-04-22T17:39:12Z"
+    },
+    {
+      "sid": "03-05",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-04-22T17:40:37Z"
+    },
+    {
+      "sid": "03-05",
+      "p": "RED_ACCEPTANCE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-04-22T17:42:19Z"
+    },
+    {
+      "sid": "03-05",
+      "p": "RED_UNIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: pure-domain scenario; acceptance test asserts via direct module invocation",
+      "t": "2026-04-22T17:42:57Z"
+    },
+    {
+      "sid": "03-05",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-04-22T17:46:38Z"
+    },
+    {
+      "sid": "03-05",
+      "p": "COMMIT",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-04-22T17:49:40Z"
+    },
+    {
+      "sid": "03-06",
+      "p": "PREPARE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-04-22T17:51:14Z"
+    },
+    {
+      "sid": "03-06",
+      "p": "RED_ACCEPTANCE",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-04-22T17:59:55Z"
+    },
+    {
+      "sid": "03-06",
+      "p": "RED_UNIT",
+      "s": "SKIPPED",
+      "d": "NOT_APPLICABLE: pure-domain scenario; acceptance test asserts via direct module invocation",
+      "t": "2026-04-22T18:00:34Z"
+    },
+    {
+      "sid": "03-06",
+      "p": "GREEN",
+      "s": "EXECUTED",
+      "d": "PASS",
+      "t": "2026-04-22T18:04:46Z"
     }
   ]
 }
