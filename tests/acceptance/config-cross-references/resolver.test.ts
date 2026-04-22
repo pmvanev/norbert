@@ -18,18 +18,25 @@
  *       The first live anchor remains in registry.test.ts.
  */
 
-import { describe, it } from "vitest";
+import { describe, it, expect } from "vitest";
+import { walkingSkeletonConfig } from "./_helpers/fixtures";
+import { buildRegistry } from "../../../src/plugins/norbert-config/domain/references/registry";
+import { resolve } from "../../../src/plugins/norbert-config/domain/references/resolver";
 
 // @walking_skeleton @driving_port
 describe("Resolving a reference whose name matches a single registry entry returns the live outcome", () => {
-  it.skip("resolve({ kind: 'name', value: 'nw-bdd-requirements' }, registry) returns { tag: 'live', entry: <user-scope skill> }", () => {
-    // Driving port:
-    //   const result = resolve({ kind: 'name', value: 'nw-bdd-requirements' }, registry);
-    // Then:
-    //   result.tag === 'live'
-    //   result.entry.type === 'skill'
-    //   result.entry.scope === 'user'
-    //   result.entry.name === 'nw-bdd-requirements'
+  it("resolve({ kind: 'name', value: 'nw-bdd-requirements' }, registry) returns { tag: 'live', entry: <user-scope skill> }", () => {
+    const registry = buildRegistry(walkingSkeletonConfig, 0);
+
+    const result = resolve({ kind: "name", value: "nw-bdd-requirements" }, registry);
+
+    expect(result.tag).toBe("live");
+    if (result.tag !== "live") {
+      throw new Error("Expected live outcome");
+    }
+    expect(result.entry.type).toBe("skill");
+    expect(result.entry.scope).toBe("user");
+    expect(result.entry.name).toBe("nw-bdd-requirements");
   });
 });
 
