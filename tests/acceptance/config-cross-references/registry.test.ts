@@ -54,7 +54,7 @@ describe("Loading state with no aggregated configuration renders no tokens and n
 
 // @walking_skeleton @driving_port
 describe("Markdown link to a known skill resolves through the registry", () => {
-  it.skip("lookupByName returns the user-scope skill nw-bdd-requirements as a single live entry", () => {
+  it("lookupByName returns the user-scope skill nw-bdd-requirements as a single live entry", () => {
     const registry = buildRegistry(walkingSkeletonConfig, 0);
     const matches = lookupByName(registry, "nw-bdd-requirements");
 
