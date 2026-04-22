@@ -244,12 +244,60 @@ describe("Ctrl+click within the same sub-tab swaps only the list selection and d
 
 // @walking_skeleton @driving_port
 describe("Ctrl+click closes any open split as part of the commit", () => {
-  it.skip("refCtrlClick when splitState !== null returns splitState === null", () => {
-    // Given: state.splitState = { topRef: '/release', bottomRef: 'nw-bdd-requirements' }
-    // When:  next = reduce(state, { tag: 'refCtrlClick', ref: refTo(hook 'pre-release.sh') })
-    // Then:  next.splitState === null
-    //        next.activeSubTab === 'hooks'
-    //        next.selectedItemKey === 'pre-release.sh'
+  it("refCtrlClick when splitState !== null returns splitState === null", () => {
+    // Arrange: a split is already open with /release on top and the user-scope
+    // skill nw-bdd-requirements on the bottom. The user then Ctrl+clicks an
+    // inline reference to the project-scope hook pre-release.sh -- a target
+    // in a DIFFERENT sub-tab ('hooks'). Per ADR-002 the Ctrl+click commits
+    // the cross-tab navigation atomically AND closes the open split as part
+    // of the same returned state -- there is no intermediate "split still
+    // open" render. The split is built via refSingleClick so the arrangement
+    // is constructed entirely through the driving port (no hand-rolled
+    // splitState fixture peeking at internals).
+    const { registry, releaseEntry } = makeWalkingSkeletonReducerArrangement();
+    const skillRef = refTo(registry, "nw-bdd-requirements");
+    if (skillRef.tag !== "live") {
+      throw new Error(
+        `walkingSkeletonConfig must yield a live ref for nw-bdd-requirements, got ${skillRef.tag}`,
+      );
+    }
+    const hookRef = refTo(registry, "pre-release.sh");
+    if (hookRef.tag !== "live") {
+      throw new Error(
+        `walkingSkeletonConfig must yield a live ref for pre-release.sh, got ${hookRef.tag}`,
+      );
+    }
+    const stateAfterSingleClick = reduce(
+      {
+        ...initialNavState,
+        selectedItemKey: releaseEntry.itemKey,
+      },
+      {
+        tag: "refSingleClick",
+        ref: skillRef,
+        currentEntry: releaseEntry,
+      },
+    );
+    // Pre-condition: the arrangement actually has an open split. If this fails
+    // the rest of the test no longer discriminates the close-split branch.
+    expect(stateAfterSingleClick.splitState).not.toBeNull();
+
+    // Act: dispatch refCtrlClick on the live hook target while the split is
+    // open.
+    const next = reduce(stateAfterSingleClick, {
+      tag: "refCtrlClick",
+      ref: hookRef,
+    });
+
+    // Assert: the split is closed AND the cross-tab navigation is committed
+    // in the same returned state. activeSubTab and selectedItemKey reflect
+    // the target.
+    expect(next.splitState).toBeNull();
+    expect(next.activeSubTab).toBe("hooks");
+    expect(next.selectedItemKey).toBe(hookRef.entry.itemKey);
+    expect(next.history.entries.length).toBe(
+      stateAfterSingleClick.history.entries.length + 1,
+    );
   });
 });
 
