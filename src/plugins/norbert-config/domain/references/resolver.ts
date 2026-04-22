@@ -27,10 +27,16 @@
  *   - No React, no Tauri, no node:* imports
  *
  * Step 02-01 implements only the `kind: 'name'` -> single-match -> live path.
- * The other ResolvedRef variants land in 02-02..02-04 as their scenarios are
- * un-skipped one at a time. The placeholder fallback returns a `dead` outcome
- * with an empty searchedScopes list so it is distinguishable from a real
- * dead-reference result once 02-03 fills in the searched scopes.
+ * Step 02-02 adds the `kind: 'name'` -> multi-match -> ambiguous branch.
+ * Candidate ordering is preserved as registry insertion order; sorting and
+ * scope precedence are deliberately NOT this module's concern -- per
+ * architecture sec 6.4 / ADR-004 they belong to ScopePrecedence so the
+ * resolver stays a pure derivation independent of policy.
+ *
+ * The remaining ResolvedRef variants land in 02-03..02-04 as their scenarios
+ * are un-skipped one at a time. The placeholder fallback returns a `dead`
+ * outcome with an empty searchedScopes list so it is distinguishable from a
+ * real dead-reference result once 02-03 fills in the searched scopes.
  */
 
 import type { ConfigScope } from "../types";
@@ -57,10 +63,15 @@ export type ResolvedRef =
 /**
  * Resolve a Reference against a ReferenceRegistry.
  *
- * Step 02-01: only `kind: 'name'` with exactly one matching entry returns the
- * live outcome. All other input shapes (and unmatched / ambiguous names) fall
- * through to a placeholder dead outcome with no searched scopes; subsequent
- * steps refine each branch.
+ * Implemented branches:
+ *   - `kind: 'name'` with exactly one matching entry -> live
+ *   - `kind: 'name'` with two or more matching entries -> ambiguous
+ *     (candidates passed through in registry insertion order; sorting is a
+ *     ScopePrecedence concern per architecture sec 6.4 / ADR-004)
+ *
+ * All other input shapes (path lookups, unmatched names) fall through to a
+ * placeholder dead outcome with no searched scopes; 02-03 fills in the
+ * searched scopes and 02-04 adds the unsupported branch.
  */
 export function resolve(ref: Reference, registry: ReferenceRegistry): ResolvedRef {
   if (ref.kind === "name") {
@@ -68,9 +79,12 @@ export function resolve(ref: Reference, registry: ReferenceRegistry): ResolvedRe
     if (matches.length === 1) {
       return { tag: "live", entry: matches[0]! };
     }
+    if (matches.length >= 2) {
+      return { tag: "ambiguous", candidates: matches };
+    }
   }
 
   // Placeholder fallback for all not-yet-implemented branches. Refined in
-  // 02-02 (ambiguous), 02-03 (dead w/ searched scopes), 02-04 (unsupported).
+  // 02-03 (dead w/ searched scopes) and 02-04 (unsupported).
   return { tag: "dead", searchedScopes: [] };
 }

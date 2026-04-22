@@ -19,7 +19,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { walkingSkeletonConfig } from "./_helpers/fixtures";
+import { ambiguousReleaseConfig, walkingSkeletonConfig } from "./_helpers/fixtures";
 import { buildRegistry } from "../../../src/plugins/norbert-config/domain/references/registry";
 import { resolve } from "../../../src/plugins/norbert-config/domain/references/resolver";
 
@@ -42,13 +42,29 @@ describe("Resolving a reference whose name matches a single registry entry retur
 
 // @walking_skeleton @driving_port
 describe("Resolving a reference whose name matches two or more registry entries returns the ambiguous outcome", () => {
-  it.skip("resolve({ kind: 'name', value: 'release' }, registry) returns { tag: 'ambiguous', candidates: [project, user] }", () => {
-    // Driving port:
-    //   const result = resolve({ kind: 'name', value: 'release' }, ambiguousReleaseRegistry);
-    // Then:
-    //   result.tag === 'ambiguous'
-    //   result.candidates.length >= 2
-    //   result.candidates.map(c => c.scope).sort() includes 'project' and 'user'
+  it("resolve({ kind: 'name', value: 'release' }, registry) returns { tag: 'ambiguous', candidates: [project, user] }", () => {
+    const registry = buildRegistry(ambiguousReleaseConfig, 0);
+
+    const result = resolve({ kind: "name", value: "release" }, registry);
+
+    expect(result.tag).toBe("ambiguous");
+    if (result.tag !== "ambiguous") {
+      throw new Error("Expected ambiguous outcome");
+    }
+    expect(result.candidates.length).toBeGreaterThanOrEqual(2);
+    const scopes = result.candidates.map((c) => c.scope);
+    expect(scopes).toContain("project");
+    expect(scopes).toContain("user");
+
+    // Determinism: ordering preserved across calls for the same registry
+    // (architecture sec 6.4 / ADR-004 -- sorting is a ScopePrecedence concern).
+    const second = resolve({ kind: "name", value: "release" }, registry);
+    if (second.tag !== "ambiguous") {
+      throw new Error("Expected ambiguous outcome on second call");
+    }
+    expect(second.candidates.map((c) => c.itemKey)).toEqual(
+      result.candidates.map((c) => c.itemKey),
+    );
   });
 });
 
