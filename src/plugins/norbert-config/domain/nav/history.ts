@@ -88,12 +88,18 @@ export function goBack(history: NavHistory): NavHistory {
 }
 
 /**
- * Placeholder: full forward semantics land in step 03-02. Returning the
- * input unchanged is safe because no production code path calls goForward
- * yet; the un-skipped scenario here exercises only goBack.
+ * Move the head one step forward. No-op when already at the end
+ * (`headIndex >= entries.length - 1`); the entries array is preserved in
+ * either case. Symmetric to {@link goBack}.
  */
 export function goForward(history: NavHistory): NavHistory {
-  return history;
+  if (history.headIndex >= history.entries.length - 1) {
+    return history;
+  }
+  return {
+    entries: history.entries,
+    headIndex: history.headIndex + 1,
+  };
 }
 
 /**

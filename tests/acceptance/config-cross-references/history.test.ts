@@ -19,7 +19,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { goBack } from "../../../src/plugins/norbert-config/domain/nav/history";
+import { goBack, goForward } from "../../../src/plugins/norbert-config/domain/nav/history";
 import { makeHistoryWith4Entries } from "./_helpers/fixtures";
 
 // @walking_skeleton @driving_port
@@ -34,10 +34,11 @@ describe("Alt+Left restores the previous navigation snapshot", () => {
 
 // @walking_skeleton @driving_port
 describe("Alt+Right re-advances after going back", () => {
-  it.skip("goForward on a 4-entry history with headIndex=2 returns headIndex=3", () => {
-    // const h = makeHistoryWith4Entries(2);
-    // const next = goForward(h);
-    // expect(next.headIndex).toBe(3);
+  it("goForward on a 4-entry history with headIndex=2 returns headIndex=3", () => {
+    const h = makeHistoryWith4Entries(2);
+    const next = goForward(h);
+    expect(next.headIndex).toBe(3);
+    expect(next.entries).toEqual(h.entries); // entries themselves unchanged
   });
 });
 
