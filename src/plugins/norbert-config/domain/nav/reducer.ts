@@ -187,11 +187,24 @@ function resolveFilterOnNav(
     // Rule 2: filter already shows the target -- preserve verbatim.
     return { filter: prevFilter, resetCue: null };
   }
-  // Rule 3 (04-07): mismatch -- clear only the target sub-tab's filter and
-  // emit the reset cue. For 04-06 the matching/no-filter branches are the
-  // only live ones; the mismatch branch falls through to "preserve" to keep
-  // the walking-skeleton invariants stable until 04-07 lands.
-  return { filter: prevFilter, resetCue: null };
+  // Rule 3 (04-07): mismatch -- clear only the target sub-tab's `source`
+  // filter dimension (preserving `sort`) and emit the reset cue naming the
+  // destination sub-tab. The reset is scoped to the target sub-tab only --
+  // other sub-tab entries in `bySubTab` are spread through unchanged so
+  // unrelated filters (e.g. on the source sub-tab) survive the cross-reference
+  // navigation. ADR-007 specifies the cue is the destination sub-tab id; the
+  // Provider reads it, announces "filter cleared on <tab>", then dispatches
+  // an acknowledge action that sets it back to null (deferred -- not in
+  // walking-skeleton scope).
+  return {
+    filter: {
+      bySubTab: {
+        ...prevFilter.bySubTab,
+        [targetSubTab]: { ...existing, source: null },
+      },
+    },
+    resetCue: targetSubTab,
+  };
 }
 
 /**

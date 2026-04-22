@@ -365,11 +365,67 @@ describe("Ctrl+click preserves a filter that already shows the target", () => {
 
 // @walking_skeleton @driving_port
 describe("Ctrl+click resets the destination filter when it would hide the target", () => {
-  it.skip("refCtrlClick with a target whose source mismatches the existing filter clears the filter and emits the cue", () => {
-    // Given: state.filter.bySubTab.skills.source === 'project'
-    // When:  next = reduce(state, { tag: 'refCtrlClick', ref: refTo(user-scope skill) })
-    // Then:  next.filter.bySubTab.skills.source === null
-    //        next.filterResetCue === 'skills'  (per ADR-007)
+  it("refCtrlClick with a target whose source mismatches the existing filter clears the filter and emits the cue", () => {
+    // Arrange: the user is on the 'commands' sub-tab with /release selected.
+    // The 'skills' sub-tab carries a source-filter set to 'project' (i.e. the
+    // user has narrowed the skills list to project-scope items). The 'commands'
+    // sub-tab also carries an unrelated source-filter set to 'user'. The user
+    // Ctrl+clicks an inline reference to the user-scope skill
+    // nw-bdd-requirements -- the target's source ('user') MISMATCHES the
+    // destination sub-tab's existing filter source ('project'), so per ADR-007
+    // the destination sub-tab's filter must be cleared (only the `source`
+    // dimension; `sort` is preserved) and a `filterResetCue` emitted naming
+    // the destination sub-tab so the Provider can announce "filter cleared on
+    // skills". The unrelated 'commands' sub-tab filter must remain intact --
+    // ADR-007 requires the reset to be scoped to the target sub-tab only.
+    const { registry, releaseEntry } = makeWalkingSkeletonReducerArrangement();
+    const targetRef = refTo(registry, "nw-bdd-requirements");
+    if (targetRef.tag !== "live") {
+      throw new Error(
+        `walkingSkeletonConfig must yield a live ref for nw-bdd-requirements, got ${targetRef.tag}`,
+      );
+    }
+    const stateBefore: ConfigNavState = {
+      ...initialNavState,
+      selectedItemKey: releaseEntry.itemKey,
+      filter: {
+        bySubTab: {
+          skills: { source: "project", sort: "source" },
+          commands: { source: "user", sort: "name" },
+        },
+      },
+      filterResetCue: null,
+    };
+    // Pre-condition: the destination sub-tab carries an active source filter
+    // that MISMATCHES the target's source. Without this the test would no
+    // longer discriminate the mismatch-reset branch from the matching-preserve
+    // branch covered in 04-06.
+    expect(stateBefore.filter.bySubTab.skills?.source).toBe("project");
+    expect(targetRef.entry.source).toBe("user");
+    expect(targetRef.entry.type).toBe("skill");
+    // Pre-condition: an unrelated sub-tab also carries a filter so the test
+    // can verify the reset is scoped to only the target sub-tab.
+    expect(stateBefore.filter.bySubTab.commands?.source).toBe("user");
+
+    // Act: dispatch refCtrlClick on the live cross-tab target.
+    const next = reduce(stateBefore, {
+      tag: "refCtrlClick",
+      ref: targetRef,
+    });
+
+    // Assert: the destination sub-tab's source filter is cleared (only the
+    // source dimension; sort is preserved) and a filterResetCue is emitted
+    // naming the destination sub-tab.
+    expect(next.filter.bySubTab.skills?.source).toBeNull();
+    expect(next.filter.bySubTab.skills?.sort).toBe("source");
+    expect(next.filterResetCue).toBe("skills");
+    // Other sub-tab filters are unchanged -- the reset is scoped to the
+    // target sub-tab only (ADR-007).
+    expect(next.filter.bySubTab.commands?.source).toBe("user");
+    expect(next.filter.bySubTab.commands?.sort).toBe("name");
+    // And the rest of the cross-tab Ctrl+click commit still happens.
+    expect(next.activeSubTab).toBe("skills");
+    expect(next.selectedItemKey).toBe(targetRef.entry.itemKey);
   });
 });
 
