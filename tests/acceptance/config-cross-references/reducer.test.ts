@@ -303,11 +303,63 @@ describe("Ctrl+click closes any open split as part of the commit", () => {
 
 // @walking_skeleton @driving_port
 describe("Ctrl+click preserves a filter that already shows the target", () => {
-  it.skip("refCtrlClick with a target whose source matches the existing filter leaves the filter intact", () => {
-    // Given: state.filter.bySubTab.skills.source === 'user'
-    // When:  next = reduce(state, { tag: 'refCtrlClick', ref: refTo(user-scope skill) })
-    // Then:  next.filter.bySubTab.skills.source === 'user'
-    //        no filterResetCue is set
+  it("refCtrlClick with a target whose source matches the existing filter leaves the filter intact", () => {
+    // Arrange: the user is on the 'commands' sub-tab and the 'skills' sub-tab
+    // already has a source-filter set to 'user' (i.e. the user has narrowed
+    // the skills list to user-scope items). They Ctrl+click an inline reference
+    // to the user-scope skill nw-bdd-requirements -- the target's source
+    // ('user') matches the destination sub-tab's existing filter source
+    // ('user'), so per ADR-007 the filter must be preserved and NO
+    // filterResetCue emitted (the target is already visible under the active
+    // filter; resetting would be unnecessary churn and would mis-cue the user).
+    const { registry, releaseEntry } = makeWalkingSkeletonReducerArrangement();
+    const targetRef = refTo(registry, "nw-bdd-requirements");
+    if (targetRef.tag !== "live") {
+      throw new Error(
+        `walkingSkeletonConfig must yield a live ref for nw-bdd-requirements, got ${targetRef.tag}`,
+      );
+    }
+    // The pre-state also carries a stale `filterResetCue` from a previous
+    // navigation (the Provider has not yet acknowledged it). The matching
+    // branch must replace it with `null` -- no cue is emitted for THIS
+    // navigation, and any stale cue from a prior navigation is superseded by
+    // this commit's outcome (per ADR-007 the cue describes the most recent
+    // navigation's filter outcome, not a backlog).
+    const stateBefore: ConfigNavState = {
+      ...initialNavState,
+      selectedItemKey: releaseEntry.itemKey,
+      filter: {
+        bySubTab: {
+          skills: { source: "user", sort: "name" },
+        },
+      },
+      filterResetCue: "agents",
+    };
+    // Pre-condition: the destination sub-tab carries an active source filter
+    // that matches the target's source. Without this the test would no longer
+    // discriminate the matching-preserve branch.
+    expect(stateBefore.filter.bySubTab.skills?.source).toBe("user");
+    expect(targetRef.entry.source).toBe("user");
+    expect(targetRef.entry.type).toBe("skill");
+    // Pre-condition: a stale cue is present so the assertion that the matching
+    // branch sets `filterResetCue` to null is non-trivially testing the
+    // reducer's commit semantics rather than the spread defaults.
+    expect(stateBefore.filterResetCue).toBe("agents");
+
+    // Act: dispatch refCtrlClick on the live cross-tab target.
+    const next = reduce(stateBefore, {
+      tag: "refCtrlClick",
+      ref: targetRef,
+    });
+
+    // Assert: the destination sub-tab's filter is preserved verbatim and no
+    // reset cue is emitted.
+    expect(next.filter.bySubTab.skills?.source).toBe("user");
+    expect(next.filter.bySubTab.skills?.sort).toBe("name");
+    expect(next.filterResetCue).toBeNull();
+    // And the rest of the cross-tab Ctrl+click commit still happens.
+    expect(next.activeSubTab).toBe("skills");
+    expect(next.selectedItemKey).toBe(targetRef.entry.itemKey);
   });
 });
 

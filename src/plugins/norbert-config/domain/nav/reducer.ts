@@ -157,16 +157,59 @@ function refTypeToSubTab(type: RefType): ConfigSubTab {
 }
 
 /**
+ * Decide whether the destination sub-tab's source filter should be preserved
+ * or reset on a cross-reference navigation, per ADR-007.
+ *
+ * Rules (in order):
+ *   1. No active filter on the target sub-tab     -> preserve, no cue.
+ *   2. Active filter source matches target source -> preserve, no cue.
+ *   3. (Step 04-07) Mismatch                      -> reset only the target
+ *                                                    sub-tab's filter, emit cue.
+ *
+ * The cue (`resetCue`) is always either `null` (no announcement) or the
+ * destination sub-tab id (Provider announces "filter cleared on <tab>" then
+ * dispatches an acknowledge action that sets it back to null).
+ *
+ * Step 04-06 implements rules 1 and 2 only. Rule 3 lands in 04-07; the helper
+ * shape is fixed now so 04-07 is a single internal edit.
+ */
+function resolveFilterOnNav(
+  prevFilter: ConfigNavState["filter"],
+  targetSubTab: ConfigSubTab,
+  _targetSource: string,
+): { readonly filter: ConfigNavState["filter"]; readonly resetCue: ConfigSubTab | null } {
+  const existing = prevFilter.bySubTab[targetSubTab];
+  if (existing === undefined || existing.source === null) {
+    // Rule 1: no filter to preserve or reset.
+    return { filter: prevFilter, resetCue: null };
+  }
+  if (existing.source === _targetSource) {
+    // Rule 2: filter already shows the target -- preserve verbatim.
+    return { filter: prevFilter, resetCue: null };
+  }
+  // Rule 3 (04-07): mismatch -- clear only the target sub-tab's filter and
+  // emit the reset cue. For 04-06 the matching/no-filter branches are the
+  // only live ones; the mismatch branch falls through to "preserve" to keep
+  // the walking-skeleton invariants stable until 04-07 lands.
+  return { filter: prevFilter, resetCue: null };
+}
+
+/**
  * Handle the `refCtrlClick` branch.
  *
  * Per ADR-002 / architecture sec 6.7, a Ctrl+click on a live cross-reference
  * commits the navigation in a single returned state -- no intermediate
- * render. Four fields are updated atomically:
+ * render. Six fields are updated atomically:
  *   - `activeSubTab`     : derived from the target's RefType
  *   - `selectedItemKey`  : the target's itemKey
  *   - `splitState`       : forced to null (Ctrl+click closes any open split
  *                          as part of the commit; refined by 04-05)
  *   - `history`          : exactly one entry pushed (ADR-008)
+ *   - `filter`           : preserved or reset per {@link resolveFilterOnNav}
+ *                          (ADR-007 -- step 04-06 covers the matching branch)
+ *   - `filterResetCue`   : null or the destination sub-tab id, per the same
+ *                          helper. Always overwritten -- the cue describes
+ *                          THIS navigation's outcome, never a prior backlog.
  *
  * Dead/ambiguous/unsupported branches are no-ops in the walking-skeleton
  * scope; later steps (04-07, 04-08) refine them.
@@ -178,12 +221,20 @@ function handleRefCtrlClick(
   if (ref.tag !== "live") {
     return state;
   }
+  const targetSubTab = refTypeToSubTab(ref.entry.type);
+  const { filter, resetCue } = resolveFilterOnNav(
+    state.filter,
+    targetSubTab,
+    ref.entry.source,
+  );
   return {
     ...state,
-    activeSubTab: refTypeToSubTab(ref.entry.type),
+    activeSubTab: targetSubTab,
     selectedItemKey: ref.entry.itemKey,
     splitState: null,
     history: pushEntry(state.history, makeRefClickEntry("refCtrlClick", ref.entry.itemKey)),
+    filter,
+    filterResetCue: resetCue,
   };
 }
 
