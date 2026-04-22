@@ -16,10 +16,6 @@
  *   - Pure functions only (no classes, no mutation of inputs)
  *   - Readonly types throughout
  *   - No React, no Tauri, no IO
- *
- * Step 03-01 scope: types + emptyHistory sentinel + goBack happy path. The
- * remaining four functions are implemented as minimal placeholders that
- * preserve the readonly contract; full behaviour lands in steps 03-02..03-06.
  */
 
 /**
@@ -38,7 +34,7 @@ export interface NavHistory {
 /**
  * LRU cap on history depth. Non-configurable per ADR-006: chosen to sit
  * comfortably above realistic deep-dive chain length while bounding memory.
- * Used by both the reducer and tests; eviction logic lands in step 03-06.
+ * Eviction is enforced by {@link pushEntry} via {@link enforceLruCap}.
  */
 export const MAX_HISTORY_ENTRIES = 50;
 
@@ -58,6 +54,17 @@ export const emptyHistory: NavHistory = {
 // ---------------------------------------------------------------------------
 
 /**
+ * Drop the oldest entries from the front so the most-recent
+ * {@link MAX_HISTORY_ENTRIES} survive. No-op when already within the cap.
+ * The newest entry (caller-appended at the tail) is always retained as head.
+ */
+function enforceLruCap(entries: readonly NavEntry[]): readonly NavEntry[] {
+  return entries.length > MAX_HISTORY_ENTRIES
+    ? entries.slice(entries.length - MAX_HISTORY_ENTRIES)
+    : entries;
+}
+
+/**
  * Append `entry` to the history, truncating any forward tail first so that a
  * new navigation action after Alt+Left clears the redo stack. When the
  * resulting stack would exceed {@link MAX_HISTORY_ENTRIES}, the oldest
@@ -65,15 +72,9 @@ export const emptyHistory: NavHistory = {
  * entry is always the head, so `headIndex` ends at `entries.length - 1`.
  */
 export function pushEntry(history: NavHistory, entry: NavEntry): NavHistory {
-  const keep = history.entries.slice(0, history.headIndex + 1);
-  const appended = [...keep, entry];
-  // LRU cap: if appending would exceed the cap, drop the oldest entries from
-  // the front so the most-recent MAX_HISTORY_ENTRIES survive. The new entry
-  // is always retained as the head.
-  const capped =
-    appended.length > MAX_HISTORY_ENTRIES
-      ? appended.slice(appended.length - MAX_HISTORY_ENTRIES)
-      : appended;
+  const retained = history.entries.slice(0, history.headIndex + 1);
+  const withNewHead = [...retained, entry];
+  const capped = enforceLruCap(withNewHead);
   return {
     entries: capped,
     headIndex: capped.length - 1,
@@ -110,9 +111,10 @@ export function goForward(history: NavHistory): NavHistory {
 }
 
 /**
- * True iff goBack would change `headIndex`. Final semantics already aligned
- * with ADR-006 invariant 1 (`0 <= headIndex < entries.length`); refined
- * exposure lands with the reducer integration in step 03-04.
+ * True iff {@link goBack} would change `headIndex`. Mirrors the lower-bound
+ * guard in `goBack` and aligns with ADR-006 invariant 1
+ * (`0 <= headIndex < entries.length`): back navigation is available only
+ * while a strictly older entry exists in the stack.
  */
 export function canGoBack(history: NavHistory): boolean {
   return history.headIndex > 0;
