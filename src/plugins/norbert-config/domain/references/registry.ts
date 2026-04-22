@@ -174,6 +174,49 @@ function basename(filePath: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Internal: pure path normaliser
+//
+// Architecture sec 6.1 -- the registry compares paths structurally so that an
+// absolute markdown-link href and an indexed item's filePath collide on the
+// same key when they refer to the same file. This MUST stay a pure JS string
+// transform (no node:os, no node:path) so the domain is platform-agnostic and
+// the dependency-cruiser boundary rule against node:* under domain/** holds.
+//
+// Rules (all idempotent):
+//   1. Backslashes -> forward slashes (cross-platform fixture ergonomics).
+//   2. Collapse '/./' segments and a leading './' (e.g. '/a/./b' -> '/a/b',
+//      './a' -> 'a').
+//   3. Strip a single trailing '/' unless the path is exactly '/'.
+//   4. Leave a leading '~/' as-is. The tilde is the canonical user-scope form
+//      throughout the registry; we deliberately do NOT expand to an absolute
+//      home path here (that would couple the domain to node:os and to the host
+//      filesystem). Resolver-level absolute-home expansion is a later concern.
+// ---------------------------------------------------------------------------
+
+function normalisePath(input: string): string {
+  // 1. Backslashes -> forward slashes.
+  let path = input.replace(/\\/g, "/");
+
+  // 2a. Strip a leading './' (but not '../').
+  if (path.startsWith("./")) {
+    path = path.slice(2);
+  }
+
+  // 2b. Collapse interior '/./' segments. Repeated application handles
+  // overlapping matches like '/a/./././b'.
+  while (path.includes("/./")) {
+    path = path.replace(/\/\.\//g, "/");
+  }
+
+  // 3. Strip a single trailing '/' unless the path is just '/'.
+  if (path.length > 1 && path.endsWith("/")) {
+    path = path.slice(0, -1);
+  }
+
+  return path;
+}
+
+// ---------------------------------------------------------------------------
 // Internal: collect all entries from an AggregatedConfig in a single pass per
 // collection. Agents are filtered to the parsed branch only.
 // ---------------------------------------------------------------------------
@@ -217,8 +260,11 @@ function indexEntries(entries: readonly RegistryEntry[]): RegistryIndices {
 
     // First-writer-wins on path collisions; later steps may surface conflicts
     // as warnings but the byFilePath surface is single-valued by contract.
-    if (!byFilePath.has(entry.filePath)) {
-      byFilePath.set(entry.filePath, entry);
+    // Key on the normalised filePath so lookups using equivalent forms
+    // (backslashes, trailing slash, redundant ./) collide on the same entry.
+    const pathKey = normalisePath(entry.filePath);
+    if (!byFilePath.has(pathKey)) {
+      byFilePath.set(pathKey, entry);
     }
   }
 
@@ -269,5 +315,5 @@ export function lookupByPath(
   reg: ReferenceRegistry,
   path: string,
 ): RegistryEntry | null {
-  return reg.byFilePath.get(path) ?? null;
+  return reg.byFilePath.get(normalisePath(path)) ?? null;
 }

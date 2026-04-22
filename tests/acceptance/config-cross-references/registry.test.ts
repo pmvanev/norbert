@@ -64,7 +64,7 @@ describe("Markdown link to a known skill resolves through the registry", () => {
     expect(matches[0].name).toBe("nw-bdd-requirements");
   });
 
-  it.skip("lookupByPath resolves the absolute markdown link href to the same registry entry", () => {
+  it("lookupByPath resolves the absolute markdown link href to the same registry entry", () => {
     const registry = buildRegistry(walkingSkeletonConfig, 0);
     const entry = lookupByPath(
       registry,
