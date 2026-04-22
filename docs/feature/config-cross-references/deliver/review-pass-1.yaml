@@ -1,0 +1,87 @@
+reviewer: nw-software-crafter-reviewer
+model: sonnet
+date: 2026-04-21
+target_wave: DELIVER (config-cross-references walking skeleton)
+pass: 1 of 2 (focus: TDD discipline + Testing Theater)
+
+approval_status: approved
+
+testing_theater_check:
+  pattern_1_tautological: clean
+  pattern_2_mock_call_count_only: clean
+  pattern_3_implementation_leak: clean
+  pattern_4_test_passes_no_matter_what: clean
+  pattern_5_skip_as_coverage: clean
+  pattern_6_loop_of_one: clean
+  pattern_7_dependency_only: clean
+  pattern_8_hidden_seam_swap: clean
+
+deletion_test_per_step:
+  - step: 01-01
+    deletion_test: yes
+    rationale: >
+      The live scenario asserts byName.size === 0, byFilePath.size === 0, and
+      version > 0. A no-op stub returning version: 0 would fail the version
+      assertion; a missing module would fail the import.
+  - step: 01-02
+    deletion_test: yes
+    rationale: >
+      lookupByName(registry, "nw-bdd-requirements") relies on buildRegistry
+      walking config.skills and inserting an entry keyed by name. An empty
+      byName map returns [] which has length 0, not 1.
+  - step: 01-03
+    deletion_test: yes
+    rationale: >
+      lookupByPath requires the byFilePath map to be populated with normalised
+      keys during buildRegistry. Without that population, byFilePath.get()
+      returns undefined and the function returns null.
+  - step: 01-04
+    deletion_test: yes
+    rationale: >
+      ambiguousReleaseConfig contains two "release" commands. If byName used a
+      single-entry overwrite strategy, lookupByName would return an array of
+      length 1. The scenario asserts >= 2. The "RED passed without production
+      change" log note is correct: 01-02 already implemented the array-push
+      pattern, so no production change was needed -- but the scenario is
+      genuinely bound to that implementation.
+  - step: 01-05
+    deletion_test: yes
+    rationale: >
+      The NFR-2 scenario requires the registry to have indexed all 500 distinct
+      items. Without the collection-walking indexing from 01-02, byName.size
+      would be 0. The "RED passed without production change" note means only
+      the fixture helper and test un-skip were required; the indexing logic
+      already existed.
+
+driving_port_discipline: clean
+atomicity_per_commit: clean
+des_integrity: clean
+fp_paradigm: clean
+architectural_rules: clean
+refactor_integrity: clean
+
+issues:
+  - severity: LOW
+    finding: >
+      The @property tag on the NFR-2 scenario implies a property-based /
+      randomised test, but the scenario is a single deterministic example using
+      performance.now(). Roadmap implementation notes acknowledge this; tag is
+      informational only. Cosmetic ambiguity only.
+    file_and_line: "tests/acceptance/config-cross-references/registry.test.ts:137"
+    recommendation: >
+      Consider renaming the tag to @performance-budget or @nfr to avoid
+      implying a property-based test. Alternatively, add a comment clarifying
+      the tag is used for metadata only. Does not require a revision cycle.
+
+summary: >
+  The walking-skeleton registry implementation is clean across all 8 Testing
+  Theater patterns and all spot-checked dimensions. The "RED passed without
+  production change" flags for steps 01-04 and 01-05 are genuine walking-
+  skeleton artefacts: the array-push byName accumulator was implemented
+  conservatively in 01-02, so 01-04's un-skip required no production change
+  while remaining genuinely bound to that implementation (deletion test
+  confirms). All 5 live scenarios are deletion-test positive, all enter
+  through driving-port functions, the production module is strictly FP-pure
+  with no boundary violations, and the DES execution log is internally
+  consistent. One LOW cosmetic issue found (@property tag naming ambiguity);
+  zero BLOCKERs; zero HIGHs. Pass 2 may proceed.

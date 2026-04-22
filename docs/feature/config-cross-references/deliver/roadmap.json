@@ -1,0 +1,130 @@
+{
+  "roadmap": {
+    "project_id": "config-cross-references",
+    "created_at": "2026-04-21",
+    "total_steps": 5,
+    "phases": 1,
+    "scope": "walking-skeleton-only",
+    "paradigm": "functional",
+    "crafter": "nw-functional-software-crafter",
+    "created_by": "nw-solution-architect"
+  },
+  "implementation_scope": {
+    "source_directories": [
+      "src/plugins/norbert-config/domain/references/"
+    ]
+  },
+  "phases": [
+    {
+      "id": "01",
+      "name": "ReferenceRegistry walking skeleton",
+      "description": "Build the pure-domain ReferenceRegistry that the resolver and detection pipeline will consume in later waves.",
+      "default_agent": "nw-software-crafter",
+      "default_deps_strategy": "sequential",
+      "steps": [
+        {
+          "id": "01-01",
+          "name": "Stub buildRegistry empty contract",
+          "criteria": [
+            "Importing the registry module no longer fails",
+            "buildRegistry on empty config produces empty byName",
+            "buildRegistry on empty config produces empty byFilePath",
+            "Returned registry version is strictly greater than zero"
+          ],
+          "agent": "nw-software-crafter",
+          "deps": [],
+          "scenario": "Loading state with no aggregated configuration renders no tokens and no crash",
+          "test_file": "tests/acceptance/config-cross-references/registry.test.ts",
+          "scenario_name": "buildRegistry returns an empty registry when given an empty aggregated config",
+          "files_to_modify": [
+            "src/plugins/norbert-config/domain/references/registry.ts"
+          ],
+          "implementation_notes": "Create the module with the public surface from architecture sec 6.1: types RefType, RegistryEntry, ReferenceRegistry; pure functions buildRegistry, lookupByName, lookupByPath. Empty implementation: buildRegistry returns empty maps and version prevVersion+1."
+        },
+        {
+          "id": "01-02",
+          "name": "Index AggregatedConfig into byName",
+          "criteria": [
+            "Building from walkingSkeletonConfig and looking up nw-bdd-requirements returns one entry",
+            "Returned entry has type skill scope user name nw-bdd-requirements",
+            "lookupByName for an unknown name still returns an empty list",
+            "buildRegistry remains synchronous and pure"
+          ],
+          "agent": "nw-software-crafter",
+          "deps": ["01-01"],
+          "scenario": "lookupByName returns the user-scope skill nw-bdd-requirements as a single live entry",
+          "test_file": "tests/acceptance/config-cross-references/registry.test.ts",
+          "scenario_name": "lookupByName returns the user-scope skill nw-bdd-requirements as a single live entry",
+          "files_to_modify": [
+            "src/plugins/norbert-config/domain/references/registry.ts"
+          ],
+          "implementation_notes": "Walk all seven AggregatedConfig collections (agents parsed branch only commands skills hooks mcpServers rules plugins) and produce RegistryEntry per item keyed in byName as a multimap. Mirror configAggregator.ts style."
+        },
+        {
+          "id": "01-03",
+          "name": "Populate byFilePath with normalisation",
+          "criteria": [
+            "lookupByPath with the absolute href returns a non-null entry",
+            "Returned entry has type skill name nw-bdd-requirements",
+            "Path equivalence is structural across forms",
+            "lookupByPath returns null for an unknown path"
+          ],
+          "agent": "nw-software-crafter",
+          "deps": ["01-02"],
+          "scenario": "lookupByPath resolves the absolute markdown link href to the same registry entry",
+          "test_file": "tests/acceptance/config-cross-references/registry.test.ts",
+          "scenario_name": "lookupByPath resolves the absolute markdown link href to the same registry entry",
+          "files_to_modify": [
+            "src/plugins/norbert-config/domain/references/registry.ts"
+          ],
+          "implementation_notes": "Add a private normalisePath string transform handling backslash forward slash conversion leading dot slash strip interior dot slash collapse trailing slash strip. Apply at insert and lookup. Do not call node:os."
+        },
+        {
+          "id": "01-04",
+          "name": "Preserve multi-scope name collisions",
+          "criteria": [
+            "Looking up release in ambiguousReleaseConfig returns at least two candidates",
+            "Returned candidate scopes include both project and user",
+            "Single-entry lookups still return exactly one entry",
+            "Candidate ordering is deterministic across builds"
+          ],
+          "agent": "nw-software-crafter",
+          "deps": ["01-03"],
+          "scenario": "lookupByName for an ambiguous name returns all matching candidates",
+          "test_file": "tests/acceptance/config-cross-references/registry.test.ts",
+          "scenario_name": "lookupByName for an ambiguous name returns all matching candidates",
+          "files_to_modify": [
+            "src/plugins/norbert-config/domain/references/registry.ts"
+          ],
+          "implementation_notes": "byName multimap from 01-02 should already preserve multiple entries. Behavioural validation step. Do not sort here ordering policy belongs to ScopePrecedence."
+        },
+        {
+          "id": "01-05",
+          "name": "NFR-2 500-item registry build",
+          "criteria": [
+            "make500ItemConfig returns an AggregatedConfig with 500 items",
+            "buildRegistry on the 500-item config produces a registry with byName size 500",
+            "Build completes within 100 ms wall-clock",
+            "buildRegistry returns a value not a Promise",
+            "All previously-live scenarios continue to pass"
+          ],
+          "agent": "nw-software-crafter",
+          "deps": ["01-04"],
+          "scenario": "buildRegistry with 500 items completes synchronously and produces the correct entry count",
+          "test_file": "tests/acceptance/config-cross-references/registry.test.ts",
+          "scenario_name": "buildRegistry with 500 items completes synchronously and produces the correct entry count",
+          "files_to_modify": [
+            "tests/acceptance/config-cross-references/_helpers/fixtures.ts",
+            "src/plugins/norbert-config/domain/references/registry.ts"
+          ],
+          "implementation_notes": "Add make500ItemConfig helper to fixtures.ts producing 100 each of skills commands agents hooks mcpServers with unique names. Un-skip the scenario. Use performance.now for elapsed timing."
+        }
+      ]
+    }
+  ],
+  "validation": {
+    "status": "approved",
+    "reviewer": "nw-software-crafter-reviewer",
+    "review_file": "docs/feature/config-cross-references/deliver/roadmap-review.yaml"
+  }
+}

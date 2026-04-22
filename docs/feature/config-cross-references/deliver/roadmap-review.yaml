@@ -1,0 +1,73 @@
+reviewer: nw-software-crafter-reviewer
+model: sonnet
+date: 2026-04-21
+target: roadmap.json (config-cross-references walking skeleton)
+
+approval_status: approved
+
+per_step_check:
+  - step_id: "01-01"
+    one_scenario: true
+    behavioural_ac: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    scope_pure_domain: true
+    sized_one_tdd_cycle: true
+  - step_id: "01-02"
+    one_scenario: true
+    behavioural_ac: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    scope_pure_domain: true
+    sized_one_tdd_cycle: true
+  - step_id: "01-03"
+    one_scenario: true
+    behavioural_ac: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    scope_pure_domain: true
+    sized_one_tdd_cycle: true
+  - step_id: "01-04"
+    one_scenario: true
+    behavioural_ac: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    scope_pure_domain: true
+    sized_one_tdd_cycle: true
+  - step_id: "01-05"
+    one_scenario: true
+    behavioural_ac: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    scope_pure_domain: true
+    sized_one_tdd_cycle: true
+
+issues:
+  - id: I1
+    severity: medium
+    description: >
+      Three it.skip scenarios in registry.test.ts are never assigned to any
+      roadmap step and will remain permanently skipped after the five steps
+      complete:
+        1. registry.test.ts: "lookupByName returns an empty list for an unknown name"
+        2. registry.test.ts: "a rebuild from a different aggregated config produces a
+           strictly greater version" (memoisation invalidation)
+        3. registry.test.ts: "a skill with the same name in user and project scopes
+           appears twice in lookupByName" (cross-scope collision via makeAggregatedConfig
+           and makeSkill -- distinct from the ambiguousReleaseConfig fixture in 01-04)
+      These are out of scope for "walking-skeleton-only" but should be flagged so the
+      crafter does not assume full scenario coverage. Folded into the per-step prompts
+      as an informational note.
+
+summary: >
+  The roadmap is well-structured with zero blockers. Each of the five steps maps
+  unambiguously to one acceptance scenario, all AC are behavioural, the dependency
+  chain is a strict linear sequence with no cycles, files_to_modify are concrete and
+  minimal, and every step's implementation_notes give the crafter a concrete starting
+  point. Scope discipline is clean. One medium informational issue (3 deferred
+  it.skip scenarios) is acknowledged. The crafter may begin Phase 2 immediately.

@@ -1,0 +1,120 @@
+reviewer: nw-software-crafter-reviewer
+model: sonnet
+date: 2026-04-21
+target_wave: DELIVER (config-cross-references walking skeleton)
+pass: 2 of 2 (focus: API design + maintainability + forward-compat)
+
+approval_status: approved
+
+api_ergonomics: >
+  The three public exports — buildRegistry, lookupByName, lookupByPath — match
+  the §6.1 contract verbatim and are well-shaped for downstream consumers.
+  lookupByName returns a readonly array (empty on miss, multimap on collision)
+  so the resolver's ambiguous branch (§6.3) requires no adapter. lookupByPath
+  normalises on lookup, so callers pass raw paths without pre-processing.
+  buildRegistry's prevVersion parameter keeps the increment responsibility at
+  the call site. The implicit convention that the first call passes 0 is not
+  codified anywhere — see LOW issue 1.
+
+type_design: >
+  RefType is a plain string union — appropriate at this scale; branded types
+  would add friction without benefit. RegistryEntry is fully readonly and flat
+  with no optional fields, so resolver pattern-matching is straightforward.
+  ReadonlyMap types prevent caller mutation correctly. RegistryEntry.itemKey
+  is documented as matching List's selectedKey but the cross-reference to §6.4
+  is implicit; a future maintainer would benefit from an inline pointer.
+
+naming_discoverability: >
+  entryFromAgent..entryFromPlugin are a discoverable family. collectEntries /
+  indexEntries clearly describe pipeline stages. normalisePath uses British
+  spelling vs TypeScript stdlib's normalize — minor inconsistency, not a
+  defect. RefType value "mcp" is the only abbreviation; self-evident in
+  domain. All private helpers correctly module-private.
+
+comment_quality_post_refactor: >
+  Post-L1 comment density is appropriate. The normalisePath block earns its
+  space by documenting the no-node:os constraint. The hook naming fallback
+  comment explains design intent. The first-writer-wins note on byFilePath is
+  load-bearing and correctly placed. entryFromPlugin's source=name assignment
+  is correct per spec but unexplained — see LOW issue 2.
+
+edge_case_coverage: >
+  Relative-path resolution (./foo.md against DetectionContext.currentItemDir)
+  is correctly deferred to the resolver layer (§6.3). normalisePath strips
+  the ./ prefix but does not resolve against a base dir — the architecture
+  explicitly assigns that to the resolver. Version field interplay with
+  useMemo is sound: config object reference gates registry rebuild;
+  registry.version gates detection memoisation. Two path forms not handled
+  and not noted as known gaps: ~user/ tilde forms and Windows drive-letter
+  paths after backslash normalisation — see LOW issue 4.
+
+maintainability_under_change: >
+  Adding a new RefType: one union member, one entryFromX projector, one line
+  in collectEntries. Adding a normalisation rule: one idempotent function
+  call inside normalisePath. Dependency-cruiser rules ensure domain purity
+  survives extension. 147 lines is well within readable cognitive budget.
+
+fixture_quality: >
+  make500ItemConfig generates 100 each of skills, commands, agents, hooks,
+  mcpServers (500 total) with globally unique names — byName.size === 500 is
+  a genuine structural assertion. Rules and plugins are absent — see LOW
+  issue 3. makeHook for plugin scope falls through to projectScopePath —
+  fixture inconsistency, dormant in current tests.
+
+refactor_quality: >
+  L1 + L4 sweep (commit 55ca0c6) left no dead code. All helpers are called
+  from collectEntries or the public API. No commented-out blocks, no TODO
+  leftovers, no redundant imports. Module header JSDoc updated to reflect
+  the driving port contract. No over-trim or leftover artefacts.
+
+issues:
+  - severity: LOW
+    finding: >
+      buildRegistry JSDoc does not document the initialisation convention:
+      callers must pass prevVersion = 0 on first build to receive version = 1.
+    file_and_line: "src/plugins/norbert-config/domain/references/registry.ts (buildRegistry JSDoc)"
+    recommendation: >
+      Add: "Pass 0 on the first call; the returned registry will have
+      version 1, the sentinel for an initialised registry."
+
+  - severity: LOW
+    finding: >
+      entryFromPlugin sets source: plugin.name (same as name) without
+      explanation. Looks like a copy-paste bug to a new reader.
+    file_and_line: "src/plugins/norbert-config/domain/references/registry.ts (entryFromPlugin)"
+    recommendation: >
+      Add inline comment: "PluginInfo has no separate source field; the
+      plugin name is both the item name and its source attribution."
+
+  - severity: LOW
+    finding: >
+      make500ItemConfig omits rules and plugins from the 500-item load
+      fixture. Both have production projectors but are not load-exercised.
+    file_and_line: "tests/acceptance/config-cross-references/_helpers/fixtures.ts (make500ItemConfig)"
+    recommendation: >
+      Expand to include rules and plugins proportionally (e.g., 70 each of
+      seven types). Update JSDoc accordingly. Non-blocking follow-up.
+
+  - severity: LOW
+    finding: >
+      normalisePath does not flag ~user/ and Windows drive-letter paths as
+      known v1 gaps. Without a TODO they are invisible to future maintainers.
+    file_and_line: "src/plugins/norbert-config/domain/references/registry.ts (normalisePath)"
+    recommendation: >
+      Append to block comment: "Known gaps (not v1): ~user/ forms passed
+      through unchanged; Windows drive-letter prefixes retained after
+      backslash normalisation."
+
+debt_status: accepted_for_followup
+# All four LOW findings are documentation/comment additions to make implicit
+# conventions explicit. None affect runtime behaviour. They are accepted as
+# walking-skeleton-wave debt and will be addressed in a follow-up polish pass
+# alongside the resolver/detection wave (where the consumer code will exercise
+# these surfaces and naturally surface comment needs).
+
+summary: >
+  The registry module is well-designed for its walking-skeleton scope. Public
+  API matches the architecture contract exactly, types are clean and flat,
+  and the module is structured for low-friction extension. Four LOW findings
+  identified, all comment/documentation additions; none blocking. Zero
+  BLOCKERs, zero HIGHs. Approved for Phase 5 (mutation testing).
