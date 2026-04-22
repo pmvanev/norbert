@@ -1,0 +1,74 @@
+reviewer: nw-software-crafter-reviewer
+model: sonnet
+date: 2026-04-22
+target: roadmap.json Phase 03 (NavHistory)
+
+approval_status: approved
+
+per_step_check:
+  - step_id: "03-01"
+    one_scenario: true
+    behavioural_criteria: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    sized_one_tdd_cycle: true
+  - step_id: "03-02"
+    one_scenario: true
+    behavioural_criteria: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    sized_one_tdd_cycle: true
+  - step_id: "03-03"
+    one_scenario: true
+    behavioural_criteria: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    sized_one_tdd_cycle: true
+  - step_id: "03-04"
+    one_scenario: true
+    behavioural_criteria: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    sized_one_tdd_cycle: true
+  - step_id: "03-05"
+    one_scenario: true
+    behavioural_criteria: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    sized_one_tdd_cycle: true
+  - step_id: "03-06"
+    one_scenario: true
+    behavioural_criteria: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    sized_one_tdd_cycle: true
+  - step_id: "03-07"
+    one_scenario: true
+    behavioural_criteria: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    sized_one_tdd_cycle: true
+
+module_path_correct: yes
+lru_cap_discipline: yes
+property_test_not_loop_of_one: yes
+navigate_entry_shape_deferral_acceptable: yes
+
+issues: []
+
+summary: >
+  All 7 Phase 03 steps map 1:1 to history.test.ts scenarios, dependencies form
+  a strict linear chain from 02-04 through 03-07, and all criteria are expressed
+  in terms of observable public-function outputs. Module path (domain/nav/
+  history.ts) matches architecture §6.5 and falls within dependency-cruiser's
+  domain/** coverage. LRU cap is hardcoded to 50 per ADR-006 with no
+  configurable-cap foothold. Property-test step 03-06 explicitly guards against
+  loop-of-one via its criteria. NavEntry shape deferral to opaque readonly
+  records is appropriate for this isolated LRU module. Zero blockers.

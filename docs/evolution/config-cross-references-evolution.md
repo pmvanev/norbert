@@ -325,3 +325,196 @@ Continue from `walking-skeleton.md` step 7:
 The resolver's `ResolvedRef` discriminated union is the contract surface for
 the navigation reducer; downstream consumers should switch exhaustively on
 `tag` rather than testing for individual field presence.
+
+---
+
+## Phase 03 — NavHistory LRU-50 (2026-04-22)
+
+**Wave segment**: DELIVER (navigation history slice — powers Alt+Left / Alt+Right per ADR-006)
+**Paradigm**: functional
+**Crafter**: nw-functional-software-crafter
+
+### Scope Shipped
+
+The pure-domain `NavHistory` module (architecture §6.5) at
+`src/plugins/norbert-config/domain/nav/history.ts`. Public surface:
+`pushEntry`, `goBack`, `goForward`, `canGoBack`, `canGoForward`, plus the
+`NavEntry` and `NavHistory` types, the `MAX_HISTORY_ENTRIES` constant, and
+the `emptyHistory` sentinel. Seven TDD steps, one per behaviour, followed by
+a refactor pass, a mutation pass, and a consolidated remediation closing all
+open review findings:
+
+| Step | Behaviour |
+|------|-----------|
+| 03-01 | Stub `NavHistory` module surface + `goBack` happy path (decrement headIndex) |
+| 03-02 | `goForward` happy path (increment headIndex, symmetric to `goBack`) |
+| 03-03 | `pushEntry` truncates the forward tail before appending (validation-only — earlier code already satisfies the contract) |
+| 03-04 | `goBack` at start of history is a no-op + `canGoBack` predicate (validation-only — guard in place from 03-01) |
+| 03-05 | `goForward` at end of history is a no-op + `canGoForward` predicate |
+| 03-06 | LRU-50 invariant as a property test — weighted action arbitrary, default `numRuns=100`, `minLength: 60` ensures sequences breach the cap |
+| 03-07 | LRU eviction example — pushing onto a 50-entry history evicts `entries[0]` and pins `headIndex` at 49 (validation-only — 03-06 already implements the cap) |
+
+### Wave Timeline
+
+| Wave | Commit | Notes |
+|------|--------|-------|
+| DELIVER 03-01 | `3e5e7d6` | Stub module + `goBack`; `headIndex: -1` sentinel for `emptyHistory` |
+| DELIVER 03-02 | `327582b` | `goForward` happy path |
+| DELIVER 03-03 | `ccc4b45` | `pushEntry` truncates forward stack — validation-only un-skip |
+| DELIVER 03-04 | `b09f540` | `goBack` at start no-op + `canGoBack` — validation-only un-skip |
+| DELIVER 03-05 | `34f469e` | `goForward` at end no-op + `canGoForward` |
+| DELIVER 03-06 | `cd683b3` | LRU-50 property test — weighted action arbitrary 3:1:1 push:back:forward |
+| DELIVER 03-07 | `a264c4d` | LRU eviction example — validation-only un-skip |
+| DELIVER refactor-03 | `e26f8f0` | L1 + L4 sweep — extracted `enforceLruCap` helper; `pushEntry` reduced to a three-line composition |
+| DELIVER mutation-03 | `0aa938b` | Stryker run on history only (separate scoped config); 95.45% kill rate (42/44) |
+| DELIVER remediation-03 | `a34f72b` | Consolidated remediation closing all Phase 03 review findings + the long-standing dep-cruiser §4 enforcement gap |
+
+### What This Enables
+
+The history module is the last pure-domain prerequisite before the navigation
+state machine:
+
+- **`ConfigNavReducer`** (architecture §6.4) — can now consume `NavHistory`
+  for the `historyBack` / `historyForward` action transitions: `historyBack`
+  reduces to `goBack(state.history)`, `historyForward` to
+  `goForward(state.history)`. Now unblocked.
+- **`ConfigNavProvider`** (§6.6) — can use `canGoBack` / `canGoForward` to
+  gate the Alt+Left / Alt+Right end-of-history audible cue; the predicates
+  give the keyboard handler a single conditional with no state decoding. Now
+  unblocked.
+
+### Quality Summary
+
+| Dimension | Result |
+|-----------|--------|
+| Live acceptance scenarios | 10 (7 outcome scenarios + 3 mutation-coverage describe blocks) |
+| Mutation kill rate | **95.45%** (42/44 mutants killed; gate ≥ 80%) |
+| Surviving mutants | 2 — both equivalent on the LRU cap boundary check (`appended.length > MAX_HISTORY_ENTRIES` → `true` and → `>=`); behaviourally indistinguishable from the original at every reachable input because `pushEntry` only ever appends one entry per call |
+| Property test quality | `numRuns=100` default, `minLength: 60`, weighted action arbitrary 3:1:1 (push:back:forward), `size: "max"` for value complexity — sequences routinely exceed the 50-cap; not loop-of-one |
+| DES execution log entries | 16 steps complete (10 in Phase 03 — 7 TDD + refactor-03 + mutation-03 + remediation-03) |
+| Reviews (DELIVER) | 2 — pass-1 TDD/Theater approved (1 MEDIUM closed via remediation, 1 LOW); pass-2 API/maintainability approved (3 LOW); all addressed |
+| DES integrity | 16/16 steps complete (verify_deliver_integrity passes); PREPARE logged for all 7 Phase 03 steps via DES CLI |
+| Architectural rules | dependency-cruiser now enforces 3 architecture §4 rules for `src/plugins/norbert-config/domain/**`; module clean |
+| FP paradigm | Pure functions only; readonly types throughout; no classes; no input mutation; LRU eviction expressed in three readable lines |
+| Public API drift vs §6.5 | Zero — `pushEntry`, `goBack`, `goForward`, `canGoBack`, `canGoForward` match the contract verbatim |
+
+### Notable Engineering Decisions
+
+- **Property test (03-06) uses a weighted action arbitrary** — 3:1:1
+  push:back:forward — with `minLength: 60` and `size: "max"` so the sequence
+  routinely exceeds the 50-cap and truly exercises the eviction logic. Default
+  `numRuns=100`. Inline comment documents the weighting rationale; explicitly
+  guards against the loop-of-one Testing Theater pattern called out in
+  pass-1 review.
+- **`headIndex: -1` sentinel for `emptyHistory`** — encodes "no head yet" as
+  the only representable state where `entries.length === 0`. The sentinel
+  handles the empty-history edge across all five functions without
+  special-casing: `pushEntry` yields `headIndex 0`; `goBack` and `goForward`
+  no-op via existing guards; `canGoBack` and `canGoForward` both return
+  `false`. Eliminates a null/undefined branch in every consumer. Pass-2 review
+  validated as mathematically sound across all functions.
+- **3 of 7 steps were validation-only** (03-03, 03-04, 03-07) — RED passed
+  without production change because earlier steps already implemented the
+  contract correctly. Pass-1 review explicitly verified this is genuine via
+  per-step deletion tests (revert the relevant code in production → primary
+  assertion fails) and not Fixture Theater. Validation-only is a legitimate
+  outside-in artefact when an earlier step's incidental implementation
+  already satisfies a later scenario's contract.
+- **`enforceLruCap` extracted in refactor-03** — L1 + L4 sweep before mutation
+  testing. The pure helper isolates the cap-boundary logic from the
+  truncate-then-append pipeline, making the surviving cap-equality mutants
+  trivially provable as equivalent during the mutation run.
+- **PREPARE phase logged for all 7 Phase 03 steps via DES CLI** — closes the
+  Phase 02 process gap (which had required retrospective `BACKFILL:` PREPARE
+  entries for steps 02-02 and 02-04). No backfill required for Phase 03.
+
+### Outside-In TDD Notes
+
+All seven Phase 03 scenarios are exercised exclusively through the five
+public driving-port functions — the `enforceLruCap` helper extracted in
+refactor-03 is not exported and not referenced by any test. Pass-1 review
+verified deletion tests for every step including the three validation-only
+steps: reverting the relevant guard or branch causes the primary assertion
+to fail (truncation revert → forward tail leaks; lower-bound guard revert →
+`headIndex` decrements to -1; LRU cap revert → `entries.length` reaches 51).
+No Testing Theater patterns present. Property test (03-06) is the
+counterexample to the loop-of-one anti-pattern: 100 runs over weighted
+sequences of 60+ actions, with the `MAX_HISTORY_ENTRIES` invariant asserted
+on every reduced state.
+
+### Long-Standing Gap Closed
+
+Dependency-cruiser config now actually enforces architecture §4 rules for
+`src/plugins/norbert-config/domain/**`:
+
+- `no-tauri-from-config-domain` — forbids `@tauri-apps/*` imports
+- `no-react-from-config-domain` — forbids `react` and `react-dom` imports
+- `no-views-from-config-domain` — forbids imports from
+  `src/plugins/norbert-config/views/**`
+
+The three phases of this feature (registry / resolver / nav) were FP-clean
+by discipline only until this remediation — the prior config covered only
+the phosphor domain in `norbert-usage`. Pass-1 review's MEDIUM finding
+(`.dependency-cruiser.cjs no rule for norbert-config/domain/**`) flagged the
+gap explicitly, and remediation-03 closes it for all three phases at once.
+The fourth rule from architecture §4 (`detection-strategies-isolated`) is
+deferred until the detection module exists in the next wave.
+
+### Open Debt
+
+Carried forward from earlier phases — no net new Phase 03 debt:
+
+- **Phase 01 LOWs** (×4): `buildRegistry` JSDoc lacks initialisation
+  convention; `entryFromPlugin` source inline rationale; `make500ItemConfig`
+  fixture missing `rules` and `plugins`; `normalisePath` does not flag
+  `~user/` and Windows drive-letter paths as v1 gaps.
+- **Phase 02 LOW** (×1): `NavEntry` (this module) vs `HistoryEntry` (ADR-006
+  spec) terminology drift — one-line type alias bridge to land at the
+  reducer integration step.
+- **Deferred `it.skip` scenarios** (×3) in `registry.test.ts` (unknown-name
+  returns empty list, version increments on rebuild, cross-scope collision
+  via `makeAggregatedConfig`) — not in walking-skeleton scope, still in
+  scope for a future polish wave, no regressions.
+
+### Files Touched
+
+#### Production
+- `src/plugins/norbert-config/domain/nav/history.ts` (NEW)
+
+#### Tests
+- `tests/acceptance/config-cross-references/history.test.ts` (NEW — 10 `it` cases across 10 describe blocks)
+- `tests/acceptance/config-cross-references/_helpers/fixtures.ts` (MODIFIED — adds `makeHistoryWith4Entries`, `emptyHistory`, `makeFiftyEntries`)
+
+#### Mutation tooling
+- `stryker.config-cross-references-history.conf.json` (NEW — scoped to history only)
+- `vitest.mutation.config-cross-references-history.ts` (NEW — includes only `history.test.ts`)
+
+#### Architectural enforcement
+- `.dependency-cruiser.cjs` (MODIFIED — adds 3 forbidden rules covering `src/plugins/norbert-config/domain/**`)
+
+#### DELIVER artefacts
+- `docs/feature/config-cross-references/deliver/roadmap.json` (extended with Phase 03)
+- `docs/feature/config-cross-references/deliver/roadmap-review-phase-03.yaml` (NEW)
+- `docs/feature/config-cross-references/deliver/review-pass-1-phase-03.yaml` (NEW)
+- `docs/feature/config-cross-references/deliver/review-pass-2-phase-03.yaml` (NEW)
+- `docs/feature/config-cross-references/deliver/execution-log.json` (extended)
+- `docs/feature/config-cross-references/deliver/mutation/history-mutation-summary.md` (NEW)
+- `docs/feature/config-cross-references/deliver/mutation/history-stryker-report.json` (NEW)
+- `docs/feature/config-cross-references/deliver/mutation/history-mutation-report.html` (NEW)
+
+### Next Wave Pointer
+
+Continue from `walking-skeleton.md` step 8 onward:
+
+1. `reducer.test.ts` — pure `ConfigNavReducer` covering all action
+   transitions; brings registry, resolver, and history together into the
+   navigation state machine (US-103, US-105, US-106)
+2. Detection strategies 1 + 2 (markdown link + inline code; produces
+   `Reference` values for `resolve()`)
+3. `NavAnnouncer` ARIA live region (DESIGN §6.8)
+4. React `ConfigNavProvider` + first user-visible scenario (US-110, KPI sink)
+
+The `canGoBack` / `canGoForward` predicates are the contract surface for the
+Provider's Alt+Left / Alt+Right end-of-history cue; consumers should call
+the predicates rather than re-deriving the bound check from `headIndex` and
+`entries.length`.
