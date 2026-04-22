@@ -5,10 +5,17 @@
  * target) against a ReferenceRegistry to one of four outcomes:
  *
  *   - live        -- exactly one registry entry matches
- *   - ambiguous   -- two or more registry entries match
- *   - dead        -- no registry entry matches; the searched scopes are reported
- *   - unsupported -- a path-shaped reference points at an item type the plugin
- *                    does not expose
+ *   - ambiguous   -- two or more registry entries match (candidates returned in
+ *                    registry insertion order; sorting and scope precedence are
+ *                    a ScopePrecedence concern per architecture sec 6.4 /
+ *                    ADR-004, not this module's)
+ *   - dead        -- no registry entry matches; the full set of ConfigScopes
+ *                    the registry covers is reported, informing the dead-token
+ *                    tooltip per US-101 AC
+ *   - unsupported -- a path-shaped reference points under `.claude/<category>/`
+ *                    where the category is not one of the surfaces the plugin
+ *                    exposes (the location is recognised but the item type
+ *                    cannot be surfaced); closes US-101 AC bullet 4
  *
  * Driving port (this module's public surface):
  *   resolve(ref, registry) -> ResolvedRef   -- pure derivation
@@ -25,28 +32,6 @@
  *   - Synchronous (no Promise return)
  *   - Readonly types throughout
  *   - No React, no Tauri, no node:* imports
- *
- * Step 02-01 implements only the `kind: 'name'` -> single-match -> live path.
- * Step 02-02 adds the `kind: 'name'` -> multi-match -> ambiguous branch.
- * Step 02-03 refines the `kind: 'name'` -> no-match path to return a `dead`
- * outcome reporting the full set of ConfigScopes that were searched. The
- * scope list is a module-level constant so the resolver does not reach into
- * the registry's internal scope set -- the registry is built from all three
- * scopes' worth of input by contract, so returning the full set is correct
- * and observable for the dead-token tooltip per US-101 AC.
- * Candidate ordering is preserved as registry insertion order; sorting and
- * scope precedence are deliberately NOT this module's concern -- per
- * architecture sec 6.4 / ADR-004 they belong to ScopePrecedence so the
- * resolver stays a pure derivation independent of policy.
- *
- * Step 02-04 dispatches `kind: 'path'` through `lookupByPath`. On a hit, the
- * outcome is `live`. On a miss, the path is inspected: if it sits under
- * `.claude/<category>/...` and the category is NOT one of the supported
- * surfaces, the outcome is `unsupported` (the plugin recognises the location
- * but does not expose that item type). All other misses (supported category
- * but no registered file, or a path outside `.claude/` entirely) fall through
- * to `dead`. The supported-category set is a module-level constant so
- * adding a new surface is a one-line change.
  */
 
 import type { ConfigScope } from "../types";
@@ -122,6 +107,35 @@ function extractDotClaudeCategory(path: string): string | null {
   return next;
 }
 
+function resolveNameReference(value: string, registry: ReferenceRegistry): ResolvedRef {
+  const matches = lookupByName(registry, value);
+  if (matches.length === 1) {
+    return { tag: "live", entry: matches[0]! };
+  }
+  if (matches.length >= 2) {
+    return { tag: "ambiguous", candidates: matches };
+  }
+  return { tag: "dead", searchedScopes: SEARCHED_SCOPES };
+}
+
+function resolvePathReference(value: string, registry: ReferenceRegistry): ResolvedRef {
+  const hit = lookupByPath(registry, value);
+  if (hit !== null) {
+    return { tag: "live", entry: hit };
+  }
+
+  const category = extractDotClaudeCategory(value);
+  if (category !== null && !SUPPORTED_CATEGORIES.includes(category)) {
+    return {
+      tag: "unsupported",
+      path: value,
+      reason: `under .claude/ but not a recognised category (${SUPPORTED_CATEGORIES.join(", ")}); got "${category}"`,
+    };
+  }
+
+  return { tag: "dead", searchedScopes: SEARCHED_SCOPES };
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -129,45 +143,22 @@ function extractDotClaudeCategory(path: string): string | null {
 /**
  * Resolve a Reference against a ReferenceRegistry.
  *
- * Implemented branches:
- *   - `kind: 'name'` with exactly one matching entry -> live
- *   - `kind: 'name'` with two or more matching entries -> ambiguous
- *     (candidates passed through in registry insertion order; sorting is a
- *     ScopePrecedence concern per architecture sec 6.4 / ADR-004)
- *   - `kind: 'name'` with no matching entry -> dead (searchedScopes lists
- *     every ConfigScope the registry covers, informing the dead-token tooltip)
- *   - `kind: 'path'` resolved via `lookupByPath`:
- *       - hit                                            -> live
- *       - miss, path under `.claude/<unknown-category>/` -> unsupported
- *       - miss, path under `.claude/<known-category>/`   -> dead
- *       - miss, path not under `.claude/` at all         -> dead
+ * Dispatches on `ref.kind`:
+ *   - `name` -> exact-name match; one hit live, multiple hits ambiguous,
+ *               no hits dead
+ *   - `path` -> exact-path match; on miss, `.claude/<unknown-category>/`
+ *               yields unsupported, all other misses yield dead
  */
 export function resolve(ref: Reference, registry: ReferenceRegistry): ResolvedRef {
-  if (ref.kind === "name") {
-    const matches = lookupByName(registry, ref.value);
-    if (matches.length === 1) {
-      return { tag: "live", entry: matches[0]! };
+  switch (ref.kind) {
+    case "name":
+      return resolveNameReference(ref.value, registry);
+    case "path":
+      return resolvePathReference(ref.value, registry);
+    default: {
+      // Exhaustiveness check -- a new `Reference` kind must add a case here.
+      const _exhaustive: never = ref;
+      return _exhaustive;
     }
-    if (matches.length >= 2) {
-      return { tag: "ambiguous", candidates: matches };
-    }
-    return { tag: "dead", searchedScopes: SEARCHED_SCOPES };
   }
-
-  // kind === "path"
-  const hit = lookupByPath(registry, ref.value);
-  if (hit !== null) {
-    return { tag: "live", entry: hit };
-  }
-
-  const category = extractDotClaudeCategory(ref.value);
-  if (category !== null && !SUPPORTED_CATEGORIES.includes(category)) {
-    return {
-      tag: "unsupported",
-      path: ref.value,
-      reason: `under .claude/ but not a recognised category (${SUPPORTED_CATEGORIES.join(", ")}); got "${category}"`,
-    };
-  }
-
-  return { tag: "dead", searchedScopes: SEARCHED_SCOPES };
 }
