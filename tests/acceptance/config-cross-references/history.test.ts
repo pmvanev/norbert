@@ -19,7 +19,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { goBack, goForward, pushEntry } from "../../../src/plugins/norbert-config/domain/nav/history";
+import { canGoBack, goBack, goForward, pushEntry } from "../../../src/plugins/norbert-config/domain/nav/history";
 import { makeHistoryWith4Entries } from "./_helpers/fixtures";
 
 // @walking_skeleton @driving_port
@@ -55,11 +55,11 @@ describe("A new cross-reference action after Alt+Left clears the forward stack",
 
 // @walking_skeleton @driving_port
 describe("Alt+Left at the start of history is a no-op with end-of-history cue", () => {
-  it.skip("goBack on a history with headIndex=0 returns the same history", () => {
-    // const h = { entries: [e0, e1], headIndex: 0 };
-    // const next = goBack(h);
-    // expect(next).toEqual(h);
-    // expect(canGoBack(h)).toBe(false);
+  it("goBack on a history with headIndex=0 returns the same history", () => {
+    const h = { entries: [{ k: "e0" }, { k: "e1" }] as const, headIndex: 0 };
+    const next = goBack(h);
+    expect(next).toEqual(h);
+    expect(canGoBack(h)).toBe(false);
   });
 });
 
