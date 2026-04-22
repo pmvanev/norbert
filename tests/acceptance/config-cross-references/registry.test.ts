@@ -79,7 +79,7 @@ describe("Markdown link to a known skill resolves through the registry", () => {
 
 // @walking_skeleton @driving_port
 describe("Reference resolving to multiple items renders as an ambiguous token", () => {
-  it.skip("lookupByName for an ambiguous name returns all matching candidates", () => {
+  it("lookupByName for an ambiguous name returns all matching candidates", () => {
     const registry = buildRegistry(ambiguousReleaseConfig, 0);
     const candidates = lookupByName(registry, "release");
 
