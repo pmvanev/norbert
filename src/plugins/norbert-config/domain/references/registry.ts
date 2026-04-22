@@ -41,6 +41,36 @@ export type RefType =
   | "rule"
   | "plugin";
 
+/**
+ * Single source of truth for the ConfigScopes a registry indexes across.
+ * Resolver and detection re-use this constant to avoid silent divergence;
+ * adding or removing a scope here is the only change required to keep
+ * dead-token tooltips and category dispatch in sync with the registry.
+ */
+export const REGISTRY_SCOPES: readonly ConfigScope[] = [
+  "user",
+  "project",
+  "plugin",
+];
+
+/**
+ * Single source of truth for the `.claude/<category>/...` segments the
+ * plugin exposes as navigable item types. Matches the seven entries on
+ * AggregatedConfig (agents, commands, skills, hooks, mcpServers, rules,
+ * plugins). Resolver and detection re-use this constant to avoid silent
+ * divergence; adding a new surface requires a single edit here plus the
+ * corresponding RefType literal above.
+ */
+export const REGISTRY_CATEGORIES: readonly string[] = [
+  "agents",
+  "commands",
+  "skills",
+  "hooks",
+  "mcpServers",
+  "rules",
+  "plugins",
+];
+
 export interface RegistryEntry {
   readonly type: RefType;
   readonly scope: ConfigScope;

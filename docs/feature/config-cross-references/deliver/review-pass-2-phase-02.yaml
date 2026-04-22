@@ -1,0 +1,138 @@
+reviewer: nw-software-crafter-reviewer
+model: sonnet
+date: 2026-04-22
+target_wave: DELIVER (config-cross-references Phase 02 resolver)
+pass: 2 of 2 (focus: API design + maintainability + forward-compat)
+
+approval_status: approved
+
+api_ergonomics: >
+  The three public exports — Reference, ResolvedRef, and resolve — are well-shaped
+  for all three identified consumers. Detection (§6.2 / ADR-001) constructs Reference
+  values directly from MDAST nodes: an inlineCode node's value maps to
+  { kind: 'name', value } and a link node's url maps to { kind: 'path', value: url }
+  with no adapter layer. ConfigNavReducer (§6.4) can switch exhaustively on
+  ResolvedRef.tag — all four tag strings are distinct literals. DisambiguationPopover
+  (ADR-004) receives the 'ambiguous' arm with candidates carrying scope, name, and
+  itemKey for display and commit dispatch. No impedance mismatch.
+
+type_design: >
+  The discriminated union arms are appropriately distinct. The 'dead' arm correctly
+  carries searchedScopes. The 'unsupported' arm carries path and reason — the
+  unrecognised category is interpolated into reason as a substring; consumers needing
+  to render or act on the category must parse the string. A typed 'category' field
+  would eliminate this need; see MEDIUM issue 1. Reference is a narrow two-variant
+  union with shared 'value' field. No branded types needed at this scale. All types
+  readonly throughout.
+
+naming_discoverability: >
+  resolveNameReference, resolvePathReference, extractDotClaudeCategory are precise.
+  SUPPORTED_CATEGORIES and SEARCHED_SCOPES are appropriately screaming-snake-case.
+  SEARCHED_SCOPES name implies a dynamic record but is a static constant; see LOW
+  issue 4. No unexplained acronyms.
+
+comment_quality_post_refactor: >
+  Module header documents all four outcomes, the driving port surface, and the
+  §6.3 deviation with cross-reference to roadmap-review-phase-02.yaml. The
+  SEARCHED_SCOPES block comment asserts a registry-contract fact without compile-time
+  enforcement; if the registry contract changes, the comment becomes silently wrong
+  and the dead tooltip reports misleading info; see MEDIUM issue 3. The
+  SUPPORTED_CATEGORIES comment notes one-line change cost but does not flag the
+  required parallel change in registry.ts (RefType); see MEDIUM issue 2.
+  extractDotClaudeCategory's JSDoc earns its space. resolveNameReference and
+  resolvePathReference are uncommented but self-documenting. The never exhaustiveness
+  block comment correctly anticipates future Reference.kind additions.
+
+edge_case_coverage: >
+  Five edge cases verified: (1) ~alice/.claude/skills/foo (named user) -> 'dead'
+  correctly; (2) bare '~/.claude/' or '~/.claude' -> extractDotClaudeCategory guards
+  next === '' and returns null -> 'dead'; (3) Reference {kind:'name', value:''} ->
+  'dead', does not throw; (4) Windows backslash in path -> handled consistently in
+  both extractDotClaudeCategory and normalisePath; (5) supported-category path with
+  no matching entry (~/.claude/skills/nonexistent/SKILL.md) -> 'dead' correctly.
+  The one runtime gap is SEARCHED_SCOPES not validated against registry coverage;
+  see MEDIUM issue 3.
+
+maintainability_under_change: >
+  Adding a new navigable surface (e.g., 'tasks') requires changes in two separate
+  files (RefType in registry.ts + SUPPORTED_CATEGORIES in resolver.ts) with no
+  compile-time link. Neither types nor tests catch a one-sided update. This is
+  the primary maintainability hazard; see MEDIUM issue 2. Otherwise: thin
+  dispatcher, named helpers, never exhaustiveness on Reference.kind. Module is
+  164 lines, max nesting depth 2 — well within readable budget.
+
+reference_shape_deviation_assessment: >
+  Cleanly documented at resolver.ts lines 25-28 with pointer to
+  roadmap-review-phase-02.yaml. The pass-1 roadmap review approved the deviation
+  and documented the rationale (§6.3 conflates source-syntax with lookup-strategy;
+  implemented shape correctly separates them). Module header explicitly guards
+  against accidental reversion. Back-propagation during finalize is well-scoped:
+  §6.3 prose update only; no other architecture sections reference the §6.3
+  Reference shape directly.
+
+refactor_quality: >
+  The 2eded1e refactor adds genuine cohesion: resolve() is a three-line dispatcher,
+  each named helper has single responsibility. Helpers called once each — right
+  threshold for extract-when-readability-helps. The never exhaustiveness block
+  is worth its weight: anticipates future Reference.kind additions (e.g., bare-prose
+  per OQ-4). No dead code, no leftover TODOs, no commented-out blocks.
+
+issues:
+  - severity: MEDIUM
+    finding: >
+      The 'unsupported' ResolvedRef arm carries a 'reason' field with the
+      unrecognised category interpolated as a substring. UI consumers needing
+      to render or act on the category must parse the string. Type-design gap.
+    file_and_line: "src/plugins/norbert-config/domain/references/resolver.ts:52"
+    recommendation: >
+      Add a 'category' field to the unsupported arm:
+        | { tag: 'unsupported'; path: string; category: string; reason: string }
+      Populate from extractDotClaudeCategory's return value. The reason field
+      remains for human-readable context. Strongly recommended before detection
+      starts consuming the API to avoid a breaking change later.
+
+  - severity: MEDIUM
+    finding: >
+      SUPPORTED_CATEGORIES (resolver.ts) and RefType (registry.ts) are parallel
+      lists with no compile-time link. Adding a new surface requires updating
+      both files; one-sided updates produce silent inconsistency. The
+      SUPPORTED_CATEGORIES comment does not mention the parallel change.
+    file_and_line: "src/plugins/norbert-config/domain/references/resolver.ts:74-82"
+    recommendation: >
+      Add to the comment block: "Adding a new surface here REQUIRES a parallel
+      addition to RefType in registry.ts — these two lists must stay in sync."
+      Better: export a shared REGISTRY_CATEGORIES (or REGISTRY_SCOPES) constant
+      from registry.ts and import here, eliminating the duplication.
+
+  - severity: MEDIUM
+    finding: >
+      SEARCHED_SCOPES is hardcoded as ["user", "project", "plugin"] and not
+      derived from or validated against the registry's actual scope coverage.
+      The block comment asserts the contract "by hand" with no compile-time
+      enforcement. If registry's scope coverage changes, the dead tooltip
+      reports misleading info (US-101 AC).
+    file_and_line: "src/plugins/norbert-config/domain/references/resolver.ts:64"
+    recommendation: >
+      Update the comment to flag the sync dependency, or — better — export a
+      REGISTRY_SCOPES constant from registry.ts and re-export as
+      SEARCHED_SCOPES. Zero runtime cost, compile-time link established.
+
+  - severity: LOW
+    finding: >
+      The name SEARCHED_SCOPES implies a dynamic record but is a static module
+      constant. REGISTRY_SCOPES or ALL_REGISTRY_SCOPES would communicate the
+      static nature.
+    file_and_line: "src/plugins/norbert-config/domain/references/resolver.ts:64"
+    recommendation: >
+      Rename to REGISTRY_SCOPES. Acceptable as-is if MEDIUM issue 3's recommendation
+      (export from registry.ts) is adopted, since the imported name will clarify
+      provenance.
+
+summary: >
+  The resolver is well-designed for its consumers and correctly handles all verified
+  edge cases. The §6.3 shape deviation is cleanly documented; the refactor adds
+  genuine cohesion. Three MEDIUM findings (typed category field; SUPPORTED_CATEGORIES
+  / RefType undocumented coupling; SEARCHED_SCOPES sync hazard) are implicit
+  couplings rather than runtime defects. Zero BLOCKERs, zero HIGHs. Approved with
+  strong recommendation to address MEDIUMs before detection consumes the API
+  (avoids breaking-change later).

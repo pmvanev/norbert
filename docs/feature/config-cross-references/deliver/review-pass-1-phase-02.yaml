@@ -1,0 +1,114 @@
+reviewer: nw-software-crafter-reviewer
+model: sonnet
+date: 2026-04-22
+target_wave: DELIVER (config-cross-references Phase 02 resolver)
+pass: 1 of 2 (focus: TDD discipline + Testing Theater)
+
+approval_status: approved
+
+testing_theater_check:
+  pattern_1_tautological: clean
+  pattern_2_mock_call_count_only: clean
+  pattern_3_implementation_leak: clean
+  pattern_4_test_passes_no_matter_what: clean
+  pattern_5_skip_as_coverage: clean
+  pattern_6_loop_of_one: clean
+  pattern_7_dependency_only: clean
+  pattern_8_hidden_seam_swap: clean
+
+deletion_test_per_step:
+  - step: 02-01 (live)
+    deletion_test: yes
+    rationale: >
+      Reverting the single-hit branch in resolveNameReference to return
+      { tag: 'dead' } causes result.tag to become 'dead' not 'live', failing
+      the primary tag assertion. The three entry-field assertions are
+      genuinely falsified by the deletion.
+  - step: 02-02 (ambiguous)
+    deletion_test: yes
+    rationale: >
+      Reverting the matches.length >= 2 branch to return { tag: 'dead' }
+      causes result.tag to become 'dead'. The determinism assertion on the
+      second call also fails. All assertions are genuinely falsified.
+  - step: 02-03 (dead)
+    deletion_test: yes
+    rationale: >
+      Reverting the zero-match branch to return { tag: 'live', entry: undefined }
+      causes result.tag to be 'live' not 'dead'. Minor under-specification on
+      scope membership recorded as LOW issue D3.
+  - step: 02-04 (unsupported + live-path regression guard)
+    deletion_test: yes (both assertions independently verified)
+    rationale: >
+      Unsupported block: reverting the !SUPPORTED_CATEGORIES.includes branch
+      causes result.tag to be 'dead' not 'unsupported'. Regression-guard block:
+      reverting the hit !== null early-return causes the live-path call to
+      fall through to dead. Both assertions genuinely falsified.
+
+driving_port_discipline: clean
+# resolver.test.ts imports only `resolve`. The three post-refactor internals
+# (resolveNameReference, resolvePathReference, extractDotClaudeCategory) are
+# not exported and not referenced by any test.
+
+atomicity_per_commit: clean
+# 5 commits (156c93d, 7131597, 3cc3203, ca55fc6, 2eded1e) correspond 1:1 to
+# 4 step IDs + refactor-02 in the execution log. Each step targets a single
+# behavior and resolver.ts.
+
+des_integrity: violations
+# Expected 25 entries for Phase 02 (4 steps x 5 phases + refactor-02 x 5).
+# Actual: 23 entries. Steps 02-02 and 02-04 each open at RED_ACCEPTANCE
+# without a preceding PREPARE entry. Process-recording gap only; recorded
+# as MEDIUM D1.
+
+fp_paradigm: clean
+# resolver.ts imports only ConfigScope (type-only) and registry items.
+# All functions pure and synchronous. Readonly qualifiers throughout.
+# never-type exhaustiveness check on switch.
+
+refactor_integrity: clean
+# refactor-02 (commit 2eded1e) extracts internal helpers; public surface
+# byte-equivalent. No test scenario changed. Both RED phases correctly
+# SKIPPED / NOT_APPLICABLE for the refactor pass.
+
+reference_shape_deviation_documented: yes
+# Documented in resolver.ts module docstring (lines 22-28) and in
+# roadmap-review-phase-02.yaml. Back-propagation deferred to finalize.
+
+issues:
+  - severity: MEDIUM
+    finding: >
+      DES integrity gap -- PREPARE events missing for steps 02-02 and 02-04.
+      execution-log.json has 23 entries for Phase 02 where 25 are expected.
+      Both 02-02 and 02-04 open directly at RED_ACCEPTANCE.
+    file_and_line: "docs/feature/config-cross-references/deliver/execution-log.json"
+    recommendation: >
+      Backfill PREPARE entries for 02-02 and 02-04 via the DES CLI
+      (log_phase) with status EXECUTED data PASS. Required before
+      verify_deliver_integrity will pass.
+
+  - severity: LOW
+    finding: >
+      Stale comment in resolver.test.ts header (line 18) states "All scenarios
+      are it.skip" but all four it() blocks are live.
+    file_and_line: "tests/acceptance/config-cross-references/resolver.test.ts:18"
+    recommendation: >
+      Update to "All scenarios are live as of Phase 02 completion."
+
+  - severity: LOW
+    finding: >
+      Scenario 02-03 asserts each element of result.searchedScopes is a member
+      of the expected set but does not assert the full three-scope set is
+      present. A regression returning a single-element list would still pass.
+    file_and_line: "tests/acceptance/config-cross-references/resolver.test.ts:84-90"
+    recommendation: >
+      Add: expect(result.searchedScopes).toEqual(expect.arrayContaining(
+      ["user", "project", "plugin"])).
+
+summary: >
+  Phase 02 resolver is structurally sound. All four scenarios exercise the
+  resolve() driving port exclusively, all deletion tests are genuine, no
+  testing theater patterns present. Two process-recording gaps (missing
+  PREPARE events for 02-02 and 02-04) are the only notable finding above
+  LOW. Zero BLOCKERs, zero HIGH; approval proceeds with two LOW items and
+  one MEDIUM (DES logging gap that must be backfilled before integrity
+  verification).

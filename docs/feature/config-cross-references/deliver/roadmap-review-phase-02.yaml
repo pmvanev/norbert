@@ -1,0 +1,64 @@
+reviewer: nw-software-crafter-reviewer
+model: sonnet
+date: 2026-04-22
+target: roadmap.json Phase 02 (resolver)
+
+approval_status: approved
+
+reference_contract_decision: agree
+reference_contract_rationale: >
+  The test-contract shape { kind: 'name' | 'path', value: string } cleanly
+  separates the resolver's concern (how to look up) from the detection layer's
+  concern (what syntax produced the reference). The architecture section 6.3
+  shape conflates those two concerns by carrying 'markdown-link' | 'inline-code'
+  as the kind discriminant inside the resolver. The resolver doesn't need to
+  know the source syntax; it needs to know the lookup strategy. Back-propagating
+  the cleaner shape to DESIGN during finalize is the correct process.
+
+per_step_check:
+  - step_id: "02-01"
+    one_scenario: true
+    behavioural_criteria: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    sized_one_tdd_cycle: true
+  - step_id: "02-02"
+    one_scenario: true
+    behavioural_criteria: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    sized_one_tdd_cycle: true
+  - step_id: "02-03"
+    one_scenario: true
+    behavioural_criteria: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    sized_one_tdd_cycle: true
+  - step_id: "02-04"
+    one_scenario: true
+    behavioural_criteria: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    sized_one_tdd_cycle: true
+
+unsupported_heuristic_acceptable: yes
+unsupported_heuristic_rationale: >
+  The heuristic is deterministic with a single decision point and produces
+  meaningfully different UX: 'unsupported' signals "I recognise this location
+  but cannot navigate there"; 'dead' signals "I have no idea what this is."
+  That distinction is load-bearing for US-101 AC bullet 4. v1 scope is honest;
+  a future wave can refine the heuristic without breaking the contract.
+
+issues: []
+
+summary: >
+  Phase 02 is clean. Each of the four steps maps 1:1 to an it.skip in
+  resolver.test.ts, criteria are fully observable from return-value inspection,
+  the dependency chain is a strict linear sequence anchored at 01-05, and
+  files_to_modify is limited to the single new resolver.ts module throughout.
+  The deliberate test-contract deviation from architecture section 6.3 is
+  sound and correctly documented for back-propagation. Zero blockers.

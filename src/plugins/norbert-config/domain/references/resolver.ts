@@ -35,7 +35,14 @@
  */
 
 import type { ConfigScope } from "../types";
-import { lookupByName, lookupByPath, type ReferenceRegistry, type RegistryEntry } from "./registry";
+import {
+  lookupByName,
+  lookupByPath,
+  REGISTRY_CATEGORIES,
+  REGISTRY_SCOPES,
+  type ReferenceRegistry,
+  type RegistryEntry,
+} from "./registry";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -49,37 +56,12 @@ export type ResolvedRef =
   | { readonly tag: "live"; readonly entry: RegistryEntry }
   | { readonly tag: "ambiguous"; readonly candidates: readonly RegistryEntry[] }
   | { readonly tag: "dead"; readonly searchedScopes: readonly ConfigScope[] }
-  | { readonly tag: "unsupported"; readonly path: string; readonly reason: string };
-
-// ---------------------------------------------------------------------------
-// Module constants
-// ---------------------------------------------------------------------------
-
-/**
- * The full set of ConfigScopes a registry indexes across. The registry is
- * built from user-, project-, and plugin-scope input by contract, so a name
- * miss has searched all three. Held as a module-level constant so the
- * resolver does not reach into the registry's internal scope set.
- */
-const SEARCHED_SCOPES: readonly ConfigScope[] = ["user", "project", "plugin"];
-
-/**
- * The set of `.claude/<category>/...` segments the plugin exposes as
- * navigable item types. A path-kind reference whose `.claude/` category is
- * absent from this set yields the `unsupported` outcome -- the resolver
- * recognises the location but the plugin cannot surface that item type.
- * Held as a module-level constant so adding a new surface is a one-line
- * change here.
- */
-const SUPPORTED_CATEGORIES: readonly string[] = [
-  "agents",
-  "commands",
-  "skills",
-  "hooks",
-  "mcpServers",
-  "rules",
-  "plugins",
-];
+  | {
+      readonly tag: "unsupported";
+      readonly path: string;
+      readonly category: string;
+      readonly reason: string;
+    };
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -115,7 +97,7 @@ function resolveNameReference(value: string, registry: ReferenceRegistry): Resol
   if (matches.length >= 2) {
     return { tag: "ambiguous", candidates: matches };
   }
-  return { tag: "dead", searchedScopes: SEARCHED_SCOPES };
+  return { tag: "dead", searchedScopes: REGISTRY_SCOPES };
 }
 
 function resolvePathReference(value: string, registry: ReferenceRegistry): ResolvedRef {
@@ -125,15 +107,16 @@ function resolvePathReference(value: string, registry: ReferenceRegistry): Resol
   }
 
   const category = extractDotClaudeCategory(value);
-  if (category !== null && !SUPPORTED_CATEGORIES.includes(category)) {
+  if (category !== null && !REGISTRY_CATEGORIES.includes(category)) {
     return {
       tag: "unsupported",
       path: value,
-      reason: `under .claude/ but not a recognised category (${SUPPORTED_CATEGORIES.join(", ")}); got "${category}"`,
+      category,
+      reason: `under .claude/ but not a recognised category (${REGISTRY_CATEGORIES.join(", ")}); got "${category}"`,
     };
   }
 
-  return { tag: "dead", searchedScopes: SEARCHED_SCOPES };
+  return { tag: "dead", searchedScopes: REGISTRY_SCOPES };
 }
 
 // ---------------------------------------------------------------------------

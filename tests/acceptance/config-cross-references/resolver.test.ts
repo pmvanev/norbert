@@ -14,8 +14,8 @@
  *     -- Reference to an unsupported item type renders as an unsupported token
  *   detection.test.ts -- the resolver feeds the detection annotation
  *
- * NOTE: All scenarios are it.skip per the implement-one-at-a-time strategy.
- *       The first live anchor remains in registry.test.ts.
+ * NOTE: All four ResolvedRef-variant scenarios are live as of Phase 02
+ *       completion. Additional mutation-coverage scenarios are also live.
  */
 
 import { describe, it, expect } from "vitest";
@@ -86,6 +86,12 @@ describe("Resolving a reference that matches no registry entry returns the dead 
     for (const scope of result.searchedScopes) {
       expect(["user", "project", "plugin"]).toContain(scope);
     }
+    // Pin the full three-scope set without over-constraining ordering: a
+    // regression returning a single-element list would pass the per-element
+    // membership loop above but fail this arrayContaining assertion.
+    expect(result.searchedScopes).toEqual(
+      expect.arrayContaining(["user", "project", "plugin"]),
+    );
     // Resolver does not throw on a dead outcome (executing this far proves it).
   });
 });
@@ -103,6 +109,10 @@ describe("Resolving a file-path reference to an item type the plugin does not ex
       throw new Error("Expected unsupported outcome");
     }
     expect(result.path).toBe(unsupportedPath);
+    // Typed `category` field is the structured datum future UI consumers
+    // (DisambiguationPopover, dead-token tooltip) read directly without
+    // parsing the human-readable reason string.
+    expect(result.category).toBe("unknown-kind");
     // The reason must be a non-empty string identifying the unsupported
     // category (architecture sec 6.3 -- 'unsupported' when the path resolves
     // to an item type the plugin does not expose; closes PO MEDIUM #1 /
