@@ -78,13 +78,23 @@ export const inlineCodeStrategy: DetectionStrategy = {
             (resolved.candidates[0]?.itemKey ?? "")
           : "";
 
+    // Base contract per architecture sec 6.2: variant + target-key + raw-text.
+    // Additive hProperty for ambiguous tokens: the React layer (popover per
+    // ADR-004 -- always-show disambiguation) reads `data-ref-candidate-count`
+    // to render the right number of options without re-querying the registry.
+    // Back-prop to architecture during finalize (roadmap step 05-06 note).
+    const hProperties: ReferenceTokenData["hProperties"] = {
+      "data-ref-variant": resolved.tag,
+      "data-ref-target-key": targetKey,
+      "data-ref-raw-text": rawText,
+      ...(resolved.tag === "ambiguous"
+        ? { "data-ref-candidate-count": resolved.candidates.length }
+        : {}),
+    };
+
     annotate(node, {
       hName: "reference-token",
-      hProperties: {
-        "data-ref-variant": resolved.tag,
-        "data-ref-target-key": targetKey,
-        "data-ref-raw-text": rawText,
-      },
+      hProperties,
     });
   },
 };

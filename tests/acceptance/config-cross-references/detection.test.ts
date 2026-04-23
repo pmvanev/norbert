@@ -20,7 +20,11 @@
 import { describe, it, expect } from "vitest";
 import { visit } from "unist-util-visit";
 import type { InlineCode } from "mdast";
-import { agentDetectionConfig, walkingSkeletonConfig } from "./_helpers/fixtures";
+import {
+  agentDetectionConfig,
+  ambiguousReleaseConfig,
+  walkingSkeletonConfig,
+} from "./_helpers/fixtures";
 import {
   fencedCodeBlockWithKnownName,
   parseMarkdown,
@@ -228,12 +232,48 @@ describe("Reference to a missing item renders as a dead token", () => {
 
 // @walking_skeleton @driving_port
 describe("Reference resolving to multiple items renders as an ambiguous token", () => {
-  it.skip("detection over inline code 'release' produces an ambiguous token when 'release' exists in 2+ scopes", () => {
-    // Given: tree parsed from "Run `release` to ship."
-    // And:   registry has 'release' command in both project and user scope
-    // When:  annotated = detectionRemarkPlugin(registry, ctx)(tree)
-    // Then:  the inlineCode node has data.hName === 'reference-token' and data.hProperties['data-ref-variant'] === 'ambiguous'
-    //        AND data.hProperties['data-ref-candidate-count'] === 2
+  it("detection over inline code 'release' produces an ambiguous token when 'release' exists in 2+ scopes", () => {
+    // Arrange: ambiguousReleaseConfig has a 'release' command in BOTH project
+    // and user scope, so resolve({kind:'name', value:'release'}, registry)
+    // returns { tag: 'ambiguous', candidates: [<project>, <user>] }. The
+    // detection layer must surface this multiplicity to the React layer per
+    // ADR-004 (always-show disambiguation popover) so the popover knows how
+    // many options to render. Architecture sec 6.2 lists data-ref-variant /
+    // data-ref-target-key / data-ref-raw-text; the candidate count is an
+    // ADDITIVE hProperty for ambiguous tokens (back-prop to architecture
+    // during finalize per roadmap step 05-06 note).
+    const registry = buildRegistry(ambiguousReleaseConfig, 0);
+    const ctx: DetectionContext = { currentItemDir: null };
+    const tree = parseMarkdown("Run `release` to ship.");
+
+    // Act
+    detectionRemarkPlugin(registry, ctx)(tree);
+
+    // Assert: collect every inlineCode node and locate the 'release' one.
+    const inlineCodeNodes: InlineCode[] = [];
+    visit(tree, "inlineCode", (node) => {
+      inlineCodeNodes.push(node);
+    });
+    expect(inlineCodeNodes).toHaveLength(1);
+
+    const matched = inlineCodeNodes[0];
+    if (matched === undefined) {
+      throw new Error(
+        "Expected the parsed tree to contain the 'release' inlineCode node",
+      );
+    }
+
+    const matchedData = matched.data as
+      | {
+          hName?: string;
+          hProperties?: Record<string, unknown>;
+        }
+      | undefined;
+    expect(matchedData?.hName).toBe("reference-token");
+    expect(matchedData?.hProperties?.["data-ref-variant"]).toBe("ambiguous");
+    expect(matchedData?.hProperties?.["data-ref-raw-text"]).toBe("release");
+    // Two registry candidates (project + user scope) for the bare name.
+    expect(matchedData?.hProperties?.["data-ref-candidate-count"]).toBe(2);
   });
 });
 
