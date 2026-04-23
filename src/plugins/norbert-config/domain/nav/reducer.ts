@@ -7,17 +7,24 @@
  * path). All state transitions are pure total functions on
  * (state, action) -> state.
  *
- * Walking-skeleton scope (Step 04-01):
- *   - ConfigNavState shape with splitState, history, filter, transient cues.
- *   - SplitState fixed-shape per ADR-009 (a third pane is a compile-time
- *     error -- the type carries exactly topRef and bottomRef).
- *   - ConfigNavAction discriminated union of 5 walking-skeleton variants.
- *     Other variants land in steps 04-02..04-12.
- *   - reduce() implements only the `refSingleClick on a live ref` branch;
- *     all other action tags fall through to the exhaustiveness default and
- *     return state unchanged. The `never` default will start failing
- *     compilation as soon as a 6th action variant is added without a case,
- *     restoring TDD discipline for subsequent steps.
+ * Public surface (stable for downstream Provider consumption):
+ *   - {@link reduce}            the driving port
+ *   - {@link ConfigNavState}    full navigation state shape
+ *   - {@link ConfigNavAction}   discriminated union of dispatchable actions
+ *   - {@link SplitState}        fixed-shape 2-pane split (ADR-009)
+ *   - {@link FilterByTab}       per-sub-tab filter cell
+ *
+ * Architectural invariants enforced here:
+ *   - SplitState is a fixed-shape record -- a third pane is a compile-time
+ *     error, not a runtime check (ADR-009).
+ *   - The `default: never` exhaustiveness branch in {@link reduce} flags any
+ *     ConfigNavAction variant added to the union without a matching case as
+ *     a type error at the assignment site.
+ *   - Cross-ref actions push exactly one history entry; manual selection
+ *     and sub-tab switches do not (ADR-008).
+ *   - Filter on cross-ref nav: preserved when the destination filter
+ *     already shows the target, reset (with a cue) when it would hide it,
+ *     never touched when the destination has no active filter (ADR-007).
  *
  * Constraints:
  *   - Pure functions only (no classes, no mutation of inputs)
@@ -84,20 +91,21 @@ export interface ConfigNavState {
 // ---------------------------------------------------------------------------
 
 /**
- * Walking-skeleton action union. Five variants suffice to drive the
- * milestone-0 scenarios in walking-skeleton.feature and reducer.test.ts.
- * Steps 04-02..04-12 will extend this union with:
- *   - navigateBack / navigateForward (US-104)
- *   - replayHistoryEntry (US-104 integration)
- *   - setFilter / clearFilter (US-105)
- *   - openAmbiguousPopover / closeAmbiguousPopover (US-103)
- *   - dismissUnsupported (US-101 unsupported branch)
- *   - acknowledgeFilterReset (ADR-007 transient cue clearing)
- *   - acknowledgeEndOfHistory (ADR-006 transient cue clearing)
+ * Discriminated union of actions {@link reduce} accepts. Each variant maps
+ * to one case in the reducer; the `default: never` branch enforces
+ * compile-time exhaustiveness so adding a new variant without a matching
+ * case is a type error at the assignment site.
  *
- * The compiler will flag every reduce() default branch that needs a new
- * case as soon as a variant lands, so the never-exhaustiveness check below
- * acts as a TDD ratchet.
+ *   - `refSingleClick`   open or replace the bottom of the 2-pane split
+ *                        (ADR-009); pushes one history entry on a live ref.
+ *   - `refCtrlClick`     atomic cross-tab navigation (ADR-002 sec 6.7);
+ *                        closes any open split and pushes one history entry.
+ *   - `selectItem`       manual list-row selection; updates focus, does NOT
+ *                        push history (ADR-008).
+ *   - `switchSubTab`     manual mode-switch; resets selection, does NOT push
+ *                        history (ADR-008, Architecture sec 6.4).
+ *   - `closeSplit`       collapse the 2-pane split (ADR-009); pushes one
+ *                        history entry (ADR-008).
  */
 export type ConfigNavAction =
   | {
@@ -163,39 +171,33 @@ function refTypeToSubTab(type: RefType): ConfigSubTab {
  * Rules (in order):
  *   1. No active filter on the target sub-tab     -> preserve, no cue.
  *   2. Active filter source matches target source -> preserve, no cue.
- *   3. (Step 04-07) Mismatch                      -> reset only the target
- *                                                    sub-tab's filter, emit cue.
+ *   3. Mismatch                                   -> clear only the target
+ *                                                    sub-tab's `source` (sort
+ *                                                    preserved), emit cue.
  *
- * The cue (`resetCue`) is always either `null` (no announcement) or the
- * destination sub-tab id (Provider announces "filter cleared on <tab>" then
- * dispatches an acknowledge action that sets it back to null).
- *
- * Step 04-06 implements rules 1 and 2 only. Rule 3 lands in 04-07; the helper
- * shape is fixed now so 04-07 is a single internal edit.
+ * The cue is either `null` (no announcement) or the destination sub-tab id;
+ * the Provider reads it, announces "filter cleared on <tab>", then dispatches
+ * an acknowledge action that sets it back to null. The reset is scoped to
+ * the target sub-tab only -- unrelated filters in `bySubTab` are spread
+ * through unchanged so a filter on the source sub-tab survives the
+ * cross-reference navigation.
  */
 function resolveFilterOnNav(
   prevFilter: ConfigNavState["filter"],
   targetSubTab: ConfigSubTab,
-  _targetSource: string,
+  targetSource: string,
 ): { readonly filter: ConfigNavState["filter"]; readonly resetCue: ConfigSubTab | null } {
   const existing = prevFilter.bySubTab[targetSubTab];
   if (existing === undefined || existing.source === null) {
     // Rule 1: no filter to preserve or reset.
     return { filter: prevFilter, resetCue: null };
   }
-  if (existing.source === _targetSource) {
+  if (existing.source === targetSource) {
     // Rule 2: filter already shows the target -- preserve verbatim.
     return { filter: prevFilter, resetCue: null };
   }
-  // Rule 3 (04-07): mismatch -- clear only the target sub-tab's `source`
-  // filter dimension (preserving `sort`) and emit the reset cue naming the
-  // destination sub-tab. The reset is scoped to the target sub-tab only --
-  // other sub-tab entries in `bySubTab` are spread through unchanged so
-  // unrelated filters (e.g. on the source sub-tab) survive the cross-reference
-  // navigation. ADR-007 specifies the cue is the destination sub-tab id; the
-  // Provider reads it, announces "filter cleared on <tab>", then dispatches
-  // an acknowledge action that sets it back to null (deferred -- not in
-  // walking-skeleton scope).
+  // Rule 3: mismatch -- clear the source dimension and emit the cue naming
+  // the destination sub-tab.
   return {
     filter: {
       bySubTab: {
@@ -216,16 +218,17 @@ function resolveFilterOnNav(
  *   - `activeSubTab`     : derived from the target's RefType
  *   - `selectedItemKey`  : the target's itemKey
  *   - `splitState`       : forced to null (Ctrl+click closes any open split
- *                          as part of the commit; refined by 04-05)
+ *                          as part of the commit)
  *   - `history`          : exactly one entry pushed (ADR-008)
  *   - `filter`           : preserved or reset per {@link resolveFilterOnNav}
- *                          (ADR-007 -- step 04-06 covers the matching branch)
+ *                          (ADR-007)
  *   - `filterResetCue`   : null or the destination sub-tab id, per the same
  *                          helper. Always overwritten -- the cue describes
  *                          THIS navigation's outcome, never a prior backlog.
  *
- * Dead/ambiguous/unsupported branches are no-ops in the walking-skeleton
- * scope; later steps (04-07, 04-08) refine them.
+ * Non-live targets (dead, ambiguous, unsupported) are a complete no-op:
+ * the early-return guard returns `state` verbatim so the same reference
+ * propagates through the dispatch.
  */
 function handleRefCtrlClick(
   state: ConfigNavState,
@@ -257,11 +260,12 @@ function handleRefCtrlClick(
  * Two structural sub-cases (per ADR-009 the 2-slot SplitState shape makes a
  * third pane impossible, so these two exhaust the live-ref space):
  *
- *   1. `state.splitState === null` (Step 04-01 -- open-from-empty):
+ *   1. `state.splitState === null` (open-from-empty):
  *      a non-null `currentEntry` becomes the new top, the target becomes
- *      the bottom, and a history entry is pushed.
+ *      the bottom, and a history entry is pushed. A null `currentEntry`
+ *      is a no-op -- there is no anchor to open against.
  *
- *   2. `state.splitState !== null` (Step 04-02 -- bottom-replace):
+ *   2. `state.splitState !== null` (bottom-replace):
  *      the existing `topRef` is preserved as the top anchor (the action's
  *      `currentEntry` is intentionally ignored here -- the user's spatial
  *      anchor is the open top pane, not the list selection), the target
@@ -269,8 +273,8 @@ function handleRefCtrlClick(
  *      entry is pushed. This preserves the user's mental model: the top
  *      pane stays put while successive single-clicks scan through bottoms.
  *
- * Dead/ambiguous/unsupported branches and missing-anchor handling land in
- * 04-03..04-09 and currently fall through to a state-unchanged return.
+ * Non-live targets (dead, ambiguous, unsupported) are a complete no-op:
+ * the early-return guard returns `state` verbatim.
  */
 function handleRefSingleClick(
   state: ConfigNavState,
@@ -311,10 +315,10 @@ function handleRefSingleClick(
  * Reduce a {@link ConfigNavState} by applying a {@link ConfigNavAction}.
  *
  * Pure total function: every action tag is dispatched to a small named
- * handler (or returns state unchanged in the 04-01 walking-skeleton scope).
- * The `never`-typed default branch enforces compile-time exhaustiveness:
- * a future action variant added to {@link ConfigNavAction} without a
- * matching case here is a type error at the assignment site.
+ * handler or to an inline branch at the same abstraction level. The
+ * `never`-typed default branch enforces compile-time exhaustiveness: a
+ * future action variant added to {@link ConfigNavAction} without a matching
+ * case here is a type error at the assignment site.
  */
 export function reduce(
   state: ConfigNavState,
@@ -326,44 +330,29 @@ export function reduce(
     case "refCtrlClick":
       return handleRefCtrlClick(state, action.ref);
     case "selectItem":
-      // Manual list-row selection. Per ADR-008 only cross-ref actions push
-      // history entries -- selectItem updates the focused item (and possibly
-      // the active sub-tab when the action carries one) but MUST NOT push.
-      // The history field is left untouched so a mid-history `headIndex`
-      // survives a manual selection (no silent forward-branch truncation).
+      // Manual list-row selection updates focus but MUST NOT push history
+      // (ADR-008 -- only cross-ref actions push). `history` is left untouched
+      // so a mid-history `headIndex` survives a manual selection.
       return {
         ...state,
         activeSubTab: action.subTab,
         selectedItemKey: action.itemKey,
       };
     case "switchSubTab":
-      // Manual sub-tab mode-switch. Per ADR-008 only cross-ref actions push
-      // history entries -- a manual sub-tab switch updates the active sub-tab
-      // but MUST NOT push. Per Architecture sec 6.4 the mode-switch also
-      // resets `selectedItemKey` to null so the list-pane scroll lands at the
-      // top of the new sub-tab (no stale selection bleeding across modes).
-      // The history field is left untouched so a mid-history `headIndex`
-      // survives a manual switch (no silent forward-branch truncation).
+      // Manual mode-switch updates the active sub-tab but MUST NOT push
+      // history (ADR-008). Per Architecture sec 6.4 it also resets
+      // `selectedItemKey` to null so the list-pane scroll lands at the top
+      // of the new sub-tab (no stale selection bleeding across modes).
       return {
         ...state,
         activeSubTab: action.subTab,
         selectedItemKey: null,
       };
     case "closeSplit": {
-      // Per ADR-009 closeSplit collapses the 2-pane split back to a single pane
-      // by setting splitState to null. Per ADR-008 closeSplit is a cross-pane
-      // navigation action and pushes a single history entry capturing the
-      // post-close state. Other observable fields (activeSubTab, selectedItemKey,
-      // filter, filterResetCue) are preserved -- the action only manipulates the
-      // split layout and the history stack.
-      //
-      // The action is idempotent on a state that already has splitState === null
-      // in the splitState dimension (null -> null) but still pushes a history
-      // entry; the walking-skeleton scenario only exercises the splitState !== null
-      // path, and ADR-008 does not carve out an exception for the degenerate
-      // closed-split case (the bookkeeping cost of a redundant entry is bounded
-      // by the LRU cap and a Provider that dispatches closeSplit on a closed
-      // split would itself be a UI bug).
+      // Collapse the 2-pane split (ADR-009) and push one history entry
+      // (ADR-008 -- closeSplit is a cross-pane navigation action). All
+      // observable fields other than `splitState` and `history` are
+      // preserved.
       const entry: NavEntry = { action: "closeSplit" };
       return {
         ...state,

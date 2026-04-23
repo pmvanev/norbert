@@ -357,6 +357,27 @@ export function refTo(registry: ReferenceRegistry, name: string): ResolvedRef {
 }
 
 /**
+ * Resolve a name through the registry and assert the result is a live ref.
+ * Eliminates the repeated `refTo(...) + tag-guard + throw` arrange block in
+ * reducer scenarios that need a live target. The narrowed return type lets
+ * callers use `.entry` directly without further discrimination. Throws when
+ * the name is missing from the registry or resolves to dead/ambiguous so
+ * fixture/registry drift fails fast at the call site.
+ */
+export function liveRefTo(
+  registry: ReferenceRegistry,
+  name: string,
+): Extract<ResolvedRef, { tag: "live" }> {
+  const ref = refTo(registry, name);
+  if (ref.tag !== "live") {
+    throw new Error(
+      `Fixture must yield a live ref for '${name}', got ${ref.tag}`,
+    );
+  }
+  return ref;
+}
+
+/**
  * Build the registry-and-current-entry pair the walking-skeleton reducer
  * scenario needs. The current entry is the `/release` command (project scope);
  * the target is resolved on demand via {@link refTo}.

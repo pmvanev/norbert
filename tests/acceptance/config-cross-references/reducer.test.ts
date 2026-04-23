@@ -28,13 +28,26 @@
 
 import { describe, expect, it } from "vitest";
 
+import type { AggregatedConfig, ConfigSubTab } from "../../../src/plugins/norbert-config/domain/types";
+import {
+  buildRegistry,
+  type RefType,
+} from "../../../src/plugins/norbert-config/domain/references/registry";
+import { resolve } from "../../../src/plugins/norbert-config/domain/references/resolver";
 import {
   reduce,
   type ConfigNavState,
 } from "../../../src/plugins/norbert-config/domain/nav/reducer";
 import {
   initialNavState,
+  liveRefTo,
+  makeAgent,
+  makeAggregatedConfig,
+  makeCommand,
   makeHistoryWith4Entries,
+  makeMcpServer,
+  makePlugin,
+  makeRule,
   makeWalkingSkeletonReducerArrangement,
   refTo,
 } from "./_helpers/fixtures";
@@ -46,12 +59,7 @@ describe("Single-click on a live reference opens a vertical split with the targe
     // user single-clicks an inline reference to the user-scope skill
     // `nw-bdd-requirements`.
     const { registry, releaseEntry } = makeWalkingSkeletonReducerArrangement();
-    const targetRef = refTo(registry, "nw-bdd-requirements");
-    if (targetRef.tag !== "live") {
-      throw new Error(
-        `walkingSkeletonConfig must yield a live ref for nw-bdd-requirements, got ${targetRef.tag}`,
-      );
-    }
+    const targetRef = liveRefTo(registry, "nw-bdd-requirements");
     const stateBefore = {
       ...initialNavState,
       selectedItemKey: releaseEntry.itemKey,
@@ -98,18 +106,8 @@ describe("Single-click in an open split replaces the bottom pane only", () => {
     // from-empty branch (the latter would set the new top to currentEntry,
     // i.e. B, dropping A).
     const { registry, releaseEntry } = makeWalkingSkeletonReducerArrangement();
-    const bRef = refTo(registry, "nw-bdd-requirements");
-    if (bRef.tag !== "live") {
-      throw new Error(
-        `walkingSkeletonConfig must yield a live ref for nw-bdd-requirements, got ${bRef.tag}`,
-      );
-    }
-    const cRef = refTo(registry, "nw-discovery-methodology");
-    if (cRef.tag !== "live") {
-      throw new Error(
-        `walkingSkeletonConfig must yield a live ref for nw-discovery-methodology, got ${cRef.tag}`,
-      );
-    }
+    const bRef = liveRefTo(registry, "nw-bdd-requirements");
+    const cRef = liveRefTo(registry, "nw-discovery-methodology");
     const stateBefore = {
       ...initialNavState,
       selectedItemKey: bRef.entry.itemKey,
@@ -155,12 +153,7 @@ describe("Ctrl+click across sub-tabs switches sub-tab, list selection, and detai
     // 6.7 the reducer must commit the cross-tab navigation in a single
     // returned state -- no intermediate render.
     const { registry, releaseEntry } = makeWalkingSkeletonReducerArrangement();
-    const targetRef = refTo(registry, "nw-bdd-requirements");
-    if (targetRef.tag !== "live") {
-      throw new Error(
-        `walkingSkeletonConfig must yield a live ref for nw-bdd-requirements, got ${targetRef.tag}`,
-      );
-    }
+    const targetRef = liveRefTo(registry, "nw-bdd-requirements");
     const stateBefore = {
       ...initialNavState,
       selectedItemKey: releaseEntry.itemKey,
@@ -202,18 +195,8 @@ describe("Ctrl+click within the same sub-tab swaps only the list selection and d
     // already 'skills' produces no change), validating that the atomic
     // 4-field update naturally subsumes both branches.
     const { registry } = makeWalkingSkeletonReducerArrangement();
-    const sourceRef = refTo(registry, "nw-bdd-requirements");
-    if (sourceRef.tag !== "live") {
-      throw new Error(
-        `walkingSkeletonConfig must yield a live ref for nw-bdd-requirements, got ${sourceRef.tag}`,
-      );
-    }
-    const targetRef = refTo(registry, "nw-discovery-methodology");
-    if (targetRef.tag !== "live") {
-      throw new Error(
-        `walkingSkeletonConfig must yield a live ref for nw-discovery-methodology, got ${targetRef.tag}`,
-      );
-    }
+    const sourceRef = liveRefTo(registry, "nw-bdd-requirements");
+    const targetRef = liveRefTo(registry, "nw-discovery-methodology");
     const stateBefore: ConfigNavState = {
       ...initialNavState,
       activeSubTab: "skills",
@@ -256,18 +239,8 @@ describe("Ctrl+click closes any open split as part of the commit", () => {
     // is constructed entirely through the driving port (no hand-rolled
     // splitState fixture peeking at internals).
     const { registry, releaseEntry } = makeWalkingSkeletonReducerArrangement();
-    const skillRef = refTo(registry, "nw-bdd-requirements");
-    if (skillRef.tag !== "live") {
-      throw new Error(
-        `walkingSkeletonConfig must yield a live ref for nw-bdd-requirements, got ${skillRef.tag}`,
-      );
-    }
-    const hookRef = refTo(registry, "pre-release.sh");
-    if (hookRef.tag !== "live") {
-      throw new Error(
-        `walkingSkeletonConfig must yield a live ref for pre-release.sh, got ${hookRef.tag}`,
-      );
-    }
+    const skillRef = liveRefTo(registry, "nw-bdd-requirements");
+    const hookRef = liveRefTo(registry, "pre-release.sh");
     const stateAfterSingleClick = reduce(
       {
         ...initialNavState,
@@ -314,12 +287,7 @@ describe("Ctrl+click preserves a filter that already shows the target", () => {
     // filterResetCue emitted (the target is already visible under the active
     // filter; resetting would be unnecessary churn and would mis-cue the user).
     const { registry, releaseEntry } = makeWalkingSkeletonReducerArrangement();
-    const targetRef = refTo(registry, "nw-bdd-requirements");
-    if (targetRef.tag !== "live") {
-      throw new Error(
-        `walkingSkeletonConfig must yield a live ref for nw-bdd-requirements, got ${targetRef.tag}`,
-      );
-    }
+    const targetRef = liveRefTo(registry, "nw-bdd-requirements");
     // The pre-state also carries a stale `filterResetCue` from a previous
     // navigation (the Provider has not yet acknowledged it). The matching
     // branch must replace it with `null` -- no cue is emitted for THIS
@@ -380,12 +348,7 @@ describe("Ctrl+click resets the destination filter when it would hide the target
     // skills". The unrelated 'commands' sub-tab filter must remain intact --
     // ADR-007 requires the reset to be scoped to the target sub-tab only.
     const { registry, releaseEntry } = makeWalkingSkeletonReducerArrangement();
-    const targetRef = refTo(registry, "nw-bdd-requirements");
-    if (targetRef.tag !== "live") {
-      throw new Error(
-        `walkingSkeletonConfig must yield a live ref for nw-bdd-requirements, got ${targetRef.tag}`,
-      );
-    }
+    const targetRef = liveRefTo(registry, "nw-bdd-requirements");
     const stateBefore: ConfigNavState = {
       ...initialNavState,
       selectedItemKey: releaseEntry.itemKey,
@@ -572,12 +535,7 @@ describe("Manual list-row selection does not push a history entry", () => {
     // (== 1) lets us also confirm the reducer does not silently truncate the
     // forward branch the way a navigation push would.
     const { registry, releaseEntry } = makeWalkingSkeletonReducerArrangement();
-    const targetSkill = refTo(registry, "nw-bdd-requirements");
-    if (targetSkill.tag !== "live") {
-      throw new Error(
-        `walkingSkeletonConfig must yield a live ref for nw-bdd-requirements, got ${targetSkill.tag}`,
-      );
-    }
+    const targetSkill = liveRefTo(registry, "nw-bdd-requirements");
     const stateBefore: ConfigNavState = {
       ...initialNavState,
       activeSubTab: "commands",
@@ -672,12 +630,7 @@ describe("Close button collapses the split back to a single pane", () => {
     // history entry; per ADR-009 it collapses the 2-pane split back to a single
     // pane by setting splitState to null.
     const { registry, releaseEntry } = makeWalkingSkeletonReducerArrangement();
-    const skillRef = refTo(registry, "nw-bdd-requirements");
-    if (skillRef.tag !== "live") {
-      throw new Error(
-        `walkingSkeletonConfig must yield a live ref for nw-bdd-requirements, got ${skillRef.tag}`,
-      );
-    }
+    const skillRef = liveRefTo(registry, "nw-bdd-requirements");
     const stateAfterSingleClick = reduce(
       {
         ...initialNavState,
@@ -706,6 +659,321 @@ describe("Close button collapses the split back to a single pane", () => {
     expect(next.selectedItemKey).toBe(stateAfterSingleClick.selectedItemKey);
     expect(next.filter).toBe(stateAfterSingleClick.filter);
   });
+});
+
+// @mutation-coverage @driving_port
+describe("Cross-reference history entries record the originating action and target itemKey", () => {
+  it("refSingleClick (open-from-empty), refSingleClick (bottom-replace), refCtrlClick, and closeSplit each push an entry whose action and targetItemKey match the dispatched intent", () => {
+    // Pins the NavEntry shape pushed by every cross-ref action in the reducer.
+    // The original walking-skeleton tests only assert `history.entries.length`
+    // grew by 1; they never inspect the entry payload. Per ADR-006/ADR-008 the
+    // entry IS the audit record that drives the live-cue announcer (US-104),
+    // so the action discriminator and targetItemKey must be exact -- not just
+    // "an entry was pushed". Mutating any of the four call sites in the
+    // reducer (refSingleClick open, refSingleClick replace, refCtrlClick,
+    // closeSplit) to drop the action string or omit targetItemKey is a real
+    // bug the announcer would surface as silent or mislabelled cues.
+    //
+    // One scenario covers all four pushers because they share a single
+    // makeRefClickEntry helper (plus the closeSplit literal); reading the
+    // tail entry of each post-state is a tight, readable assertion.
+    const { registry, releaseEntry } = makeWalkingSkeletonReducerArrangement();
+    const skillRef = refTo(registry, "nw-bdd-requirements");
+    if (skillRef.tag !== "live") {
+      throw new Error(
+        `walkingSkeletonConfig must yield a live ref for nw-bdd-requirements, got ${skillRef.tag}`,
+      );
+    }
+    const otherSkillRef = refTo(registry, "nw-discovery-methodology");
+    if (otherSkillRef.tag !== "live") {
+      throw new Error(
+        `walkingSkeletonConfig must yield a live ref for nw-discovery-methodology, got ${otherSkillRef.tag}`,
+      );
+    }
+    const hookRef = refTo(registry, "pre-release.sh");
+    if (hookRef.tag !== "live") {
+      throw new Error(
+        `walkingSkeletonConfig must yield a live ref for pre-release.sh, got ${hookRef.tag}`,
+      );
+    }
+
+    // Step 1: refSingleClick on empty split (open-from-empty branch).
+    const afterOpen = reduce(
+      { ...initialNavState, selectedItemKey: releaseEntry.itemKey },
+      { tag: "refSingleClick", ref: skillRef, currentEntry: releaseEntry },
+    );
+    const openEntry = afterOpen.history.entries[afterOpen.history.entries.length - 1];
+    expect(openEntry).toBeDefined();
+    expect(openEntry?.action).toBe("refSingleClick");
+    expect(openEntry?.targetItemKey).toBe(skillRef.entry.itemKey);
+
+    // Step 2: refSingleClick on a non-null split (bottom-replace branch).
+    const afterReplace = reduce(afterOpen, {
+      tag: "refSingleClick",
+      ref: otherSkillRef,
+      currentEntry: skillRef.entry,
+    });
+    const replaceEntry =
+      afterReplace.history.entries[afterReplace.history.entries.length - 1];
+    expect(replaceEntry).toBeDefined();
+    expect(replaceEntry?.action).toBe("refSingleClick");
+    expect(replaceEntry?.targetItemKey).toBe(otherSkillRef.entry.itemKey);
+
+    // Step 3: refCtrlClick (cross-tab branch -- pre-state has an open split so
+    // we also pin the entry pushed when the reducer commits an atomic
+    // 4-field update + close).
+    const afterCtrl = reduce(afterReplace, {
+      tag: "refCtrlClick",
+      ref: hookRef,
+    });
+    const ctrlEntry = afterCtrl.history.entries[afterCtrl.history.entries.length - 1];
+    expect(ctrlEntry).toBeDefined();
+    expect(ctrlEntry?.action).toBe("refCtrlClick");
+    expect(ctrlEntry?.targetItemKey).toBe(hookRef.entry.itemKey);
+
+    // Step 4: closeSplit -- pushes an entry whose action discriminator is the
+    // literal "closeSplit". closeSplit entries do NOT carry a targetItemKey
+    // (the action has no target), so we pin only the action discriminator.
+    // First reopen a split so closeSplit is non-degenerate.
+    const reopened = reduce(
+      { ...initialNavState, selectedItemKey: releaseEntry.itemKey },
+      { tag: "refSingleClick", ref: skillRef, currentEntry: releaseEntry },
+    );
+    const afterClose = reduce(reopened, { tag: "closeSplit" });
+    const closeEntry = afterClose.history.entries[afterClose.history.entries.length - 1];
+    expect(closeEntry).toBeDefined();
+    expect(closeEntry?.action).toBe("closeSplit");
+  });
+});
+
+// @mutation-coverage @driving_port
+describe("Ctrl+click into a destination sub-tab with no active filter preserves state and emits no cue", () => {
+  it("refCtrlClick on a cross-tab live target whose destination sub-tab has no entry in filter.bySubTab returns the same filter reference and a null cue", () => {
+    // Pins resolveFilterOnNav Rule 1 (destination has no filter at all).
+    // The 04-06 "preserves" test exercises Rule 2 (destination has a matching
+    // filter); the 04-07 "resets" test exercises Rule 3 (destination has a
+    // mismatching filter). Neither exercises Rule 1 -- the destination
+    // having no filter entry at all. Mutating the Rule 1 short-circuit
+    // (`existing === undefined || existing.source === null` -> false) would
+    // cause the reducer to fall through to the mismatch branch and spuriously
+    // emit a cue for a navigation that should be a quiet preserve.
+    //
+    // Setup: an unrelated sub-tab carries a filter so filter.bySubTab is
+    // non-empty (a buggy implementation that always returned `prevFilter`
+    // without inspecting `existing` could pass with an empty bySubTab).
+    const { registry, releaseEntry } = makeWalkingSkeletonReducerArrangement();
+    const targetRef = refTo(registry, "nw-bdd-requirements");
+    if (targetRef.tag !== "live") {
+      throw new Error(
+        `walkingSkeletonConfig must yield a live ref for nw-bdd-requirements, got ${targetRef.tag}`,
+      );
+    }
+    const stateBefore: ConfigNavState = {
+      ...initialNavState,
+      selectedItemKey: releaseEntry.itemKey,
+      filter: {
+        bySubTab: {
+          // Unrelated sub-tab filter -- destination 'skills' has no entry.
+          commands: { source: "user", sort: "name" },
+        },
+      },
+      filterResetCue: null,
+    };
+    // Pre-condition: destination sub-tab has NO filter entry.
+    expect(stateBefore.filter.bySubTab.skills).toBeUndefined();
+
+    const next = reduce(stateBefore, { tag: "refCtrlClick", ref: targetRef });
+
+    // Filter object is preserved by reference (Rule 1 returns prevFilter as-is)
+    // and no cue is emitted. The unrelated 'commands' filter survives intact.
+    expect(next.filter).toBe(stateBefore.filter);
+    expect(next.filterResetCue).toBeNull();
+    expect(next.filter.bySubTab.commands?.source).toBe("user");
+    // The cross-tab navigation still commits.
+    expect(next.activeSubTab).toBe("skills");
+    expect(next.selectedItemKey).toBe(targetRef.entry.itemKey);
+  });
+});
+
+// @mutation-coverage @driving_port
+describe("Ctrl+click into a destination sub-tab whose existing filter has source=null preserves state and emits no cue", () => {
+  it("refCtrlClick on a cross-tab live target whose destination filter exists with source === null returns the same filter reference and a null cue", () => {
+    // Pins the right-hand operand of the resolveFilterOnNav Rule 1
+    // disjunction (`existing === undefined || existing.source === null`).
+    // The 04-06 "preserves" test exercises Rule 2 (non-null source matching
+    // target). The 04-07 "resets" test exercises Rule 3 (non-null source
+    // mismatching target). The "no active filter" mutation-coverage test
+    // above exercises the LEFT operand (existing === undefined). What none of
+    // them exercise is the RIGHT operand: an entry exists in bySubTab BUT
+    // its source is null (e.g. the user previously cleared the source filter
+    // explicitly while keeping a non-default sort). Per ADR-007 a null source
+    // is "no source filter" and must short-circuit the same way an absent
+    // entry does -- preserve and emit no cue. Mutating the right operand to
+    // `false` would fall through to the source-equality check and, because
+    // the target source is non-null, drop into Rule 3 -- spuriously
+    // re-clearing an already-null source AND emitting a misleading cue.
+    const { registry, releaseEntry } = makeWalkingSkeletonReducerArrangement();
+    const targetRef = liveRefTo(registry, "nw-bdd-requirements");
+    const stateBefore: ConfigNavState = {
+      ...initialNavState,
+      selectedItemKey: releaseEntry.itemKey,
+      filter: {
+        bySubTab: {
+          // Destination sub-tab carries a filter entry but its source is null;
+          // a non-default sort is preserved so the entry is non-trivial.
+          skills: { source: null, sort: "source" },
+        },
+      },
+      filterResetCue: null,
+    };
+    // Pre-conditions discriminate the right operand of the Rule 1
+    // disjunction: the entry exists, its source is null, and the target's
+    // source is non-null.
+    expect(stateBefore.filter.bySubTab.skills).toBeDefined();
+    expect(stateBefore.filter.bySubTab.skills?.source).toBeNull();
+    expect(targetRef.entry.source).toBe("user");
+
+    const next = reduce(stateBefore, { tag: "refCtrlClick", ref: targetRef });
+
+    // The Rule 1 short-circuit returns prevFilter as-is (same object
+    // reference) and emits no cue. The user-set sort is preserved.
+    expect(next.filter).toBe(stateBefore.filter);
+    expect(next.filterResetCue).toBeNull();
+    expect(next.filter.bySubTab.skills?.source).toBeNull();
+    expect(next.filter.bySubTab.skills?.sort).toBe("source");
+  });
+});
+
+// @mutation-coverage @driving_port
+describe("Single-click on a live reference with no current anchor is a complete no-op", () => {
+  it("refSingleClick when splitState === null and currentEntry === null returns the same state reference", () => {
+    // Pins the missing-anchor guard in handleRefSingleClick. The 04-01 open-
+    // from-empty test always supplies a non-null currentEntry, so the
+    // `if (currentEntry === null) return state` guard is never exercised.
+    // Mutating it to `if (false)` would cause the reducer to fall through and
+    // build a SplitState with `topRef: null` -- a runtime-invalid state the
+    // ADR-009 type forbids. The guard is the only thing standing between a
+    // detection-annotated link click on a list-pane that has no current
+    // selection and a corrupted split.
+    //
+    // The action payload otherwise looks identical to a successful open --
+    // only currentEntry being null should suppress the state change.
+    const { registry } = makeWalkingSkeletonReducerArrangement();
+    const targetRef = refTo(registry, "nw-bdd-requirements");
+    if (targetRef.tag !== "live") {
+      throw new Error(
+        `walkingSkeletonConfig must yield a live ref for nw-bdd-requirements, got ${targetRef.tag}`,
+      );
+    }
+    const stateBefore: ConfigNavState = {
+      ...initialNavState,
+      // No selection, no split, no current anchor.
+      selectedItemKey: null,
+      splitState: null,
+    };
+
+    const next = reduce(stateBefore, {
+      tag: "refSingleClick",
+      ref: targetRef,
+      currentEntry: null,
+    });
+
+    // The early-return guard returns state verbatim -- same object reference,
+    // no spread, no allocation. History is unchanged because no entry was
+    // pushed.
+    expect(next).toBe(stateBefore);
+    expect(next.splitState).toBeNull();
+    expect(next.history).toBe(stateBefore.history);
+    expect(next.history.entries.length).toBe(stateBefore.history.entries.length);
+  });
+});
+
+// @mutation-coverage @driving_port
+describe("Cross-tab Ctrl+click maps each RefType to its canonical Configuration sub-tab", () => {
+  // Pins the REF_TYPE_TO_SUB_TAB mapping. The walking-skeleton tests cover
+  // skill -> 'skills' and hook -> 'hooks'; the remaining five RefType
+  // entries (agent, command, mcp, rule, plugin) are unexercised, so any
+  // string-literal mutation on those map values survives. The mapping is the
+  // pure pivot the reducer uses to dispatch a cross-ref click into the right
+  // Configuration view sub-tab; mismapping any entry would silently land the
+  // user on the wrong sub-tab. Each scenario builds a single-item
+  // AggregatedConfig that carries exactly one item of the targeted RefType,
+  // resolves it through the registry, and asserts the post-state's
+  // activeSubTab.
+  const cases: ReadonlyArray<{
+    readonly label: string;
+    readonly name: string;
+    readonly config: AggregatedConfig;
+    readonly expectedSubTab: ConfigSubTab;
+    readonly expectedRefType: RefType;
+  }> = [
+    {
+      label: "agent -> 'agents'",
+      name: "release-agent",
+      config: makeAggregatedConfig({ agents: [makeAgent("release-agent", "user")] }),
+      expectedSubTab: "agents",
+      expectedRefType: "agent",
+    },
+    {
+      label: "command -> 'commands'",
+      name: "deploy",
+      config: makeAggregatedConfig({ commands: [makeCommand("deploy", "user")] }),
+      expectedSubTab: "commands",
+      expectedRefType: "command",
+    },
+    {
+      label: "mcp -> 'mcp'",
+      name: "playwright",
+      config: makeAggregatedConfig({ mcpServers: [makeMcpServer("playwright", "user")] }),
+      expectedSubTab: "mcp",
+      expectedRefType: "mcp",
+    },
+    {
+      // Rule entries have no name field; the registry indexes them by the
+      // basename of their filePath (registry.entryFromRule). makeRule defaults
+      // to `.claude/CLAUDE.md` so the lookup name is "CLAUDE.md".
+      label: "rule -> 'rules'",
+      name: "CLAUDE.md",
+      config: makeAggregatedConfig({ rules: [makeRule("no-secrets", "project")] }),
+      expectedSubTab: "rules",
+      expectedRefType: "rule",
+    },
+    {
+      label: "plugin -> 'plugins'",
+      name: "norbert-config",
+      config: makeAggregatedConfig({ plugins: [makePlugin("norbert-config")] }),
+      expectedSubTab: "plugins",
+      expectedRefType: "plugin",
+    },
+  ];
+
+  it.each(cases)(
+    "refCtrlClick on a live $label sets activeSubTab to the canonical sub-tab id",
+    ({ name, config, expectedSubTab, expectedRefType }) => {
+      const registry = buildRegistry(config, 0);
+      const targetRef = resolve({ kind: "name", value: name }, registry);
+      if (targetRef.tag !== "live") {
+        throw new Error(
+          `Fixture must yield a live ref for '${name}', got ${targetRef.tag}`,
+        );
+      }
+      // Pre-condition: the registry entry is the targeted RefType so the
+      // mapping under test is the one being exercised (not an accidental
+      // alias).
+      expect(targetRef.entry.type).toBe(expectedRefType);
+
+      const next = reduce(initialNavState, {
+        tag: "refCtrlClick",
+        ref: targetRef,
+      });
+
+      // Asserts the literal sub-tab id the mapping must produce. A mutation
+      // that replaces any value with "" would set activeSubTab to "" here
+      // and fail.
+      expect(next.activeSubTab).toBe(expectedSubTab);
+      expect(next.selectedItemKey).toBe(targetRef.entry.itemKey);
+    },
+  );
 });
 
 // @milestone-2 @driving_port @property
