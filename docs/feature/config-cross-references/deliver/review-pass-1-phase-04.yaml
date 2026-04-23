@@ -1,0 +1,149 @@
+reviewer: nw-software-crafter-reviewer
+model: sonnet
+date: 2026-04-22
+target_wave: DELIVER (config-cross-references Phase 04 ConfigNavReducer)
+pass: 1 of 2 (focus: TDD discipline + Testing Theater)
+
+approval_status: approved
+
+testing_theater_check:
+  pattern_1_tautological: clean
+  pattern_2_mock_call_count_only: clean
+  pattern_3_implementation_leak: clean
+  pattern_4_test_passes_no_matter_what: clean
+  pattern_5_skip_as_coverage: clean
+  pattern_6_loop_of_one: clean
+  pattern_7_dependency_only: clean
+  pattern_8_hidden_seam_swap: clean
+
+deletion_test_per_step:
+  - step: 04-01
+    deletion_test: yes
+    rationale: >
+      Reverting handleRefSingleClick or removing reducer.ts causes the splitState
+      assertions to fail. Removing the live-tag guard would expose the null-
+      currentEntry path and not create a split.
+  - step: 04-02
+    deletion_test: yes
+    rationale: >
+      Test passes currentEntry=B (not A) with prior split topRef=A. Reverting the
+      splitState !== null branch to 04-01's open-from-empty path would replace
+      topRef with B, failing expect(next.splitState.topRef).toBe(stateBefore.splitState.topRef).
+  - step: 04-03
+    deletion_test: yes
+    rationale: >
+      All four field assertions (activeSubTab, selectedItemKey, splitState,
+      history.length) fail if handleRefCtrlClick is reverted. The action variant
+      did not exist before 04-03; removing it causes the switch to fall through
+      to the never default (TypeScript error).
+  - step: 04-04
+    deletion_test: yes
+    rationale: >
+      Validation-only; deletion target is 04-03 production code. Reverting
+      handleRefCtrlClick removes the case entirely. Same-tab assertions all fail.
+  - step: 04-05
+    deletion_test: yes
+    rationale: >
+      Validation-only; deletion target is 04-03 production code. Test constructs
+      open split via refSingleClick (pre-condition verified) then asserts
+      splitState === null after refCtrlClick. Reverting splitState: null would
+      leave split open.
+  - step: 04-06
+    deletion_test: yes
+    rationale: >
+      Pre-state carries stale filterResetCue='agents' and skills filter
+      {source:'user'}. Removing the resolveFilterOnNav call would leave the cue
+      stale. Filter preservation assertions discriminate against an over-resetting
+      implementation.
+  - step: 04-07
+    deletion_test: yes
+    rationale: >
+      Removing the mismatch branch leaves source='project' instead of null.
+      Removing cue emission leaves filterResetCue null instead of 'skills'. Test
+      also verifies unrelated commands filter is untouched — over-clearing
+      implementation that cleared all filters would fail.
+  - step: 04-08
+    deletion_test: yes
+    rationale: >
+      Reverting the live-tag guard in handleRefSingleClick causes dead ref to
+      proceed. Dead ResolvedRef has no `entry`, so ref.entry access throws or
+      open-from-empty creates a new splitState. Either way expect(next).toBe(stateBefore)
+      fails. Deletion through 04-01.
+  - step: 04-09
+    deletion_test: yes
+    rationale: >
+      Reverting the live-tag guard in handleRefCtrlClick causes dead ref to reach
+      refTypeToSubTab(ref.entry.type). Dead ResolvedRef has no entry — runtime
+      TypeError. Deletion through 04-03 guard.
+  - step: 04-10
+    deletion_test: yes
+    rationale: >
+      Replacing selectItem case with pushEntry would fail
+      expect(next.history).toBe(stateBefore.history). Omitting activeSubTab
+      update would fail expect(next.activeSubTab).toBe('skills').
+  - step: 04-11
+    deletion_test: yes
+    rationale: >
+      Two pre-conditions enforce non-triviality: activeSubTab !== 'skills' (real
+      change) and selectedItemKey !== null (real reset). Removing
+      selectedItemKey: null fails expect(next.selectedItemKey).toBeNull().
+      Adding pushEntry fails the history identity assertion.
+  - step: 04-12
+    deletion_test: yes
+    rationale: >
+      Arrangement opens split via refSingleClick (pre-condition verified).
+      Removing splitState: null fails expect(next.splitState).toBeNull().
+      Removing pushEntry fails the history-length-+1 assertion.
+
+driving_port_discipline: clean
+# All 12 active tests + both skipped tests enter exclusively through the
+# exported reduce() function. No test references handleRefSingleClick,
+# handleRefCtrlClick, resolveFilterOnNav, or refTypeToSubTab.
+
+des_integrity: clean
+# All 12 Phase 04 steps have PREPARE logged. No step missing any of the 5
+# phases. RED_UNIT consistently SKIPPED with the same justification across
+# all 12 steps. One LOW logging precision issue captured in issues below
+# (04-05 RED_ACCEPTANCE missing VALIDATION_ONLY qualifier).
+
+atomicity_per_commit: clean
+fp_paradigm: clean
+architectural_rules: clean
+
+issues:
+  - severity: low
+    finding: >
+      Step 04-05 RED_ACCEPTANCE DES entry records status "PASS" without the
+      VALIDATION_ONLY/PASS_IMMEDIATELY qualifier used consistently for other
+      validation-only steps (04-04, 04-08, 04-09). The commit description
+      documents the outcome correctly; the execution-log entry does not.
+    file_and_line: >
+      docs/feature/config-cross-references/deliver/execution-log.json
+      (04-05 RED_ACCEPTANCE entry)
+    recommendation: >
+      Update the 04-05 RED_ACCEPTANCE detail to read "VALIDATION_ONLY: outcome
+      (b) — test passes immediately; 04-03 already sets splitState to null
+      unconditionally in handleRefCtrlClick" for consistency. No production
+      or test code change required.
+
+  - severity: low
+    finding: >
+      ADR-009 invariant (splitState !== null implies selectedItemKey ===
+      topRef.itemKey) is correctly deferred to milestone-2 property tests, but
+      the 04-01 example test does not include an explicit assertion on this
+      relationship. The invariant holds today by construction; a future refactor
+      could break it without 04-01 catching.
+    file_and_line: >
+      tests/acceptance/config-cross-references/reducer.test.ts (04-01 test body)
+    recommendation: >
+      Add expect(next.selectedItemKey).toBe(next.splitState.topRef.itemKey)
+      to 04-01 OR document the invariant is property-test-covered. Either
+      option acceptable.
+
+summary: >
+  Phase 04 ConfigNavReducer passes all TDD discipline checks. All 12 steps have
+  PREPARE logged, all 8 testing-theater patterns clean, all 12 tests enter
+  through reduce() driving port, all 12 deletion tests expose production
+  defects. ADR-007 filter semantics precisely verified in 04-06/04-07. Two LOW
+  findings (DES logging precision for 04-05, implicit ADR-009 invariant in
+  04-01); neither blocks. Zero BLOCKER, zero HIGH. Approved.

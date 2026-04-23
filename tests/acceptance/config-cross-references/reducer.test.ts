@@ -86,6 +86,13 @@ describe("Single-click on a live reference opens a vertical split with the targe
     expect(next.history.entries.length).toBe(
       stateBefore.history.entries.length + 1,
     );
+    // ADR-009 invariant: when the split is open, selectedItemKey MUST equal
+    // the top pane's itemKey (the user's spatial anchor is the open top pane,
+    // and the list-pane selection must reflect that anchor). Locked in here
+    // explicitly so a future refactor that decouples selectedItemKey from
+    // the top anchor is caught at the example-test level rather than waiting
+    // for the milestone-2 property tests to surface it.
+    expect(next.selectedItemKey).toBe(next.splitState.topRef.itemKey);
   });
 });
 
@@ -460,6 +467,54 @@ describe("Single-click on a dead reference is a complete no-op", () => {
 });
 
 // @walking_skeleton @driving_port
+describe("Single-click on a live reference with a null current anchor is a complete no-op", () => {
+  it("refSingleClick with a live ref but currentEntry === null returns the same state reference", () => {
+    // Arrange: the user is on a list-pane that has no selection
+    // (selectedItemKey === null, splitState === null) and the Provider
+    // dispatches refSingleClick on a LIVE ref but with currentEntry: null --
+    // there is no anchor for the open-from-empty branch to use as the top
+    // pane. This exercises the missing-anchor guard in handleRefSingleClick
+    // where the existing 04-08 dead-ref test cannot reach (its no-op short-
+    // circuits on the dead tag, never reaching the currentEntry === null
+    // check). The mutation-coverage test below pins the same guard via the
+    // strong "ref returned the same reference" identity assertion; this
+    // walking-skeleton-level test makes the contract visible alongside the
+    // other no-op scenarios so a Provider author scanning for "what does
+    // refSingleClick do without a current anchor" finds the answer
+    // immediately.
+    //
+    // Per ADR-008 no history is pushed; per ADR-009 no split is opened. The
+    // guard `if (currentEntry === null) return state` is the only thing
+    // standing between this dispatch and a SplitState with topRef: null --
+    // a runtime-invalid state the type forbids.
+    const { registry } = makeWalkingSkeletonReducerArrangement();
+    const targetRef = liveRefTo(registry, "nw-bdd-requirements");
+    const stateBefore: ConfigNavState = {
+      ...initialNavState,
+      // No selection, no split, no current anchor.
+      selectedItemKey: null,
+      splitState: null,
+    };
+
+    // Act: dispatch refSingleClick on the live target with currentEntry: null.
+    // The action payload otherwise looks identical to a successful open.
+    const next = reduce(stateBefore, {
+      tag: "refSingleClick",
+      ref: targetRef,
+      currentEntry: null,
+    });
+
+    // Assert: the early-return guard returns state verbatim -- same object
+    // reference, no spread, no allocation. History is unchanged because no
+    // entry was pushed.
+    expect(next).toBe(stateBefore);
+    expect(next.splitState).toBeNull();
+    expect(next.history.entries.length).toBe(0);
+    expect(next.history).toBe(stateBefore.history);
+  });
+});
+
+// @walking_skeleton @driving_port
 describe("Ctrl+click on a dead reference is a complete no-op", () => {
   it("refCtrlClick with a dead ResolvedRef returns the same state reference", () => {
     // Arrange: a non-trivial pre-state with a populated selection, an open
@@ -619,6 +674,58 @@ describe("Manual sub-tab switch does not push a history entry", () => {
 });
 
 // @walking_skeleton @driving_port
+describe("Manual sub-tab switch clears any open split", () => {
+  it("switchSubTab returns splitState === null when a split was open before the switch", () => {
+    // Arrange: a split is already open (built through the driving port via
+    // refSingleClick so the arrangement is not hand-rolling internals). Per
+    // architecture sec 6.4 a manual sub-tab switch resets THREE fields:
+    // activeSubTab (to the new tab), selectedItemKey (to null), and
+    // splitState (to null). The selectedItemKey reset is already covered by
+    // the existing 04-11 test; this scenario discriminates the splitState
+    // reset, which a buggy reducer that only spread state and overrode
+    // activeSubTab/selectedItemKey would silently leak past -- leaving a
+    // stale-split UI bug where the bottom preview pane belongs to a
+    // reference from a different sub-tab.
+    const { registry, releaseEntry } = makeWalkingSkeletonReducerArrangement();
+    const skillRef = liveRefTo(registry, "nw-bdd-requirements");
+    const stateAfterSingleClick = reduce(
+      {
+        ...initialNavState,
+        selectedItemKey: releaseEntry.itemKey,
+      },
+      {
+        tag: "refSingleClick",
+        ref: skillRef,
+        currentEntry: releaseEntry,
+      },
+    );
+    // Pre-condition: the arrangement actually has an open split. If this
+    // fails the rest of the test no longer discriminates the split-clear
+    // branch from the existing selectedItemKey-reset branch.
+    expect(stateAfterSingleClick.splitState).not.toBeNull();
+    // Pre-condition: the target sub-tab differs from the current activeSubTab
+    // so the action drives a real mode-switch (not a no-op).
+    expect(stateAfterSingleClick.activeSubTab).not.toBe("hooks");
+
+    // Act: dispatch switchSubTab to a different sub-tab while the split is
+    // open. Per architecture sec 6.4 this MUST clear the split as part of
+    // the same returned state.
+    const next = reduce(stateAfterSingleClick, {
+      tag: "switchSubTab",
+      subTab: "hooks",
+    });
+
+    // Assert: splitState is cleared, activeSubTab updated, selectedItemKey
+    // reset to null (existing sec 6.4 contract), history is unchanged
+    // (ADR-008 manual-switch rule).
+    expect(next.splitState).toBeNull();
+    expect(next.activeSubTab).toBe("hooks");
+    expect(next.selectedItemKey).toBeNull();
+    expect(next.history).toBe(stateAfterSingleClick.history);
+  });
+});
+
+// @walking_skeleton @driving_port
 describe("Close button collapses the split back to a single pane", () => {
   it("closeSplit returns splitState === null and pushes one history entry", () => {
     // Arrange: a split is already open with /release on top and the user-scope
@@ -698,13 +805,14 @@ describe("Cross-reference history entries record the originating action and targ
     }
 
     // Step 1: refSingleClick on empty split (open-from-empty branch).
+    // Provenance key is `source` per ADR-008.
     const afterOpen = reduce(
       { ...initialNavState, selectedItemKey: releaseEntry.itemKey },
       { tag: "refSingleClick", ref: skillRef, currentEntry: releaseEntry },
     );
     const openEntry = afterOpen.history.entries[afterOpen.history.entries.length - 1];
     expect(openEntry).toBeDefined();
-    expect(openEntry?.action).toBe("refSingleClick");
+    expect(openEntry?.source).toBe("refSingleClick");
     expect(openEntry?.targetItemKey).toBe(skillRef.entry.itemKey);
 
     // Step 2: refSingleClick on a non-null split (bottom-replace branch).
@@ -716,7 +824,7 @@ describe("Cross-reference history entries record the originating action and targ
     const replaceEntry =
       afterReplace.history.entries[afterReplace.history.entries.length - 1];
     expect(replaceEntry).toBeDefined();
-    expect(replaceEntry?.action).toBe("refSingleClick");
+    expect(replaceEntry?.source).toBe("refSingleClick");
     expect(replaceEntry?.targetItemKey).toBe(otherSkillRef.entry.itemKey);
 
     // Step 3: refCtrlClick (cross-tab branch -- pre-state has an open split so
@@ -728,12 +836,12 @@ describe("Cross-reference history entries record the originating action and targ
     });
     const ctrlEntry = afterCtrl.history.entries[afterCtrl.history.entries.length - 1];
     expect(ctrlEntry).toBeDefined();
-    expect(ctrlEntry?.action).toBe("refCtrlClick");
+    expect(ctrlEntry?.source).toBe("refCtrlClick");
     expect(ctrlEntry?.targetItemKey).toBe(hookRef.entry.itemKey);
 
-    // Step 4: closeSplit -- pushes an entry whose action discriminator is the
+    // Step 4: closeSplit -- pushes an entry whose source discriminator is the
     // literal "closeSplit". closeSplit entries do NOT carry a targetItemKey
-    // (the action has no target), so we pin only the action discriminator.
+    // (the action has no target), so we pin only the source discriminator.
     // First reopen a split so closeSplit is non-degenerate.
     const reopened = reduce(
       { ...initialNavState, selectedItemKey: releaseEntry.itemKey },
@@ -742,7 +850,7 @@ describe("Cross-reference history entries record the originating action and targ
     const afterClose = reduce(reopened, { tag: "closeSplit" });
     const closeEntry = afterClose.history.entries[afterClose.history.entries.length - 1];
     expect(closeEntry).toBeDefined();
-    expect(closeEntry?.action).toBe("closeSplit");
+    expect(closeEntry?.source).toBe("closeSplit");
   });
 });
 

@@ -1,0 +1,111 @@
+reviewer: nw-software-crafter-reviewer
+model: sonnet
+date: 2026-04-22
+target: roadmap.json Phase 04 (ConfigNavReducer)
+
+approval_status: approved
+
+per_step_check:
+  - step_id: "04-01"
+    one_scenario: true
+    behavioural_criteria: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    sized_one_tdd_cycle: true
+  - step_id: "04-02"
+    one_scenario: true
+    behavioural_criteria: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    sized_one_tdd_cycle: true
+  - step_id: "04-03"
+    one_scenario: true
+    behavioural_criteria: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    sized_one_tdd_cycle: true
+  - step_id: "04-04"
+    one_scenario: true
+    behavioural_criteria: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    sized_one_tdd_cycle: true
+  - step_id: "04-05"
+    one_scenario: true
+    behavioural_criteria: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    sized_one_tdd_cycle: true
+  - step_id: "04-06"
+    one_scenario: true
+    behavioural_criteria: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    sized_one_tdd_cycle: true
+  - step_id: "04-07"
+    one_scenario: true
+    behavioural_criteria: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    sized_one_tdd_cycle: true
+  - step_id: "04-08"
+    one_scenario: true
+    behavioural_criteria: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    sized_one_tdd_cycle: true
+  - step_id: "04-09"
+    one_scenario: true
+    behavioural_criteria: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    sized_one_tdd_cycle: true
+  - step_id: "04-10"
+    one_scenario: true
+    behavioural_criteria: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    sized_one_tdd_cycle: true
+  - step_id: "04-11"
+    one_scenario: true
+    behavioural_criteria: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    sized_one_tdd_cycle: true
+  - step_id: "04-12"
+    one_scenario: true
+    behavioural_criteria: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    sized_one_tdd_cycle: true
+
+state_shape_completeness: yes
+action_union_completeness: yes
+filter_handling_correct: yes
+history_integration_correct: yes
+milestone_1_disambiguation_correctly_excluded: yes
+validation_only_claims_plausible: yes
+
+issues: []
+
+summary: >
+  Phase 04 is well-structured. All 12 walking-skeleton steps map 1:1 to
+  distinct it.skip scenarios in reducer.test.ts; the 2 milestone-2 property
+  tests are correctly excluded. The dependency chain is a strict linear
+  04-01→04-12 with correct root dependency on 03-07. Every criterion is
+  expressed as an observable state-field assertion through the reduce()
+  driving port. Validation-only claims for 04-04 and 04-05 are accurate given
+  04-03's unconditional field assignments. Filter handling, history push/no-
+  push rules, and disambiguation exclusion all align with their ADRs.

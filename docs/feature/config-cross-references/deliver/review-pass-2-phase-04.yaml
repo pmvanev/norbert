@@ -1,0 +1,138 @@
+reviewer: nw-software-crafter-reviewer
+model: sonnet
+date: 2026-04-22
+target_wave: DELIVER (config-cross-references Phase 04 ConfigNavReducer)
+pass: 2 of 2 (focus: API design + maintainability + forward-compat)
+
+approval_status: rejected_pending_revisions
+
+api_ergonomics: >
+  reduce(state, action) is exactly what the Provider needs. Five walking-skeleton
+  action tags are clean discriminated-union members. Extension story documented
+  in JSDoc. One gap: refSingleClick carries currentEntry: RegistryEntry | null
+  but ADR-002's canonical action table shows no currentEntry payload — the
+  architecture expects the reducer to read the anchor from state. Deviation not
+  back-propagated. endOfHistory and filterResetCue have no acknowledge actions
+  yet (deferred). No ergonomic blockers for the Provider's current needs.
+
+type_design: >
+  ConfigNavAction uses consistent tag discriminants. SplitState fixed-shape per
+  ADR-009. FilterByTab appropriately narrow. Two type-design concerns: (1)
+  ConfigNavState.popover typed as literal null instead of DisambiguationState |
+  null per ADR-002 — see MEDIUM issue 2. (2) makeRefClickEntry uses key `action`
+  for provenance but ADR-008 specifies `source` — see MEDIUM issue 3.
+
+naming_discoverability: >
+  handleRefSingleClick, handleRefCtrlClick, resolveFilterOnNav,
+  refTypeToSubTab/REF_TYPE_TO_SUB_TAB are all precise and self-documenting.
+  No unexplained acronyms. No issues.
+
+comment_quality_post_refactor: >
+  Module-level JSDoc accurately describes scope and constraints. Each handler
+  has JSDoc explaining sub-cases and ADR references. resolveFilterOnNav
+  enumerates all three rules. switchSubTab inline comment references §6.4 for
+  selectedItemKey reset but does NOT mention splitState — because the
+  implementation omits it (see HIGH issue 1).
+
+edge_case_coverage: >
+  Null-currentEntry guard on refSingleClick exists but is not directly tested
+  with a live ref — see LOW issue 4. closeSplit when splitState already null
+  is acknowledged in comment as still-pushes; not tested but framed as
+  Provider-level UI bug. switchSubTab does not clear splitState (HIGH issue 1)
+  and no test arranges open split before switchSubTab.
+
+maintainability_under_change: >
+  Adding historyBack/historyForward straightforward. Adding openDisambiguation
+  requires popover type widening (MEDIUM 2). REF_TYPE_TO_SUB_TAB total
+  Record<RefType,ConfigSubTab> means new RefType is compile-time error —
+  good. resolveFilterOnNav designed for single-edit extension. The
+  makeRefClickEntry provenance key mismatch (MEDIUM 3) is latent debt for
+  step 04-09.
+
+popover_placeholder_assessment: >
+  popover: null typed as literal null rather than DisambiguationState | null.
+  When openDisambiguation lands the implementer must change ConfigNavState
+  type — disruptive cascade to every construction site including
+  initialNavState. Typing as DisambiguationState | null from day one (with
+  forward-declaration) makes step 04-11 purely additive. Medium-severity
+  finding — see MEDIUM issue 2.
+
+refactor_quality: >
+  refactor-04 commit not yet detected in working tree (parallel agent may
+  still be running). Current implementation is post-GREEN, pre-refactor.
+  Code is already clean (pure handlers, well-named helpers, no duplication).
+  ADR-007 implementation note recommends extracting resolveFilterOnNav to
+  domain/nav/filter.ts — not yet done; refactor-04 task.
+
+issues:
+  - severity: HIGH
+    finding: >
+      switchSubTab does not clear splitState. Architecture §6.4 explicitly
+      specifies the effect as `activeSubTab, selectedItemKey=null,
+      splitState=null`. Reducer implementation spreads ...state and overrides
+      only activeSubTab and selectedItemKey, leaving splitState intact. A user
+      who manually tab-switches while a preview split is open will see the
+      split persist with a top-pane reference now belonging to a different
+      sub-tab — a stale-split UI bug. No test catches because switchSubTab
+      test does not arrange an open split.
+    file_and_line: "src/plugins/norbert-config/domain/nav/reducer.ts (switchSubTab case)"
+    recommendation: >
+      Add splitState: null to the switchSubTab return object. Add a test that
+      arranges open split and asserts next.splitState === null after
+      switchSubTab.
+
+  - severity: MEDIUM
+    finding: >
+      ConfigNavState.popover typed as literal null rather than
+      DisambiguationState | null per ADR-002. When openDisambiguation lands
+      (step 04-11 / future phase), implementer must widen the interface —
+      cascades to every ConfigNavState construction site including
+      initialNavState. Avoidable rework.
+    file_and_line: "src/plugins/norbert-config/domain/nav/reducer.ts (ConfigNavState.popover field)"
+    recommendation: >
+      Define DisambiguationState (or import) and change field type to
+      `readonly popover: DisambiguationState | null`. Add comment referencing
+      ADR-002 and step 04-11. Initial value null at all construction sites
+      unchanged; only interface widens.
+
+  - severity: MEDIUM
+    finding: >
+      makeRefClickEntry uses key `action` for provenance ({ action:
+      "refSingleClick", targetItemKey }) but ADR-008 specifies `source`
+      ({ source: 'refSingleClick' | ... }). closeSplit entry uses { action:
+      "closeSplit" }. NavEntry is opaque so no runtime error today, but the
+      NavAnnouncer step (later phase) will expect `source` and find `action`
+      — silent mismatch requiring migration at the wrong time.
+    file_and_line: "src/plugins/norbert-config/domain/nav/reducer.ts (makeRefClickEntry, closeSplit entry)"
+    recommendation: >
+      Rename provenance key from `action` to `source` in both sites, aligning
+      with ADR-008's contract. Single-file change, no downstream breakage.
+
+  - severity: LOW
+    finding: >
+      refSingleClick no-op path for live ref with currentEntry === null is
+      not directly tested. A Provider bug dispatching live refSingleClick
+      without a current anchor silently returns state unchanged; without a
+      test the invariant is invisible.
+    file_and_line: "tests/acceptance/config-cross-references/reducer.test.ts (missing test)"
+    recommendation: >
+      Add test: arrange initialNavState with selectedItemKey null, dispatch
+      refSingleClick with ref.tag === 'live' and currentEntry: null, assert
+      next === stateBefore and history unchanged.
+
+  - severity: LOW
+    finding: >
+      resolveFilterOnNav not extracted to domain/nav/filter.ts as ADR-007
+      implementation note recommends. Currently inline in reducer.ts.
+    file_and_line: "src/plugins/norbert-config/domain/nav/reducer.ts (resolveFilterOnNav)"
+    recommendation: >
+      Extract to domain/nav/filter.ts as separate pure module. Refactor-04
+      task if that pass hasn't run yet.
+
+summary: >
+  Walking-skeleton ConfigNavReducer is well-structured with clean FP discipline
+  and strong comments. One HIGH issue blocks approval: switchSubTab does not
+  clear splitState as architecture §6.4 requires, leaving a stale-split UI bug.
+  Two MEDIUM issues require attention before the Provider integration wave
+  (popover type widening; NavEntry provenance key alignment). Two LOW polish
+  items. Resolve HIGH and two MEDIUMs, then resubmit.

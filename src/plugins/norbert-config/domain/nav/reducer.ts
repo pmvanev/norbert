@@ -42,6 +42,23 @@ import { pushEntry, type NavEntry, type NavHistory } from "./history";
 // ---------------------------------------------------------------------------
 
 /**
+ * Disambiguation popover state. Forward-declaration stub for milestone-1; the
+ * concrete shape lands when the `openDisambiguation` action is implemented in
+ * a future phase. ADR-002 specifies the canonical shape as
+ * `{ trigger, candidates, highlightedIndex, triggerInteraction }`. Defining
+ * the type now (with `null` initialised at every construction site) lets a
+ * future `openDisambiguation` action become a purely additive change instead
+ * of an interface widening that cascades to every ConfigNavState construction
+ * site (initialNavState, every reducer return). All current call sites that
+ * write `popover: null` remain valid against this widened type.
+ */
+export type DisambiguationState = Readonly<{
+  readonly trigger: "refSingleClick" | "refCtrlClick";
+  readonly candidates: readonly RegistryEntry[];
+  readonly highlightedIndex: number;
+}>;
+
+/**
  * Two-pane vertical split. Per ADR-009 the split is a fixed-shape record so
  * a third pane is a compile-time impossibility -- the type system, not a
  * runtime invariant, enforces the 2-pane contract. `dividerRatio` is in
@@ -83,7 +100,7 @@ export interface ConfigNavState {
   readonly filter: { readonly bySubTab: Readonly<Record<string, FilterByTab>> };
   readonly filterResetCue: ConfigSubTab | null;
   readonly endOfHistory: "back" | "forward" | null;
-  readonly popover: null;
+  readonly popover: DisambiguationState | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -127,16 +144,19 @@ export type ConfigNavAction =
 // ---------------------------------------------------------------------------
 
 /**
- * Build a NavEntry capturing the just-completed cross-reference action.
- * The opaque `action`/`targetItemKey` shape is sufficient for milestone-0
- * history depth tests; the concrete `HistoryEntry` shape from ADR-006
- * lands when needed for the live-cue announcer (Step 04-09 / US-104).
+ * Build a NavEntry capturing the just-completed cross-reference action. The
+ * `source` provenance key aligns with ADR-008's contract (every history entry
+ * carries `{ source: 'refSingleClick' | 'refCtrlClick' | 'bottomReplace' |
+ * 'closeSplit' | 'disambiguation' }`). The opaque `source`/`targetItemKey`
+ * shape is sufficient for milestone-0 history depth tests; the concrete
+ * `HistoryEntry` shape from ADR-006 lands when needed for the live-cue
+ * announcer (Step 04-09 / US-104).
  */
 function makeRefClickEntry(
-  action: "refSingleClick" | "refCtrlClick",
+  source: "refSingleClick" | "refCtrlClick",
   targetItemKey: string,
 ): NavEntry {
-  return { action, targetItemKey };
+  return { source, targetItemKey };
 }
 
 /**
@@ -342,18 +362,22 @@ export function reduce(
       // Manual mode-switch updates the active sub-tab but MUST NOT push
       // history (ADR-008). Per Architecture sec 6.4 it also resets
       // `selectedItemKey` to null so the list-pane scroll lands at the top
-      // of the new sub-tab (no stale selection bleeding across modes).
+      // of the new sub-tab AND clears `splitState` so a preview opened in
+      // the previous sub-tab does not survive the mode switch (a stale-
+      // split UI bug where the bottom pane would belong to a reference
+      // from a different sub-tab).
       return {
         ...state,
         activeSubTab: action.subTab,
         selectedItemKey: null,
+        splitState: null,
       };
     case "closeSplit": {
       // Collapse the 2-pane split (ADR-009) and push one history entry
       // (ADR-008 -- closeSplit is a cross-pane navigation action). All
       // observable fields other than `splitState` and `history` are
-      // preserved.
-      const entry: NavEntry = { action: "closeSplit" };
+      // preserved. Provenance key `source` aligns with ADR-008's contract.
+      const entry: NavEntry = { source: "closeSplit" };
       return {
         ...state,
         splitState: null,
