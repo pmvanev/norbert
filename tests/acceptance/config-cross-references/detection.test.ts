@@ -115,12 +115,30 @@ describe("Content inside fenced code blocks is never linkified", () => {
 
 // @walking_skeleton @driving_port
 describe("Bare prose is not detected as a reference in v1", () => {
-  it.skip("detection over plain prose containing the bare word 'release' produces no token annotations even when 'release' is a known command", () => {
-    // Given: tree parsed from "Use release to ship."
-    // And:   registry contains a project-scope command 'release'
-    // When:  annotated = detectionRemarkPlugin(registry, ctx)(tree)
-    // Then:  no text node in the result has data.hName === 'reference-token'
-    //        (Bare-prose detection is OFF by default per ADR-010.)
+  it("detection over plain prose containing the bare word 'release' produces no token annotations even when 'release' is a known command", () => {
+    // Arrange: registry contains a project-scope `release` command
+    // (walkingSkeletonConfig). Source markdown is bare prose -- no inline code,
+    // no markdown link -- so no v1 strategy should annotate it (ADR-010).
+    const registry = buildRegistry(walkingSkeletonConfig, 0);
+    const ctx: DetectionContext = { currentItemDir: null };
+    const tree = parseMarkdown("Use release to ship.");
+
+    // Act
+    detectionRemarkPlugin(registry, ctx)(tree);
+
+    // Assert: walk EVERY node in the tree -- not just text -- and confirm no
+    // node anywhere carries a reference-token annotation. ADR-010 fixes
+    // bare-prose detection OFF by default in v1; the DETECTION_PIPELINE
+    // contains only inlineCodeStrategy (and, in 05-04, markdownLinkStrategy),
+    // neither of which scans plain text nodes.
+    const annotatedNodes: Array<{ type: string; hName: unknown }> = [];
+    visit(tree, (node) => {
+      const data = (node as { data?: { hName?: unknown } }).data;
+      if (data?.hName !== undefined) {
+        annotatedNodes.push({ type: node.type, hName: data.hName });
+      }
+    });
+    expect(annotatedNodes).toHaveLength(0);
   });
 });
 

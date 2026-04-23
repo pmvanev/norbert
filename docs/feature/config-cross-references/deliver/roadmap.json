@@ -2,9 +2,9 @@
   "roadmap": {
     "project_id": "config-cross-references",
     "created_at": "2026-04-21",
-    "total_steps": 28,
-    "phases": 4,
-    "scope": "walking-skeleton-plus-resolver-plus-history-plus-reducer",
+    "total_steps": 35,
+    "phases": 5,
+    "scope": "walking-skeleton-plus-resolver-plus-history-plus-reducer-plus-detection",
     "paradigm": "functional",
     "crafter": "nw-functional-software-crafter",
     "created_by": "nw-solution-architect"
@@ -583,6 +583,150 @@
           "implementation_notes": "Add closeSplit action variant. Sets splitState to null and pushes one history entry capturing the post-close state."
         }
       ]
+    },
+    {
+      "id": "05",
+      "name": "Detection pipeline remark plugin",
+      "description": "Pure remark-style plugin that walks MDAST and annotates nodes with data.hName='reference-token' so react-markdown can render custom components per ADR-001. Detects 4 reference variants (live, ambiguous, dead, unsupported) across 2 source kinds (markdown links, inline code).",
+      "default_agent": "nw-software-crafter",
+      "default_deps_strategy": "sequential",
+      "steps": [
+        {
+          "id": "05-01",
+          "name": "Stub detection plugin with inline-code live token",
+          "criteria": [
+            "Importing detectionRemarkPlugin and DetectionContext from the detection module no longer fails",
+            "Detection over inline code matching a known agent name produces a node with data.hName === reference-token",
+            "data.hProperties data-ref-variant === live for the matched node",
+            "data.hProperties data-ref-target-key points at the matched item",
+            "Other inline code nodes (e.g. shell commands like ls -la) are NOT annotated"
+          ],
+          "agent": "nw-software-crafter",
+          "deps": ["04-12"],
+          "scenario": "Inline code matching a known agent renders as a live cross-reference token",
+          "test_file": "tests/acceptance/config-cross-references/detection.test.ts",
+          "scenario_name": "detection over inline code 'nw-solution-architect' produces a token annotation when the agent exists in the registry",
+          "files_to_modify": [
+            "src/plugins/norbert-config/domain/references/detection/types.ts",
+            "src/plugins/norbert-config/domain/references/detection/inlineCodeStrategy.ts",
+            "src/plugins/norbert-config/domain/references/detection/pipeline.ts",
+            "src/plugins/norbert-config/domain/references/detection/remarkPlugin.ts",
+            "tests/acceptance/config-cross-references/_helpers/markdownFixtures.ts",
+            "tests/acceptance/config-cross-references/_helpers/fixtures.ts",
+            "package.json",
+            ".dependency-cruiser.cjs"
+          ],
+          "implementation_notes": "Create the detection module per architecture sec 6.2 layout. types.ts exports DetectionContext (currentItemDir field for relative-path resolution later), Reference, and the strategy interface. inlineCodeStrategy.ts implements detectInlineCodeName which calls lookupByName on inlineCode node value. pipeline.ts exports DETECTION_PIPELINE as a const array and composePipeline. remarkPlugin.ts exports detectionRemarkPlugin(registry, ctx) returning a unified plugin function (tree) => tree' that uses unist-util-visit to walk MDAST nodes. For matched references annotate via data.hName='reference-token' and data.hProperties { 'data-ref-variant': variant, 'data-ref-target-key': key, 'data-ref-raw-text': raw }. Use resolve(ref, registry) to classify into live/ambiguous/dead/unsupported. Add unist-util-visit as a direct dependency in package.json (currently transitive via remark-gfm). The lockfile updates as a consequence. Add the architecture sec 4 rule 4 to .dependency-cruiser.cjs: { name: 'detection-strategies-isolated', severity: 'error', from: { path: '^src/plugins/norbert-config/domain/references/detection/' }, to: { pathNot: '^(src/plugins/norbert-config/domain/references/detection/types|node_modules/unist-util-visit|src/plugins/norbert-config/domain/references/registry)' } } — verify rule fires by trying to import a non-allowed module from a strategy file before committing. Add parseMarkdown helper to markdownFixtures.ts using remark + remark-gfm (or react-markdown's parser by proxy). Pure FP throughout: no React, no Tauri, no IO."
+        },
+        {
+          "id": "05-02",
+          "name": "Fenced code blocks are not annotated",
+          "criteria": [
+            "Detection over a fenced code block containing a known item name produces no token annotations on any node within the fenced subtree",
+            "The fenced code block's parent and sibling nodes are unaffected",
+            "Previously live scenarios continue to pass"
+          ],
+          "agent": "nw-software-crafter",
+          "deps": ["05-01"],
+          "scenario": "Content inside fenced code blocks is never linkified",
+          "test_file": "tests/acceptance/config-cross-references/detection.test.ts",
+          "scenario_name": "detection over a fenced block containing 'nw-bdd-requirements' produces no token annotations",
+          "files_to_modify": [
+            "src/plugins/norbert-config/domain/references/detection/inlineCodeStrategy.ts"
+          ],
+          "implementation_notes": "Likely outcome b validation only since unist-util-visit walks inlineCode nodes only by default not code (fenced) nodes. If the visitor accidentally matches code blocks add an explicit type guard rejecting node.type === code. Document outcome in commit body."
+        },
+        {
+          "id": "05-03",
+          "name": "Bare prose is not annotated by default per ADR-010",
+          "criteria": [
+            "Detection over plain text containing the bare word matching a registry item name produces no token annotations",
+            "ADR-010 default OFF state confirmed",
+            "Previously live scenarios continue to pass"
+          ],
+          "agent": "nw-software-crafter",
+          "deps": ["05-02"],
+          "scenario": "Bare prose is not detected as a reference in v1",
+          "test_file": "tests/acceptance/config-cross-references/detection.test.ts",
+          "scenario_name": "detection over plain prose containing the bare word 'release' produces no token annotations even when 'release' is a known command",
+          "files_to_modify": [],
+          "implementation_notes": "Likely outcome b validation only since the pipeline contains only inlineCode and markdown-link strategies; no bare-prose strategy exists yet (ADR-010 deferred to R3 / US-111). Confirm DETECTION_PIPELINE has no bareProseStrategy entry. Document in commit body."
+        },
+        {
+          "id": "05-04",
+          "name": "Markdown link to a known skill renders live token",
+          "criteria": [
+            "Detection over a markdown link whose href resolves to a registered item produces a node with data.hName === reference-token",
+            "data.hProperties data-ref-variant === live for the matched link",
+            "data.hProperties data-ref-target-key matches the resolver hit",
+            "Inline code scenarios continue to pass"
+          ],
+          "agent": "nw-software-crafter",
+          "deps": ["05-03"],
+          "scenario": "Markdown link to a known skill renders as a live cross-reference token",
+          "test_file": "tests/acceptance/config-cross-references/detection.test.ts",
+          "scenario_name": "detection over [nw-bdd-requirements](~/.claude/skills/nw-bdd-requirements/SKILL.md) produces a live token annotation",
+          "files_to_modify": [
+            "src/plugins/norbert-config/domain/references/detection/markdownLinkStrategy.ts",
+            "src/plugins/norbert-config/domain/references/detection/pipeline.ts"
+          ],
+          "implementation_notes": "Create markdownLinkStrategy.ts implementing detectMarkdownLink which walks link MDAST nodes and calls lookupByPath on node.url. Prepend detectMarkdownLink so the final DETECTION_PIPELINE order matches ADR-010 sec Strategy contract: [detectMarkdownLink, detectInlineCodeName]. Same data.hName/hProperties annotation pattern as inline-code strategy. Use the resolver to classify outcomes."
+        },
+        {
+          "id": "05-05",
+          "name": "Reference to a missing item renders dead token",
+          "criteria": [
+            "Detection over a markdown link whose href has no registry entry produces a node with data.hName === reference-token",
+            "data.hProperties data-ref-variant === dead",
+            "Previously live scenarios continue to pass"
+          ],
+          "agent": "nw-software-crafter",
+          "deps": ["05-04"],
+          "scenario": "Reference to a missing item renders as a dead token",
+          "test_file": "tests/acceptance/config-cross-references/detection.test.ts",
+          "scenario_name": "detection over a markdown link to a non-existent skill produces a dead token annotation",
+          "files_to_modify": [],
+          "implementation_notes": "Likely outcome b validation only. The resolver returns dead for unknown paths (per resolver step 02-03). The detection strategy already maps the resolver tag to data-ref-variant. No production change expected."
+        },
+        {
+          "id": "05-06",
+          "name": "Multi-scope match renders ambiguous token",
+          "criteria": [
+            "Detection over inline code matching a name with 2 or more registry candidates produces a node with data.hName === reference-token",
+            "data.hProperties data-ref-variant === ambiguous",
+            "data.hProperties data-ref-candidate-count equals the number of candidates",
+            "Previously live scenarios continue to pass"
+          ],
+          "agent": "nw-software-crafter",
+          "deps": ["05-05"],
+          "scenario": "Reference resolving to multiple items renders as an ambiguous token",
+          "test_file": "tests/acceptance/config-cross-references/detection.test.ts",
+          "scenario_name": "detection over inline code 'release' produces an ambiguous token when 'release' exists in 2+ scopes",
+          "files_to_modify": [
+            "src/plugins/norbert-config/domain/references/detection/inlineCodeStrategy.ts"
+          ],
+          "implementation_notes": "The resolver returns ambiguous when lookupByName returns 2+ entries (resolver step 02-02). The detection strategy needs to also emit data-ref-candidate-count when the variant is ambiguous. May be a small extension to the inlineCode strategy depending on how 05-01 mapped resolver tags to hProperties. NOTE: data-ref-candidate-count is an additive hProperty beyond architecture sec 6.2 contract (which lists only data-ref-variant, data-ref-target-key, data-ref-raw-text) — record for finalize back-propagation to architecture."
+        },
+        {
+          "id": "05-07",
+          "name": "Unsupported item type renders unsupported token",
+          "criteria": [
+            "Detection over a markdown link whose path resolves to an unsupported item type produces a node with data.hName === reference-token",
+            "data.hProperties data-ref-variant === unsupported",
+            "data.hProperties data-ref-target-path equals the original path",
+            "Previously live scenarios continue to pass"
+          ],
+          "agent": "nw-software-crafter",
+          "deps": ["05-06"],
+          "scenario": "Reference to an unsupported item type renders as an unsupported token",
+          "test_file": "tests/acceptance/config-cross-references/detection.test.ts",
+          "scenario_name": "detection over a markdown link whose path resolves to an item type the plugin does not expose produces an unsupported token annotation",
+          "files_to_modify": [
+            "src/plugins/norbert-config/domain/references/detection/markdownLinkStrategy.ts"
+          ],
+          "implementation_notes": "The resolver returns unsupported for paths under .claude with unknown categories (resolver step 02-04). The link strategy needs to emit data-ref-target-path on the unsupported variant in addition to mapping the variant tag. Likely small extension to the markdownLink strategy. NOTE: data-ref-target-path is an additive hProperty beyond architecture sec 6.2 contract — record for finalize back-propagation to architecture."
+        }
+      ]
     }
   ],
   "validation": {
@@ -593,7 +737,9 @@
     "phase_02_review_file": "docs/feature/config-cross-references/deliver/roadmap-review-phase-02.yaml",
     "phase_03_reviewer": "approved",
     "phase_03_review_file": "docs/feature/config-cross-references/deliver/roadmap-review-phase-03.yaml",
-    "phase_04_reviewer": "pending",
-    "phase_04_review_file": "docs/feature/config-cross-references/deliver/roadmap-review-phase-04.yaml"
+    "phase_04_reviewer": "approved",
+    "phase_04_review_file": "docs/feature/config-cross-references/deliver/roadmap-review-phase-04.yaml",
+    "phase_05_reviewer": "pending",
+    "phase_05_review_file": "docs/feature/config-cross-references/deliver/roadmap-review-phase-05.yaml"
   }
 }
