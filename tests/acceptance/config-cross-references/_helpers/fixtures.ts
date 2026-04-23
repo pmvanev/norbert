@@ -319,6 +319,15 @@ export const ambiguousReleaseConfig: AggregatedConfig = makeAggregatedConfig({
   ],
 });
 
+/**
+ * Detection-pipeline fixture: registry must contain a `nw-solution-architect`
+ * agent so the live-token scenario in detection.test.ts has a registry hit.
+ * Project scope mirrors walking-skeleton.feature:33.
+ */
+export const agentDetectionConfig: AggregatedConfig = makeAggregatedConfig({
+  agents: [makeAgent("nw-solution-architect", "project")],
+});
+
 // ---------------------------------------------------------------------------
 // ConfigNavReducer fixtures (Phase 04)
 // ---------------------------------------------------------------------------

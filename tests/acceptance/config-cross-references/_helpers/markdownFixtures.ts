@@ -9,7 +9,17 @@
  *   - fencedCodeBlockWithKnownName: fenced block containing a known item name (must NOT be detected)
  *   - markdownLinkToMissing: explicit md link to a non-existent skill (dead)
  *   - inlineCodeAmbiguous: inline code matching multiple items (ambiguous)
+ *
+ * Also exposes `parseMarkdown(source)` -- a thin unified+remark-parse+remark-gfm
+ * pipeline used by detection acceptance scenarios. Mirrors the parser
+ * react-markdown uses internally so the MDAST shape the detection plugin sees
+ * during tests matches what it sees at render time.
  */
+
+import { unified } from "unified";
+import remarkParse from "remark-parse";
+import remarkGfm from "remark-gfm";
+import type { Root as MdastRoot } from "mdast";
 
 export const markdownLinkToSkill = `
 # /release
@@ -45,3 +55,12 @@ Load the [nw-retired-skill](~/.claude/skills/nw-retired-skill/SKILL.md) skill.
 export const inlineCodeAmbiguous = `
 Run the \`release\` command to ship.
 `.trim();
+
+/**
+ * Parse a markdown source string into an MDAST tree using the same
+ * remark-parse + remark-gfm front-end react-markdown uses. Pure: returns a
+ * fresh tree on every call, no shared mutable state.
+ */
+export function parseMarkdown(source: string): MdastRoot {
+  return unified().use(remarkParse).use(remarkGfm).parse(source) as MdastRoot;
+}

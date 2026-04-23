@@ -54,6 +54,28 @@ module.exports = {
       from: { path: '^src/plugins/norbert-config/domain' },
       to: { path: '^src/plugins/norbert-config/views/' },
     },
+    {
+      name: 'detection-strategies-isolated',
+      severity: 'error',
+      comment:
+        'Detection strategies may import only from the detection module ' +
+        'itself (types, sibling strategies via the pipeline composer, the ' +
+        'remark plugin glue), unist-util-visit, and the registry+resolver ' +
+        'types. Architecture §4 rule 4. The architecture spec wording lists ' +
+        'types + visit + registry; resolver is added because strategies use ' +
+        'resolve() to classify outcomes (architecture §6.2).',
+      from: { path: '^src/plugins/norbert-config/domain/references/detection/' },
+      to: {
+        pathNot: [
+          '^src/plugins/norbert-config/domain/references/detection/',
+          '^src/plugins/norbert-config/domain/references/registry',
+          '^src/plugins/norbert-config/domain/references/resolver',
+          '^node_modules/unist-util-visit',
+          '^node_modules/unist',
+          '^node_modules/@types/unist',
+        ],
+      },
+    },
   ],
   options: {
     doNotFollow: {

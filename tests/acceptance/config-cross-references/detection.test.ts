@@ -17,18 +17,69 @@
  *   user-stories.md US-101 acceptance criteria, ADR-001, ADR-010
  */
 
-import { describe, it } from "vitest";
+import { describe, it, expect } from "vitest";
+import { visit } from "unist-util-visit";
+import type { InlineCode } from "mdast";
+import { agentDetectionConfig } from "./_helpers/fixtures";
+import { parseMarkdown } from "./_helpers/markdownFixtures";
+import { buildRegistry } from "../../../src/plugins/norbert-config/domain/references/registry";
+import {
+  detectionRemarkPlugin,
+  type DetectionContext,
+} from "../../../src/plugins/norbert-config/domain/references/detection/remarkPlugin";
 
 // @walking_skeleton @driving_port
 describe("Inline code matching a known agent renders as a live cross-reference token", () => {
-  it.skip("detection over inline code 'nw-solution-architect' produces a token annotation when the agent exists in the registry", () => {
-    // Driving port:
-    //   const tree = parseMarkdown("Invoke `nw-solution-architect` here. Run `ls -la`.");
-    //   const annotated = detectionRemarkPlugin(registry, ctx)(tree);
-    // Then: the inlineCode node for 'nw-solution-architect' has data.hName === 'reference-token'
-    //       AND data.hProperties['data-ref-variant'] === 'live'
-    //       AND data.hProperties['data-ref-target-key'] points at the agent
-    //       The inlineCode node for 'ls -la' has no such annotation.
+  it("detection over inline code 'nw-solution-architect' produces a token annotation when the agent exists in the registry", () => {
+    // Arrange
+    const registry = buildRegistry(agentDetectionConfig, 0);
+    const ctx: DetectionContext = { currentItemDir: null };
+    const tree = parseMarkdown(
+      "Invoke `nw-solution-architect` here. Run `ls -la`.",
+    );
+
+    // Act
+    detectionRemarkPlugin(registry, ctx)(tree);
+
+    // Assert: collect every inlineCode node in the annotated tree.
+    const inlineCodeNodes: InlineCode[] = [];
+    visit(tree, "inlineCode", (node) => {
+      inlineCodeNodes.push(node);
+    });
+    expect(inlineCodeNodes).toHaveLength(2);
+
+    const matched = inlineCodeNodes.find(
+      (node) => node.value === "nw-solution-architect",
+    );
+    const unmatched = inlineCodeNodes.find((node) => node.value === "ls -la");
+    if (matched === undefined || unmatched === undefined) {
+      throw new Error(
+        "Expected the parsed tree to contain both inlineCode fixtures",
+      );
+    }
+
+    // Matched node: live token annotation per architecture sec 6.2.
+    const matchedData = matched.data as
+      | {
+          hName?: string;
+          hProperties?: Record<string, unknown>;
+        }
+      | undefined;
+    expect(matchedData?.hName).toBe("reference-token");
+    expect(matchedData?.hProperties?.["data-ref-variant"]).toBe("live");
+    expect(matchedData?.hProperties?.["data-ref-target-key"]).toBe(
+      "agent:project:nw-solution-architect",
+    );
+    expect(matchedData?.hProperties?.["data-ref-raw-text"]).toBe(
+      "nw-solution-architect",
+    );
+
+    // Non-matched node: no annotation. (data may be undefined OR present but
+    // without hName -- both are acceptable shapes for "unannotated".)
+    const unmatchedData = unmatched.data as
+      | { hName?: string }
+      | undefined;
+    expect(unmatchedData?.hName).toBeUndefined();
   });
 });
 
