@@ -34,6 +34,7 @@ import {
 } from "../../../src/plugins/norbert-config/domain/nav/reducer";
 import {
   initialNavState,
+  makeHistoryWith4Entries,
   makeWalkingSkeletonReducerArrangement,
   refTo,
 } from "./_helpers/fixtures";
@@ -561,9 +562,51 @@ describe("Ctrl+click on a dead reference is a complete no-op", () => {
 
 // @walking_skeleton @driving_port
 describe("Manual list-row selection does not push a history entry", () => {
-  it.skip("selectItem leaves history.entries.length unchanged (ADR-008)", () => {
-    // When:  next = reduce(state, { tag: 'selectItem', subTab, itemKey, item })
-    // Then:  next.history.entries.length === state.history.entries.length
+  it("selectItem leaves history.entries.length unchanged (ADR-008)", () => {
+    // Arrange: a non-trivial pre-state where the user is on the 'commands'
+    // sub-tab with /release selected, and a populated 4-entry history (a
+    // realistic mid-session backlog from prior cross-ref clicks). Per ADR-008
+    // only cross-ref actions (refSingleClick, refCtrlClick, closeSplit) push
+    // history entries; manual list-row selection MUST NOT push, even though
+    // it updates the focused item. The pre-state's mid-history `headIndex`
+    // (== 1) lets us also confirm the reducer does not silently truncate the
+    // forward branch the way a navigation push would.
+    const { registry, releaseEntry } = makeWalkingSkeletonReducerArrangement();
+    const targetSkill = refTo(registry, "nw-bdd-requirements");
+    if (targetSkill.tag !== "live") {
+      throw new Error(
+        `walkingSkeletonConfig must yield a live ref for nw-bdd-requirements, got ${targetSkill.tag}`,
+      );
+    }
+    const stateBefore: ConfigNavState = {
+      ...initialNavState,
+      activeSubTab: "commands",
+      selectedItemKey: releaseEntry.itemKey,
+      history: makeHistoryWith4Entries(1),
+    };
+    // Pre-condition: the target item is in a different sub-tab from the
+    // current activeSubTab so the action carries a non-trivial subTab change
+    // alongside the itemKey change. If they matched, the test would no longer
+    // discriminate the optional-subTab branch of selectItem.
+    expect(stateBefore.activeSubTab).not.toBe("skills");
+
+    // Act: dispatch selectItem on the cross-tab target. This is a MANUAL
+    // selection (e.g. the user clicked a list row in the 'skills' sub-tab),
+    // not a cross-ref navigation.
+    const next = reduce(stateBefore, {
+      tag: "selectItem",
+      subTab: "skills",
+      itemKey: targetSkill.entry.itemKey,
+    });
+
+    // Assert: selectedItemKey and activeSubTab updated; history is unchanged
+    // (same entries array, same headIndex) -- ADR-008 manual-selection rule.
+    expect(next.selectedItemKey).toBe(targetSkill.entry.itemKey);
+    expect(next.activeSubTab).toBe("skills");
+    expect(next.history.entries.length).toBe(
+      stateBefore.history.entries.length,
+    );
+    expect(next.history).toBe(stateBefore.history);
   });
 });
 

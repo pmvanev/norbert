@@ -326,9 +326,19 @@ export function reduce(
     case "refCtrlClick":
       return handleRefCtrlClick(state, action.ref);
     case "selectItem":
+      // Manual list-row selection. Per ADR-008 only cross-ref actions push
+      // history entries -- selectItem updates the focused item (and possibly
+      // the active sub-tab when the action carries one) but MUST NOT push.
+      // The history field is left untouched so a mid-history `headIndex`
+      // survives a manual selection (no silent forward-branch truncation).
+      return {
+        ...state,
+        activeSubTab: action.subTab,
+        selectedItemKey: action.itemKey,
+      };
     case "switchSubTab":
     case "closeSplit":
-      // Walking-skeleton placeholder: implementations land in 04-04..04-12.
+      // Walking-skeleton placeholder: implementations land in 04-11..04-12.
       return state;
     default: {
       const _exhaustive: never = action;
