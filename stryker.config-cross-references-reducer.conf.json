@@ -1,0 +1,18 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stryker-mutator/stryker/master/packages/core/schema/stryker-schema.json",
+  "mutate": [
+    "src/plugins/norbert-config/domain/nav/reducer.ts"
+  ],
+  "testRunner": "vitest",
+  "reporters": ["clear-text", "json", "html"],
+  "jsonReporter": {
+    "fileName": "docs/feature/config-cross-references/deliver/mutation/reducer-stryker-report.json"
+  },
+  "htmlReporter": {
+    "fileName": "docs/feature/config-cross-references/deliver/mutation/reducer-mutation-report.html"
+  },
+  "vitest": {
+    "configFile": "vitest.mutation.config-cross-references-reducer.ts"
+  },
+  "tempDirName": ".stryker-tmp-reducer"
+}
