@@ -497,13 +497,65 @@ describe("Single-click on a dead reference is a complete no-op", () => {
 
 // @walking_skeleton @driving_port
 describe("Ctrl+click on a dead reference is a complete no-op", () => {
-  it.skip("refCtrlClick with a dead ResolvedRef returns the same state reference", () => {
-    // Given: any state
-    // When:  next = reduce(state, { tag: 'refCtrlClick', ref: deadResolvedRef })
-    // Then:  next.activeSubTab === state.activeSubTab
-    //        next.selectedItemKey === state.selectedItemKey
-    //        next.splitState === state.splitState
-    //        next.history.entries.length === state.history.entries.length
+  it("refCtrlClick with a dead ResolvedRef returns the same state reference", () => {
+    // Arrange: a non-trivial pre-state with a populated selection, an open
+    // split, an active per-sub-tab filter and a stale filterResetCue, so the
+    // no-op assertion is meaningful (a buggy reducer that mutates ANY of
+    // these would be caught). Symmetric to the 04-08 single-click no-op:
+    // the dead ref is constructed via the real resolver against a registry
+    // that does not contain the looked-up name -- this is more honest about
+    // the contract than hand-rolling a `{ tag: 'dead', ... }` literal because
+    // the test exercises the same path the Provider would take when it
+    // dispatches a refCtrlClick on a detection-annotated link whose target
+    // was deleted between page-load and click.
+    //
+    // Per ADR-008 dead refs do not push history; per ADR-009 dead refs do
+    // not open splits. The handleRefCtrlClick guard
+    // `if (ref.tag !== 'live') return state;` already produces this no-op
+    // for any non-live tag, so outcome (b) validation-only is expected.
+    const { registry, releaseEntry } = makeWalkingSkeletonReducerArrangement();
+    const deadRef = refTo(registry, "this-name-is-not-in-the-registry");
+    if (deadRef.tag !== "dead") {
+      throw new Error(
+        `Expected a dead ResolvedRef for an unknown name, got ${deadRef.tag}`,
+      );
+    }
+    const stateBefore: ConfigNavState = {
+      ...initialNavState,
+      selectedItemKey: releaseEntry.itemKey,
+      splitState: {
+        topRef: releaseEntry,
+        bottomRef: releaseEntry,
+        dividerRatio: 0.5,
+      },
+      filter: {
+        bySubTab: {
+          skills: { source: "user", sort: "name" },
+        },
+      },
+      filterResetCue: "agents",
+    };
+
+    // Act: dispatch refCtrlClick on the dead target. The action payload
+    // otherwise looks identical to a live Ctrl+click; the only thing that
+    // should suppress state change is the dead tag.
+    const next = reduce(stateBefore, {
+      tag: "refCtrlClick",
+      ref: deadRef,
+    });
+
+    // Assert: every observable field is unchanged AND the returned reference
+    // is the same object (no spread, no allocation -- the early-return guard
+    // returns `state` verbatim).
+    expect(next).toBe(stateBefore);
+    expect(next.splitState).toBe(stateBefore.splitState);
+    expect(next.selectedItemKey).toBe(stateBefore.selectedItemKey);
+    expect(next.activeSubTab).toBe(stateBefore.activeSubTab);
+    expect(next.history.entries.length).toBe(
+      stateBefore.history.entries.length,
+    );
+    expect(next.filter).toBe(stateBefore.filter);
+    expect(next.filterResetCue).toBe(stateBefore.filterResetCue);
   });
 });
 
