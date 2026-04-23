@@ -279,18 +279,49 @@ describe("Reference resolving to multiple items renders as an ambiguous token", 
 
 // @walking_skeleton @driving_port
 describe("Reference to an unsupported item type renders as an unsupported token", () => {
-  it.skip("detection over a markdown link whose path resolves to an item type the plugin does not expose produces an unsupported token annotation", () => {
-    // Given: tree parsed from "[unknown thing](~/.claude/unknown-kind/foo.bin)"
-    // And:   registry contains no 'unknown-kind' items at that path; the path
-    //        resolves through resolve(path, registry) to { tag: 'unsupported',
-    //        path, reason } per architecture sec 6.3.
-    // When:  annotated = detectionRemarkPlugin(registry, ctx)(tree)
-    // Then:  the link node has data.hName === 'reference-token' and
-    //        data.hProperties['data-ref-variant'] === 'unsupported'
-    //        AND data.hProperties['data-ref-target-path'] === '~/.claude/unknown-kind/foo.bin'
+  it("detection over a markdown link whose path resolves to an item type the plugin does not expose produces an unsupported token annotation", () => {
+    // Arrange: walkingSkeletonConfig has no 'unknown-kind' category entries, so
+    // a markdown link to a path under .claude/unknown-kind/ classifies via the
+    // resolver path branch as unsupported (resolver.ts: extractDotClaudeCategory
+    // matches 'unknown-kind' which is NOT in REGISTRY_CATEGORIES). Per
+    // architecture sec 6.2 + US-101 AC bullet 4 the markdown-link strategy
+    // must annotate the link MDAST node with data-ref-variant === 'unsupported'
+    // AND data-ref-target-path so the React renderer can surface the unsupported
+    // chip + tooltip with the original href (no re-parsing the link).
     //
-    // (Closes PO MEDIUM #1 -- US-101 AC bullet 4 'unsupported' variant.
-    //  Paired with resolver.test.ts unsupported case and walking-skeleton.feature
-    //  scenario "Reference to an unsupported item type renders as an unsupported token".)
+    // NOTE: data-ref-target-path is an ADDITIVE hProperty beyond architecture
+    // sec 6.2's documented contract -- back-prop during finalize per roadmap.
+    const registry = buildRegistry(walkingSkeletonConfig, 0);
+    const ctx: DetectionContext = { currentItemDir: null };
+    const tree = parseMarkdown(
+      "Open the [unknown thing](~/.claude/unknown-kind/foo.bin) file.",
+    );
+
+    // Act
+    detectionRemarkPlugin(registry, ctx)(tree);
+
+    // Assert: collect every link node in the annotated tree.
+    const linkNodes: Array<{
+      type: string;
+      url: string;
+      data?: { hName?: string; hProperties?: Record<string, unknown> };
+    }> = [];
+    visit(tree, "link", (node) => {
+      linkNodes.push(node as unknown as (typeof linkNodes)[number]);
+    });
+    expect(linkNodes).toHaveLength(1);
+
+    const matched = linkNodes[0];
+    if (matched === undefined) {
+      throw new Error("Expected the parsed tree to contain a link node");
+    }
+
+    // Unsupported variant: token annotation + variant + target-path so the
+    // tooltip can surface the original href without re-parsing the link.
+    expect(matched.data?.hName).toBe("reference-token");
+    expect(matched.data?.hProperties?.["data-ref-variant"]).toBe("unsupported");
+    expect(matched.data?.hProperties?.["data-ref-target-path"]).toBe(
+      "~/.claude/unknown-kind/foo.bin",
+    );
   });
 });

@@ -86,13 +86,24 @@ export const markdownLinkStrategy: DetectionStrategy = {
           ? (resolved.candidates[0]?.itemKey ?? "")
           : "";
 
+    // `data-ref-target-path` lets the renderer surface the original href in
+    // tooltips without re-parsing the link. Unsupported tokens (US-101 AC
+    // bullet 4) need it because there is no registry entry to look up -- the
+    // tooltip explains the path is recognised but the item type is not
+    // exposed by the plugin. Additive hProperty beyond architecture sec 6.2
+    // contract; back-prop during finalize per roadmap step 05-07.
+    const hProperties: ReferenceTokenData["hProperties"] = {
+      "data-ref-variant": resolved.tag,
+      "data-ref-target-key": targetKey,
+      "data-ref-raw-text": href,
+      ...(resolved.tag === "unsupported"
+        ? { "data-ref-target-path": resolved.path }
+        : {}),
+    };
+
     annotate(node, {
       hName: "reference-token",
-      hProperties: {
-        "data-ref-variant": resolved.tag,
-        "data-ref-target-key": targetKey,
-        "data-ref-raw-text": href,
-      },
+      hProperties,
     });
   },
 };
