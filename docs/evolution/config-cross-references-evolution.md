@@ -518,3 +518,266 @@ The `canGoBack` / `canGoForward` predicates are the contract surface for the
 Provider's Alt+Left / Alt+Right end-of-history cue; consumers should call
 the predicates rather than re-deriving the bound check from `headIndex` and
 `entries.length`.
+
+---
+
+## Phase 04 — ConfigNavReducer (2026-04-22)
+
+**Wave segment**: DELIVER (navigation state machine — the action-driven core that the Provider will dispatch into)
+**Paradigm**: functional
+**Crafter**: nw-functional-software-crafter
+
+### Scope Shipped
+
+The pure-domain `ConfigNavReducer` module (architecture §6.4) at
+`src/plugins/norbert-config/domain/nav/reducer.ts`. Public surface:
+`reduce()` driving port, `ConfigNavState`, `ConfigNavAction` discriminated
+union (5 walking-skeleton variants), `SplitState` (ADR-009 fixed-shape
+2-pane record), `FilterByTab`, and `DisambiguationState` (forward-declaration
+stub for the future ambiguity popover). Internal helpers `resolveFilterOnNav`
+and `refTypeToSubTab`. Twelve TDD steps, one per behaviour, followed by a
+refactor pass, a mutation pass, and a consolidated remediation closing all
+open review findings:
+
+| Step | Behaviour |
+|------|-----------|
+| 04-01 | Stub reducer surface + `refSingleClick` open-from-empty (split with topRef from current selection, bottomRef from target, +1 history entry) |
+| 04-02 | `refSingleClick` in open split replaces `bottomRef` only, preserving `topRef` |
+| 04-03 | `refCtrlClick` across sub-tabs is atomic — single returned state with `activeSubTab`, `selectedItemKey`, `splitState: null`, and history all updated together |
+| 04-04 | `refCtrlClick` within same sub-tab swaps selection only (validation-only — 04-03's unconditional sub-tab assignment is idempotent) |
+| 04-05 | `refCtrlClick` closes any open split as part of the commit (validation-only — 04-03 already sets `splitState: null` unconditionally) |
+| 04-06 | `refCtrlClick` preserves a filter that already shows the target (ADR-007 Rule 2) |
+| 04-07 | `refCtrlClick` resets a destination filter that would hide the target + emits `filterResetCue` (ADR-007 Rule 3) |
+| 04-08 | `refSingleClick` on a dead `ResolvedRef` is a complete no-op (validation-only — early-return guard from 04-01) |
+| 04-09 | `refCtrlClick` on a dead `ResolvedRef` is a complete no-op (validation-only — early-return guard from 04-03) |
+| 04-10 | `selectItem` updates focus without pushing history (ADR-008) |
+| 04-11 | `switchSubTab` updates active sub-tab and resets `selectedItemKey` to null without pushing history (ADR-008) |
+| 04-12 | `closeSplit` collapses the split to null and pushes one history entry (ADR-008) |
+
+### Wave Timeline
+
+| Wave | Commit | Notes |
+|------|--------|-------|
+| DELIVER 04-01 | `157adc7` | Stub module + `refSingleClick` open-from-empty foundation |
+| DELIVER 04-02 | `65e6795` | `refSingleClick` bottom-replace branch when split is open |
+| DELIVER 04-03 | `3828031` | `refCtrlClick` atomic cross-tab — single returned state with all 4 fields |
+| DELIVER 04-04 | `f09f491` | `refCtrlClick` same-tab — validation-only un-skip |
+| DELIVER 04-05 | `02af33e` | `refCtrlClick` closes open split — validation-only un-skip |
+| DELIVER 04-06 | `307a29d` | `refCtrlClick` preserves matching filter (ADR-007 Rule 2) |
+| DELIVER 04-07 | `7e9fb21` | `refCtrlClick` resets mismatched filter + cue (ADR-007 Rule 3) |
+| DELIVER 04-08 | `862ef2a` | `refSingleClick` on dead — validation-only un-skip |
+| DELIVER 04-09 | `b8995f7` | `refCtrlClick` on dead — validation-only un-skip |
+| DELIVER 04-10 | `60a8197` | `selectItem` no history push (ADR-008) |
+| DELIVER 04-11 | `df23209` | `switchSubTab` no history push + reset selection (ADR-008) |
+| DELIVER 04-12 | `d97aa13` | `closeSplit` collapses + pushes history (ADR-008) |
+| DELIVER refactor-04 | `74dfc54` | L1 + L3 + L2 sweep — extracted `handleRefSingleClick` / `handleRefCtrlClick` / `resolveFilterOnNav` / `refTypeToSubTab`; reducer reduced to a flat dispatcher with `never`-typed exhaustiveness check |
+| DELIVER mutation-04 | `9fca024` | Stryker run on reducer only (separate scoped config); 97.40% kill rate (75/77) after three iterations |
+| DELIVER remediation-04 | `d9eb7a6` | Consolidated remediation closing the HIGH `switchSubTab` `splitState` bug + 4 polish closures |
+
+### What This Enables
+
+The navigation state machine is now complete. Three pure-domain prerequisites
+(registry, resolver, history) are composed into a single dispatchable reducer:
+
+- **`ConfigNavProvider`** (architecture §6.6) — can now wrap the reducer with
+  React Context + `useReducer`, dispatching `ConfigNavAction` values from DOM
+  event handlers and exposing the state to the Configuration view tree. The
+  Provider's keyboard handler reads `canGoBack` / `canGoForward` from the
+  embedded `NavHistory`; click handlers translate DOM events into
+  `refSingleClick` / `refCtrlClick` actions. Now unblocked.
+- **Detection step (walking-skeleton step 9)** — the remark plugin that
+  detects references inside markdown content; produces `Reference` values for
+  `resolve()`. The reducer's action surface is the consumer.
+- **NavAnnouncer (walking-skeleton step 10)** — the ARIA live region that
+  reads `filterResetCue` and `endOfHistory` transients and announces them.
+  The reducer is the producer of both transients.
+- **First user-visible scenario (walking-skeleton step 11)** — Provider +
+  detection + announcer wired together. **This is where the Configuration
+  tab finally gets actual clickable references in the UI for the first time.**
+
+### Quality Summary
+
+| Dimension | Result |
+|-----------|--------|
+| Live acceptance scenarios | 17 (12 outcome scenarios + 5 mutation-coverage describe blocks; the cross-tab map case is one parametrised describe with 5 `it.each` entries, totalling 21 `it` cases across 17 describe blocks) |
+| Mutation kill rate | **97.40%** (75/77 mutants killed; gate ≥ 80%) |
+| NoCoverage mutants | 2 — both on the `default:` branch of the `switch (action.tag)` exhaustiveness check; statically unreachable under the discriminated union (TS narrows to `never`). Mirrors the Phase 01 registry and Phase 02 resolver residuals — TypeScript-`never` exhaustiveness branches are an architectural pattern across the feature. |
+| Surviving mutants | 0 |
+| DES execution log entries | 28 roadmap steps complete (12 Phase 04 TDD + refactor-04 + mutation-04 + remediation-04, with synthetic IDs for the three non-TDD steps); PREPARE logged for all 12 Phase 04 steps via DES CLI |
+| Reviews (DELIVER) | 2 — pass-1 TDD/Theater approved (2 LOW); pass-2 API/maintainability initially **rejected** with 1 HIGH + 2 MEDIUM + 2 LOW; all 5 closed in remediation commit `d9eb7a6` |
+| DES integrity | 28/28 steps complete (verify_deliver_integrity passes) |
+| Architectural rules | dependency-cruiser clean; reducer imports only `ConfigSubTab`, `RefType`, `RegistryEntry` (type-only), `ResolvedRef` (type-only), and `pushEntry` / `NavEntry` / `NavHistory` from history; no `node:*`, no React, no Tauri |
+| FP paradigm | Pure functions only; readonly types throughout; `never`-typed exhaustiveness check; no input mutation; atomic single-return updates per ADR-002 |
+| Public API drift vs §6.4 | One known deviation — see "Notable Engineering Decisions" below (`refSingleClick.currentEntry` payload) |
+
+### Notable Engineering Decisions
+
+- **`refSingleClick` action carries `currentEntry: RegistryEntry | null`** as
+  an action payload because the reducer needs the spatial anchor for the
+  open-from-empty case (no existing split, no current `selectedItemKey` that
+  resolves to an entry — the Provider must supply the click-target's owning
+  list-row entry directly). This deviates from ADR-002's canonical action
+  table, which expected the reducer to read the anchor from state. The
+  deviation is documented in the module JSDoc; back-propagation to the ADR
+  is deferred to a future polish wave when the bottom-replace path's
+  `currentEntry`-ignored semantics get the same treatment. No Provider
+  ergonomics impact — the click handler always knows the row it came from.
+- **`refCtrlClick` atomic update per architecture §6.7** — six fields
+  (`activeSubTab`, `selectedItemKey`, `splitState`, `history`, `filter`,
+  `filterResetCue`) are updated in a single returned state with no
+  intermediate render. Atomicity is by construction: one return statement
+  composes the next state. The 2-slot fixed-shape `SplitState` (ADR-009)
+  makes a third pane a compile-time impossibility, eliminating an entire
+  class of split-management bugs at the type level.
+- **`resolveFilterOnNav` helper implements ADR-007 mismatch-only-clears
+  semantics** — only the destination sub-tab's `source` filter clears,
+  other sub-tab filters are preserved (spread through unchanged), and the
+  destination's `sort` dimension is preserved (the user's chosen order
+  survives a cross-reference navigation). Three rules in order: no filter
+  to act on (Rule 1), filter already shows target (Rule 2), mismatch (Rule
+  3 — clear + emit cue). Inline in `reducer.ts` for now; extraction to
+  `domain/nav/filter.ts` per ADR-007's implementation note is open debt
+  for a future refactor wave.
+- **`popover` field type widened to `DisambiguationState | null` with a
+  forward-declaration stub** — done in remediation after pass-2 review
+  flagged the literal-`null` typing as an avoidable cascade when the
+  future `openDisambiguation` action lands. Defining the type now (with
+  `null` initialised at every construction site) makes that future action
+  a purely additive change instead of an interface widening that would
+  cascade to every `ConfigNavState` construction site including
+  `initialNavState`.
+- **NavEntry provenance key renamed `action` → `source`** — done in
+  remediation to align with ADR-008's contract (every history entry carries
+  `{ source: 'refSingleClick' | 'refCtrlClick' | 'closeSplit' | ... }`).
+  NavEntry is opaque so no runtime error existed today, but the
+  NavAnnouncer step (walking-skeleton step 10) will expect `source` and
+  would have found `action` — silent mismatch caught at the right time.
+- **4 of 12 steps were validation-only** (04-04, 04-05, 04-08, 04-09) —
+  RED passed without production change because earlier steps already
+  implemented the contract correctly. 04-04 and 04-05 ride 04-03's
+  unconditional field assignments (`activeSubTab` is idempotent on same-tab
+  targets; `splitState: null` is set unconditionally regardless of prior
+  split). 04-08 and 04-09 ride the early-return live-tag guards from 04-01
+  and 04-03. Pass-1 review explicitly verified each is genuine via deletion
+  tests (revert the relevant guard or branch in production → primary
+  assertion fails) and not Fixture Theater.
+- **PREPARE phase logged for all 12 Phase 04 steps via DES CLI** — closes a
+  recurring concern from prior phases (Phase 02 had required retrospective
+  `BACKFILL:` PREPARE entries for 02-02 and 02-04). Phase 03 closed the
+  habit gap; Phase 04 sustains it across a 12-step phase. No backfill
+  required.
+
+### Real Bug Caught By Review Pass 2
+
+`switchSubTab` was missing `splitState: null` despite architecture §6.4
+specifying the effect as `activeSubTab, selectedItemKey=null, splitState=null`.
+The reducer implementation spread `...state` and overrode only `activeSubTab`
+and `selectedItemKey`, leaving `splitState` intact. A user who manually
+tab-switches while a preview split is open would have seen the split persist
+with a top-pane reference now belonging to a different sub-tab — a
+stale-split UI bug. No test caught it because the `switchSubTab` test did
+not arrange an open split as a pre-condition. The HIGH-severity catch in
+pass-2 review validates the double-review investment in the rigor profile —
+a behavioural bug would have shipped through to the Provider integration
+wave otherwise. Closed in remediation commit `d9eb7a6` with a new test that
+arranges open split before `switchSubTab` and asserts `next.splitState ===
+null`.
+
+### Outside-In TDD Notes
+
+All 17 Phase 04 scenarios (12 original + 5 mutation-coverage) are exercised
+exclusively through the `reduce()` driving port — the four internal helpers
+(`handleRefSingleClick`, `handleRefCtrlClick`, `resolveFilterOnNav`,
+`refTypeToSubTab` / `REF_TYPE_TO_SUB_TAB`) are not exported and not
+referenced by any test. Pass-1 review verified deletion tests for every
+step including the four validation-only steps: reverting the relevant
+guard or branch causes the primary tag assertion to fail (split not
+opened, `topRef` replaced when it should be preserved, dead-ref proceeds
+into `ref.entry` access and throws, `selectedItemKey` not reset, etc.).
+No Testing Theater patterns present across the eight checked patterns.
+
+### Long-Standing Process Improvement
+
+PREPARE phase logged for **all 12** Phase 04 steps via DES CLI at the time
+of action, not retrospectively. Prior phases (notably Phase 02) had
+required `BACKFILL:`-prefixed PREPARE entries reconstructed after the fact
+because the DES CLI was not called when the prepare work happened. Phase
+03 was the first phase to close the gap; Phase 04 sustains it across a
+larger-step phase. The pattern is now established as the working norm for
+this feature.
+
+### Open Debt
+
+Carried forward from earlier phases — none net new from Phase 04 after
+remediation:
+
+- **Phase 01 LOWs** (×4): `buildRegistry` JSDoc lacks initialisation
+  convention; `entryFromPlugin` source inline rationale; `make500ItemConfig`
+  fixture missing `rules` and `plugins`; `normalisePath` does not flag
+  `~user/` and Windows drive-letter paths as v1 gaps.
+- **Phase 02 LOW** (×1): `NavEntry` (history module) vs `HistoryEntry`
+  (ADR-006 spec) terminology drift — partially addressed via the Phase 04
+  remediation `action` → `source` provenance-key rename, which aligns the
+  reducer's NavEntry payloads with what the NavAnnouncer will expect; the
+  type-name bridge from `NavEntry` to `HistoryEntry` is still open for the
+  reducer integration step.
+- **Deferred `it.skip` scenarios** (×3) in `registry.test.ts` (unknown-name
+  returns empty list, version increments on rebuild, cross-scope collision
+  via `makeAggregatedConfig`) — not in walking-skeleton scope, still in
+  scope for a future polish wave, no regressions.
+- **Phase 04 LOW** (×1): `resolveFilterOnNav` extraction to
+  `domain/nav/filter.ts` per ADR-007's implementation note — currently
+  inline in `reducer.ts`; deferred to a future refactor wave.
+- **Phase 04 LOW** (×1): step 04-05 `RED_ACCEPTANCE` execution-log entry
+  records status `PASS` without the `VALIDATION_ONLY` qualifier used
+  consistently for other validation-only steps (04-04, 04-08, 04-09). The
+  DES log is append-only so the precision gap is permanent in the record;
+  no production impact.
+- **Milestone-2 reducer property tests** (×2): `splitState !== null` ⇒
+  `selectedItemKey === topRef.itemKey` invariant; reducer-level history-cap
+  invariant under arbitrary action sequences — both deferred from this
+  phase by design (milestone-2 scope per the roadmap).
+
+### Files Touched
+
+#### Production
+- `src/plugins/norbert-config/domain/nav/reducer.ts` (NEW)
+
+#### Tests
+- `tests/acceptance/config-cross-references/reducer.test.ts` (NEW — 17 describe blocks; 12 outcome + 5 mutation-coverage; 21 `it` cases including a parametrised `it.each` over 5 RefType→sub-tab mappings)
+- `tests/acceptance/config-cross-references/_helpers/fixtures.ts` (MODIFIED — adds `initialNavState` and `refTo` helpers for reducer tests)
+
+#### Mutation tooling
+- `stryker.config-cross-references-reducer.conf.json` (NEW — scoped to reducer only)
+- `vitest.mutation.config-cross-references-reducer.ts` (NEW — includes only `reducer.test.ts`)
+
+#### DELIVER artefacts
+- `docs/feature/config-cross-references/deliver/roadmap.json` (extended with Phase 04)
+- `docs/feature/config-cross-references/deliver/roadmap-review-phase-04.yaml` (NEW)
+- `docs/feature/config-cross-references/deliver/review-pass-1-phase-04.yaml` (NEW)
+- `docs/feature/config-cross-references/deliver/review-pass-2-phase-04.yaml` (NEW — initially rejected; closed in remediation `d9eb7a6`)
+- `docs/feature/config-cross-references/deliver/execution-log.json` (extended; 28 roadmap steps + synthetic IDs for refactor-04 / mutation-04 / remediation-04)
+- `docs/feature/config-cross-references/deliver/mutation/reducer-mutation-summary.md` (NEW)
+- `docs/feature/config-cross-references/deliver/mutation/reducer-stryker-report.json` (NEW)
+- `docs/feature/config-cross-references/deliver/mutation/reducer-mutation-report.html` (NEW)
+
+### Next Wave Pointer
+
+Continue from `walking-skeleton.md` step 9 onward:
+
+1. `detection.test.ts` — the remark plugin that detects references inside
+   markdown content; produces `Reference` values for the reducer's action
+   payloads via `resolve()`
+2. `announcements.test.ts` — `NavAnnouncer` ARIA live region (DESIGN §6.8);
+   reads `filterResetCue` and `endOfHistory` transients from the reducer
+3. React `ConfigNavProvider` + first user-visible scenario (US-110, KPI sink)
+   — **step 11 is where the Configuration tab gets actual clickable
+   references in the UI for the first time**
+
+The `reduce()` driving port and the `ConfigNavAction` discriminated union
+are the contract surface for the Provider's `useReducer` integration;
+consumers should construct action values rather than reaching for internal
+helpers. The five walking-skeleton action variants are stable; future
+variants (`historyBack`, `historyForward`, `openDisambiguation`,
+`clearFilterResetCue`, `acknowledgeEndOfHistory`) will land additively
+against the existing `default: never` exhaustiveness branch.
