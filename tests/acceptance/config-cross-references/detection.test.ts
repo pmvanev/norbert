@@ -20,8 +20,11 @@
 import { describe, it, expect } from "vitest";
 import { visit } from "unist-util-visit";
 import type { InlineCode } from "mdast";
-import { agentDetectionConfig } from "./_helpers/fixtures";
-import { parseMarkdown } from "./_helpers/markdownFixtures";
+import { agentDetectionConfig, walkingSkeletonConfig } from "./_helpers/fixtures";
+import {
+  fencedCodeBlockWithKnownName,
+  parseMarkdown,
+} from "./_helpers/markdownFixtures";
 import { buildRegistry } from "../../../src/plugins/norbert-config/domain/references/registry";
 import {
   detectionRemarkPlugin,
@@ -85,11 +88,28 @@ describe("Inline code matching a known agent renders as a live cross-reference t
 
 // @walking_skeleton @driving_port
 describe("Content inside fenced code blocks is never linkified", () => {
-  it.skip("detection over a fenced block containing 'nw-bdd-requirements' produces no token annotations", () => {
-    // Given: tree parsed from "```bash\necho \"nw-bdd-requirements\"\n```"
-    // And:   registry contains the skill 'nw-bdd-requirements'
-    // When:  annotated = detectionRemarkPlugin(registry, ctx)(tree)
-    // Then:  no node in the fenced 'code' subtree has data.hName === 'reference-token'
+  it("detection over a fenced block containing 'nw-bdd-requirements' produces no token annotations", () => {
+    // Arrange: registry contains the skill 'nw-bdd-requirements' (user scope)
+    // and the source markdown wraps it inside a fenced bash code block.
+    const registry = buildRegistry(walkingSkeletonConfig, 0);
+    const ctx: DetectionContext = { currentItemDir: null };
+    const tree = parseMarkdown(fencedCodeBlockWithKnownName);
+
+    // Act
+    detectionRemarkPlugin(registry, ctx)(tree);
+
+    // Assert: walk EVERY node in the tree -- not just inlineCode -- and confirm
+    // no node anywhere carries a reference-token annotation. Fenced code blocks
+    // are MDAST `code` nodes (not `inlineCode`), so the inlineCode strategy
+    // must leave them alone (architecture sec 6.2, ADR-001).
+    const annotatedNodes: Array<{ type: string; hName: unknown }> = [];
+    visit(tree, (node) => {
+      const data = (node as { data?: { hName?: unknown } }).data;
+      if (data?.hName !== undefined) {
+        annotatedNodes.push({ type: node.type, hName: data.hName });
+      }
+    });
+    expect(annotatedNodes).toHaveLength(0);
   });
 });
 
