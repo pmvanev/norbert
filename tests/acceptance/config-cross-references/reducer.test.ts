@@ -612,10 +612,51 @@ describe("Manual list-row selection does not push a history entry", () => {
 
 // @walking_skeleton @driving_port
 describe("Manual sub-tab switch does not push a history entry", () => {
-  it.skip("switchSubTab leaves history.entries.length unchanged (ADR-008)", () => {
-    // When:  next = reduce(state, { tag: 'switchSubTab', subTab })
-    // Then:  next.history.entries.length === state.history.entries.length
-    //        next.selectedItemKey === null  (mode-switch resets selection)
+  it("switchSubTab leaves history.entries.length unchanged (ADR-008)", () => {
+    // Arrange: a non-trivial pre-state where the user is on the 'commands'
+    // sub-tab with /release selected, and a populated 4-entry history (a
+    // realistic mid-session backlog from prior cross-ref clicks). Per ADR-008
+    // only cross-ref actions (refSingleClick, refCtrlClick, closeSplit) push
+    // history entries; a manual sub-tab switch MUST NOT push, even though it
+    // changes the active sub-tab. Per Architecture sec 6.4 the mode-switch
+    // also resets `selectedItemKey` to null so the list-pane scroll lands at
+    // the top of the new sub-tab. The pre-state's mid-history `headIndex`
+    // (== 1) lets us also confirm the reducer does not silently truncate the
+    // forward branch the way a navigation push would.
+    const { releaseEntry } = makeWalkingSkeletonReducerArrangement();
+    const stateBefore: ConfigNavState = {
+      ...initialNavState,
+      activeSubTab: "commands",
+      selectedItemKey: releaseEntry.itemKey,
+      history: makeHistoryWith4Entries(1),
+    };
+    // Pre-condition: the target sub-tab differs from the current activeSubTab
+    // so the action drives a real mode-switch (not a no-op). Without this
+    // the test would no longer discriminate the switch from a degenerate
+    // identity case.
+    expect(stateBefore.activeSubTab).not.toBe("skills");
+    // Pre-condition: a current selection exists so the mode-switch reset to
+    // null is non-trivially testing the reducer (a buggy implementation that
+    // forgot to clear selectedItemKey would still pass if it started as null).
+    expect(stateBefore.selectedItemKey).not.toBeNull();
+
+    // Act: dispatch switchSubTab to a different sub-tab. This is a MANUAL
+    // mode switch (e.g. the user clicked the 'skills' sub-tab header), not a
+    // cross-ref navigation.
+    const next = reduce(stateBefore, {
+      tag: "switchSubTab",
+      subTab: "skills",
+    });
+
+    // Assert: activeSubTab updated; selectedItemKey reset to null
+    // (mode-switch reset per Architecture sec 6.4); history is unchanged
+    // (same entries array, same headIndex) -- ADR-008 manual-switch rule.
+    expect(next.activeSubTab).toBe("skills");
+    expect(next.selectedItemKey).toBeNull();
+    expect(next.history.entries.length).toBe(
+      stateBefore.history.entries.length,
+    );
+    expect(next.history).toBe(stateBefore.history);
   });
 });
 

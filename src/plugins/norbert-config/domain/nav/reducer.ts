@@ -337,8 +337,20 @@ export function reduce(
         selectedItemKey: action.itemKey,
       };
     case "switchSubTab":
+      // Manual sub-tab mode-switch. Per ADR-008 only cross-ref actions push
+      // history entries -- a manual sub-tab switch updates the active sub-tab
+      // but MUST NOT push. Per Architecture sec 6.4 the mode-switch also
+      // resets `selectedItemKey` to null so the list-pane scroll lands at the
+      // top of the new sub-tab (no stale selection bleeding across modes).
+      // The history field is left untouched so a mid-history `headIndex`
+      // survives a manual switch (no silent forward-branch truncation).
+      return {
+        ...state,
+        activeSubTab: action.subTab,
+        selectedItemKey: null,
+      };
     case "closeSplit":
-      // Walking-skeleton placeholder: implementations land in 04-11..04-12.
+      // Walking-skeleton placeholder: implementation lands in 04-12.
       return state;
     default: {
       const _exhaustive: never = action;
