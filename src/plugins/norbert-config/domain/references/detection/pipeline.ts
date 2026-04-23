@@ -1,11 +1,9 @@
 /**
  * Detection Pipeline -- composer
  *
- * The DETECTION_PIPELINE constant is the single source of truth for which
- * strategies participate in v1, in what order. Per ADR-001 / ADR-010, v1
- * ships [markdown-link, inline-code]. This step bootstraps with only the
- * inline-code branch -- the markdown-link strategy PREPENDS in step 05-04 so
- * the canonical order is preserved without touching this file twice.
+ * DETECTION_PIPELINE is the single source of truth for which strategies
+ * participate in v1, in what order. Per ADR-001 / ADR-010, v1 ships
+ * [markdown-link, inline-code].
  *
  * `composePipeline` reduces a strategy list to a single DetectionStrategy
  * whose `apply` runs every member in order against each visited node.

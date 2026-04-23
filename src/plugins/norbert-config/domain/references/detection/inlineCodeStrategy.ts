@@ -2,26 +2,32 @@
  * Detection Pipeline -- inline-code strategy
  *
  * Visits MDAST `inlineCode` nodes (`` `name` ``) and, when the node value
- * matches a known item name in the ReferenceRegistry, annotates the node with
- * the standard unified `data.hName` / `data.hProperties` block so
- * react-markdown's `components` map renders it as a cross-reference token.
+ * resolves via the registry's name index, annotates the node with the
+ * standard reference-token contract (architecture §6.2) so react-markdown's
+ * `components` map renders it as a cross-reference token.
+ *
+ * Outcomes (all four ResolvedRef variants):
+ *   - live       -> annotate with target-key
+ *   - ambiguous  -> annotate with first-candidate target-key + candidate-count
+ *                   (the popover re-reads candidates at click time per ADR-004)
+ *   - dead       -> leave the node untouched (plain code, no registry hit)
+ *   - unsupported -> not produced by the name branch of the resolver
  *
  * Architecture: §6.2 (Detection Pipeline) -- inline-code branch.
- * ADR-010: ships in v1 alongside markdown-link. Bare prose deferred.
+ * ADR-001: pure remark-style transform. ADR-010: ships in v1 alongside
+ * markdown-link; bare-prose detection deferred.
  *
- * Pure: no IO, no closures over module-level state. Uses `resolve` so all four
- * ResolvedRef variants (live | ambiguous | dead | unsupported) Just Work as
- * later steps un-skip more scenarios. The current scenario only exercises
- * `live`; the resolver classifies the rest correctly today.
+ * Pure: no IO, no closures over module-level state. The token-annotation
+ * projection is shared with markdownLinkStrategy via applyTokenAnnotation.
  */
 
 import { resolve } from "../resolver";
 import type { ReferenceRegistry } from "../registry";
+import { applyTokenAnnotation } from "./applyAnnotation";
 import type {
   DetectionContext,
   DetectionStrategy,
   MdastNode,
-  ReferenceTokenData,
 } from "./types";
 
 /**
@@ -38,17 +44,6 @@ function isInlineCodeNode(
   );
 }
 
-function annotate(
-  node: MdastNode & { value: string; data?: Record<string, unknown> },
-  data: ReferenceTokenData,
-): void {
-  // Mutating `node.data` in place is the standard unified contract for remark
-  // plugins (see remark-toc, remark-external-links). The surrounding pipeline
-  // produces fresh trees per render, so this stays effectively pure.
-  const existing = (node.data ?? {}) as Record<string, unknown>;
-  node.data = { ...existing, hName: data.hName, hProperties: data.hProperties };
-}
-
 export const inlineCodeStrategy: DetectionStrategy = {
   apply: (
     node: MdastNode,
@@ -62,39 +57,17 @@ export const inlineCodeStrategy: DetectionStrategy = {
     const rawText = node.value;
     const resolved = resolve({ kind: "name", value: rawText }, registry);
 
-    // No registry hit and no .claude/<unknown-category>/ path: leave the node
-    // untouched. Inline code that doesn't match any item is plain code.
+    // No registry hit: leave the node untouched. Inline code that doesn't
+    // match any item is plain code, not a reference.
     if (resolved.tag === "dead") {
       return;
     }
 
-    const targetKey =
-      resolved.tag === "live"
-        ? resolved.entry.itemKey
-        : resolved.tag === "ambiguous"
-          ? // First candidate is a stable identifier for the variant; the
-            // disambiguation popover (US-108) reads the full candidates list
-            // off the registry at click time, not off the data attribute.
-            (resolved.candidates[0]?.itemKey ?? "")
-          : "";
-
-    // Base contract per architecture sec 6.2: variant + target-key + raw-text.
-    // Additive hProperty for ambiguous tokens: the React layer (popover per
-    // ADR-004 -- always-show disambiguation) reads `data-ref-candidate-count`
-    // to render the right number of options without re-querying the registry.
-    // Back-prop to architecture during finalize (roadmap step 05-06 note).
-    const hProperties: ReferenceTokenData["hProperties"] = {
-      "data-ref-variant": resolved.tag,
-      "data-ref-target-key": targetKey,
-      "data-ref-raw-text": rawText,
-      ...(resolved.tag === "ambiguous"
+    const extras: Record<string, string | number> =
+      resolved.tag === "ambiguous"
         ? { "data-ref-candidate-count": resolved.candidates.length }
-        : {}),
-    };
+        : {};
 
-    annotate(node, {
-      hName: "reference-token",
-      hProperties,
-    });
+    applyTokenAnnotation(node, resolved, rawText, extras);
   },
 };
