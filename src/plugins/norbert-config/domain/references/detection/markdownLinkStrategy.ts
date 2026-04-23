@@ -65,22 +65,20 @@ export const markdownLinkStrategy: DetectionStrategy = {
     const href = node.url;
     const resolved = resolve({ kind: "path", value: href }, registry);
 
-    // Plain dead links (href is not a registry path AND not under
-    // `.claude/<unknown-category>/`) stay unannotated -- they remain regular
-    // markdown links so the renderer can navigate or ignore them at will.
-    // Dead links pointing into `.claude/<known-category>/` (e.g. a deleted
-    // skill) ARE annotated as the `dead` variant in step 05-05.
-    if (resolved.tag === "dead") {
-      return;
-    }
-
     // Project the ResolvedRef onto the data-attribute shape the renderer
-    // reads. `data-ref-target-key` is meaningful for live (the entry's
-    // itemKey) and ambiguous (first candidate's itemKey -- the popover
-    // re-reads candidates from the registry at click time). For unsupported,
-    // the renderer keys off `data-ref-target-path` instead, which step 05-07
-    // will surface; we set target-key to the empty string to keep the data
-    // shape consistent.
+    // reads. All four ResolvedRef variants (live | ambiguous | dead |
+    // unsupported) annotate so the React rendering layer can surface the
+    // appropriate token style (live = link, ambiguous = popover, dead =
+    // strikethrough+tooltip per US-107, unsupported = neutral chip per
+    // US-101 AC bullet 4). D2: dead refs never crash -- they always render
+    // as a token rather than a bare link so users see the broken state.
+    //
+    // `data-ref-target-key` is meaningful for live (the entry's itemKey)
+    // and ambiguous (first candidate's itemKey -- the popover re-reads
+    // candidates from the registry at click time). For dead and unsupported
+    // there is no target entry, so target-key is the empty string; the
+    // renderer keys off `data-ref-target-path` (surfaced in step 05-07)
+    // and `data-ref-raw-text` instead.
     const targetKey =
       resolved.tag === "live"
         ? resolved.entry.itemKey

@@ -188,11 +188,41 @@ describe("Markdown link to a known skill renders as a live cross-reference token
 
 // @walking_skeleton @driving_port
 describe("Reference to a missing item renders as a dead token", () => {
-  it.skip("detection over a markdown link to a non-existent skill produces a dead token annotation", () => {
-    // Given: tree parsed from "[nw-retired-skill](~/.claude/skills/nw-retired-skill/SKILL.md)"
-    // And:   registry has no item named 'nw-retired-skill'
-    // When:  annotated = detectionRemarkPlugin(registry, ctx)(tree)
-    // Then:  the link node has data.hName === 'reference-token' and data.hProperties['data-ref-variant'] === 'dead'
+  it("detection over a markdown link to a non-existent skill produces a dead token annotation", () => {
+    // Arrange: walkingSkeletonConfig contains nw-bdd-requirements but NOT
+    // nw-retired-skill, so a markdown link to a path under .claude/skills/ for
+    // a missing skill must classify via the resolver path branch as dead. Per
+    // architecture sec 6.2 + D2 ("dead refs never crash"), the markdown-link
+    // strategy must annotate the link MDAST node so the React renderer can
+    // surface the dead-style token (US-107: strikethrough + tooltip).
+    const registry = buildRegistry(walkingSkeletonConfig, 0);
+    const ctx: DetectionContext = { currentItemDir: null };
+    const tree = parseMarkdown(
+      "Load the [nw-retired-skill](~/.claude/skills/nw-retired-skill/SKILL.md) skill.",
+    );
+
+    // Act
+    detectionRemarkPlugin(registry, ctx)(tree);
+
+    // Assert: collect every link node in the annotated tree.
+    const linkNodes: Array<{
+      type: string;
+      url: string;
+      data?: { hName?: string; hProperties?: Record<string, unknown> };
+    }> = [];
+    visit(tree, "link", (node) => {
+      linkNodes.push(node as unknown as (typeof linkNodes)[number]);
+    });
+    expect(linkNodes).toHaveLength(1);
+
+    const matched = linkNodes[0];
+    if (matched === undefined) {
+      throw new Error("Expected the parsed tree to contain a link node");
+    }
+
+    // The dead link gets a dead token annotation per architecture sec 6.2.
+    expect(matched.data?.hName).toBe("reference-token");
+    expect(matched.data?.hProperties?.["data-ref-variant"]).toBe("dead");
   });
 });
 
