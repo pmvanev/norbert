@@ -144,11 +144,45 @@ describe("Bare prose is not detected as a reference in v1", () => {
 
 // @walking_skeleton @driving_port
 describe("Markdown link to a known skill renders as a live cross-reference token", () => {
-  it.skip("detection over [nw-bdd-requirements](~/.claude/skills/nw-bdd-requirements/SKILL.md) produces a live token annotation", () => {
-    // Given: tree parsed from the markdown link
-    // And:   registry contains the user-scope skill 'nw-bdd-requirements' at that path
-    // When:  annotated = detectionRemarkPlugin(registry, ctx)(tree)
-    // Then:  the link node has data.hName === 'reference-token' and data.hProperties['data-ref-variant'] === 'live'
+  it("detection over [nw-bdd-requirements](~/.claude/skills/nw-bdd-requirements/SKILL.md) produces a live token annotation", () => {
+    // Arrange: walkingSkeletonConfig already contains nw-bdd-requirements (user
+    // scope) at filePath '~/.claude/skills/nw-bdd-requirements/SKILL.md', so a
+    // markdown link to that exact href must classify via the resolver path
+    // branch as live and the markdown-link strategy must annotate the link
+    // MDAST node with the standard token data block.
+    const registry = buildRegistry(walkingSkeletonConfig, 0);
+    const ctx: DetectionContext = { currentItemDir: null };
+    const tree = parseMarkdown(
+      "Load the [nw-bdd-requirements](~/.claude/skills/nw-bdd-requirements/SKILL.md) skill.",
+    );
+
+    // Act
+    detectionRemarkPlugin(registry, ctx)(tree);
+
+    // Assert: collect every link node in the annotated tree.
+    const linkNodes: Array<{
+      type: string;
+      url: string;
+      data?: { hName?: string; hProperties?: Record<string, unknown> };
+    }> = [];
+    visit(tree, "link", (node) => {
+      linkNodes.push(node as unknown as (typeof linkNodes)[number]);
+    });
+    expect(linkNodes).toHaveLength(1);
+
+    const matched = linkNodes[0];
+    if (matched === undefined) {
+      throw new Error("Expected the parsed tree to contain a link node");
+    }
+
+    // The matched link gets a live token annotation per architecture sec 6.2.
+    // Resolver returns the user-scope skill, whose itemKey is computed by
+    // buildRegistry from (type, scope, name).
+    expect(matched.data?.hName).toBe("reference-token");
+    expect(matched.data?.hProperties?.["data-ref-variant"]).toBe("live");
+    expect(matched.data?.hProperties?.["data-ref-target-key"]).toBe(
+      "skill:user:nw-bdd-requirements",
+    );
   });
 });
 

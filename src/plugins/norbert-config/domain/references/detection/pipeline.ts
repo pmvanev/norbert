@@ -14,6 +14,7 @@
  */
 
 import { inlineCodeStrategy } from "./inlineCodeStrategy";
+import { markdownLinkStrategy } from "./markdownLinkStrategy";
 import type {
   DetectionContext,
   DetectionStrategy,
@@ -21,10 +22,14 @@ import type {
 } from "./types";
 import type { ReferenceRegistry } from "../registry";
 
+// ADR-010 §Strategy contract: the canonical v1 pipeline order is
+// [markdown-link, inline-code]. Strategies visit distinct MDAST node types
+// (link vs inlineCode), so iteration order does not affect output today;
+// the explicit ordering still matters for ADR auditability and for any
+// future strategy that might overlap node types.
 export const DETECTION_PIPELINE: readonly DetectionStrategy[] = [
+  markdownLinkStrategy,
   inlineCodeStrategy,
-  // markdownLinkStrategy lands in step 05-04 with PREPEND so order matches
-  // ADR-010 (markdown-link first, then inline-code).
 ];
 
 export function composePipeline(
