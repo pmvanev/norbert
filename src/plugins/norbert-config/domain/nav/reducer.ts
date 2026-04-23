@@ -349,9 +349,28 @@ export function reduce(
         activeSubTab: action.subTab,
         selectedItemKey: null,
       };
-    case "closeSplit":
-      // Walking-skeleton placeholder: implementation lands in 04-12.
-      return state;
+    case "closeSplit": {
+      // Per ADR-009 closeSplit collapses the 2-pane split back to a single pane
+      // by setting splitState to null. Per ADR-008 closeSplit is a cross-pane
+      // navigation action and pushes a single history entry capturing the
+      // post-close state. Other observable fields (activeSubTab, selectedItemKey,
+      // filter, filterResetCue) are preserved -- the action only manipulates the
+      // split layout and the history stack.
+      //
+      // The action is idempotent on a state that already has splitState === null
+      // in the splitState dimension (null -> null) but still pushes a history
+      // entry; the walking-skeleton scenario only exercises the splitState !== null
+      // path, and ADR-008 does not carve out an exception for the degenerate
+      // closed-split case (the bookkeeping cost of a redundant entry is bounded
+      // by the LRU cap and a Provider that dispatches closeSplit on a closed
+      // split would itself be a UI bug).
+      const entry: NavEntry = { action: "closeSplit" };
+      return {
+        ...state,
+        splitState: null,
+        history: pushEntry(state.history, entry),
+      };
+    }
     default: {
       const _exhaustive: never = action;
       return _exhaustive;

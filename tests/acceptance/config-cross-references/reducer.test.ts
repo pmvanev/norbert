@@ -662,11 +662,49 @@ describe("Manual sub-tab switch does not push a history entry", () => {
 
 // @walking_skeleton @driving_port
 describe("Close button collapses the split back to a single pane", () => {
-  it.skip("closeSplit returns splitState === null and pushes one history entry", () => {
-    // Given: state.splitState !== null
-    // When:  next = reduce(state, { tag: 'closeSplit' })
-    // Then:  next.splitState === null
-    //        next.history.entries.length === state.history.entries.length + 1
+  it("closeSplit returns splitState === null and pushes one history entry", () => {
+    // Arrange: a split is already open with /release on top and the user-scope
+    // skill nw-bdd-requirements on the bottom. The arrangement is constructed
+    // entirely through the driving port (refSingleClick) so we are not
+    // hand-rolling a splitState fixture that peeks at internals -- the closeSplit
+    // contract is exercised against state produced by the very same reducer.
+    // Per ADR-008 closeSplit is a cross-pane navigation action and pushes a
+    // history entry; per ADR-009 it collapses the 2-pane split back to a single
+    // pane by setting splitState to null.
+    const { registry, releaseEntry } = makeWalkingSkeletonReducerArrangement();
+    const skillRef = refTo(registry, "nw-bdd-requirements");
+    if (skillRef.tag !== "live") {
+      throw new Error(
+        `walkingSkeletonConfig must yield a live ref for nw-bdd-requirements, got ${skillRef.tag}`,
+      );
+    }
+    const stateAfterSingleClick = reduce(
+      {
+        ...initialNavState,
+        selectedItemKey: releaseEntry.itemKey,
+      },
+      {
+        tag: "refSingleClick",
+        ref: skillRef,
+        currentEntry: releaseEntry,
+      },
+    );
+    // Pre-condition: the arrangement actually has an open split. If this fails
+    // the rest of the test no longer discriminates the close-split branch.
+    expect(stateAfterSingleClick.splitState).not.toBeNull();
+
+    // Act: dispatch closeSplit while the split is open.
+    const next = reduce(stateAfterSingleClick, { tag: "closeSplit" });
+
+    // Assert: the split is collapsed and a history entry is pushed. Other
+    // observable fields (activeSubTab, selectedItemKey, filter) are unchanged.
+    expect(next.splitState).toBeNull();
+    expect(next.history.entries.length).toBe(
+      stateAfterSingleClick.history.entries.length + 1,
+    );
+    expect(next.activeSubTab).toBe(stateAfterSingleClick.activeSubTab);
+    expect(next.selectedItemKey).toBe(stateAfterSingleClick.selectedItemKey);
+    expect(next.filter).toBe(stateAfterSingleClick.filter);
   });
 });
 
