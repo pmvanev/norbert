@@ -781,3 +781,257 @@ helpers. The five walking-skeleton action variants are stable; future
 variants (`historyBack`, `historyForward`, `openDisambiguation`,
 `clearFilterResetCue`, `acknowledgeEndOfHistory`) will land additively
 against the existing `default: never` exhaustiveness branch.
+
+---
+
+## Phase 05 — Detection Pipeline (2026-04-23)
+
+**Wave segment**: DELIVER (detection slice — the pure remark plugin that turns markdown content into annotated MDAST that `react-markdown`'s `components` map renders as `ReferenceToken`s)
+**Paradigm**: functional
+**Crafter**: nw-functional-software-crafter
+
+### Scope Shipped
+
+The pure-domain detection module at
+`src/plugins/norbert-config/domain/references/detection/`. Six files:
+`types.ts` (DetectionStrategy, DetectionContext, MdastNode, ReferenceTokenData),
+`applyAnnotation.ts` (extracted in refactor-05 — shared `annotate` helper),
+`inlineCodeStrategy.ts`, `markdownLinkStrategy.ts`, `pipeline.ts` (DETECTION_PIPELINE
+const + composePipeline), and `remarkPlugin.ts` (the unified-compatible
+`detectionRemarkPlugin(registry, ctx)` factory). Detects 4 reference variants
+(live, ambiguous, dead, unsupported) across 2 source kinds (markdown links,
+inline code) and annotates MDAST nodes with `data.hName='reference-token'`
+plus typed `data.hProperties` for `react-markdown`'s `components` map. Seven
+TDD steps, one per behaviour, followed by a refactor pass, a mutation pass,
+and a consolidated remediation closing two of the four open review findings:
+
+| Step | Behaviour |
+|------|-----------|
+| 05-01 | Stub detection module surface + inline-code live token (annotates `inlineCode` matching a known agent name) |
+| 05-02 | Fenced code blocks not annotated (validation-only — `unist-util-visit` does not visit `code` nodes by default) |
+| 05-03 | Bare prose not annotated by default per ADR-010 (validation-only — pipeline contains no bare-prose strategy) |
+| 05-04 | Markdown link to a known skill renders live token (`detectMarkdownLink` prepended to DETECTION_PIPELINE per ADR-010 canonical order) |
+| 05-05 | Reference to a missing item renders dead token (RED→GREEN — removed an early-return on `dead` from `markdownLinkStrategy`) |
+| 05-06 | Multi-scope match renders ambiguous token + emits `data-ref-candidate-count` (additive hProperty) |
+| 05-07 | Unsupported item type renders unsupported token + emits `data-ref-target-path` (additive hProperty) |
+
+### Wave Timeline
+
+| Wave | Commit | Notes |
+|------|--------|-------|
+| DELIVER 05-01 | `25084bf` | Stub module + inline-code live + `detection-strategies-isolated` dep-cruiser rule + `unist-util-visit` direct-dep promotion |
+| DELIVER 05-02 | `e55d868` | Fenced code not annotated — validation-only un-skip |
+| DELIVER 05-03 | `c646413` | Bare prose not annotated — validation-only un-skip |
+| DELIVER 05-04 | `9aefd87` | `markdownLinkStrategy` + pipeline prepend per ADR-010 canonical order |
+| DELIVER 05-05 | `caf3db7` | Dead variant — genuine RED→GREEN (removed early-return on `dead` from link strategy) |
+| DELIVER 05-06 | `41722f9` | Ambiguous variant + `data-ref-candidate-count` additive hProperty |
+| DELIVER 05-07 | `d8e49ba` | Unsupported variant + `data-ref-target-path` additive hProperty |
+| DELIVER refactor-05 | `52c5c42` | L1 + L2 + L4 sweep — extracted `applyAnnotation.ts` shared helper; both strategies delegate; +129/-150 across 5 files; public surface byte-equivalent |
+| DELIVER mutation-05 | `14fa65a` | Stryker run on detection only (separate scoped config); 96.15% kill rate (75/78) after three iterations |
+| DELIVER remediation-05 | `b01432d` | Consolidated remediation closing 2 of 4 open LOWs from review pass-1/pass-2 |
+
+### What This Enables
+
+The detection module is the last pure-domain prerequisite before the React
+rendering layer. Three pure-domain prerequisites (registry, resolver, history),
+the navigation state machine (reducer), and now the MDAST-annotation pipeline
+are composed into the full producer side of the cross-reference flow:
+
+- **`ConfigDetailPanel`** (architecture §6.9, walking-skeleton step 11) — can
+  now wire `detectionRemarkPlugin(registry, ctx)` into `react-markdown`'s
+  `remarkPlugins` prop and render the four reference token variants via the
+  `components={{ 'reference-token': ReferenceToken }}` custom-component map.
+  **Step 11 is where the Configuration tab finally gets actual clickable
+  references in the UI for the first time.** The detection plugin's contract
+  is byte-equivalent to what step 11 expects per architecture §6.2.
+- **`NavAnnouncer`** (walking-skeleton step 10) — the pure
+  `announcementFor(prev, next)` helper that reads `filterResetCue` and
+  `endOfHistory` transients from the reducer and produces text for the
+  ARIA live region. Detection is now no longer a blocker for that step.
+- **Forward-compat for `bareProseStrategy`** (R3, US-111) — the extracted
+  `applyAnnotation.ts` helper lets a future bare-prose strategy reuse the
+  same annotation surface without duplicating the `data.hName` /
+  `data.hProperties` construction.
+
+### Quality Summary
+
+| Dimension | Result |
+|-----------|--------|
+| Live acceptance scenarios | 12 (7 outcome scenarios + 5 mutation-coverage describe blocks for direct-strategy guard tests) |
+| Mutation kill rate | **96.15%** (75/78 mutants killed; gate ≥ 80%) |
+| NoCoverage mutants | 1 — `applyAnnotation.ts:34:47` `?? ""` StringLiteral fallback; unreachable under the resolver's ambiguous-arity invariant (candidates.length ≥ 2) |
+| Surviving mutants | 2 — both equivalent: (1) `inlineCodeStrategy.ts:43` `typeof value === "string" -> true` is unreachable because `lookupByName` is `Map.get` keyed by string and any non-string lookup misses returning `dead` which short-circuits; (2) `applyAnnotation.ts:34:12` `candidates[0]?.itemKey -> candidates[0].itemKey` defensive optional-chain that the resolver's arity invariant renders identical |
+| DES execution log entries | 35 roadmap steps complete (7 Phase 05 TDD + refactor-05 + mutation-05 + remediation-05, with synthetic IDs for the three non-TDD steps); PREPARE logged for all 7 Phase 05 steps via DES CLI |
+| Reviews (DELIVER) | 2 — pass-1 TDD/Theater approved (2 LOW); pass-2 API/maintainability approved (2 LOW); 2 of 4 closed in remediation `b01432d`, 2 deferred to this finalize back-propagation |
+| Reviews (roadmap) | 2 — initial review rejected with 1 BLOCKER (dep-cruiser rule absent) + 1 MEDIUM (package.json missing) + 2 LOW; revision-1 approved with all 4 closed |
+| DES integrity | 35/35 steps complete (verify_deliver_integrity passes) |
+| Architectural rules | dependency-cruiser now enforces all 4 architecture §4 rules including `detection-strategies-isolated` (the long-deferred rule from Phase 03 remediation); detection module clean |
+| FP paradigm | Pure functions only; readonly types throughout; mutation-in-place on `node.data` is the standard unified/remark convention and documented in source |
+| Public API drift vs §6.2 | Two additive hProperties (`data-ref-candidate-count`, `data-ref-target-path`) — back-propagated to architecture §6.2 in this finalize step |
+
+### Notable Engineering Decisions
+
+- **`detection-strategies-isolated` dep-cruiser rule landed** — closes the
+  long-standing gap from Phase 03 remediation where rule 4 from architecture
+  §4 was explicitly deferred until the detection module shipped. The rule
+  forbids any cross-strategy import inside `detection/`; the allowlist
+  permits only the detection types module, the registry types, the resolver,
+  and `unist-util-visit`. The resolver addition is a documented deviation
+  from the architecture §4 wording (which originally listed only types +
+  visit + registry); the strategies need `resolve()` to classify outcomes,
+  so the resolver is correctly part of the allowlist. Now machine-enforces
+  strategy isolation.
+- **`unist-util-visit` promoted from transitive to direct dependency** —
+  was already resolved via `remark-gfm`; this phase adds the explicit
+  `package.json` declaration so a future `remark-gfm` upgrade cannot drop
+  the transitive resolution and silently break the strategy implementations.
+  The lockfile update is a downstream consequence, not the change itself.
+- **Asymmetric dead-handling between the two strategies** — the
+  `markdownLinkStrategy` annotates dead refs as tokens (so the React
+  rendering layer can show a strikethrough + tooltip per US-107). The
+  `inlineCodeStrategy` leaves dead inline-code as plain code: an inline-code
+  mention with no registry hit is just code (a shell command, a library
+  call, a literal value), not a "broken reference". The design decision
+  emerged from the test discipline during 05-05 and is now locked by an
+  explicit acceptance test added in remediation-05 (asserts that an unknown
+  inline-code name produces zero annotations). The asymmetry is documented
+  in the architecture §6.2 back-propagation as part of this finalize.
+- **`applyAnnotation.ts` extracted in refactor-05** before mutation testing
+  — the shared `annotate` helper closes a duplication concern that pass-2
+  review would otherwise have raised, and produces forward-compat for the
+  future `bareProseStrategy` (R3, US-111). The refactor was 5 files
+  changed, +129/-150, and the public surface remained byte-equivalent —
+  every test passed unchanged.
+- **Additive hProperties** (`data-ref-candidate-count`,
+  `data-ref-target-path`) — both shipped during 05-06 and 05-07
+  respectively. The React rendering layer needs them for the
+  disambiguation popover (read candidate count without re-querying the
+  registry) and the unsupported-token tooltip (read the original path
+  without re-parsing the link). Flagged for back-propagation in three
+  locations each (source comment, roadmap implementation_notes, test file
+  comment) and now back-propagated to architecture §6.2 in this finalize.
+- **Genuine RED→GREEN at 05-05** — only one of the seven TDD steps moved
+  the production code through a real RED→GREEN cycle (the rest were
+  validation-only or new-strategy-introductions). 05-05 specifically
+  removed an early-return on `dead` from `markdownLinkStrategy` so dead
+  links would annotate. Pass-1 review verified this is genuine via a
+  deletion test (re-adding the early-return causes the dead test's
+  `hName === "reference-token"` assertion to fail).
+
+### Long-Standing Process Improvement
+
+PREPARE phase logged for **all 7** Phase 05 steps via DES CLI at the time
+of action, not retrospectively. Phases 03 and 04 established the discipline;
+Phase 05 sustains it. No `BACKFILL:`-prefixed entries needed. The pattern
+is now the entrenched working norm for this feature.
+
+### Outside-In TDD Notes
+
+All 12 Phase 05 scenarios (7 walking-skeleton + 5 mutation-coverage
+direct-strategy guard tests) are exercised exclusively through the
+`detectionRemarkPlugin(registry, ctx)` driving port and (for the guard
+tests) the strategy `apply()` methods. The internal `applyAnnotation.ts`
+helper extracted in refactor-05 is not exported beyond the detection
+package boundary and not referenced directly by any test. Pass-1 review
+verified deletion tests for every step including the validation-only
+steps (05-02, 05-03) and the genuine RED→GREEN step (05-05). No Testing
+Theater patterns present across the eight checked patterns.
+
+### Open Debt
+
+Carried forward from earlier phases — none net new from Phase 05 after
+remediation:
+
+- **Phase 01 LOWs** (×4): `buildRegistry` JSDoc lacks initialisation
+  convention; `entryFromPlugin` source inline rationale; `make500ItemConfig`
+  fixture missing `rules` and `plugins`; `normalisePath` does not flag
+  `~user/` and Windows drive-letter paths as v1 gaps.
+- **Phase 02 LOW** (×1): `NavEntry` (history module) vs `HistoryEntry`
+  (ADR-006 spec) terminology drift — partially addressed via the Phase 04
+  remediation `action` → `source` provenance-key rename; the type-name
+  bridge from `NavEntry` to `HistoryEntry` is still open for the reducer
+  integration step.
+- **Deferred `it.skip` scenarios** (×3) in `registry.test.ts`
+  (unknown-name returns empty list, version increments on rebuild,
+  cross-scope collision via `makeAggregatedConfig`) — not in walking-
+  skeleton scope, still in scope for a future polish wave, no regressions.
+- **Phase 04 LOW** (×1): `resolveFilterOnNav` extraction to
+  `domain/nav/filter.ts` per ADR-007's implementation note — currently
+  inline in `reducer.ts`; deferred to a future refactor wave.
+- **Phase 04 LOW** (×1): step 04-05 `RED_ACCEPTANCE` execution-log entry
+  records status `PASS` without the `VALIDATION_ONLY` qualifier — DES log
+  is append-only so the precision gap is permanent in the record.
+- **Phase 05 LOW** (×1, process improvement): 05-05 `RED_ACCEPTANCE`
+  d-field reads `"PASS"` without an explicit `PASS_IMMEDIATELY` /
+  `VALIDATION_ONLY` / `GENUINE_RED` qualifier. Future phases should adopt
+  `d: "PASS: genuine RED — <description>"` vs.
+  `d: "PASS_IMMEDIATELY: outcome (b) — <reason>"` for self-contained DES
+  log inspection.
+- **Milestone-2 reducer property tests** (×2): `splitState !== null` ⇒
+  `selectedItemKey === topRef.itemKey` invariant; reducer-level
+  history-cap invariant under arbitrary action sequences — both deferred
+  by design (milestone-2 scope per the roadmap).
+
+### Files Touched
+
+#### Production
+- `src/plugins/norbert-config/domain/references/detection/types.ts` (NEW)
+- `src/plugins/norbert-config/domain/references/detection/applyAnnotation.ts` (NEW — extracted in refactor-05)
+- `src/plugins/norbert-config/domain/references/detection/inlineCodeStrategy.ts` (NEW)
+- `src/plugins/norbert-config/domain/references/detection/markdownLinkStrategy.ts` (NEW)
+- `src/plugins/norbert-config/domain/references/detection/pipeline.ts` (NEW)
+- `src/plugins/norbert-config/domain/references/detection/remarkPlugin.ts` (NEW)
+
+#### Tests
+- `tests/acceptance/config-cross-references/detection.test.ts` (NEW — 12 `it` cases across 12 describe blocks; 7 walking-skeleton + 5 mutation-coverage)
+- `tests/acceptance/config-cross-references/_helpers/markdownFixtures.ts` (NEW — `parseMarkdown` helper using remark + remark-gfm)
+- `tests/acceptance/config-cross-references/_helpers/fixtures.ts` (MODIFIED — adds detection-aware fixture builders)
+
+#### Mutation tooling
+- `stryker.config-cross-references-detection.conf.json` (NEW — scoped to `detection/**/*.ts`)
+- `vitest.mutation.config-cross-references-detection.ts` (NEW — includes only `detection.test.ts`)
+
+#### Architectural enforcement
+- `.dependency-cruiser.cjs` (MODIFIED — adds the 4th architecture §4 rule `detection-strategies-isolated`)
+
+#### Dependency declaration
+- `package.json` (MODIFIED — promotes `unist-util-visit` from transitive to direct dependency)
+- `package-lock.json` (MODIFIED — downstream consequence of the dependency promotion)
+
+#### DELIVER artefacts
+- `docs/feature/config-cross-references/deliver/roadmap.json` (extended with Phase 05)
+- `docs/feature/config-cross-references/deliver/roadmap-review-phase-05.yaml` (NEW — initial review, rejected)
+- `docs/feature/config-cross-references/deliver/roadmap-review-phase-05-revision-1.yaml` (NEW — revision-1, approved)
+- `docs/feature/config-cross-references/deliver/review-pass-1-phase-05.yaml` (NEW)
+- `docs/feature/config-cross-references/deliver/review-pass-2-phase-05.yaml` (NEW)
+- `docs/feature/config-cross-references/deliver/execution-log.json` (extended; 35 roadmap steps + synthetic IDs for refactor-05 / mutation-05 / remediation-05)
+- `docs/feature/config-cross-references/deliver/mutation/detection-mutation-summary.md` (NEW)
+- `docs/feature/config-cross-references/deliver/mutation/detection-stryker-report.json` (NEW)
+- `docs/feature/config-cross-references/deliver/mutation/detection-mutation-report.html` (NEW)
+
+#### Architecture back-propagation (this finalize)
+- `docs/feature/config-cross-references/design/architecture.md` (§6.1 case-sensitivity sentence + §6.2 hProperties enumeration + asymmetric dead note + Changed Assumptions block + §13 changelog entry)
+
+### Next Wave Pointer
+
+Continue from `walking-skeleton.md` step 10 onward:
+
+1. `announcements.test.ts` — pure `NavAnnouncer` text helper
+   `announcementFor(prev, next)` (DESIGN §6.8); reads `filterResetCue` and
+   `endOfHistory` transients from the reducer
+2. **Step 11 — React `ConfigNavProvider` + first user-visible scenario**
+   (US-110, KPI sink) — Provider wraps the reducer with React Context +
+   `useReducer`, threads the registry through `useMemo`, wires
+   `detectionRemarkPlugin(registry, ctx)` into `ConfigDetailPanel`'s
+   `react-markdown` invocation, and registers the Alt+Left/Right window
+   listener. **Step 11 is the payoff: the Configuration tab finally gets
+   actual clickable references in the UI for the first time.**
+
+The `detectionRemarkPlugin(registry, ctx)` factory is the contract surface
+for `ConfigDetailPanel`'s `react-markdown` integration; the React layer
+should pass it as `remarkPlugins={[detectionRemarkPlugin(registry, ctx)]}`
+without additional wrapping. The four reference token variants
+(`'live' | 'ambiguous' | 'dead' | 'unsupported'`) are stable; future
+strategies (bare-prose for R3 / US-111) will land additively against the
+existing `DETECTION_PIPELINE` const without changing the rendered token
+contract.

@@ -189,6 +189,8 @@ function lookupByName(reg: ReferenceRegistry, name: string): readonly RegistryEn
 function lookupByPath(reg: ReferenceRegistry, path: string): RegistryEntry | null;
 ```
 
+**Name lookup is case-sensitive** — `lookupByName(reg, "Foo")` and `lookupByName(reg, "foo")` are independent queries. The key is the name exactly as ingested during `buildRegistry`. The registry's `byName` map is `Map<string, ...>`, and the ingestion path passes the raw `name` field through unchanged. Detection strategies pass `inlineCode.value` and `link.url` to the lookup verbatim; matching is structurally exact.
+
 **Rebuild trigger**: whenever `AggregatedConfig` changes (that is: when the user hits the reload button in `ConfigurationView`, or when the backend watcher — inherited from parent `norbert-config` — fires). Deferred rebuild through `useMemo` keyed by the config object reference.
 
 **Integration-seam prop contract**: `ConfigurationView` owns the Tauri IPC (`invoke("read_claude_config", …)`) and the `loadState` discriminated union; it is the sole caller of the backend. It passes the resulting value down to `ConfigNavProvider` as `aggregatedConfig: AggregatedConfig | null`. `ConfigNavProvider` calls `buildRegistry(aggregatedConfig)` inside a `useMemo` keyed on `aggregatedConfig`. When `null` (idle/loading/error), the registry is an empty derived value — detection no-ops. This keeps the provider free of IPC coupling and preserves the existing `loadState` machinery in `ConfigurationView` unchanged.
@@ -212,15 +214,33 @@ domain/references/detection/
 
 Output: the MDAST is transformed (existing nodes replaced with `mdast-util`-compatible nodes carrying additional data). Because `react-markdown` v10's `components` map keys on HTML element names rather than arbitrary MDAST node types, the strategy is:
 
-- Replace matched `link`/`inlineCode` nodes with the **same** HAST-bound node type (`link` or `inlineCode`) but attach a distinguishing `data.hName: 'reference-token'` and `data.hProperties: { 'data-ref-variant': variant, 'data-ref-target-key': targetKey, 'data-ref-raw-text': raw }`.
+- Replace matched `link`/`inlineCode` nodes with the **same** HAST-bound node type (`link` or `inlineCode`) but attach a distinguishing `data.hName: 'reference-token'` and `data.hProperties` carrying the typed payload below.
 - The `components` map in `ConfigDetailPanel` then provides a custom renderer for `'reference-token'` (via the `components={{ 'reference-token': ReferenceToken }}` prop supported by `react-markdown` v10 for custom element names produced by remark plugins).
 - Fallback: if a plugin-incompatibility surfaces during implementation, the alternative is rehype-stage transformation (`rehypePlugins`) producing HAST elements directly — identical effect, different pipeline stage. Both paths are pure.
+
+**`data.hProperties` contract** — the React rendering layer reads these attributes off the `reference-token` element to drive variant-specific UI (variant styling, click target, tooltip content, popover candidate count):
+
+| Attribute | Type | Emitted on | Meaning |
+|-----------|------|------------|---------|
+| `data-ref-variant` | `'live' \| 'ambiguous' \| 'dead' \| 'unsupported'` | every annotated node | maps 1:1 to the `ResolvedRef.tag` from §6.3 |
+| `data-ref-target-key` | `string` | every annotated node | `itemKey` for `live` / `ambiguous` (first candidate); empty string for `dead` / `unsupported` |
+| `data-ref-raw-text` | `string` | every annotated node | the original source text — `inlineCode.value` for inline-code matches, link text for markdown-link matches |
+| `data-ref-candidate-count` | `number` | **only** when `data-ref-variant === 'ambiguous'` | equals `candidates.length`; the disambiguation popover reads this without re-querying the registry |
+| `data-ref-target-path` | `string` | **only** when `data-ref-variant === 'unsupported'` | equals the original href; the unsupported-token tooltip reads this without re-parsing the link |
+
+**Asymmetric dead handling** — the two strategies handle the `dead` outcome asymmetrically by design. `markdownLinkStrategy` annotates a dead link as a `reference-token` node so the React rendering layer can show a strikethrough + tooltip explaining the search failure (US-107). `inlineCodeStrategy` leaves a dead inline-code node untouched: an inline-code mention with no registry hit is treated as plain code (a shell command, a library call, a literal value), not a "broken reference". This intentional asymmetry is locked by an explicit acceptance test against the inline-code strategy and is the design decision per ADR-001.
 
 Reference for this pattern: the `remark-toc`, `remark-gh-link`, and `remark-external-links` plugins all use the `data.hName` mechanism to produce custom renderable nodes from an MDAST transform. Implementation should mirror their shape.
 
 **Memoisation**: `useMemo(() => detect(markdownContent, registry), [markdownContent, registry.version])` inside the detail renderer path. O(1) cache hit on subsequent renders of the same item.
 
 **Performance budget** (NFR-2): AST walk is O(nodes). For a 2000-line command body ~ 10-20 k AST nodes; strategies do one Map lookup per node ≈ 10-20 k lookups → well under 1 ms on modern hardware. Registry build is one pass over `AggregatedConfig` ≈ O(N) where N = total items; 500 items → sub-millisecond.
+
+#### Changed Assumptions (2026-04-23, Phase 05 finalize back-propagation)
+
+- **Additive hProperties**: `data-ref-candidate-count` (ambiguous) and `data-ref-target-path` (unsupported) added during implementation (Phase 05 steps 05-06 and 05-07). Both are needed by the React rendering layer: the disambiguation popover reads candidate count without re-querying the registry, and the unsupported tooltip reads the original path without re-parsing the link. The original §6.2 contract listed only `data-ref-variant`, `data-ref-target-key`, and `data-ref-raw-text`; the table above is the current authoritative contract.
+- **Asymmetric dead handling**: the two strategies were originally specified symmetrically; during implementation the design decision to leave inline-code dead refs as plain code (vs annotating like markdown links) emerged from the test discipline. Documented above and locked by an explicit acceptance test added in remediation-05.
+- **Resolver added to detection allowlist**: the `detection-strategies-isolated` dep-cruiser rule (architecture §4 rule 4) was originally specified to allow only types + visit + registry. The implementation requires `resolver.resolve()` to classify outcomes; resolver was added to the allowlist with an inline comment explaining the deviation.
 
 ### 6.3 Reference Resolution
 
@@ -437,3 +457,4 @@ Each step is independently testable. BDD scenarios from user-stories.md map to i
 
 - 2026-04-21: Initial DESIGN wave deliverable. Ten ADRs, three C4 levels, one architecture document, one wave-decisions.
 - 2026-04-22: §6.3 back-propagation from DELIVER Phase 02 (resolver). `Reference` shape switched from source-syntax discriminant (`markdown-link | inline-code`) to lookup-strategy discriminant (`name | path`); `unsupported` arm gained typed `category` field. Added §6.3 "Changed Assumptions" block documenting rationale and forward references.
+- 2026-04-23: §6.1 + §6.2 back-propagation from DELIVER Phase 05 (detection pipeline). §6.1 documents case-sensitive name lookup. §6.2 hProperties contract enumerated as a typed table including the additive `data-ref-candidate-count` (ambiguous) and `data-ref-target-path` (unsupported); asymmetric dead handling between `markdownLinkStrategy` (annotates) and `inlineCodeStrategy` (leaves as plain code) documented as the design decision per ADR-001. Added §6.2 "Changed Assumptions" block covering the additive hProperties, the asymmetric dead handling, and the resolver addition to the `detection-strategies-isolated` dep-cruiser allowlist.
