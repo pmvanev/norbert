@@ -34,6 +34,9 @@ import {
   detectionRemarkPlugin,
   type DetectionContext,
 } from "../../../src/plugins/norbert-config/domain/references/detection/remarkPlugin";
+import { inlineCodeStrategy } from "../../../src/plugins/norbert-config/domain/references/detection/inlineCodeStrategy";
+import { markdownLinkStrategy } from "../../../src/plugins/norbert-config/domain/references/detection/markdownLinkStrategy";
+import type { MdastNode } from "../../../src/plugins/norbert-config/domain/references/detection/types";
 
 // @walking_skeleton @driving_port
 describe("Inline code matching a known agent renders as a live cross-reference token", () => {
@@ -187,6 +190,18 @@ describe("Markdown link to a known skill renders as a live cross-reference token
     expect(matched.data?.hProperties?.["data-ref-target-key"]).toBe(
       "skill:user:nw-bdd-requirements",
     );
+    // Live tokens MUST NOT carry data-ref-target-path -- that key is reserved
+    // for unsupported tokens (markdownLinkStrategy.ts:64-67 spread). The
+    // renderer distinguishes variants by hProperty PRESENCE, not value. We
+    // assert key absence (not just `undefined` value) so a mutation that
+    // always-spreads `{ "data-ref-target-path": resolved.path }` -- which
+    // injects `undefined` for non-unsupported variants -- is killed.
+    expect(
+      Object.prototype.hasOwnProperty.call(
+        matched.data?.hProperties ?? {},
+        "data-ref-target-path",
+      ),
+    ).toBe(false);
   });
 });
 
@@ -227,6 +242,22 @@ describe("Reference to a missing item renders as a dead token", () => {
     // The dead link gets a dead token annotation per architecture sec 6.2.
     expect(matched.data?.hName).toBe("reference-token");
     expect(matched.data?.hProperties?.["data-ref-variant"]).toBe("dead");
+    // Dead links have no registry entry to key off, so target-key is the
+    // empty-string sentinel (markdownLinkStrategy.ts:87 -- the renderer keys
+    // off data-ref-raw-text instead). Asserting the exact sentinel value
+    // anchors the `: ""` literal so a mutation to a non-empty string is killed.
+    expect(matched.data?.hProperties?.["data-ref-target-key"]).toBe("");
+    // Dead tokens MUST NOT carry data-ref-target-path -- that key is reserved
+    // for unsupported tokens (markdownLinkStrategy.ts:64-67 spread). We assert
+    // key absence (not just `undefined` value) so a mutation that
+    // always-spreads `{ "data-ref-target-path": resolved.path }` -- which
+    // injects `undefined` for non-unsupported variants -- is killed.
+    expect(
+      Object.prototype.hasOwnProperty.call(
+        matched.data?.hProperties ?? {},
+        "data-ref-target-path",
+      ),
+    ).toBe(false);
   });
 });
 
@@ -274,6 +305,15 @@ describe("Reference resolving to multiple items renders as an ambiguous token", 
     expect(matchedData?.hProperties?.["data-ref-raw-text"]).toBe("release");
     // Two registry candidates (project + user scope) for the bare name.
     expect(matchedData?.hProperties?.["data-ref-candidate-count"]).toBe(2);
+    // ambiguous branch picks the first candidate's itemKey as a stable
+    // identifier for the variant (architecture sec 6.2 contract via
+    // inlineCodeStrategy.ts:74-79); ambiguousReleaseConfig is ordered
+    // [project, user] so the first candidate is the project-scope command.
+    // Asserting this anchors the ternary's ambiguous branch and the
+    // optional-chaining/nullish-coalescing on candidates[0].
+    expect(matchedData?.hProperties?.["data-ref-target-key"]).toBe(
+      "command:project:release",
+    );
   });
 });
 
@@ -323,5 +363,133 @@ describe("Reference to an unsupported item type renders as an unsupported token"
     expect(matched.data?.hProperties?.["data-ref-target-path"]).toBe(
       "~/.claude/unknown-kind/foo.bin",
     );
+  });
+});
+
+// @mutation_coverage @driving_port
+describe("Each strategy short-circuits on nodes its guard does not match", () => {
+  // Mutation-coverage scenarios for the type-narrowing guards in
+  // inlineCodeStrategy.isInlineCodeNode and markdownLinkStrategy.isLinkNode.
+  // The end-to-end remarkPlugin walks every MDAST node (root, paragraph, text,
+  // code, heading, ...) and applies BOTH strategies to each, so the guards must
+  // reject any node whose `type` differs OR whose payload field is non-string.
+  //
+  // The driving port for these scenarios is the strategy's exported `apply`
+  // function -- the same function the composed pipeline invokes per node. We
+  // pass deliberately-mistyped MdastNode values (correct .type, missing/wrong
+  // payload) and assert no `data` annotation is added.
+
+  it("inlineCodeStrategy.apply ignores a non-inlineCode node even when it carries a string value field matching a registry name", () => {
+    // Arrange: a `text`-typed node whose `value` IS a string and IS a known
+    // registry name. Kills two guard mutations together:
+    //   - `node.type === "inlineCode" -> true`: would let the second conjunct
+    //     pass (value is a string), so the strategy would annotate a plain
+    //     text node.
+    //   - `node.type === "inlineCode" && ... -> node.type === "inlineCode" || ...`:
+    //     same effect via the disjunction mutation.
+    // Without a string value, both mutations would still reject (the second
+    // conjunct fails for missing payload), leaving the mutants alive.
+    const registry = buildRegistry(walkingSkeletonConfig, 0);
+    const ctx: DetectionContext = { currentItemDir: null };
+    const node: MdastNode & { data?: Record<string, unknown>; value?: unknown } = {
+      type: "text",
+      value: "nw-bdd-requirements",
+    };
+
+    // Act
+    inlineCodeStrategy.apply(node, registry, ctx);
+
+    // Assert: a non-inlineCode node must remain unannotated regardless of
+    // payload shape -- bare-prose detection is OFF in v1 (ADR-010).
+    expect(node.data).toBeUndefined();
+  });
+
+  it("inlineCodeStrategy.apply ignores an inlineCode-typed node whose value field is missing entirely", () => {
+    // Arrange: type matches the discriminator but the payload field is
+    // structurally absent. Kills the second-conjunct mutation
+    //   `typeof node.value === "string" -> true`
+    // which would otherwise let the strategy proceed to read `.value` as
+    // `undefined`, then call `resolve({kind:'name', value: undefined})` --
+    // which would crash or, worse, classify undefined as dead and annotate
+    // the node. The early-return `if (resolved.tag === "dead") return` would
+    // mask a downstream crash, so we assert no annotation directly.
+    const registry = buildRegistry(walkingSkeletonConfig, 0);
+    const ctx: DetectionContext = { currentItemDir: null };
+    const node: MdastNode & { data?: Record<string, unknown> } = {
+      type: "inlineCode",
+    };
+
+    // Act
+    inlineCodeStrategy.apply(node, registry, ctx);
+
+    // Assert
+    expect(node.data).toBeUndefined();
+  });
+
+  it("inlineCodeStrategy.apply leaves a non-inlineCode node unannotated even when the early-return body is removed", () => {
+    // Arrange: a `text`-typed node bearing a known registry name as value.
+    // Kills two guard-body mutations together:
+    //   - `if (!isInlineCodeNode(node)) -> if (false)`: removes the early
+    //     return so the strategy proceeds on a non-inlineCode node.
+    //   - `if (!isInlineCodeNode(node)) { return; } -> { ... } { }`: empty
+    //     block body, same downstream effect (no return).
+    // Either mutation lets the strategy reach `node.value as string` and
+    // resolve a known name. We pick a `text` node containing a known name so
+    // the downstream resolve succeeds and would write a `data` annotation.
+    const registry = buildRegistry(walkingSkeletonConfig, 0);
+    const ctx: DetectionContext = { currentItemDir: null };
+    const node: MdastNode & { data?: Record<string, unknown>; value?: unknown } = {
+      type: "text",
+      value: "nw-bdd-requirements",
+    };
+
+    // Act
+    inlineCodeStrategy.apply(node, registry, ctx);
+
+    // Assert
+    expect(node.data).toBeUndefined();
+  });
+
+  it("markdownLinkStrategy.apply ignores a non-link node even when it carries a string url field that resolves through the registry", () => {
+    // Arrange: a `definition`-typed node (MDAST link definition) whose `url`
+    // IS a string and DOES resolve to a registry entry. Kills two guard
+    // mutations together:
+    //   - `node.type === "link" -> true`: would let the second conjunct pass
+    //     (url is a string), so the strategy would annotate the definition.
+    //   - `node.type === "link" || ...`: same via the disjunction mutation.
+    // Without a string url, both mutations still reject. Definition nodes
+    // are NOT links per MDAST -- they are reference targets -- so no
+    // annotation is correct.
+    const registry = buildRegistry(walkingSkeletonConfig, 0);
+    const ctx: DetectionContext = { currentItemDir: null };
+    const node: MdastNode & { data?: Record<string, unknown>; url?: unknown } = {
+      type: "definition",
+      url: "~/.claude/skills/nw-bdd-requirements/SKILL.md",
+    };
+
+    // Act
+    markdownLinkStrategy.apply(node, registry, ctx);
+
+    // Assert
+    expect(node.data).toBeUndefined();
+  });
+
+  it("markdownLinkStrategy.apply ignores a link-typed node whose url field is missing entirely", () => {
+    // Arrange: type matches the discriminator but the payload field is
+    // structurally absent. Kills the second-conjunct mutation
+    //   `typeof node.url === "string" -> true`
+    // which would otherwise let the strategy proceed to read `.url` as
+    // `undefined`, then call `resolve({kind:'path', value: undefined})`.
+    const registry = buildRegistry(walkingSkeletonConfig, 0);
+    const ctx: DetectionContext = { currentItemDir: null };
+    const node: MdastNode & { data?: Record<string, unknown> } = {
+      type: "link",
+    };
+
+    // Act
+    markdownLinkStrategy.apply(node, registry, ctx);
+
+    // Assert
+    expect(node.data).toBeUndefined();
   });
 });
