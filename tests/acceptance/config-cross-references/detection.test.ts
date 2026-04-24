@@ -93,6 +93,43 @@ describe("Inline code matching a known agent renders as a live cross-reference t
   });
 });
 
+// @validation_only @driving_port
+describe("Inline code containing an unregistered name produces no annotation", () => {
+  it("inline code containing an unregistered name produces no annotation (asymmetric to markdown-link strategy)", () => {
+    // Locks in the design decision documented in inlineCodeStrategy.ts lines
+    // 60-64 (early-return on dead): inline code that does not match any
+    // registry item stays plain code, NOT a dead reference token. This is
+    // INTENTIONALLY asymmetric to markdownLinkStrategy, which DOES annotate
+    // dead links so the renderer can surface the strikethrough/tooltip
+    // affordance (US-107). The asymmetry exists because (a) inline code is
+    // ambient prose syntax with high false-positive risk, while (b) markdown
+    // links are explicit author intent ("I meant to reference this").
+    //
+    // If the early-return is accidentally removed in a future refactor, every
+    // unregistered inline-code span would suddenly render as a dead token --
+    // a noisy regression. This test catches that regression.
+    const registry = buildRegistry(walkingSkeletonConfig, 0);
+    const ctx: DetectionContext = { currentItemDir: null };
+    const tree = parseMarkdown("Run `nw-nonexistent-skill` here.");
+
+    // Act
+    detectionRemarkPlugin(registry, ctx)(tree);
+
+    // Assert: walk EVERY node in the tree -- not just inlineCode -- and confirm
+    // no node anywhere carries a reference-token annotation. A regression that
+    // dropped the early-return would annotate the inlineCode node; this would
+    // immediately fail the toHaveLength(0) assertion.
+    const annotatedNodes: Array<{ type: string; hName: unknown }> = [];
+    visit(tree, (node) => {
+      const data = (node as { data?: { hName?: unknown } }).data;
+      if (data?.hName !== undefined) {
+        annotatedNodes.push({ type: node.type, hName: data.hName });
+      }
+    });
+    expect(annotatedNodes).toHaveLength(0);
+  });
+});
+
 // @walking_skeleton @driving_port
 describe("Content inside fenced code blocks is never linkified", () => {
   it("detection over a fenced block containing 'nw-bdd-requirements' produces no token annotations", () => {

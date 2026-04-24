@@ -54,6 +54,10 @@ export const inlineCodeStrategy: DetectionStrategy = {
       return;
     }
 
+    // Note: remark-parse trims surrounding whitespace from inlineCode.value
+    // before the AST is produced, so a raw Map.get against the registry's
+    // by-name index matches without explicit trim. If a future markdown parser
+    // variant ships without this guarantee, add `.trim()` here.
     const rawText = node.value;
     const resolved = resolve({ kind: "name", value: rawText }, registry);
 

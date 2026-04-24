@@ -1,0 +1,25 @@
+reviewer: nw-software-crafter-reviewer
+model: sonnet
+date: 2026-04-23
+target: roadmap.json Phase 05 (Detection) — revision 1
+prior_review: roadmap-review-phase-05.yaml
+
+approval_status: approved
+
+closure_check:
+  D1_blocker_dep_cruiser_rule: closed
+  D2_medium_package_json: closed
+  D3_low_attribute_backprop_flagged: closed
+  D4_low_pipeline_order: closed
+
+new_findings: []
+
+summary: >
+  All four defects from the prior rejection are closed. Step 05-01
+  files_to_modify now includes both .dependency-cruiser.cjs and package.json,
+  and implementation_notes carry the full detection-strategies-isolated rule
+  text and correct direct-dependency framing for unist-util-visit. Step 05-04
+  implementation_notes now explicitly says "Prepend detectMarkdownLink" with
+  the final ADR-010 canonical order [detectMarkdownLink, detectInlineCodeName].
+  Steps 05-06 and 05-07 each carry a NOTE flagging their additive hProperties
+  for finalize back-propagation to architecture §6.2. Zero blockers; approved.

@@ -1,0 +1,110 @@
+reviewer: nw-software-crafter-reviewer
+model: sonnet
+date: 2026-04-23
+target_wave: DELIVER (config-cross-references Phase 05 Detection)
+pass: 2 of 2 (focus: API design + maintainability + forward-compat)
+
+approval_status: approved
+
+api_ergonomics: >
+  detectionRemarkPlugin(registry, ctx) returns (tree) => tree, exactly what
+  react-markdown's remarkPlugins prop expects. Architecture §6.2 prescribes
+  this integration; implementation matches without deviation. ConfigDetailPanel
+  (step 11) will pass it as remarkPlugins={[detectionRemarkPlugin(registry, ctx)]}
+  with no additional wrapping. Re-export of DetectionContext from remarkPlugin.ts
+  is a clean ergonomic touch.
+
+type_design: >
+  DetectionContext (currentItemDir: string | null) is adequate for v1 and
+  extension-ready. DetectionStrategy interface clean; void return appropriate
+  for unified mutation contract. ReferenceTokenData is well-typed; index
+  signature accommodates additive attributes (data-ref-candidate-count as
+  number, data-ref-target-path as string). Mild concern: index signature
+  admits any string key — typo like "data-reff-variant" not caught at compile
+  time. Inherent index-signature trade-off; acceptable.
+
+naming_discoverability: >
+  All identifiers self-documenting. inlineCodeStrategy and markdownLinkStrategy
+  name the syntax form. DETECTION_PIPELINE / composePipeline / detectionRemarkPlugin
+  follow remark ecosystem conventions. isInlineCodeNode/isLinkNode use is*
+  type-guard convention. MdastNode alias rationale documented (decouple from
+  @types/mdast churn). NOTE: refactor-05 extracted applyAnnotation.ts as the
+  shared helper — addressing the duplication concern proactively (see
+  maintainability_under_change).
+
+comment_quality_post_refactor: >
+  refactor-05 landed (commit 52c5c42) with L1 docstring consolidation. Quality
+  is high: every file-level JSDoc names architecture section + ADR. annotate()
+  function explained with ecosystem reference. pipeline.ts comment explains
+  prepend rationale and ADR-010 canonical order. Additive hProperties
+  (data-ref-candidate-count, data-ref-target-path) carry inline NOTE comments
+  pointing to finalize back-propagation. No why-gaps found.
+
+edge_case_coverage: >
+  (1) Empty registry: strategies call resolve() which returns dead/null;
+  inlineCode early-returns on dead, markdownLink annotates as dead. Both
+  correct. (2) Missing node.url: isLinkNode guard requires
+  typeof node.url === "string"; malformed parse skipped without crash.
+  (3) Whitespace in node.value (inlineCode): not trimmed before lookup; remark-
+  parse trims by default but undocumented as precondition — see LOW issue 3.
+  (4) Case sensitivity: lookupByName is case-sensitive (Map.get exact-match);
+  undocumented design decision — see LOW issue 2.
+
+maintainability_under_change: >
+  Adding bareProseStrategy (R3, US-111): clean 3-step process (new strategy
+  file + DETECTION_PIPELINE entry + optional DetectionContext field). Adding
+  data-ref-* attribute: index signature escape hatch already in place. The
+  annotate() duplication concern from initial assessment has been ADDRESSED by
+  refactor-05 which extracted applyAnnotation.ts as the shared helper. Both
+  strategies now delegate; future bareProseStrategy can use the same helper.
+
+architecture_backprop_documented: yes
+# data-ref-candidate-count (05-06) and data-ref-target-path (05-07) both
+# flagged in source code inline comments AND roadmap implementation_notes
+# AND test file comments — three locations each. Architecture §6.2 update
+# deferred to finalize as designed.
+
+detection_strategies_isolated_rule_sanity: >
+  Rule allowlist is correct and complete: detection/ siblings, registry,
+  resolver, unist-util-visit + unist + @types/unist transitive surfaces.
+  Architecture §4 wording listed only types + visit + registry; resolver
+  addition is correct and documented. No false positives or negatives
+  expected. Rule sanity: PASS.
+
+refactor_quality: >
+  refactor-05 landed with extracted applyAnnotation.ts shared helper (closes
+  the duplication concern this review would otherwise have raised), L1
+  docstring consolidation, L2 dead fixture removal. 5 files changed,
+  +129/-150. Public surface byte-equivalent.
+
+issues:
+  - severity: LOW
+    finding: >
+      Case sensitivity of registry name lookup is unspecified in architecture
+      and ADR documents. lookupByName performs exact Map.get(); NW-BDD-Requirements
+      does not match nw-bdd-requirements. Defensible but undocumented.
+    file_and_line: "architecture.md §6.1 (Registry); inlineCodeStrategy.ts:63"
+    recommendation: >
+      Add to architecture §6.1: "Name lookup is case-sensitive; key is the name
+      exactly as ingested during buildRegistry." Documentation gap; finalize task.
+
+  - severity: LOW
+    finding: >
+      Whitespace trimming of inline-code node.value is not performed before
+      registry lookup. remark-parse trims by default but this is not documented
+      as precondition.
+    file_and_line: "inlineCodeStrategy.ts:62-63"
+    recommendation: >
+      Add a comment noting remark-parse guarantees trimmed inlineCode.value, OR
+      add rawText = node.value.trim(). Comment form preferred to avoid masking
+      legitimate whitespace mismatch signal.
+
+summary: >
+  Phase 05 Detection Pipeline is sound. Public API integrates cleanly with
+  react-markdown's remarkPlugins prop per architecture §6.2. All four
+  ResolvedRef variants mapped correctly. detection-strategies-isolated rule
+  correctly specified and active. Additive hProperties consistently flagged for
+  finalize back-propagation across three locations each. The annotate()
+  duplication concern was proactively addressed by refactor-05 (52c5c42). Two
+  LOW issues — both documentation gaps for finalize. Zero BLOCKER, zero HIGH.
+  Approved.

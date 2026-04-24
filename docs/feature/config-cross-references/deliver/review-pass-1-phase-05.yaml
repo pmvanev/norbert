@@ -1,0 +1,105 @@
+reviewer: nw-software-crafter-reviewer
+model: sonnet
+date: 2026-04-23
+target_wave: DELIVER (config-cross-references Phase 05 Detection)
+pass: 1 of 2 (focus: TDD discipline + Testing Theater)
+
+approval_status: approved
+
+testing_theater_check:
+  pattern_1_tautological: clean
+  pattern_2_mock_call_count_only: clean
+  pattern_3_implementation_leak: clean
+  pattern_4_test_passes_no_matter_what: clean
+  pattern_5_skip_as_coverage: clean
+  pattern_6_loop_of_one: clean
+  pattern_7_dependency_only: clean
+  pattern_8_hidden_seam_swap: clean
+
+deletion_test_per_step:
+  - step: "05-01"
+    deletion_test: yes
+    rationale: >
+      Removing annotate() in inlineCodeStrategy.apply() causes hName to be
+      undefined, failing the toBe("reference-token") assertion.
+  - step: "05-02"
+    deletion_test: yes
+    rationale: >
+      Test walks ALL nodes and asserts annotatedNodes.toHaveLength(0). If
+      inlineCode strategy matched code (fenced) nodes, count would be non-zero.
+      Node-type guard is the load-bearing invariant.
+  - step: "05-03"
+    deletion_test: yes
+    rationale: >
+      Test asserts annotatedNodes.toHaveLength(0) on plain prose. Adding a
+      bare-prose strategy to DETECTION_PIPELINE that annotated text nodes
+      would immediately fail. Absence of any text-node strategy is load-bearing.
+  - step: "05-04"
+    deletion_test: yes
+    rationale: >
+      Removing markdownLinkStrategy from DETECTION_PIPELINE leaves link node
+      unannotated, failing matched.data?.hName assertion.
+  - step: "05-05"
+    deletion_test: yes
+    rationale: >
+      Genuine outcome (a) RED→GREEN. Re-adding the early-return on dead in
+      markdownLinkStrategy causes hName to be undefined on dead link, failing
+      the toBe("reference-token") assertion. Commit body explicitly states
+      "RED→GREEN, removed early-return".
+  - step: "05-06"
+    deletion_test: yes
+    rationale: >
+      Test asserts data-ref-candidate-count toBe(2) — integer value equality.
+      Omitting candidate-count or computing wrong count fails.
+  - step: "05-07"
+    deletion_test: yes
+    rationale: >
+      Test asserts data-ref-target-path exact string equality
+      (~/.claude/unknown-kind/foo.bin). Omitting or wrong value fails.
+
+driving_port_discipline: clean
+des_integrity: clean
+# All 7 steps have PREPARE/RED_ACCEPTANCE/RED_UNIT(SKIPPED)/GREEN/COMMIT logged.
+# Total Phase 05 entries: 35. PREPARE logged for every step.
+atomicity_per_commit: clean
+fp_paradigm: mutation_acknowledged
+# annotate() mutates node.data in place — standard unified/remark convention.
+# Documented in source. Acceptable tradeoff.
+architectural_rules: clean
+# detection-strategies-isolated rule active and not violated. Imports verified.
+unist_util_visit_promotion_landed: yes
+# package.json has "unist-util-visit": "^5.1.0" in dependencies.
+data_attribute_value_assertions: yes
+# Both 05-06 and 05-07 use exact value equality, not presence checks.
+
+issues:
+  - severity: low
+    finding: >
+      DES 05-05 RED_ACCEPTANCE d-field reads "PASS" without "PASS_IMMEDIATELY"
+      / "VALIDATION_ONLY" / explicit outcome-(a) marker. Pattern is consistent
+      across all non-validation steps. Commit body compensates.
+    file_and_line: "execution-log.json (05-05 RED_ACCEPTANCE)"
+    recommendation: >
+      Future steps: use d: "PASS: genuine RED — <description>" vs.
+      d: "PASS_IMMEDIATELY: outcome (b) — <reason>" for self-contained DES log.
+
+  - severity: low
+    finding: >
+      Inline-code dead-skip asymmetry is intentional (early-return on dead in
+      inlineCodeStrategy lines 65-69) but untested explicitly. Documented in
+      inline comment but no acceptance scenario asserts the design decision
+      with a known-but-dead inline name. If early-return is accidentally
+      removed in refactor, no test catches the regression.
+    file_and_line: "src/plugins/norbert-config/domain/references/detection/inlineCodeStrategy.ts:65-69"
+    recommendation: >
+      Add validation-only scenario asserting detection over inline code
+      containing an unregistered name produces no annotation (asymmetric to
+      markdownLinkStrategy which annotates dead).
+
+summary: >
+  Phase 05 Detection passes all TDD discipline and Testing Theater checks. All
+  7 deletion tests are sensitive. driving-port discipline maintained; mutation-
+  in-place is acknowledged per unified/remark convention; the new
+  detection-strategies-isolated dep-cruiser rule is correctly active. Two LOW
+  findings (DES log precision + untested inline-code dead-skip asymmetry).
+  Zero BLOCKER, zero HIGH. Approved.

@@ -1,0 +1,131 @@
+reviewer: nw-software-crafter-reviewer
+model: sonnet
+date: 2026-04-23
+target: roadmap.json Phase 05 (Detection)
+
+approval_status: rejected_pending_revisions
+
+per_step_check:
+  - step_id: "05-01"
+    one_scenario: true
+    behavioural_criteria: true
+    deps_correct: true
+    files_minimal: false
+    notes_actionable: true
+    sized_one_tdd_cycle: true
+    notes: >
+      files_to_modify missing package.json (unist-util-visit direct-dep promotion
+      requires package.json edit; lockfile update is consequence, not substitute)
+      AND missing .dependency-cruiser.cjs (architecture §4 rule 4 must land here).
+  - step_id: "05-02"
+    one_scenario: true
+    behavioural_criteria: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    sized_one_tdd_cycle: true
+  - step_id: "05-03"
+    one_scenario: true
+    behavioural_criteria: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    sized_one_tdd_cycle: true
+  - step_id: "05-04"
+    one_scenario: true
+    behavioural_criteria: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    sized_one_tdd_cycle: true
+    notes: >
+      DETECTION_PIPELINE insertion position underspecified vs ADR-010 canonical
+      order [detectMarkdownLink, detectInlineCodeName] — see LOW issue D4.
+  - step_id: "05-05"
+    one_scenario: true
+    behavioural_criteria: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    sized_one_tdd_cycle: true
+  - step_id: "05-06"
+    one_scenario: true
+    behavioural_criteria: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    sized_one_tdd_cycle: true
+  - step_id: "05-07"
+    one_scenario: true
+    behavioural_criteria: true
+    deps_correct: true
+    files_minimal: true
+    notes_actionable: true
+    sized_one_tdd_cycle: true
+
+module_layout_correct: yes
+detection_strategies_isolated_rule_in_scope: no
+unist_util_visit_promotion_addressed: no
+data_attribute_keys_consistent_with_tests: yes
+validation_only_claims_plausible: yes
+
+issues:
+  - id: D1
+    severity: BLOCKER
+    finding: >
+      architecture §4 rule 4 (detection-strategies-isolated) is absent from
+      .dependency-cruiser.cjs and no Phase 05 step adds it. This is the canonical
+      phase for the rule to land; if missed it leaves the detection boundary
+      permanently unenforced.
+    file_and_line: ".dependency-cruiser.cjs + roadmap step 05-01 files_to_modify"
+    recommendation: >
+      Add .dependency-cruiser.cjs to step 05-01 files_to_modify. Add the rule:
+      { name: 'detection-strategies-isolated', severity: 'error',
+        from: { path: '^src/plugins/norbert-config/domain/references/detection/' },
+        to: { pathNot: '^(src/plugins/norbert-config/domain/references/detection/types|unist-util-visit|src/plugins/norbert-config/domain/references/registry)' } }
+
+  - id: D2
+    severity: MEDIUM
+    finding: >
+      package.json missing from 05-01 files_to_modify. unist-util-visit direct-dep
+      promotion requires package.json edit; "lockfile-only" framing is incorrect.
+      Without explicit declaration the dep can drift when remark-gfm upgrades.
+    file_and_line: "roadmap step 05-01 files_to_modify"
+    recommendation: >
+      Add package.json to 05-01 files_to_modify. Update implementation_notes:
+      "Add unist-util-visit as direct dependency in package.json (currently
+      transitive via remark-gfm). Lockfile updates as consequence."
+
+  - id: D3
+    severity: LOW
+    finding: >
+      data-ref-candidate-count (05-06) and data-ref-target-path (05-07) are
+      additive hProperties not listed in architecture §6.2 contract. Roadmap
+      and tests internally consistent but architecture spec is stale.
+    file_and_line: "architecture.md §6.2 hProperties contract"
+    recommendation: >
+      Back-propagate both extension attributes to architecture §6.2 during
+      finalize. Add notes in 05-06/05-07 implementation_notes flagging.
+
+  - id: D4
+    severity: LOW
+    finding: >
+      ADR-010 specifies DETECTION_PIPELINE order [detectMarkdownLink,
+      detectInlineCodeName]. Step 05-01 bootstraps with inlineCodeStrategy;
+      05-04 says "Add to DETECTION_PIPELINE" without insert position. Append
+      diverges from ADR-010. Functional correctness unaffected (distinct node
+      types) but ADR ordering should be preserved.
+    file_and_line: "roadmap step 05-04 implementation_notes"
+    recommendation: >
+      Update 05-04 notes: "Prepend detectMarkdownLink so final order matches
+      ADR-010 §Strategy contract: [detectMarkdownLink, detectInlineCodeName]."
+
+summary: >
+  Phase 05 roadmap is well-structured with clean 7-step linear chain, 1:1
+  scenario mapping, and observable MDAST-output criteria. One BLOCKER prevents
+  approval: architecture §4 rule 4 (detection-strategies-isolated) is absent
+  from dep-cruiser config and no step adds it — this phase is the canonical
+  owner. Two lower-severity issues also need resolution: package.json missing
+  from 05-01 for unist-util-visit promotion, and DETECTION_PIPELINE insertion
+  position in 05-04 underspecified vs ADR-010. Resolve all three before
+  dispatching crafter.
